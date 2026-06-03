@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  (SO0056) - fraud-detection-using-machine-learning: Solution for predicting
+  fraud events with ML using Amazon SageMaker. Version 3
+Parameters:
+  SolutionPrefix:
+    Type: String
+    Description: |
+      Used to name resources created as part of this stack (and inside nested stacks too).
+      Can be the same as the stack name used by AWS CloudFormation, but this field has extra
+      constraints because it's used to name resources with restrictions (e.g. Amazon S3 bucket
+      names cannot contain capital letters).
+    AllowedPattern: '^sagemaker-soln-fdml[a-z0-9\-]{1,19}$'
+    ConstraintDescription: |
+      Should start with 'sagemaker-soln-fdml-' for permission management, followed by up to 19
+      characters. Only allowed to use lowercase letters, hyphens and/or numbers.
+    Default: "sagemaker-soln-fdml-"
+  CreateSageMakerNotebookInstance:
+    Description: Create a SageMaker Notebook Instance as part of the stack?
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  IamRole:
+    Type: String
+    Default: ""
+    Description: |
+      The ARN of the IAM Role that will be attached to the resources created by this stack to grant them permissions to
+      perform their required functions. If left blank, the template will attempt to create a role for you.
+      That could cause a stack creation error if you don't have privileges to create new roles.
+  StackVersion:
+    Description: |
+      CloudFormation Stack version.
+      Use 'release' version unless you are customizing the
+      CloudFormation templates and solution artifacts.
+    Type: String
+    Default: release
+    AllowedValues:
+      - release
+      - development
+  SolutionName:
+    Description: |
+      Prefix for the solution name. Needs to be Fraud-detection-using-machine-learning
+      or begin with  'Fraud-detection-using-machine-learning-' followed by a set of letters and hyphens.
+      Used to specify a particular directory on S3, that can correspond to a development branch.
+    Type: String
+    Default: "Fraud-detection-using-machine-learning"
+    AllowedPattern: '^Fraud-detection-using-machine-learning-?[a-z\-]*$'
+  TestOutputsS3Bucket:
+    Description: |
+      This bucket is used to store output files when the solution is tested. Should be left blank, unless this is an automated launch.
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^sagemaker-soln-[a-z0-9\-\.]{1,48}$'
+  KinesisFirehosePrefix:
+    Type: String
+    Default: fraud-detection/firehose/
+    Description: Kinesis Firehose prefix for delivery of processed events.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Solution Configuration
+        Parameters:
+          - SolutionPrefix
+          - CreateSageMakerNotebookInstance
+          - StackVersion
+      - Label:
+          default: Amazon Kinesis Firehose Configuration
+        Parameters:
+          - KinesisFirehosePrefix
+    ParameterLabels:
+      KinesisFirehosePrefix:
+        default: Kinesis Firehose S3 Prefix
+Mappings:
+  Function:
+    FraudDetection:
+      S3Key: build/model_invocation.zip
+  SolutionsS3BucketName:
+    development:
+      Prefix: sagemaker-solutions-build
+    release:
+      Prefix: sagemaker-solutions-prod
+Conditions:
+  CreateSageMakerNotebookInstance: !Equals [ !Ref CreateSageMakerNotebookInstance, 'true' ]
+  CreateDemoEndpoint: !Equals [ !Ref CreateSageMakerNotebookInstance, 'false' ]
+  CreateCustomSolutionRole: !Equals [!Ref IamRole, ""]
+Resources:
+  ModelDataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${SolutionPrefix}-${AWS::AccountId}-md-${AWS::Region}-${AWS::StackName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: >-
+              Configuring logging requires supplying an existing customer S3
+              bucket to store logs
+          - id: W51
+            reason: Default policy works fine
+  OutputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${SolutionPrefix}-${AWS::AccountId}-out-${AWS::Region}-${AWS::StackName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: >-
+              Configuring logging requires supplying an existing customer S3
+              bucket to store logs
+          - id: W51
+            reason: Default policy works fine
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Sub "${SolutionPrefix}-event-processor"
+      Role: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+      Code:
+        S3Bucket: !Sub
+          - "${SolutionsS3BucketNamePrefix}-${AWS::Region}"
+          - SolutionsS3BucketNamePrefix:
+              Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+        S3Key: !Sub
+          - "${SolutionName}/${LambdaS3Key}"
+          - LambdaS3Key:
+              Fn::FindInMap: [Function, FraudDetection, S3Key]
+      Runtime: python3.8
+      Environment:
+        Variables:
+          SolutionPrefix: !Sub ${SolutionPrefix}
+          StreamName: !Ref KinesisFirehoseDeliveryStream
+    Metadata:
+        cfn_nag:
+          rules_to_suppress:
+            - id: W58
+              reason: >-
+                The required permissions are provided in the permissions stack.
+  KinesisFirehoseDeliveryStream:
+    Type: 'AWS::KinesisFirehose::DeliveryStream'
+    Properties:
+      DeliveryStreamName: !Sub "${SolutionPrefix}-firehose-stream"
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !GetAtt
+          - OutputBucket
+          - Arn
+        Prefix: !Ref KinesisFirehosePrefix
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 100
+        CompressionFormat: GZIP
+        EncryptionConfiguration:
+          NoEncryptionConfig: NoEncryption
+        RoleARN: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+  RESTAPIGateway:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Description: >-
+        A REST API that can be used to invoke the Lambda function that triggers
+        predictions.
+      Name: !Sub "${SolutionPrefix}-model-invocation-api"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+  APIGatewayCloudWatchLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Join
+        - /
+        - - /aws/apigateway/AccessLogs
+          - !Ref RESTAPIGateway
+          - prod
+      RetentionInDays: 365
+  APIGatewayAccount:
+    Type: 'AWS::ApiGateway::Account'
+    Properties:
+      CloudWatchRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+    DependsOn:
+      - RESTAPIGateway
+  LambdaAPIPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt
+        - LambdaFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join
+        - ''
+        - - 'arn:aws:execute-api:'
+          - !Ref 'AWS::Region'
+          - ':'
+          - !Ref 'AWS::AccountId'
+          - ':'
+          - !Ref RESTAPIGateway
+          - /*/POST/*
+  RESTInvocationResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !GetAtt
+        - RESTAPIGateway
+        - RootResourceId
+      PathPart: invocations
+      RestApiId: !Ref RESTAPIGateway
+  POSTMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref RESTAPIGateway
+      ResourceId: !Ref RESTInvocationResource
+      HttpMethod: POST
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Join
+          - ''
+          - - 'arn:aws:apigateway:'
+            - !Ref 'AWS::Region'
+            - ':lambda:path/2015-03-31/functions/'
+            - !GetAtt
+              - LambdaFunction
+              - Arn
+            - /invocations
+        IntegrationResponses:
+          - ResponseTemplates:
+              application/json: ''
+            StatusCode: "200"
+          - SelectionPattern: ^not found.*
+            ResponseTemplates:
+              application/json: '{}'
+            StatusCode: "404"
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: >-
+            {"data": $input.json('$.data'),"metadata":
+            $input.json('$.metadata'),"model": "$input.params('model')"}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: "200"
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: "404"
+      RequestParameters:
+        method.request.querystring.model: false
+  RestApiDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      StageDescription:
+        AccessLogSetting:
+          DestinationArn: !GetAtt
+            - APIGatewayCloudWatchLogGroup
+            - Arn
+          Format: !Join
+            - ','
+            - - '{"requestId":"$context.requestId"'
+              - '"ip": "$context.identity.sourceIp"'
+              - '"caller":"$context.identity.caller"'
+              - '"user":"$context.identity.user"'
+              - '"requestTime":"$context.requestTime"'
+              - '"httpMethod":"$context.httpMethod"'
+              - '"resourcePath":"$context.resourcePath"'
+              - '"status":"$context.status"'
+              - '"protocol":"$context.protocol"'
+              - '"responseLength":"$context.responseLength"}'
+      RestApiId: !Ref RESTAPIGateway
+      StageName: prod
+    DependsOn:
+      - POSTMethod
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W68
+            reason: Resource not associated with an AWS::ApiGateway::UsagePlan for now
+  SolutionAssistantStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/solution-assistant/solution-assistant.yaml"
+      - SolutionsS3BucketNamePrefix:
+          Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      Parameters:
+        SolutionPrefix: !Ref SolutionPrefix
+        SolutionName: !Ref SolutionName
+        StackName: !Ref AWS::StackName
+        ModelDataBucketName: !Ref ModelDataBucket
+        OutputBucketName: !Ref OutputBucket
+        SolutionsS3BucketName: !Sub
+          - ${SolutionsS3BucketNamePrefix}-${AWS::Region}
+          - SolutionsS3BucketNamePrefix:
+              Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+        RoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+
+  SageMakerStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: CreateSageMakerNotebookInstance
+    Properties:
+      TemplateURL: !Sub
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-notebook-instance.yaml"
+      - SolutionsS3BucketNamePrefix:
+          Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      Parameters:
+        SolutionPrefix: !Ref SolutionPrefix
+        ParentStackName: !Ref AWS::StackName
+        SolutionName: !Ref SolutionName
+        StackVersion: !Ref StackVersion
+        ModelDataBucket: !Ref ModelDataBucket
+        NotebookInstanceExecutionRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+        RESTAPIGateway: !Ref RESTAPIGateway
+        TestOutputsS3Bucket: !Ref TestOutputsS3Bucket
+
+  SageMakerPermissionsStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: CreateCustomSolutionRole
+    Properties:
+      TemplateURL: !Sub
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-permissions-stack.yaml"
+      - SolutionsS3BucketNamePrefix:
+          !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      Parameters:
+        SolutionPrefix: !Ref SolutionPrefix
+        ModelDataBucketName: !Ref ModelDataBucket
+        OutputBucketName: !Ref OutputBucket
+        RESTAPIGateway: !Ref RESTAPIGateway
+        StackVersion: !Ref StackVersion
+        RootStackID: !Ref AWS::StackId
+        TestOutputsS3Bucket: !Ref TestOutputsS3Bucket
+
+  DemoEndpointStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: CreateDemoEndpoint
+    Properties:
+      TemplateURL: !Sub
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-demo-stack.yaml"
+      - SolutionsS3BucketNamePrefix:
+          !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      Parameters:
+        SolutionPrefix: !Ref SolutionPrefix
+        SolutionsBucket: !Sub
+          - "${SolutionsS3BucketNamePrefix}-${AWS::Region}"
+          - SolutionsS3BucketNamePrefix:
+              !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+        SolutionName: !Ref SolutionName
+        ExecutionRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+
+Outputs:
+  SageMakerNotebook:
+    Condition: CreateSageMakerNotebookInstance
+    Description: "Opens the Jupyter notebook to get started with model training"
+    Value: !GetAtt SageMakerStack.Outputs.SageMakerNotebook
+  FirehoseDeliveryStreamArn:
+    Description: Firehose Delivery Stream ARN
+    Value: !GetAtt
+      - KinesisFirehoseDeliveryStream
+      - Arn
+  FraudStackName:
+    Value: !Ref AWS::StackName
+  SolutionPrefix:
+    Value: !Ref SolutionPrefix
+  AwsAccountId:
+    Value: !Ref AWS::AccountId
+  AwsRegion:
+    Value: !Ref AWS::Region
+  IamRole:
+    Value: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+  ModelDataBucket:
+    Value: !Ref ModelDataBucket
+  SolutionsS3Bucket:
+    Value: !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+  RESTAPIGateway:
+    Value: !Ref RESTAPIGateway
+  SagemakerMode:
+    Value: !If
+      - CreateSageMakerNotebookInstance
+      - "NotebookInstance"
+      - "Studio"
+  DemoEndpointName:
+    Condition: CreateDemoEndpoint
+    Value: DemoEndpointStack.Outputs.EndpointName
+  SolutionName:
+    Value: !Ref SolutionName
+  TestOutputsS3Bucket:
+    Value: !Ref TestOutputsS3Bucket

@@ -1,0 +1,13 @@
+notebooks/creditcard.csv
+notebooks/creditcardfraud.zip
+lost+found
+.Trash-1000
+.sparkmagic
+.virtual_documents
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.env
+*.pem
+stack_outputs.json

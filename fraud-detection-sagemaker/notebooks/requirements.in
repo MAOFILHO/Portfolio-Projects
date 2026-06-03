@@ -1,0 +1,12 @@
+imbalanced-learn
+aws_requests_auth
+matplotlib
+scikit-learn
+pandas
+papermill
+sagemaker==1.72.0
+traitlets==4.3.3
+boto3
+seaborn
+awscli
+watchtower
