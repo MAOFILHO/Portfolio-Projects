@@ -1,0 +1,14 @@
+openai                          # Azure OpenAI API integration
+python-dotenv                   # Load environment variables from .env file
+requests                        # HTTP client for API calls
+pydantic                        # Data validation and settings management
+pillow                          # For basic image processing (e.g., resizing, thumbnail)
+azure-core                      # Core utilities for Azure SDKs
+azure-identity                  # For authenticating to Azure resources
+azure-ai-formrecognizer==3.3.0  # Azure Document Intelligence (Form Recognizer) SDK
+# Optional dependencies:
+chromadb                        # For local vector DB experimentation
+fastapi                         # For serving the backend APIs
+uvicorn                         # ASGI server for running FastAPI
+jinja2                          # HTML template rendering (if used)
+aiofiles                        # Async file upload support in FastAPI

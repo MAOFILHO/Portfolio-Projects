@@ -1,0 +1,32 @@
+[
+  {
+    "id": "Pothole_Repair_Protocol.txt",
+    "content": "POTHOLE IDENTIFICATION & REPAIR STANDARD OPERATING PROCEDURE\n\n1. Identification\n- Citizens may report potholes via the mobile app or hotline (dial 115).\n- Road inspection drones must monitor highways weekly.\n\n2. Assessment\n- Each reported pothole must be surveyed within 24 hours.\n- Risk score calculated based on depth, width, and traffic impact.\n\n3. Repair Process\n- Minor: Filled with asphalt mix and compacted by road crew.\n- Major: Excavation and full resurfacing conducted by city contractor.\n- Traffic redirection signage must be used during repairs.\n\n4. Documentation\n- All repairs logged in road maintenance database with photo proof.\n- Monthly reports submitted to Public Works Dept.\n\nProtocol enforced by the Roads and Infrastructure Department.",
+    "source": "Pothole_Repair_Protocol.txt"
+  },
+  {
+    "id": "Electric_Hazard_Protocol.txt",
+    "content": "ELECTRICAL HAZARD RESPONSE STANDARD OPERATING PROCEDURE\n\n1. Hazard Identification\n- Any visible spark, smoke, or burn smell near electrical infrastructure must be treated as high priority.\n- Residents should immediately report via hotline or emergency app.\n\n2. Immediate Response\n- Area must be cordoned off within 10 minutes of report.\n- On-call electrical technicians must isolate power supply to the affected circuit.\n- Nearby transformers and breakers should be inspected.\n\n3. Hazard Removal & Restoration\n- Burned wires or faulty components must be replaced within 4 hours.\n- Preventive maintenance must be conducted in the surrounding area.\n\n4. Post-Incident Actions\n- Safety audits and RCA (Root Cause Analysis) must be completed within 48 hours.\n- Follow-up inspections to be logged digitally.\n\nMaintained and approved by the City Electrical Safety Board.",
+    "source": "Electric_Hazard_Protocol.txt"
+  },
+  {
+    "id": "Flood_Response_Protocol.txt",
+    "content": "FLOOD RESPONSE STANDARD OPERATING PROCEDURE\n\n1. Pre-Flood Preparation\n- Drainage systems must be cleared monthly, especially during monsoon season.\n- Flood-prone areas should have early warning signage and pump stations.\n\n2. Emergency Response\n- Mobile rescue units must be dispatched within 10 minutes of reported flooding.\n- Barricades and road diversion signs must be deployed immediately.\n- Evacuation notices must be issued via SMS and radio alerts.\n\n3. Relief & Restoration\n- Temporary shelters must be arranged for affected families.\n- Water pumps should be deployed to drain flooded areas.\n- Post-flood sanitization and damage inspection must begin within 24 hours.\n\nReviewed and enforced by the City Disaster Management Authority.",
+    "source": "Flood_Response_Protocol.txt"
+  },
+  {
+    "id": "Fire_Response_Protocol.txt",
+    "content": "FIRE RESPONSE STANDARD OPERATING PROCEDURE\n\n1. Detection & Reporting\n- Any fire outbreak must be immediately reported to the city emergency hotline (dial 112).\n- Reports can also be sent via the City Safety App with location and photo evidence.\n\n2. Dispatch & Containment\n- Fire & Rescue Teams must be dispatched within 5 minutes of a confirmed fire report.\n- Initial containment should be attempted using portable extinguishers.\n- Full-scale suppression via hydrants or fire trucks should follow.\n\n3. Evacuation & Safety\n- Residents in the affected zone should be evacuated to a nearby safe zone.\n- Power and gas lines in the vicinity must be shut down.\n- Emergency medical services must be alerted in parallel.\n\n4. Investigation & Reporting\n- Cause of the fire must be determined within 72 hours.\n- Structural audits to be conducted if damage is structural.\n\nThis SOP must be reviewed quarterly by the Fire Department Leadership Team.",
+    "source": "Fire_Response_Protocol.txt"
+  },
+  {
+    "id": "Accident_Response_Protocol.txt",
+    "content": "TRAFFIC ACCIDENT RESPONSE STANDARD OPERATING PROCEDURE\n\n1. Incident Reporting\n- Traffic accidents must be reported immediately via hotline 116 or the city traffic app.\n- Reports should include location, vehicle count, injury status, and any blockages.\n\n2. Emergency Response\n- Nearest traffic patrol must arrive within 10 minutes of report.\n- Ambulance dispatch initiated if injuries are indicated.\n- Fire department alerted in case of fuel leakage or vehicle fire risk.\n\n3. Site Management\n- Traffic rerouting initiated with signage and traffic police presence.\n- Accident area photographed and documented for investigation.\n- Vehicle tow team dispatched within 30 minutes to clear the scene.\n\n4. Investigation & Logging\n- Insurance and legal inspection teams notified.\n- All accident data stored in central transportation incident log.\n\nMaintained by the Urban Traffic Management & Emergency Services Department.",
+    "source": "Accident_Response_Protocol.txt"
+  },
+  {
+    "id": "Collapse_Response_Protocol.txt",
+    "content": "STRUCTURAL COLLAPSE RESPONSE STANDARD OPERATING PROCEDURE\n\n1. Emergency Alert\n- Any sighting of partial or full building collapse must be reported via hotline 117.\n- Structural collapse suspected during earthquakes, blasts, or foundation failure.\n\n2. Search and Rescue\n- Urban Search and Rescue (USAR) teams dispatched immediately.\n- Area secured and marked as hazardous; drone survey initiated if available.\n- Survivors located via thermal and acoustic sensors.\n\n3. Medical & Safety Measures\n- EMS teams deployed with triage equipment.\n- Gas, electricity, and water supply to affected building cut off.\n\n4. Post-Collapse Recovery\n- Structural engineers assess safety for nearby buildings.\n- Site barricaded and debris removal initiated within 24 hours.\n- Collapse recorded in Infrastructure Risk Register.\n\nReviewed quarterly by the City Infrastructure Resilience Task Force.",
+    "source": "Collapse_Response_Protocol.txt"
+  }
+]
