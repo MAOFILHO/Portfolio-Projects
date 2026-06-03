@@ -1,0 +1,6 @@
+# Create an empty .gitkeep so Git tracks the outputs folder
+# Windows (PowerShell)
+#New-Item -ItemType File -Path outputs/.gitkeep
+ 
+# macOS / Linux
+#touch outputs/.gitkeep

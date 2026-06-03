@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartClaims AI Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+        .header { background: linear-gradient(135deg, #1B4F72, #2E86C1); color: white; padding: 20px 30px; }
+        .header h1 { font-size: 24px; }
+        .header p { opacity: 0.85; font-size: 14px; margin-top: 4px; }
+        .container { max-width: 1100px; margin: 20px auto; padding: 0 20px; }
+
+        /* Upload Section */
+        .upload-section { background: white; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .upload-section h2 { font-size: 18px; margin-bottom: 12px; color: #1B4F72; }
+        .upload-info { background: #EBF5FB; border-left: 4px solid #2E86C1; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; border-radius: 0 6px 6px 0; }
+        .upload-info strong { color: #1B4F72; }
+        .upload-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .upload-row input[type="file"] { flex: 1; min-width: 250px; padding: 8px; border: 2px dashed #ccc; border-radius: 6px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .btn-primary { background: #2E86C1; color: white; }
+        .btn-primary:hover { background: #1B4F72; }
+        .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+        .upload-status { margin-top: 12px; font-size: 13px; color: #555; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 0; }
+        .tab { padding: 10px 18px; background: #ddd; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: 500; }
+        .tab.active { background: white; color: #1B4F72; font-weight: 700; }
+
+        /* Chat Area */
+        .chat-panel { background: white; border-radius: 0 10px 10px 10px; padding: 20px; min-height: 400px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+        .messages { flex: 1; overflow-y: auto; max-height: 520px; margin-bottom: 16px; }
+        .msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; max-width: 90%; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+        .msg.user { background: #E8F4FD; margin-left: auto; text-align: right; white-space: normal; }
+        .msg.agent { background: #f8f9fa; border: 1px solid #e9ecef; }
+        .msg.system { background: #fff3cd; font-size: 12px; text-align: center; max-width: 100%; }
+
+        /* Chart container inside agent message */
+        .chart-wrap { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-top: 12px; }
+        .chart-wrap h4 { font-size: 14px; color: #1B4F72; margin-bottom: 10px; text-align: center; }
+        .chart-wrap canvas { max-height: 320px; }
+
+        /* Quick Actions */
+        .quick-actions { margin-bottom: 14px; }
+        .quick-actions span { font-size: 12px; color: #888; margin-right: 8px; }
+        .quick-btn { font-size: 12px; padding: 4px 10px; border: 1px solid #ccc; border-radius: 12px; background: white; cursor: pointer; margin: 2px; }
+        .quick-btn:hover { background: #EBF5FB; border-color: #2E86C1; }
+        .loading { display: none; text-align: center; padding: 8px; color: #2E86C1; font-size: 14px; }
+        .input-row { display: flex; gap: 10px; }
+        .input-row input { flex: 1; padding: 10px 14px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; }
+        .input-row input:focus { border-color: #2E86C1; outline: none; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🛡️ SmartClaims AI Agent</h1>
+    <p>Intelligent Insurance Claims Processing — Microsoft Foundry Agent Service</p>
+</div>
+
+<div class="container">
+    <!-- Upload Section -->
+    <div class="upload-section">
+        <h2>📁 Upload Data Files</h2>
+        <div class="upload-info">
+            <strong>Accepted formats:</strong><br>
+            • <strong>CSV (.csv)</strong> — Claims data. Required columns: claim_id, incident_type, claim_amount, status, fraud_flag, fraud_score, region, policy_type, processing_days.<br>
+            • <strong>Markdown (.md) / Text (.txt)</strong> — Policy or knowledge documents for Q&A search.<br>
+            • You can upload <strong>multiple files at once</strong>.
+        </div>
+        <div class="upload-row">
+            <input type="file" id="fileInput" multiple accept=".csv,.md,.txt">
+            <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()">Upload & Initialize Agent</button>
+        </div>
+        <div class="upload-status" id="uploadStatus"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('chat', this)">💬 Chat</div>
+        <div class="tab" onclick="switchTab('policy', this)">📋 Policy Q&A</div>
+        <div class="tab" onclick="switchTab('analytics', this)">📊 Analytics</div>
+        <div class="tab" onclick="switchTab('lookup', this)">🔍 Claim Lookup</div>
+        <div class="tab" onclick="switchTab('fraud', this)">⚠️ Fraud Risk</div>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+        <div class="quick-actions" id="quickActions">
+            <span>Try:</span>
+            <button class="quick-btn" onclick="sendQuick('Give me an executive summary of the claims data')">Executive Summary</button>
+            <button class="quick-btn" onclick="sendQuick('What types of coverage does the policy offer?')">Coverage Types</button>
+            <button class="quick-btn" onclick="sendQuick('Show claims by region')">Claims by Region</button>
+            <button class="quick-btn" onclick="sendQuick('Show fraud rate by region as pie chart')">Fraud Rate</button>
+        </div>
+        <div class="messages" id="messages">
+            <div class="msg system">Upload files above to start chatting with SmartClaims.</div>
+        </div>
+        <div class="loading" id="loading">⏳ SmartClaims is thinking...</div>
+        <div class="input-row">
+            <input type="text" id="userInput" placeholder="Ask SmartClaims anything..." onkeydown="if(event.key==='Enter')sendMessage()">
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentTab = 'chat';
+let chartCounter = 0; // unique id for each canvas
+
+function switchTab(tab, el) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+
+    const placeholders = {
+        chat: 'Ask SmartClaims anything...',
+        policy: 'Ask about policy coverage, exclusions, procedures...',
+        analytics: 'Ask for charts, trends, statistics from claims data...',
+        lookup: 'Enter claim ID (e.g., CLM-0042)...',
+        fraud: 'Describe the claim for fraud assessment...',
+    };
+    document.getElementById('userInput').placeholder = placeholders[tab];
+}
+
+async function uploadFiles() {
+    const input = document.getElementById('fileInput');
+    if (!input.files.length) { alert('Select files first.'); return; }
+
+    const btn = document.getElementById('uploadBtn');
+    const status = document.getElementById('uploadStatus');
+    btn.disabled = true;
+    status.textContent = '⏳ Uploading and initializing agent...';
+
+    const form = new FormData();
+    for (const f of input.files) form.append('files', f);
+
+    try {
+        const res = await fetch('/api/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.error) {
+            status.textContent = '❌ ' + data.error;
+        } else {
+            const summary = data.files.map(f =>
+                f.type === 'csv' ? `${f.file} (${f.records} records)` : `${f.file} (document)`
+            ).join(', ');
+            status.textContent = `✅ Ready! Files: ${summary}`;
+            addMsg('system', `Agent initialized with: ${summary}`);
+        }
+    } catch (e) {
+        status.textContent = '❌ Upload failed: ' + e.message;
+    }
+    btn.disabled = false;
+}
+
+async function sendMessage() {
+    const input = document.getElementById('userInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    addMsg('user', msg);
+    input.value = '';
+    document.getElementById('loading').style.display = 'block';
+
+    const endpoints = {
+        chat: '/api/chat',
+        policy: '/api/policy-qa',
+        analytics: '/api/analytics',
+        lookup: '/api/claim-lookup',
+        fraud: '/api/chat',
+    };
+
+    let body;
+    if (currentTab === 'lookup') {
+        body = JSON.stringify({ claim_id: msg });
+    } else {
+        body = JSON.stringify({ message: msg });
+    }
+
+    try {
+        const res = await fetch(endpoints[currentTab], {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
+        });
+        const data = await res.json();
+
+        // Analytics tab returns {response, chart} — render chart if present
+        if (currentTab === 'analytics' && data.chart) {
+            addAgentMsgWithChart(data.response, data.chart);
+        } else {
+            addMsg('agent', data.response || data.error || 'No response');
+        }
+    } catch (e) {
+        addMsg('agent', '❌ Error: ' + e.message);
+    }
+    document.getElementById('loading').style.display = 'none';
+}
+
+function sendQuick(text) {
+    document.getElementById('userInput').value = text;
+    sendMessage();
+}
+
+function addMsg(type, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + type;
+    if (type === 'agent') {
+        div.innerHTML = '🤖 ' + escapeHtml(text).replace(/\n/g, '<br>');
+    } else if (type === 'user') {
+        div.textContent = '👤 ' + text;
+    } else {
+        div.textContent = text;
+    }
+    appendMsg(div);
+}
+
+function addAgentMsgWithChart(text, chartData) {
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+
+    // Text part
+    const textDiv = document.createElement('div');
+    textDiv.innerHTML = '🤖 ' + escapeHtml(text).replace(/\n/g, '<br>');
+    div.appendChild(textDiv);
+
+    // Chart part
+    const canvasId = 'chart_' + (++chartCounter);
+    const wrap = document.createElement('div');
+    wrap.className = 'chart-wrap';
+
+    const title = document.createElement('h4');
+    title.textContent = '📊 ' + chartData.title;
+    wrap.appendChild(title);
+
+    const canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    wrap.appendChild(canvas);
+    div.appendChild(wrap);
+
+    appendMsg(div);
+
+    // Render chart AFTER appending to DOM
+    renderChart(canvasId, chartData);
+}
+
+function renderChart(canvasId, chartData) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    new Chart(ctx, {
+        type: chartData.type,  // 'pie' or 'bar'
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: chartData.colors,
+                borderColor: chartData.type === 'bar' ? chartData.colors.map(c => c) : '#fff',
+                borderWidth: chartData.type === 'pie' ? 2 : 1,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: chartData.type === 'pie' ? 'right' : 'top',
+                    labels: { font: { size: 12 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const val = context.parsed;
+                            const raw = chartData.type === 'pie' ? context.parsed : context.parsed.y;
+                            return ` ${context.label}: ${raw}`;
+                        }
+                    }
+                }
+            },
+            scales: chartData.type === 'bar' ? {
+                y: { beginAtZero: true, ticks: { font: { size: 11 } } },
+                x: { ticks: { font: { size: 11 } } }
+            } : {}
+        }
+    });
+}
+
+function appendMsg(div) {
+    const container = document.getElementById('messages');
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+</script>
+
+</body>
+</html>

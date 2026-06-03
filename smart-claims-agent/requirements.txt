@@ -1,0 +1,31 @@
+# =============================================================
+# SmartClaims Agent — Python Dependencies
+# SDK: azure-ai-projects v2.x (Preview) for Microsoft Foundry
+# =============================================================
+ 
+# --- Core SDK (use --pre flag during install) ---
+azure-ai-projects==2.0.0b4
+azure-identity>=1.17.0
+ 
+# --- OpenAI client (used by SDK for Responses API) ---
+openai>=1.40.0
+ 
+# --- Environment management ---
+python-dotenv>=1.0.0
+ 
+# --- Tracing & Observability (Lab 8) ---
+opentelemetry-sdk>=1.20.0
+azure-core-tracing-opentelemetry>=1.0.0b11
+azure-monitor-opentelemetry>=1.6.0
+ 
+# --- Web Search (Lab 7) ---
+tavily-python>=0.5.0
+ 
+# --- Web Application (Lab 9) ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+python-multipart>=0.0.9
+jinja2>=3.1.0
+aiofiles>=23.0.0
+matplotlib>=3.7.0
