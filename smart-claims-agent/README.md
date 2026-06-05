@@ -158,7 +158,7 @@ smart-claims-agent-project/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/MAOFILHO/smart-claims-agent
+git clone https://github.com/MAOFILHO/Portfolio-Projects/tree/main/smart-claims-agent
 cd smart-claims-agent-project
 ```
 
