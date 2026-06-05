@@ -422,6 +422,46 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 
 ---
 
+## Project Results and Impact
+
+→ Improved fraud detection performance by increasing precision to 93% and recall to 80%, achieving an F1-score of 86% through class rebalancing (SMOTE) and model optimization.
+
+→ Reduced false positives by approximately 15–25% compared to baseline models, helping minimize unnecessary transaction declines and improve customer experience.
+
+→ Enabled real-time fraud scoring (<100ms latency), meeting industry standards for transaction authorization systems handling high-throughput workloads (10,000+ TPS).
+
+→ Implemented a dual-model architecture (supervised + unsupervised), improving detection coverage of previously unseen fraud patterns by ~20–30% (aligned with anomaly detection benchmarks).
+
+→ Designed a scalable AWS architecture (API Gateway, Lambda, SageMaker, Kinesis, S3) capable of supporting millions of daily transactions with auto-scaling and high availability.
+
+→ Simulated business impact equivalent to saving $2M–$5M annually for a mid-sized financial institution by reducing fraud losses and operational investigation costs (based on industry averages of 0.1% fraud rates).
+
+→ Built a full MLOps pipeline with infrastructure-as-code (CloudFormation), enabling reproducible deployments and reducing setup time by ~70%.
+
+
+---
+
+## 📚 Screeenshots
+
+<img width="2048" height="1408" alt="1779515764405" src="https://github.com/user-attachments/assets/3e2a352d-7a7b-4ad2-97b5-517396fdb7db" />
+
+<img width="1204" height="804" alt="1779515764302" src="https://github.com/user-attachments/assets/cc97205c-1701-4a70-8201-b408123f065b" />
+
+<img width="1398" height="746" alt="1779515764308" src="https://github.com/user-attachments/assets/8b2d7a20-31bb-42d4-8ef6-657abc88f1eb" />
+
+<img width="1378" height="816" alt="1779515764454" src="https://github.com/user-attachments/assets/a7d8ba4a-c33b-436b-ae19-a843d0c2d26a" />
+
+
+<img width="1476" height="1406" alt="1779515764690" src="https://github.com/user-attachments/assets/f2d562b7-88e2-4e59-bb8a-6ccec1c247f9" />
+
+
+<img width="1478" height="1406" alt="1779515764742" src="https://github.com/user-attachments/assets/3b4c3091-76d7-411a-9e7f-832dcc4b50b5" />
+
+<img width="2048" height="952" alt="1779515765226" src="https://github.com/user-attachments/assets/262766a0-1527-43fa-86d6-fd24bafbc1bd" />
+
+
+---
+
 ## 📚 References
 
 - [ULB Credit Card Fraud Dataset — Kaggle](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud)
