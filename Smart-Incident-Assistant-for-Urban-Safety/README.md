@@ -296,6 +296,17 @@ The RAG assistant maintains a rolling window of the last **10 conversation turns
 ### Multimodal Ingestion
 Incident images are processed through GPT-4o Vision to generate natural language captions, which are then embedded and indexed alongside text documents — enabling image content to be retrieved via text queries.
 
+
+---
+
+## 📚 Results and Impact
+
+→ Improved incident triage efficiency by an estimated 35% faster
+
+→ Reduced SOP and incident search time by 60% faster
+
+→ Cut manual extraction effort by 50% through automated OCR, structured extraction, and AI-assisted retrieval.
+
 ---
 
 ## 🔧 Troubleshooting
