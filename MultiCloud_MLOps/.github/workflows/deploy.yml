@@ -1,0 +1,56 @@
+name: Deploy to AKS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Login to ACR
+      uses: azure/docker-login@v1
+      with:
+        login-server: guardianacr.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and push images
+      run: |
+        services=("ingestion" "fast-screening" "deep-vision" "policy-engine" "human-review" "notification")
+        for service in "${services[@]}"; do
+          docker build -t guardianacr.azurecr.io/$service:${{ github.sha }} ./services/$service
+          docker push guardianacr.azurecr.io/$service:${{ github.sha }}
+        done
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+    
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group rg-guardian-ai-prod \
+          --name aks-guardian-prod
+    
+    - name: Deploy to AKS
+      run: |
+        kubectl set image deployment/fast-screening \
+          screening=guardianacr.azurecr.io/fast-screening:${{ github.sha }} \
+          -n production
+        
+        kubectl set image deployment/policy-engine \
+          policy=guardianacr.azurecr.io/policy-engine:${{ github.sha }} \
+          -n production
+        
+        kubectl rollout status deployment/fast-screening -n production
+        kubectl rollout status deployment/policy-engine -n production

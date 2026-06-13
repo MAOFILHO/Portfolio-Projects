@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fast-screening
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fast-screening
+  template:
+    metadata:
+      labels:
+        app: fast-screening
+    spec:
+      containers:
+      - name: screening
+        image: guardianacr03211.azurecr.io/guardian-ai-fast-screening:v1
+        ports:
+        - containerPort: 8001
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        envFrom:
+        - configMapRef:
+            name: guardian-config
+        - secretRef:
+            name: aws-secrets
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: DYNAMODB_TABLE_NAME
+          value: "guardian-decisions"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fast-screening-service
+  namespace: production
+spec:
+  selector:
+    app: fast-screening
+  ports:
+  - port: 80
+    targetPort: 8001
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fast-screening-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fast-screening
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

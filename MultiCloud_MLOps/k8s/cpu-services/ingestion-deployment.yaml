@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestion
+  template:
+    metadata:
+      labels:
+        app: ingestion
+    spec:
+      containers:
+      - name: ingestion
+        image: guardianacr03211.azurecr.io/guardian-ai-ingestion:v1
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: guardian-config
+        - secretRef:
+            name: aws-secrets
+        env:
+        - name: DYNAMODB_TABLE_NAME
+          value: "guardian-videos"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-service
+  namespace: production
+spec:
+  selector:
+    app: ingestion
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP

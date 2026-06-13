@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardian-frontend
+  namespace: production
+  labels:
+    app: guardian-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: guardian-frontend
+  template:
+    metadata:
+      labels:
+        app: guardian-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: guardianacr03211.azurecr.io/guardian-ai-frontend:v1
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardian-frontend
+  namespace: production
+spec:
+  selector:
+    app: guardian-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

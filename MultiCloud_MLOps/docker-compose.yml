@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - guardian-network
+
+  ingestion:
+    build: ./services/ingestion
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+    networks:
+      - guardian-network
+
+  fast-screening:
+    build: ./services/fast-screening
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_HOST=redis
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+      - SQS_GPU_QUEUE_URL=${SQS_GPU_QUEUE_URL}
+    depends_on:
+      - redis
+    networks:
+      - guardian-network
+
+  deep-vision:
+    build: ./services/deep-vision
+    ports:
+      - "8002:8002"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+      - AZURE_OPENAI_ENABLED=${AZURE_OPENAI_ENABLED:-false}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o}
+      # Azure ML Model Endpoints (Optional - leave empty to use CLIP only)
+      - NSFW_MODEL_ENDPOINT=${NSFW_MODEL_ENDPOINT:-}
+      - VIOLENCE_MODEL_ENDPOINT=${VIOLENCE_MODEL_ENDPOINT:-}
+      - MODEL_ENDPOINT_KEY=${MODEL_ENDPOINT_KEY:-}
+    networks:
+      - guardian-network
+
+  policy-engine:
+    build: ./services/policy-engine
+    ports:
+      - "8003:8003"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+      - NOTIFICATION_SERVICE_URL=http://notification:8005
+      - AUTO_APPROVE_THRESHOLD=${AUTO_APPROVE_THRESHOLD:-0.2}
+      - AUTO_REJECT_THRESHOLD=${AUTO_REJECT_THRESHOLD:-0.8}
+      - AZURE_OPENAI_ENABLED=${AZURE_OPENAI_ENABLED:-false}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o}
+    depends_on:
+      - notification
+    networks:
+      - guardian-network
+
+  human-review:
+    build: ./services/human-review
+    ports:
+      - "8004:8004"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+      - NOTIFICATION_SERVICE_URL=http://notification:8005
+      - AZURE_OPENAI_ENABLED=${AZURE_OPENAI_ENABLED:-false}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o}
+    depends_on:
+      - notification
+    networks:
+      - guardian-network
+
+  notification:
+    build: ./services/notification
+    ports:
+      - "8005:8005"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+    networks:
+      - guardian-network
+
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "8006:8006"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
+      - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
+    networks:
+      - guardian-network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+      - ingestion
+      - human-review
+      - policy-engine
+    networks:
+      - guardian-network
+
+networks:
+  guardian-network:
+    driver: bridge

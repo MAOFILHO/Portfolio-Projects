@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-engine
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-engine
+  template:
+    metadata:
+      labels:
+        app: policy-engine
+    spec:
+      containers:
+      - name: policy
+        image: guardianacr03211.azurecr.io/guardian-ai-policy-engine:v1
+        ports:
+        - containerPort: 8003
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "150m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: guardian-config
+        - secretRef:
+            name: aws-secrets
+        env:
+        - name: AUTO_APPROVE_THRESHOLD
+          value: "0.2"
+        - name: AUTO_REJECT_THRESHOLD
+          value: "0.8"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-engine-service
+  namespace: production
+spec:
+  selector:
+    app: policy-engine
+  ports:
+  - port: 80
+    targetPort: 8003

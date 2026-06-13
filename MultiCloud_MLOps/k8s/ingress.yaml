@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guardian-ingress
+  namespace: production
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      # Frontend handles all requests (including API proxying via its nginx.conf)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: guardian-frontend
+            port:
+              number: 80

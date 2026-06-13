@@ -1,0 +1,13 @@
+# Pip packages for Azure ML MLflow online inference.
+# Includes azureml-ai-monitoring so MLflow-generated score scripts that
+# import "from azureml.ai.monitoring import Collector" do not crash.
+# azureml-inference-server-http is required by Azure ML container runtime.
+azureml-inference-server-http
+torch>=1.13
+torchvision
+mlflow>=2.0
+azureml-mlflow
+azureml-ai-monitoring
+inference-schema
+numpy
+pillow

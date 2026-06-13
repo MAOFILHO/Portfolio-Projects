@@ -1,0 +1,23 @@
+{
+  "Rules": [
+    {
+      "ID": "ArchiveOldVideos",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Transitions": [
+        {
+          "Days": 90,
+          "StorageClass": "GLACIER"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "GLACIER"
+        }
+      ]
+    }
+  ]
+}

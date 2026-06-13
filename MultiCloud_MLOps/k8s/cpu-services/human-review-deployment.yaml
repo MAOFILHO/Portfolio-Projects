@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: human-review
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: human-review
+  template:
+    metadata:
+      labels:
+        app: human-review
+    spec:
+      containers:
+      - name: human-review
+        image: guardianacr03211.azurecr.io/guardian-ai-human-review:v1
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: guardian-config
+        - secretRef:
+            name: aws-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: human-review-service
+  namespace: production
+spec:
+  selector:
+    app: human-review
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
