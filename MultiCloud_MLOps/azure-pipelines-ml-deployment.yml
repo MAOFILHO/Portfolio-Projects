@@ -149,7 +149,7 @@ stages:
             displayName: 'Update ConfigMap with endpoints (fallback apply)'
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: 'guardian-aks-connection'
+              kubernetesServiceEndpoint: 'guardian-azure-connection'
               namespace: 'production'
               command: 'apply'
               arguments: '-f MultiCloud_MLOps/k8s/configmap.yaml'
