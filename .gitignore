@@ -1,0 +1,18 @@
+MultiCloud_MLOps/.venv/
+MultiCloud_MLOps/.env
+# Python venvs
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/build/
+frontend/dist/
+
+# Sensitive
+.env
+
+# MacOS
+.DS_Store
