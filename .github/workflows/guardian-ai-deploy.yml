@@ -1,0 +1,70 @@
+name: Guardian AI — Deploy to AKS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'MultiCloud_MLOps/services/**'
+      - 'MultiCloud_MLOps/k8s/**'
+      - 'MultiCloud_MLOps/frontend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Login to ACR
+      uses: azure/docker-login@v1
+      with:
+        login-server: guardianacr03211.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+
+    - name: Build and push service images
+      run: |
+        services=("ingestion" "fast-screening" "deep-vision" "policy-engine" "human-review" "notification" "api-gateway")
+        for service in "${services[@]}"; do
+          docker build \
+            -t guardianacr03211.azurecr.io/guardian-ai-${service}:${{ github.sha }} \
+            -t guardianacr03211.azurecr.io/guardian-ai-${service}:latest \
+            ./MultiCloud_MLOps/services/${service}
+          docker push guardianacr03211.azurecr.io/guardian-ai-${service}:${{ github.sha }}
+          docker push guardianacr03211.azurecr.io/guardian-ai-${service}:latest
+        done
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group guardian-ai-prod \
+          --name guardian-ai-aks \
+          --overwrite-existing
+
+    - name: Deploy to AKS
+      run: |
+        kubectl set image deployment/ingestion \
+          ingestion=guardianacr03211.azurecr.io/guardian-ai-ingestion:${{ github.sha }} \
+          -n production
+        kubectl set image deployment/fast-screening \
+          fast-screening=guardianacr03211.azurecr.io/guardian-ai-fast-screening:${{ github.sha }} \
+          -n production
+        kubectl set image deployment/deep-vision \
+          deep-vision=guardianacr03211.azurecr.io/guardian-ai-deep-vision:${{ github.sha }} \
+          -n production
+        kubectl set image deployment/policy-engine \
+          policy-engine=guardianacr03211.azurecr.io/guardian-ai-policy-engine:${{ github.sha }} \
+          -n production
+        kubectl set image deployment/human-review \
+          human-review=guardianacr03211.azurecr.io/guardian-ai-human-review:${{ github.sha }} \
+          -n production
+        kubectl set image deployment/api-gateway \
+          api-gateway=guardianacr03211.azurecr.io/guardian-ai-api-gateway:${{ github.sha }} \
+          -n production
+        kubectl rollout status deployment/fast-screening -n production --timeout=5m
+        kubectl rollout status deployment/deep-vision -n production --timeout=5m
