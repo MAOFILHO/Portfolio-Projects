@@ -252,6 +252,38 @@ python -m pytest tests/smoke/test_smoke.py -v
 
 ---
 
+
+
+---
+
+## GitHub Actions CI/CD
+
+A GitHub Actions workflow at `.github/workflows/guardian-ai-deploy.yml` automatically builds and deploys service images to AKS on every push to `MultiCloud_MLOps/services/**`.
+
+### Required GitHub Secrets
+
+Add at: `github.com/MAOFILHO/Portfolio-Projects → Settings → Secrets → Actions`
+
+- `ACR_USERNAME` — run: `az acr credential show --name guardianacr03211 --query username -o tsv`
+- `ACR_PASSWORD` — run: `az acr credential show --name guardianacr03211 --query 'passwords[0].value' -o tsv`
+- `AZURE_CREDENTIALS` — run: `az ad sp create-for-rbac --name guardian-github-actions --role Contributor --scopes /subscriptions/960936b9-ecde-465b-be8d-776ca077dcd0 --sdk-auth`
+
+### Trigger Automatically
+
+Push any change to a service file and the workflow runs automatically.
+
+### Trigger Manually
+
+GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
+
+### Important Notes
+
+- AKS must be running before deployment: `az aks start --name guardian-ai-aks --resource-group guardian-ai-prod`
+- Workflow only fires on changes under `MultiCloud_MLOps/services/**`, `k8s/**`, or `frontend/**`
+- Rotate the `guardian-github-actions` SP secret annually
+
+---
+
 ## Teardown / Cleanup
 
 ### AWS Resources
