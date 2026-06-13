@@ -20,7 +20,7 @@ load_dotenv(_ENV_PATH)
 class AWSConfig:
     access_key_id: str     = field(default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", ""))
     secret_access_key: str = field(default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-    region: str            = field(default_factory=lambda: os.getenv("AWS_REGION", "ap-south-1"))
+    region: str            = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     # Populated at runtime
     account_id: str        = ""
     s3_bucket_name: str    = field(default_factory=lambda: os.getenv("S3_BUCKET_NAME", ""))

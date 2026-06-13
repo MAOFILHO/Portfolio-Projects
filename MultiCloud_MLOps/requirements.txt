@@ -1,27 +1,39 @@
-# ─── Application Services ────────────────────────────────
-fastapi==0.109.0
-uvicorn==0.27.0
-python-multipart==0.0.6
-boto3==1.34.0
-botocore==1.34.0
-redis>=5.0.0
-httpx>=0.27.0
+# Guardian AI — Python Dependencies
+# Install: pip install -r requirements.txt
 
-# ─── Azure ML SDK (MLOps scripts) ────────────────────────
-azure-ai-ml>=1.13.0
-azure-identity>=1.15.0
-mlflow>=2.12.0
-azureml-mlflow>=1.55.0
-torch>=2.0.0
-torchvision>=0.15.0
-transformers>=4.35.0
-Pillow>=10.0.0
-numpy>=1.24.0
-
-# ─── Automation Layer ────────────────────────────────────
+# ─── Core ────────────────────────────────────────────────────
 python-dotenv>=1.0.0
+boto3>=1.34.0
+botocore>=1.34.0
 
-# ─── Testing ─────────────────────────────────────────────
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-pyyaml>=6.0.0
+# ─── Azure SDK ───────────────────────────────────────────────
+azure-identity>=1.15.0
+azure-mgmt-resource>=23.0.0
+azure-ai-ml>=1.13.0
+
+# ─── Kubernetes ──────────────────────────────────────────────
+kubernetes>=28.1.0
+
+# ─── ML / Data ───────────────────────────────────────────────
+numpy>=1.24.0
+scikit-learn>=1.3.0
+mlflow>=2.9.0
+
+# ─── HTTP / Async ────────────────────────────────────────────
+requests>=2.31.0
+aiohttp>=3.9.0
+httpx>=0.25.0
+
+# ─── Web Services (used by microservices) ────────────────────
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.4.0
+
+# ─── Testing ─────────────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# ─── Utilities ───────────────────────────────────────────────
+pyyaml>=6.0.1
+click>=8.1.7
+rich>=13.7.0

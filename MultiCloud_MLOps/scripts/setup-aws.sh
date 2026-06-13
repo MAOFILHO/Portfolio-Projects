@@ -59,6 +59,7 @@ TAGS="Key=Project,Value=guardian-ai Key=ManagedBy,Value=script Key=Environment,V
 print_section "Creating S3 Bucket"
 
 # Primary S3 Bucket for Videos
+# Allow S3_BUCKET_OVERRIDE env var to use a custom name (avoids AWS deletion lock-out)
 PRIMARY_BUCKET="${S3_BUCKET_OVERRIDE:-guardian-videos-${BUCKET_SUFFIX}}"
 print_info "Checking primary S3 bucket: $PRIMARY_BUCKET"
 

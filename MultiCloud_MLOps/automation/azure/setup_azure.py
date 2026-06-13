@@ -124,6 +124,19 @@ def create_acr() -> dict:
     config.azure.acr_password     = password
     log.info("✅ ACR login server: %s", login_server)
 
+    # Persist ACR name to .env so subsequent stages can find it
+    from pathlib import Path
+    env_path = config.project_root / ".env"
+    if env_path.exists():
+        env_text = env_path.read_text()
+        if "AZURE_ACR_NAME=" in env_text:
+            import re
+            env_text = re.sub(r"AZURE_ACR_NAME=.*", f"AZURE_ACR_NAME={acr}", env_text)
+        else:
+            env_text += f"\nAZURE_ACR_NAME={acr}\n"
+        env_path.write_text(env_text)
+        log.info("✅ Persisted AZURE_ACR_NAME=%s to .env", acr)
+
     # Docker login
     run(["az", "acr", "login", "--name", acr], description="Docker login to ACR")
 

@@ -41,18 +41,36 @@ def setup_buildx() -> None:
 # ─── 9.2 Build and push ───────────────────────────────────────────────────────
 
 def _ensure_acr_credentials() -> None:
+    """
+    If ACR credentials are not in config (e.g. running images stage standalone),
+    fetch them from Azure CLI using the ACR name from config/.env.
+    """
     if config.azure.acr_username and config.azure.acr_login_server:
-        return
+        return  # Already loaded
+
     acr = config.azure.acr_name
     if not acr:
         import sys
-        log.error("AZURE_ACR_NAME not set in .env. Add it and retry.")
+        log.error(
+            "AZURE_ACR_NAME not set.\n"
+            "Fix: add AZURE_ACR_NAME=<your-acr-name> to .env\n"
+            "Then run: python setup.py --stage images"
+        )
         sys.exit(1)
+
     from automation.utils.shell import az
-    config.azure.acr_login_server = az("acr", "show", "--name", acr, "--query", "loginServer", "--output", "tsv")
-    config.azure.acr_username = az("acr", "credential", "show", "--name", acr, "--query", "username", "--output", "tsv")
-    config.azure.acr_password = az("acr", "credential", "show", "--name", acr, "--query", "passwords[0].value", "--output", "tsv")
-    log.info("✅ ACR credentials loaded: %s", config.azure.acr_login_server)
+    config.azure.acr_login_server = az(
+        "acr", "show", "--name", acr, "--query", "loginServer", "--output", "tsv"
+    )
+    config.azure.acr_username = az(
+        "acr", "credential", "show", "--name", acr, "--query", "username", "--output", "tsv"
+    )
+    config.azure.acr_password = az(
+        "acr", "credential", "show", "--name", acr,
+        "--query", "passwords[0].value", "--output", "tsv"
+    )
+    log.info("✅ ACR credentials loaded from CLI: %s", config.azure.acr_login_server)
+
 
 def _docker_login() -> None:
     _ensure_acr_credentials()

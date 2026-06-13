@@ -22,7 +22,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: vision
-        image: guardianacr03211.azurecr.io/deep-vision:latest
+        image: guardianacr65958.azurecr.io/deep-vision:latest
         ports:
         - containerPort: 8002
         envFrom:

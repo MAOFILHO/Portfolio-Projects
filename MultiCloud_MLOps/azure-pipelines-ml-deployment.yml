@@ -99,7 +99,7 @@ stages:
                 $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
                 $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
 
-                Set-Location mlops/deployment
+                Set-Location MultiCloud_MLOps/mlops/deployment
 
                 & "$(VENV_PYTHON)" deploy_model.py
 
@@ -152,5 +152,5 @@ stages:
               kubernetesServiceEndpoint: 'guardian-aks-connection'
               namespace: 'production'
               command: 'apply'
-              arguments: '-f k8s/configmap.yaml'
+              arguments: '-f MultiCloud_MLOps/k8s/configmap.yaml'
             continueOnError: true

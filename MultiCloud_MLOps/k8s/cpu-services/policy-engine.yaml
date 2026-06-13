@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: policy
-        image: guardianacr03211.azurecr.io/guardian-ai-policy-engine:v1
+        image: guardianacr65958.azurecr.io/guardian-ai-policy-engine:v1
         ports:
         - containerPort: 8003
         resources:

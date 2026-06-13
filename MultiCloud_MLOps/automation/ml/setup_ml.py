@@ -352,8 +352,14 @@ def setup_azure_ml() -> dict:
     create_compute_cluster()
     update_variable_group_ml()
 
-    run_training_pipeline()
+    # Skip training if models are already registered
     models = verify_model_registration()
+    if len(models) < 2:
+        log.info("Models not yet registered — triggering training pipeline...")
+        run_training_pipeline()
+        models = verify_model_registration()
+    else:
+        log.info("✅ Models already registered — skipping training pipeline")
 
     run_deployment_pipeline()
     endpoints = get_endpoint_uris()

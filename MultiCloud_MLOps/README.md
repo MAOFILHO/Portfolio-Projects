@@ -1,220 +1,371 @@
-# Guardian AI — MultiCloud MLOps
+# Guardian AI — MultiCloud MLOps Video Content Moderation
 
-**End-to-End MLOps Pipeline: Multi-Cloud Video Content Moderation**
+A production-grade, end-to-end MLOps application for automated video content moderation. Built on **Azure AKS** (Kubernetes) + **AWS** (S3, SQS, DynamoDB) with **Azure ML** for NSFW and Violence detection model training and deployment.
 
-This project automates the complete K21Academy Multi-Cloud Video Content Moderation MLOps guide.
-Every step that the manual asks you to perform through the Azure Portal, Azure DevOps UI,
-or Azure ML Studio GUI has been replaced with a single command:
-
-```bash
-python setup.py
-```
+> **K21 Academy Lab** — Real-World MultiCloud MLOps Track  
+> Converted from manual GUI steps to a fully automated Python/CLI deployment pipeline.
 
 ---
 
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                       Application Layer (AKS)                      │
-│  Ingestion → Fast-Screening → Deep-Vision → Policy Engine         │
-└──────────────────────────┬────────────────────────────────────────┘
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-   ┌──────────────────┐      ┌──────────────────────────┐
-   │     AWS Cloud    │      │       Azure Cloud          │
-   │  S3  (videos)    │      │  Azure ML Workspace        │
-   │  SQS (queues)    │◄────►│  Compute Cluster           │
-   │  DynamoDB (meta) │      │  Model Registry            │
-   └──────────────────┘      │  Online Endpoints (NSFW,   │
-                              │  Violence detection)       │
-                              │  Azure DevOps CI/CD        │
-                              │  AKS + ACR                 │
-                              └────────────────────────────┘
+Upload → API Gateway → Ingestion (S3) → SQS → Fast Screening
+                                                     ↓
+                                              Deep Vision (ML)
+                                                     ↓
+                                         Policy Engine → Decision
+                                                     ↓
+                                    Auto-Approve / Auto-Reject / Human Review
 ```
 
----
+**AWS** (us-east-1):
+- S3: video storage (`guardian-videos-*`)
+- SQS: `guardian-video-processing`, `guardian-gpu-processing`
+- DynamoDB: `guardian-videos`, `guardian-events`
 
-## Automated setup stages
-
-| Stage | Section | What runs | Time |
-|---|---|---|---|
-| `aws` | §7 | S3, SQS, DynamoDB | ~2 min |
-| `azure` | §8 | RG, ACR, AKS, NGINX | ~15 min |
-| `images` | §9 | Docker build & push (8 images) | ~20 min |
-| `k8s` | §10–11 | ConfigMap, secrets, deploy all services | ~5 min |
-| `devops` | §12.1–12.4 | DevOps project, 3 service connections, agent, pipelines | ~5 min |
-| `ml` | §12.5–12.7 | ML workspace, compute cluster, train, deploy, endpoint patch | ~30 min |
+**Azure** (East US):
+- AKS: 4-node cluster (`Standard_D2s_v3`) running 8 microservices
+- ACR: Docker image registry
+- Azure ML: NSFW + Violence detection model training & deployment
+- Azure DevOps: CI/CD pipelines (3 pipelines)
 
 ---
 
-## Quick start
-
-### Prerequisites
+## Prerequisites
 
 | Tool | Version | Install |
-|---|---|---|
-| Python | 3.11+ | https://www.python.org |
-| Azure CLI | 2.50+ | https://learn.microsoft.com/cli/azure |
-| AWS CLI | 2.13+ | https://aws.amazon.com/cli |
-| Docker Desktop | 24+ | https://www.docker.com/products/docker-desktop |
-| kubectl | 1.28+ | https://kubernetes.io/docs/tasks/tools |
-| Helm | 3.12+ | https://helm.sh/docs/intro/install |
-| Node.js | 20+ | https://nodejs.org |
+|------|---------|---------|
+| Python | 3.11+ | [python.org](https://python.org) |
+| AWS CLI | v2 | `brew install awscli` |
+| Azure CLI | latest | `brew install azure-cli` |
+| kubectl | latest | `brew install kubectl` |
+| Helm | 3+ | `brew install helm` |
+| Docker Desktop | latest | [docker.com](https://docker.com) |
+| Node.js | 20+ | `brew install node` |
+| git | any | pre-installed on macOS |
 
-**macOS:**  `brew install kubectl awscli azure-cli helm node python@3.11`
+---
 
-**Windows (PowerShell):**
-```powershell
-winget install Docker.DockerDesktop Kubernetes.kubectl Python.Python.3.11 Amazon.AWSCLI Microsoft.AzureCLI Kubernetes.Helm OpenJS.NodeJS
-```
+## Quick Start
 
-### Setup
+### 1. Clone and Configure
 
 ```bash
-# 1. Clone
-git clone https://github.com/k21academyuk/MultiCloud_MLOps.git
-cd MultiCloud_MLOps
+# If using as a standalone project:
+git clone https://github.com/MAOFILHO/Portfolio-Projects.git
+cd Portfolio-Projects/MultiCloud_MLOps
 
-# 2. Python environment
-python3.11 -m venv venv && source venv/bin/activate
+# Install Python dependencies
+python -m venv .venv
+source .venv/bin/activate          # macOS/Linux
 pip install -r requirements.txt
 
-# 3. Configure credentials
+# Configure credentials
 cp .env.example .env
-# Edit .env — minimum required:
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-#   AZURE_SUBSCRIPTION_ID
-#   AZDO_ORG_NAME, AZDO_PAT_TOKEN   ← generate PAT below
-
-# 4. Verify tools
-python setup.py --check
-
-# 5. Full setup (~75 min)
-python setup.py
+# Edit .env with your values (see CONFIGURATION section below)
 ```
 
-**Generate Azure DevOps PAT:**
-https://dev.azure.com → User Settings (top-right) → Personal Access Tokens → New Token
-Scopes: Agent Pools (R&M), Build (R&E), Code (R), Project+Team (R&W),
-Service Connections (R,Q,M), Variable Groups (R,C,M)
-
-### Individual stages
+### 2. Configure AWS
 
 ```bash
-python setup.py --stage aws       # AWS infra only
-python setup.py --stage azure     # Azure infra only
-python setup.py --stage images    # Docker build & push
-python setup.py --stage k8s       # Deploy to Kubernetes
-python setup.py --stage devops    # Azure DevOps + agent + pipelines
-python setup.py --stage ml        # ML workspace + train + deploy
+aws configure
+# Enter: Access Key ID, Secret Access Key, Region: us-east-1, Output: json
+```
 
-python setup.py --resume-from k8s # Resume from a specific stage after a failure
-python setup.py --cleanup         # Teardown all resources
+### 3. Configure Azure
+
+```bash
+az login
+az account set --subscription <YOUR_SUBSCRIPTION_ID>
+```
+
+### 4. Run Automated Setup (Stages)
+
+```bash
+python setup.py --stage aws      # ~2 min:   S3, SQS, DynamoDB
+python setup.py --stage azure    # ~15 min:  RG, ACR, AKS, NGINX
+python setup.py --stage images   # ~20 min:  Docker build & push (8 images)
+python setup.py --stage k8s      # ~5 min:   Deploy all services to AKS
+python setup.py --stage devops   # ~5 min:   Azure DevOps pipelines
+python setup.py --stage ml       # ~45 min:  Azure ML training + deployment
+```
+
+After `--stage k8s` completes, the app is live at: `http://<EXTERNAL_IP>`
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in all `<YOUR_VALUE>` placeholders:
+
+### AWS Credentials
+```bash
+AWS_ACCESS_KEY_ID=<from IAM user>
+AWS_SECRET_ACCESS_KEY=<from IAM user>
+AWS_REGION=us-east-1
+```
+
+### Azure Credentials
+```bash
+AZURE_SUBSCRIPTION_ID=<az account show --query id -o tsv>
+```
+
+### Azure Service Principal (required for DevOps)
+```bash
+# Create SP:
+az ad sp create-for-rbac \
+  --name guardian-ai-sp \
+  --role Contributor \
+  --scopes /subscriptions/<YOUR_SUBSCRIPTION_ID>
+
+# Fill in output values:
+AZURE_SP_APP_ID=<appId>
+AZURE_SP_SECRET=<password>
+AZURE_TENANT_ID=<tenant>
+```
+
+### Azure DevOps
+```bash
+AZDO_ORG_NAME=<your-org-name>     # from dev.azure.com/<ORG>
+AZDO_PAT_TOKEN=<personal-access-token>
+```
+Generate PAT at: `https://dev.azure.com → Profile → Personal access tokens`  
+Required scopes: Agent Pools, Build, Code, Project & Team, Service Connections, Variable Groups
+
+---
+
+## Known Issues & Workarounds
+
+### 1. AWS Region Mismatch (CRITICAL)
+**Symptom**: Resources created in wrong region despite `AWS_REGION=us-east-1`  
+**Root cause**: Original `setup-aws.sh` had `REGION="ap-south-1"` hardcoded  
+**Fix**: Already patched — script now reads `${AWS_REGION:-$(aws configure get region)}`
+
+### 2. S3 Bucket Creation Fails in us-east-1
+**Symptom**: `An error occurred (InvalidLocationConstraint)`  
+**Root cause**: us-east-1 is S3's default region and rejects `LocationConstraint`  
+**Fix**: Already patched — script uses conditional creation without `LocationConstraint` for us-east-1
+
+### 3. S3 Bucket "OperationAborted" After Deletion
+**Symptom**: `A conflicting conditional operation is currently in progress`  
+**Root cause**: AWS enforces a ~10-minute cooldown before a deleted bucket name can be reused  
+**Workaround**: Add `S3_BUCKET_OVERRIDE=guardian-videos-yourname-dev` to `.env`
+
+### 4. ACR Credentials Lost Between Stages
+**Symptom**: `username is empty` when running `--stage images` standalone  
+**Root cause**: ACR credentials were only held in-memory during `--stage azure`  
+**Fix**: Already patched — `build_images.py` fetches credentials from Azure CLI when not in config; `setup_azure.py` persists `AZURE_ACR_NAME` to `.env`
+
+### 5. Pods in ErrImagePull After k8s Deployment
+**Symptom**: All pods stuck in `ErrImagePull`  
+**Root cause**: New ACR not attached to AKS cluster  
+**Fix**: Run manually after `--stage k8s` if pods fail:
+```bash
+az aks update \
+  --name guardian-ai-aks \
+  --resource-group guardian-ai-prod \
+  --attach-acr <YOUR_ACR_NAME>
+kubectl rollout restart deployment -n production
+```
+
+### 6. Azure DevOps Service Connection — Interactive Prompt
+**Symptom**: `Azure RM service principal key:` prompt during `--stage devops`  
+**Root cause**: `az devops service-endpoint azurerm create` prompts for SP key interactively  
+**Fix**: Set these in `.env` before running `--stage devops`:
+```bash
+AZURE_SP_APP_ID=<appId>
+AZURE_SP_SECRET=<password>
+AZURE_TENANT_ID=<tenant>
+```
+
+### 7. Self-Hosted Agent Download Fails
+**Symptom**: `socket.gaierror: nodename nor servname provided` downloading agent  
+**Root cause**: `vstsagentpackage.azureedge.net` blocked or unavailable  
+**Fix**: Already patched — setup skips self-hosted agent and uses Microsoft-hosted `ubuntu-latest` pool instead
+
+### 8. Pipeline YAML "Could not find valid pipeline YAML file"
+**Symptom**: Azure DevOps pipeline fails immediately with YAML not found  
+**Root cause**: Azure Repos has the full Portfolio-Projects structure, so YAMLs are under `MultiCloud_MLOps/` subfolder, not at root  
+**Fix**: Already patched — pipeline YAMLs reference correct paths. If you re-create pipelines, update the YAML path in Azure DevOps to `MultiCloud_MLOps/azure-pipelines-*.yml`
+
+### 9. ML Training Pipeline "No agent found in pool Default"
+**Symptom**: Training jobs fail immediately  
+**Root cause**: Pipeline YAML had `pool: name: 'Default'` requiring self-hosted agent  
+**Fix**: Already patched — all pipeline YAMLs use `pool: vmImage: 'ubuntu-latest'`
+
+### 10. ML Training Path Error
+**Symptom**: `Cannot find path '/home/vsts/work/1/s/mlops/training'`  
+**Root cause**: Pipeline runs from Portfolio-Projects repo root, so MLOps scripts are under `MultiCloud_MLOps/mlops/`  
+**Fix**: Already patched — pipeline YAMLs use `cd MultiCloud_MLOps/mlops/training`
+
+### 11. Duplicate ACR Created on Each Azure Stage Run
+**Symptom**: New `guardianacr*` created every time `--stage azure` runs  
+**Root cause**: ACR name was timestamp-generated and not persisted  
+**Fix**: Already patched — `setup_azure.py` saves `AZURE_ACR_NAME=` to `.env` after first creation
+
+---
+
+## Stage Details
+
+### Stage 1: AWS (`--stage aws`)
+Creates: S3 bucket, 2 SQS queues, 2 DynamoDB tables  
+Duration: ~2 minutes  
+Region: **us-east-1** (hardcoded guard — will error if unconfigured)
+
+### Stage 2: Azure (`--stage azure`)
+Creates: Resource group, ACR, AKS cluster (4 nodes), NGINX Ingress  
+Duration: ~15 minutes (AKS is the long step)  
+Output: External IP for the app
+
+### Stage 3: Docker Images (`--stage images`)
+Builds and pushes 8 Docker images to ACR:
+- `ingestion`, `fast-screening`, `deep-vision`, `policy-engine`
+- `human-review`, `notification`, `api-gateway`, `frontend`  
+Duration: ~20 minutes (first run; subsequent runs use layer cache)
+
+### Stage 4: Kubernetes (`--stage k8s`)
+Deploys: Namespace, ConfigMap, AWS secrets, all 8 services + Redis, Ingress  
+Duration: ~5 minutes  
+✅ App is live after this stage
+
+### Stage 5: DevOps (`--stage devops`)
+Creates: Azure DevOps project, 3 service connections, variable group, 3 pipelines  
+Duration: ~5 minutes  
+Requires: `AZDO_PAT_TOKEN`, `AZURE_SP_APP_ID`, `AZURE_SP_SECRET`, `AZURE_TENANT_ID`
+
+### Stage 6: ML (`--stage ml`)
+Creates: Azure ML workspace, compute cluster, triggers training pipeline  
+Duration: ~45 minutes (training on `cpu-training-cluster`)  
+Output: NSFW + Violence detection endpoints; patches Kubernetes ConfigMap
+
+---
+
+## Running Tests
+
+```bash
+# Smoke tests (no cloud credentials required)
+python -m pytest tests/smoke/test_smoke.py -v
+
+# Expected: 69 tests passing
 ```
 
 ---
 
-## Project structure
+## Teardown / Cleanup
+
+### AWS Resources
+```bash
+chmod +x aws_resource_cleanup.sh
+./aws_resource_cleanup.sh
+```
+
+### Azure Resources
+```bash
+python automation/cleanup.py
+# OR manually:
+az group delete --name guardian-ai-prod --yes --no-wait
+```
+
+### Verify cleanup
+```bash
+# AWS
+echo "S3:"; aws s3 ls | grep guardian
+echo "SQS:"; aws sqs list-queues --region us-east-1
+echo "DDB:"; aws dynamodb list-tables --region us-east-1
+
+# Azure
+az resource list --resource-group guardian-ai-prod --output table
+```
+
+---
+
+## Project Structure
 
 ```
 MultiCloud_MLOps/
-├── setup.py                          ← Main orchestrator (start here)
-├── .env.example                      ← Credentials template
-├── requirements.txt
+├── setup.py                          # Main orchestrator (run this)
+├── .env.example                      # Environment variables template
+├── requirements.txt                  # Python dependencies
 │
-├── automation/                       ← Automation layer
-│   ├── config.py                     ← Central configuration
-│   ├── cleanup.py                    ← Resource teardown (§14)
-│   ├── aws/setup_aws.py              ← §7: S3, SQS, DynamoDB
-│   ├── azure/setup_azure.py          ← §8: RG, ACR, AKS, NGINX
-│   ├── azure/build_images.py         ← §9: Docker build & push
-│   ├── k8s/deploy_k8s.py             ← §10–11: ConfigMap + deploy
-│   ├── devops/setup_devops.py        ← §12.1–12.4: DevOps pipelines
-│   ├── ml/setup_ml.py                ← §12.5–12.7: ML workspace + train + deploy
-│   └── utils/shell.py                ← Shared CLI runner + logging
+├── automation/                       # Stage automation scripts
+│   ├── config.py                     # Central config, reads .env
+│   ├── aws/setup_aws.py             # Stage: aws
+│   ├── azure/
+│   │   ├── setup_azure.py           # Stage: azure
+│   │   └── build_images.py          # Stage: images
+│   ├── k8s/deploy_k8s.py            # Stage: k8s
+│   ├── devops/setup_devops.py       # Stage: devops
+│   ├── ml/setup_ml.py               # Stage: ml
+│   └── utils/shell.py               # CLI runner, logging
 │
-├── services/                         ← Application microservices
-│   ├── ingestion/                    ← Video upload (S3 + DynamoDB)
-│   ├── fast-screening/               ← Quick heuristic scoring
-│   ├── deep-vision/                  ← ML model inference (Azure ML endpoints)
-│   ├── policy-engine/                ← Allow/block/review decisions
-│   ├── human-review/                 ← Manual review queue
-│   ├── notification/                 ← Event notifications
-│   └── api-gateway/                  ← Frontend API proxy
+├── scripts/
+│   └── setup-aws.sh                 # AWS resource creation (called by aws stage)
 │
-├── k8s/                              ← Kubernetes manifests
-├── mlops/                            ← ML training & deployment scripts
-├── frontend/                         ← React dashboard
-├── scripts/                          ← Helper bash scripts
-├── tests/
-│   └── smoke/test_smoke.py           ← Smoke tests (run without cloud creds)
-└── azure-pipelines-*.yml             ← Azure DevOps pipeline definitions
+├── services/                        # Microservice source code
+│   ├── ingestion/                   # Video upload & S3 storage
+│   ├── fast-screening/              # Quick ML screening
+│   ├── deep-vision/                 # Deep learning analysis
+│   ├── policy-engine/               # Decision logic
+│   ├── human-review/                # Manual review interface
+│   ├── notification/                # Alerting service
+│   └── api-gateway/                 # REST API gateway
+│
+├── frontend/                        # React TypeScript UI
+├── k8s/                             # Kubernetes manifests
+├── mlops/
+│   ├── training/                    # Model training scripts
+│   └── deployment/                  # Model deployment scripts
+│
+├── azure-pipelines-app-ci-cd.yml    # App CI/CD pipeline
+├── azure-pipelines-ml-training.yml  # ML training pipeline
+├── azure-pipelines-ml-deployment.yml # ML deployment pipeline
+│
+├── tests/smoke/test_smoke.py        # 69 smoke tests
+└── aws_resource_cleanup.sh          # AWS teardown script
 ```
 
 ---
 
-## Two browser-only steps
+## Cost Estimates
 
-1. **DevOps organization** — Create at https://dev.azure.com (one time)
-2. **PAT token** — Generate in DevOps UI (User Settings → Personal Access Tokens)
+| Resource | Monthly Cost |
+|----------|-------------|
+| AKS (4x Standard_D2s_v3) | ~$280 |
+| Azure ML compute (cpu-training-cluster, 0 min instances) | ~$0 (scales to 0) |
+| ACR Standard | ~$5 |
+| S3 + SQS + DynamoDB (light usage) | ~$5 |
+| **Total** | **~$290/month** |
 
-Everything else is automated.
-
----
-
-## End-to-end test
-
-After setup:
-1. Open `http://<EXTERNAL_IP>` (printed at end of setup)
-2. Upload a video → Dashboard shows "Processing"
-3. After 2–5 min: "Pending Review" (high risk) or "Approved" (low risk)
-4. Use "Review Queue" to manually approve/reject
-
----
-
-## Cleanup
-
-```bash
-python setup.py --cleanup
-```
-
-Deletes Azure resource group (AKS, ACR, ML workspace, endpoints) and AWS resources
-(S3 bucket, SQS queues, DynamoDB tables). Requires explicit `yes` confirmation per cloud.
-
-Estimated cost: $2–15 USD for a 3–6 hour lab session.
+> ⚠️ **Cost Warning**: AKS nodes run 24/7. Stop the cluster when not in use:
+> ```bash
+> az aks stop --name guardian-ai-aks --resource-group guardian-ai-prod
+> az aks start --name guardian-ai-aks --resource-group guardian-ai-prod
+> ```
 
 ---
 
-## Smoke tests
+## Lessons Learned
 
-```bash
-pytest tests/smoke/test_smoke.py -v
-```
+This lab required significant troubleshooting beyond the original manual. Key lessons:
 
-64 tests covering module imports, config, YAML validity, bash syntax, service structure.
-All run without cloud credentials.
-
----
-
-## MLOps pipeline overview
-
-**Training:** `azure-pipelines-ml-training.yml`
-→ Agent calls `mlops/training/submit_training_job.py`
-→ Submits NSFW + Violence training jobs to `cpu-training-cluster`
-→ MLflow tracks metrics; models auto-register in Azure ML Model Registry
-
-**Deployment:** `azure-pipelines-ml-deployment.yml`
-→ Agent calls `mlops/deployment/deploy_model.py`
-→ Creates/updates `nsfw-detector-endpoint` and `violence-detector-endpoint`
-→ Updates Kubernetes ConfigMap with scoring URIs
-→ Restarts `deep-vision` deployment to pick up new endpoints
-
-**Application CI/CD:** `azure-pipelines-app-ci-cd.yml`
-→ Builds all 8 Docker images → pushes to ACR → deploys to AKS
+1. **Always set `AWS_REGION` explicitly** — never rely on CLI defaults in scripts
+2. **S3 in us-east-1 is special** — it's the default region and rejects `LocationConstraint`
+3. **Azure DevOps CLI has gaps** — some service connection types (AKS Kubeconfig, Token) require the REST API
+4. **ACR must be attached to AKS** after creation via `az aks update --attach-acr`
+5. **Portfolio-Projects repo structure matters** — pipeline YAML paths must include the subfolder prefix when the pipeline YAML isn't at repo root
+6. **Self-hosted agents require network access** — Microsoft-hosted `ubuntu-latest` is simpler for labs
+7. **Never commit secrets** — use `.env` + `.gitignore`, rotate credentials immediately if exposed
 
 ---
 
-*K21Academy Multi-Cloud Video Content Moderation MLOps Application*
-*Automation layer: replaces all Azure Portal / Azure DevOps / Azure ML Studio GUI steps*
+## Authors
+
+- **Marcos Oliveira** — Senior AI/ML Engineering Leader  
+  [github.com/MAOFILHO](https://github.com/MAOFILHO) | [Portfolio-Projects](https://github.com/MAOFILHO/Portfolio-Projects)
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE)

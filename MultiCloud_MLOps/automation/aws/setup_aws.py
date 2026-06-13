@@ -83,7 +83,9 @@ def get_resource_urls(account_id: str) -> dict:
     step("7.3 Get AWS Resource URLs")
 
     region = config.aws.region
-    bucket_name = f"guardian-videos-{account_id[:8]}"
+    # Respect S3_BUCKET_OVERRIDE if set (avoids AWS deletion lock-out period)
+    import os
+    bucket_name = os.getenv("S3_BUCKET_OVERRIDE") or f"guardian-videos-{account_id[:8]}"
 
     # SQS URLs
     sqs_url = aws(

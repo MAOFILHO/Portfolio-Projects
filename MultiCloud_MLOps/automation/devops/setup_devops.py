@@ -150,17 +150,27 @@ def create_azure_rm_connection() -> None:
     if _sc_exists(name):
         log.info("✅ SC already exists: %s", name)
         return
+    import os
+    sp_id     = os.getenv("AZURE_SP_APP_ID", "")
+    tenant_id = os.getenv("AZURE_TENANT_ID", "")
+    sub_name  = os.getenv("AZURE_SUBSCRIPTION_NAME", "Azure subscription 1")
+    sp_key    = os.getenv("AZURE_SP_SECRET", "")
+
+    env = {**_devops_env()}
+    if sp_key:
+        env["AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY"] = sp_key
+
     run(
         ["az", "devops", "service-endpoint", "azurerm", "create",
          "--name", name,
-         "--azure-rm-subscription-id", "960936b9-ecde-465b-be8d-776ca077dcd0",
-         "--azure-rm-subscription-name", "Azure subscription 1",
-         "--azure-rm-tenant-id", "26cf5b2c-43ed-450e-81ec-5261581358ea",
-         "--azure-rm-service-principal-id", "7cd6aaa8-60a7-4e49-ab84-63f882af69ae",
+         "--azure-rm-subscription-id", config.azure.subscription_id,
+         "--azure-rm-subscription-name", sub_name,
+         "--azure-rm-tenant-id", tenant_id,
+         "--azure-rm-service-principal-id", sp_id,
          "--org", _org_url(),
          "--project", config.devops.project_name],
         description=f"Create Azure RM service connection: {name}",
-        env={**_devops_env(), "AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY": "YOUR_SP_SECRET_HERE"},
+        env=env,
     )
     _grant_sc_to_all(name)
     log.info("✅ Azure RM service connection: %s", name)
@@ -176,14 +186,20 @@ def create_acr_connection() -> None:
         log.info("✅ SC already exists: %s", name)
         return
 
+    import os
+    sp_id     = os.getenv("AZURE_SP_APP_ID", "")
+    sp_key    = os.getenv("AZURE_SP_SECRET", "")
+    tenant_id = os.getenv("AZURE_TENANT_ID", "")
+    acr_name  = config.azure.acr_name
+
     ep = {
         "data": {
             "registrytype": "ACR",
-            "subscriptionId": "960936b9-ecde-465b-be8d-776ca077dcd0",
+            "subscriptionId": config.azure.subscription_id,
             "registryId": (
-                "/subscriptions/960936b9-ecde-465b-be8d-776ca077dcd0"
-                "/resourceGroups/guardian-ai-prod"
-                "/providers/Microsoft.ContainerRegistry/registries/guardianacr03211"
+                f"/subscriptions/{config.azure.subscription_id}"
+                f"/resourceGroups/{config.azure.resource_group}"
+                f"/providers/Microsoft.ContainerRegistry/registries/{acr_name}"
             ),
         },
         "name": name,
@@ -191,10 +207,10 @@ def create_acr_connection() -> None:
         "authorization": {
             "scheme": "ServicePrincipal",
             "parameters": {
-                "serviceprincipalid": "7cd6aaa8-60a7-4e49-ab84-63f882af69ae",
-                "serviceprincipalkey": "YOUR_SP_SECRET_HERE",
-                "tenantid": "26cf5b2c-43ed-450e-81ec-5261581358ea",
-                "loginServer": "guardianacr03211.azurecr.io",
+                "serviceprincipalid": sp_id,
+                "serviceprincipalkey": sp_key,
+                "tenantid": tenant_id,
+                "loginServer": f"{acr_name}.azurecr.io",
             }
         },
         "isShared": False,
@@ -217,6 +233,23 @@ def create_acr_connection() -> None:
     log.info("✅ ACR service connection: %s", name)
 
 
+def _get_project_id(project_name: str) -> str:
+    """Get Azure DevOps project ID by name via REST API."""
+    import os, base64, urllib.request, json
+    org_url = _org_url()
+    pat = os.getenv("AZDO_PAT_TOKEN", "")
+    auth = base64.b64encode(f":{pat}".encode()).decode()
+    req = urllib.request.Request(
+        f"{org_url}/_apis/projects/{project_name}?api-version=7.0",
+        headers={"Authorization": f"Basic {auth}"}
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read()).get("id", "")
+    except Exception:
+        return ""
+
+
 def create_aks_connection() -> None:
     """Create Kubernetes service connection for the AKS cluster."""
     name = config.devops.aks_sc_name
@@ -224,26 +257,68 @@ def create_aks_connection() -> None:
         log.info("✅ SC already exists: %s", name)
         return
 
+    # AKS service connection via REST API using kubeconfig (Token scheme)
+    # az devops CLI doesn't support Kubeconfig/Token scheme — use REST directly
+    import os, subprocess, base64, json as _json
+    org_url = _org_url()
+    project = config.devops.project_name
+    pat     = os.getenv("AZDO_PAT_TOKEN", "")
+    project_id = _get_project_id(project)
+
+    # Get kubeconfig and AKS FQDN
+    try:
+        fqdn_result = subprocess.run(
+            ["az", "aks", "show", "--name", config.azure.aks_cluster,
+             "--resource-group", config.azure.resource_group,
+             "--query", "fqdn", "--output", "tsv"],
+            capture_output=True, text=True
+        )
+        aks_fqdn = fqdn_result.stdout.strip()
+        token_result = subprocess.run(
+            ["kubectl", "create", "token", "default", "-n", "production"],
+            capture_output=True, text=True
+        )
+        api_token = token_result.stdout.strip() or ""
+    except Exception:
+        aks_fqdn = ""
+        api_token = ""
+
     ep = {
-        "data": {
-            "authorizationType": "AzureSubscription",
-            "azureSubscriptionId": "960936b9-ecde-465b-be8d-776ca077dcd0",
-            "azureResourceGroup": "guardian-ai-prod",
-            "azureKubernetesServiceConnection.ClusterAdmin": "true",
-        },
         "name": name,
         "type": "kubernetes",
+        "url": f"https://{aks_fqdn}" if aks_fqdn else "https://kubernetes.default.svc",
         "authorization": {
-            "scheme": "ServicePrincipal",
-            "parameters": {
-                "serviceprincipalid": "7cd6aaa8-60a7-4e49-ab84-63f882af69ae",
-                "serviceprincipalkey": "YOUR_SP_SECRET_HERE",
-                "tenantid": "26cf5b2c-43ed-450e-81ec-5261581358ea",
-            }
+            "scheme": "Token",
+            "parameters": {"apitoken": api_token}
+        },
+        "data": {
+            "authorizationType": "ServiceAccount",
+            "acceptUntrustedCerts": "true"
         },
         "isShared": False,
         "isReady": True,
+        "serviceEndpointProjectReferences": [{
+            "projectReference": {"id": project_id},
+            "name": name
+        }]
     }
+
+    import urllib.request as _req
+    auth = base64.b64encode(f":{pat}".encode()).decode()
+    payload = _json.dumps(ep).encode()
+    req = _req.Request(
+        f"{org_url}/{project}/_apis/serviceendpoint/endpoints?api-version=7.1-preview.4",
+        data=payload,
+        headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"},
+        method="POST"
+    )
+    try:
+        with _req.urlopen(req) as resp:
+            result = _json.loads(resp.read())
+            log.info("✅ AKS service connection created via REST: %s", result.get("id"))
+    except Exception as e:
+        log.warning("AKS REST endpoint creation failed: %s — create manually in Azure DevOps UI", e)
+        return
     import tempfile
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(ep, f)
@@ -458,7 +533,9 @@ def setup_devops() -> dict:
     _set_defaults()
     create_project()
     create_service_connections()
-    log.info("⏭  Skipping self-hosted agent (using Microsoft-hosted ubuntu-latest instead)")
+    log.info("⏭  Skipping self-hosted agent — using Microsoft-hosted ubuntu-latest pool instead")
+    log.info("    To use a self-hosted agent, install manually from:")
+    log.info("    https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/agents")
     group_id     = create_variable_group()
     pipeline_ids = create_pipelines()
 

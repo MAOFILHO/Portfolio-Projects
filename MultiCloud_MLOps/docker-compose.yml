@@ -16,7 +16,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
@@ -32,7 +32,7 @@ services:
       - REDIS_HOST=redis
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
       - SQS_GPU_QUEUE_URL=${SQS_GPU_QUEUE_URL}
@@ -48,7 +48,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
@@ -71,7 +71,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
       - NOTIFICATION_SERVICE_URL=http://notification:8005
@@ -94,7 +94,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
       - NOTIFICATION_SERVICE_URL=http://notification:8005
@@ -115,7 +115,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
     networks:
       - guardian-network
@@ -127,7 +127,7 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - DYNAMODB_VIDEOS_TABLE=${DYNAMODB_VIDEOS_TABLE:-guardian-videos}
       - DYNAMODB_EVENTS_TABLE=${DYNAMODB_EVENTS_TABLE:-guardian-events}
     networks:

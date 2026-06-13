@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: ingestion
-        image: guardianacr03211.azurecr.io/guardian-ai-ingestion:v1
+        image: guardianacr65958.azurecr.io/guardian-ai-ingestion:v1
         ports:
         - containerPort: 8000
         envFrom:

@@ -5,30 +5,30 @@ metadata:
   namespace: production
 data:
   # AWS Configuration
-  AWS_REGION: "us-east-1"
-  S3_BUCKET_NAME: "guardian-videos-marcos-dev"
-
-  # SQS Queues
-  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/759316130780/guardian-video-processing"
-  SQS_GPU_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/759316130780/guardian-gpu-processing"
-
-  # DynamoDB Tables (PK: video_id / event_id)
+  AWS_REGION: "ap-south-1"
+  S3_BUCKET_NAME: "guardian-videos-44204252"
+  
+  # Simplified SQS Queues (2 queues)
+  SQS_QUEUE_URL: "https://sqs.ap-south-1.amazonaws.com/442042521384/guardian-video-processing"
+  SQS_GPU_QUEUE_URL: "https://sqs.ap-south-1.amazonaws.com/442042521384/guardian-gpu-processing"
+  
+  # Simplified DynamoDB Tables (2 tables)
   DYNAMODB_VIDEOS_TABLE: "guardian-videos"
   DYNAMODB_EVENTS_TABLE: "guardian-events"
-
+  
   # Service Configuration
   LOG_LEVEL: "INFO"
   AUTO_APPROVE_THRESHOLD: "0.2"
   AUTO_REJECT_THRESHOLD: "0.8"
-
-  # Redis
+  
+  # Redis Configuration
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
-
-  # Azure OpenAI (set to true and add key secret to enable)
+  
+  # Azure OpenAI Configuration (Optional)
   AZURE_OPENAI_ENABLED: "false"
-
-  # Internal service URLs
+  
+  # Service URLs (for direct HTTP calls)
   NOTIFICATION_SERVICE_URL: "http://notification:8005"
   HUMAN_REVIEW_SERVICE_URL: "http://human-review:8004"
   POLICY_ENGINE_SERVICE_URL: "http://policy-engine-service:80"
