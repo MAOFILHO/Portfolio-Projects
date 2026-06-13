@@ -439,6 +439,9 @@ Multi-cloud flexibility: Use AWS for data and messaging and Azure for ML and CI/
 chmod +x aws_resource_cleanup.sh
 ./aws_resource_cleanup.sh
 ```
+<img width="993" height="698" alt="Screenshot 2026-06-13 at 2 13 43 PM" src="https://github.com/user-attachments/assets/6e3606e6-ee93-4af1-ac30-d30fcadc45ef" />
+<img width="993" height="697" alt="Screenshot 2026-06-13 at 2 14 09 PM" src="https://github.com/user-attachments/assets/ac995030-2cf8-45af-b545-2b8295b734ad" />
+
 
 ### Azure Resources
 ```bash
@@ -446,6 +449,11 @@ python automation/cleanup.py
 # OR manually:
 az group delete --name guardian-ai-prod --yes --no-wait
 ```
+
+<img width="1002" height="339" alt="Screenshot 2026-06-13 at 2 32 41 PM" src="https://github.com/user-attachments/assets/592a314f-83d1-41ef-8f8d-85d969cdb898" />
+<img width="991" height="232" alt="Screenshot 2026-06-13 at 2 40 31 PM" src="https://github.com/user-attachments/assets/437a021a-584b-4b84-ae06-14ed9505f842" />
+
+
 
 ### Verify cleanup
 ```bash
@@ -457,6 +465,8 @@ echo "DDB:"; aws dynamodb list-tables --region us-east-1
 # Azure
 az resource list --resource-group guardian-ai-prod --output table
 ```
+
+<img width="967" height="207" alt="Screenshot 2026-06-13 at 2 43 54 PM" src="https://github.com/user-attachments/assets/2dbf163f-75e2-4cf0-ac0f-50627fde4040" />
 
 ---
 
