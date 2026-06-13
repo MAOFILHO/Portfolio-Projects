@@ -349,13 +349,12 @@ def test_acr_sed_pattern_matches_manifest_images(tmp_path):
         "image: guardianacr65958.azurecr.io/guardian-ai-ingestion:v1\n"
         "image: ACR_PLACEHOLDER.azurecr.io/guardian-ai-deep-vision:v1\n"
     )
-    # Simulate the sed replacement
-    result = subprocess.run(
-        ["sed", "-i",
-         "s|[a-z0-9]*\\.azurecr\\.io|newacr12345.azurecr.io|g",
-         str(test_yaml)],
-        capture_output=True,
-    )
+    # Simulate the sed replacement (macOS BSD sed requires empty string after -i)
+    import platform
+    sed_args = ["sed", "-i", "", "s|[a-z0-9]*[.]azurecr[.]io|newacr12345.azurecr.io|g", str(test_yaml)] \
+        if platform.system() == "Darwin" else \
+        ["sed", "-i", "s|[a-z0-9]*[.]azurecr[.]io|newacr12345.azurecr.io|g", str(test_yaml)]
+    result = subprocess.run(sed_args, capture_output=True)
     content = test_yaml.read_text()
     assert "newacr12345.azurecr.io" in content
     assert "guardianacr65958" not in content
