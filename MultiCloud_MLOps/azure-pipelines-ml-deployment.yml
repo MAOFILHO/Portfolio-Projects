@@ -1,0 +1,156 @@
+# Azure DevOps Pipeline: ML Model Deployment
+# Trigger: After training pipeline completes or manual
+# Pool-agnostic: works on self-hosted Linux, macOS (arm64/x64), and Windows.
+# On Apple Silicon Mac, prefer Homebrew Python so cryptography/cffi load (arm64); else use PATH Python.
+
+trigger: none  # Manual trigger
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: guardian-variables
+
+stages:
+  - stage: DeployModels
+    displayName: 'Deploy Models to Azure ML'
+    jobs:
+      - job: DeployModels
+        displayName: 'Deploy All Models'
+        steps:
+          # Linux / macOS: create venv (prefer Homebrew Python on Mac for arm64), set VENV_PYTHON
+          - script: |
+              set -e
+              VENV_DIR="$(Agent.WorkFolder)/deploy_venv"
+              echo "Creating Python venv at $VENV_DIR (Linux/macOS)..."
+              if [ -x "/opt/homebrew/bin/python3.11" ]; then
+                /opt/homebrew/bin/python3.11 -m venv "$VENV_DIR"
+                echo "Using Homebrew Python 3.11 (macOS arm64)"
+              elif command -v python3.11 &>/dev/null; then
+                python3.11 -m venv "$VENV_DIR"
+                echo "Using python3.11 from PATH"
+              else
+                python3 -m venv "$VENV_DIR" || python -m venv "$VENV_DIR"
+                echo "Using default python3/python"
+              fi
+              source "$VENV_DIR/bin/activate"
+              pip install --upgrade pip --quiet
+              pip install azure-ai-ml azure-identity mlflow azureml-mlflow --quiet
+              echo "##vso[task.setvariable variable=VENV_PYTHON]$VENV_DIR/bin/python"
+            displayName: 'Prepare Python venv (Linux/macOS)'
+            condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+          # Windows: create venv with py or python, set VENV_PYTHON
+          - powershell: |
+              $venvDir = "$(Agent.WorkFolder)\deploy_venv"
+              Write-Host "Creating Python venv at $venvDir (Windows)..."
+              $py = $null
+              if (Get-Command py -ErrorAction SilentlyContinue) { $py = (py -3.11 -c "import sys; print(sys.executable)" 2>$null) }
+              if (-not $py -and (Get-Command python3.11 -ErrorAction SilentlyContinue)) { $py = (Get-Command python3.11).Source }
+              if (-not $py -and (Get-Command python -ErrorAction SilentlyContinue)) { $py = (Get-Command python).Source }
+              if (-not $py) { Write-Error "No Python 3.11 or python found. Install Python 3.11 on the agent."; exit 1 }
+              & $py -m venv $venvDir
+              & "$venvDir\Scripts\pip.exe" install --upgrade pip --quiet
+              & "$venvDir\Scripts\pip.exe" install azure-ai-ml azure-identity mlflow azureml-mlflow --quiet
+              Write-Host "##vso[task.setvariable variable=VENV_PYTHON]$venvDir\Scripts\python.exe"
+            displayName: 'Prepare Python venv (Windows)'
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+
+          # Deploy models (Linux/macOS): use venv Python
+          - task: AzureCLI@2
+            displayName: 'Azure Login and Deploy Models (Linux/macOS)'
+            condition: ne(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+                echo "Getting current subscription ID..."
+                DETECTED_SUB_ID=$(az account show --query id -o tsv 2>&1)
+                if [ -z "$DETECTED_SUB_ID" ] || [[ "$DETECTED_SUB_ID" == *"error"* ]]; then
+                  echo "##[error]Failed to get subscription ID"; exit 1
+                fi
+                echo "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$DETECTED_SUB_ID"
+                echo "Deploying models using venv Python..."
+                export AZURE_SUBSCRIPTION_ID="$DETECTED_SUB_ID"
+                export AZURE_RESOURCE_GROUP="$(AZURE_RESOURCE_GROUP)"
+                export AZURE_ML_WORKSPACE="$(AZURE_ML_WORKSPACE)"
+                cd mlops/deployment
+                "$(VENV_PYTHON)" deploy_model.py
+          
+          # Deploy models (Windows): use venv Python
+          - task: PowerShell@2
+            displayName: 'Azure Login and Deploy Models (Windows)'
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                $subId = az account show --query id -o tsv 2>$null
+
+                if (-not $subId -or $subId -match "error") {
+                    Write-Error "Failed to get subscription ID"
+                    exit 1
+                }
+
+                Write-Host "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$subId"
+
+                $env:AZURE_SUBSCRIPTION_ID = $subId
+                $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
+                $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
+
+                Set-Location mlops/deployment
+
+                & "$(VENV_PYTHON)" deploy_model.py
+
+          # Deploy models (Windows): use venv Python
+          - task: PowerShell@2
+            displayName: 'Get Endpoint Information and Update K8s ConfigMap (Windows)'
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            inputs:
+              targetType: 'inline'
+              script: |
+                $RG = "$(AZURE_RESOURCE_GROUP)"
+                $WS = "$(AZURE_ML_WORKSPACE)"
+
+                Write-Host "Getting endpoint information..."
+
+                $nsfw = az ml online-endpoint show --name nsfw-detector-endpoint --resource-group $RG --workspace-name $WS --query scoring_uri -o tsv 2>$null
+                $violence = az ml online-endpoint show --name violence-detector-endpoint --resource-group $RG --workspace-name $WS --query scoring_uri -o tsv 2>$null
+                $key = az ml online-endpoint get-credentials --name nsfw-detector-endpoint --resource-group $RG --workspace-name $WS --query primaryKey -o tsv 2>$null
+
+                if (-not $nsfw -or -not $violence) {
+                    Write-Host "Could not retrieve endpoint information. Update ConfigMap manually."
+                    exit 0
+                }
+
+                $aks = "$(AKS_CLUSTER)"
+
+                if ($aks) {
+                    Write-Host "Configuring kubectl for AKS..."
+
+                    az aks get-credentials --resource-group $RG --name $aks --overwrite-existing
+
+                    kubectl create configmap guardian-config `
+                      --from-literal=NSFW_MODEL_ENDPOINT="$nsfw" `
+                      --from-literal=VIOLENCE_MODEL_ENDPOINT="$violence" `
+                      --from-literal=MODEL_ENDPOINT_KEY="$key" `
+                      --dry-run=client -o yaml | kubectl apply -f - -n production
+
+                    kubectl rollout restart deployment/deep-vision -n production
+
+                    Write-Host "ConfigMap updated and pods restarted!"
+                }
+                else {
+                    Write-Host "AKS_CLUSTER not set in variable group. Skip K8s ConfigMap update."
+                }
+
+          - task: Kubernetes@1
+            displayName: 'Update ConfigMap with endpoints (fallback apply)'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: 'guardian-aks-connection'
+              namespace: 'production'
+              command: 'apply'
+              arguments: '-f k8s/configmap.yaml'
+            continueOnError: true

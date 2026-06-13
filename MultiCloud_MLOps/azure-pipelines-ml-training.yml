@@ -1,0 +1,238 @@
+# Azure DevOps Pipeline: ML Model Training
+# Trigger: Manual or on schedule/tag
+
+trigger: none  # Manual trigger only
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: guardian-variables
+
+stages:
+  - stage: TrainModels
+    displayName: 'Train ML Models'
+    jobs:
+      - job: TrainNSFWModel
+        displayName: 'Train NSFW Detection Model'
+        steps:
+          # macOS/Linux: Setup Python without admin prompt
+          - script: |
+              # Detect and use available Python (conda or system Python)
+              if command -v conda &> /dev/null; then
+                echo "Using conda Python"
+                eval "$(conda shell.bash hook)"
+                conda activate base || true
+                export PATH="$CONDA_PREFIX/bin:$PATH"
+              elif command -v python3 &> /dev/null; then
+                echo "Using system python3"
+                export PATH="$(dirname $(which python3)):$PATH"
+              elif command -v python &> /dev/null; then
+                echo "Using system python"
+                export PATH="$(dirname $(which python)):$PATH"
+              else
+                echo "##[error]Python not found. Please install Python 3.8+ or conda."
+                exit 1
+              fi
+              
+              python --version
+              which python
+              echo "##vso[task.setvariable variable=PYTHON_PATH]$(which python)"
+            displayName: 'Setup Python (macOS/Linux - no admin required)'
+            condition: or(eq(variables['Agent.OS'], 'Linux'), eq(variables['Agent.OS'], 'Darwin'))
+            continueOnError: false
+
+          # Windows: Setup Python
+          - powershell: |
+              # Detect and use available Python (conda or system Python)
+              if (Get-Command conda -ErrorAction SilentlyContinue) {
+                Write-Host "Using conda Python"
+                & conda activate base
+                $env:PATH = "$env:CONDA_PREFIX\Scripts;$env:CONDA_PREFIX;$env:PATH"
+              } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+                Write-Host "Using system python3"
+                $pythonPath = (Get-Command python3).Source
+                $env:PATH = "$(Split-Path $pythonPath);$env:PATH"
+              } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+                Write-Host "Using system python"
+                $pythonPath = (Get-Command python).Source
+                $env:PATH = "$(Split-Path $pythonPath);$env:PATH"
+              } else {
+                Write-Host "##[error]Python not found. Please install Python 3.8+ or conda."
+                exit 1
+              }
+              
+              python --version
+              $pythonExe = (Get-Command python).Source
+              Write-Host "Python path: $pythonExe"
+              Write-Host "##vso[task.setvariable variable=PYTHON_PATH]$pythonExe"
+            displayName: 'Setup Python (Windows)'
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            continueOnError: false
+
+          - powershell: |
+              python -m pip install --upgrade pip
+              python -m pip install azure-ai-ml azure-identity
+            displayName: 'Install dependencies'
+
+          - task: AzureCLI@2
+            displayName: 'Azure Login and Get Subscription ID'
+            inputs:
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Dynamically get the current subscription ID after login
+                # AzureCLI task automatically logs in and sets the subscription
+                # Get the subscription ID from the currently logged-in account
+                echo "Getting current subscription ID..."
+                DETECTED_SUB_ID=$(az account show --query id -o tsv 2>&1)
+                EXIT_CODE=$?
+                if [ $EXIT_CODE -ne 0 ] || [ -z "$DETECTED_SUB_ID" ] || [[ "$DETECTED_SUB_ID" == *"error"* ]] || [[ "$DETECTED_SUB_ID" == *"your-subscription-id"* ]]; then
+                  echo "##[error]Failed to get subscription ID from current account"
+                  echo "Exit code: $EXIT_CODE"
+                  echo "Output: $DETECTED_SUB_ID"
+                  echo "Account info:"
+                  az account show
+                  exit 1
+                fi
+                echo "✅ Detected subscription ID: $DETECTED_SUB_ID"
+                # Set as pipeline variable (this will override any value from variable group)
+                echo "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$DETECTED_SUB_ID"
+
+          - powershell: |
+              $env:AZURE_SUBSCRIPTION_ID = "$(AZURE_SUBSCRIPTION_ID)"
+              $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
+              $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
+              $env:AZURE_ML_REGION = "$(AZURE_ML_REGION)"
+              $env:COMPUTE_CLUSTER = "$(COMPUTE_CLUSTER)"
+
+              Write-Host "Submitting NSFW training job..."
+
+              cd mlops/training
+
+              python submit_training_job.py `
+                --model-type nsfw `
+                --subscription-id "$env:AZURE_SUBSCRIPTION_ID" `
+                --resource-group "$env:AZURE_RESOURCE_GROUP" `
+                --workspace-name "$env:AZURE_ML_WORKSPACE" `
+                --compute-cluster "$env:COMPUTE_CLUSTER"
+            displayName: 'Submit NSFW Training Job to Compute Cluster'
+            env:
+              AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+              AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
+              AZURE_ML_WORKSPACE: $(AZURE_ML_WORKSPACE)
+              AZURE_ML_REGION: $(AZURE_ML_REGION)
+              COMPUTE_CLUSTER: $(COMPUTE_CLUSTER)
+
+      - job: TrainViolenceModel
+        displayName: 'Train Violence Detection Model'
+        steps:
+          # macOS/Linux: Setup Python without admin prompt
+          - script: |
+              # Detect and use available Python (conda or system Python)
+              if command -v conda &> /dev/null; then
+                echo "Using conda Python"
+                eval "$(conda shell.bash hook)"
+                conda activate base || true
+                export PATH="$CONDA_PREFIX/bin:$PATH"
+              elif command -v python3 &> /dev/null; then
+                echo "Using system python3"
+                export PATH="$(dirname $(which python3)):$PATH"
+              elif command -v python &> /dev/null; then
+                echo "Using system python"
+                export PATH="$(dirname $(which python)):$PATH"
+              else
+                echo "##[error]Python not found. Please install Python 3.8+ or conda."
+                exit 1
+              fi
+              
+              python --version
+              which python
+              echo "##vso[task.setvariable variable=PYTHON_PATH]$(which python)"
+            displayName: 'Setup Python (macOS/Linux - no admin required)'
+            condition: or(eq(variables['Agent.OS'], 'Linux'), eq(variables['Agent.OS'], 'Darwin'))
+            continueOnError: false
+
+          # Windows: Setup Python
+          - powershell: |
+              # Detect and use available Python (conda or system Python)
+              if (Get-Command conda -ErrorAction SilentlyContinue) {
+                Write-Host "Using conda Python"
+                & conda activate base
+                $env:PATH = "$env:CONDA_PREFIX\Scripts;$env:CONDA_PREFIX;$env:PATH"
+              } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+                Write-Host "Using system python3"
+                $pythonPath = (Get-Command python3).Source
+                $env:PATH = "$(Split-Path $pythonPath);$env:PATH"
+              } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+                Write-Host "Using system python"
+                $pythonPath = (Get-Command python).Source
+                $env:PATH = "$(Split-Path $pythonPath);$env:PATH"
+              } else {
+                Write-Host "##[error]Python not found. Please install Python 3.8+ or conda."
+                exit 1
+              }
+              
+              python --version
+              $pythonExe = (Get-Command python).Source
+              Write-Host "Python path: $pythonExe"
+              Write-Host "##vso[task.setvariable variable=PYTHON_PATH]$pythonExe"
+            displayName: 'Setup Python (Windows)'
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            continueOnError: false
+
+          - powershell: |
+              python -m pip install --upgrade pip
+              python -m pip install azure-ai-ml azure-identity
+            displayName: 'Install dependencies'
+
+          - task: AzureCLI@2
+            displayName: 'Azure Login and Get Subscription ID'
+            inputs:
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Dynamically get the current subscription ID after login
+                # AzureCLI task automatically logs in and sets the subscription
+                # Get the subscription ID from the currently logged-in account
+                echo "Getting current subscription ID..."
+                DETECTED_SUB_ID=$(az account show --query id -o tsv 2>&1)
+                EXIT_CODE=$?
+                if [ $EXIT_CODE -ne 0 ] || [ -z "$DETECTED_SUB_ID" ] || [[ "$DETECTED_SUB_ID" == *"error"* ]] || [[ "$DETECTED_SUB_ID" == *"your-subscription-id"* ]]; then
+                  echo "##[error]Failed to get subscription ID from current account"
+                  echo "Exit code: $EXIT_CODE"
+                  echo "Output: $DETECTED_SUB_ID"
+                  echo "Account info:"
+                  az account show
+                  exit 1
+                fi
+                echo "✅ Detected subscription ID: $DETECTED_SUB_ID"
+                # Set as pipeline variable (this will override any value from variable group)
+                echo "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$DETECTED_SUB_ID"
+
+          - powershell: |
+              $env:AZURE_SUBSCRIPTION_ID = "$(AZURE_SUBSCRIPTION_ID)"
+              $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
+              $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
+              $env:AZURE_ML_REGION = "$(AZURE_ML_REGION)"
+              $env:COMPUTE_CLUSTER = "$(COMPUTE_CLUSTER)"
+
+              Write-Host "Submitting Violence training job..."
+
+              cd mlops/training
+
+              python submit_training_job.py `
+                --model-type violence `
+                --subscription-id "$env:AZURE_SUBSCRIPTION_ID" `
+                --resource-group "$env:AZURE_RESOURCE_GROUP" `
+                --workspace-name "$env:AZURE_ML_WORKSPACE" `
+                --compute-cluster "$env:COMPUTE_CLUSTER"
+            displayName: 'Submit Violence Training Job to Compute Cluster'
+            env:
+              AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+              AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
+              AZURE_ML_WORKSPACE: $(AZURE_ML_WORKSPACE)
+              AZURE_ML_REGION: $(AZURE_ML_REGION)
+              COMPUTE_CLUSTER: $(COMPUTE_CLUSTER)

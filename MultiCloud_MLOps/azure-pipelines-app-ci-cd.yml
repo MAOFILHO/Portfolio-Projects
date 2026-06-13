@@ -1,0 +1,225 @@
+# Azure DevOps Pipeline: Application Services CI/CD
+# Trigger: On push to main branch
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - services/*
+      - frontend/*
+      - k8s/*
+      - docker-compose.yml
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+# All env-specific values come from variable group 'guardian-variables' (Pipelines → Library).
+# Required: ACR_NAME, AKS_CLUSTER, RESOURCE_GROUP, NAMESPACE. Optional: DOCKER_CMD (full path to docker if auto-detect fails).
+variables:
+  - group: guardian-variables
+
+stages:
+  - stage: Build
+    displayName: 'Build Docker Images'
+    jobs:
+      - job: BuildImages
+        displayName: 'Build and Push Images'
+        timeoutInMinutes: 180
+        steps:
+          - task: Docker@2
+            displayName: 'Login to ACR'
+            inputs:
+              command: login
+              containerRegistry: 'guardian-acr-connection'
+
+          - bash: |
+              echo "Setting up Docker buildx..."
+              # Check if buildx is available
+              if docker buildx version >/dev/null 2>&1; then
+                echo "Docker buildx is available"
+                # Create or use existing buildx builder
+                docker buildx create --name guardian-builder --use 2>/dev/null || docker buildx use guardian-builder 2>/dev/null || echo "Using default builder"
+                docker buildx inspect --bootstrap 2>/dev/null || echo "Buildx bootstrap skipped"
+                echo "✅ Docker buildx setup complete"
+              else
+                echo "⚠️ Docker buildx not available, Docker@2 will use standard docker build"
+                echo "This is acceptable for single-platform builds"
+              fi
+            displayName: 'Setup Docker Buildx'
+            continueOnError: true
+
+          - task: Docker@2
+            displayName: 'Build and Push ingestion'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-ingestion
+              dockerfile: services/ingestion/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push fast-screening'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-fast-screening
+              dockerfile: services/fast-screening/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push deep-vision'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-deep-vision
+              dockerfile: services/deep-vision/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push policy-engine'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-policy-engine
+              dockerfile: services/policy-engine/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push human-review'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-human-review
+              dockerfile: services/human-review/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push notification'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-notification
+              dockerfile: services/notification/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push api-gateway'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-api-gateway
+              dockerfile: services/api-gateway/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Build and Push frontend'
+            inputs:
+              command: buildAndPush
+              repository: $(ACR_NAME).azurecr.io/guardian-ai-frontend
+              dockerfile: frontend/Dockerfile
+              containerRegistry: 'guardian-acr-connection'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+  - stage: Deploy
+    displayName: 'Deploy to AKS'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployToAKS
+        displayName: 'Deploy Services'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: Kubernetes@1
+                  displayName: 'Set kubectl context'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: 'guardian-aks-connection'
+                    namespace: '$(NAMESPACE)'
+
+                - bash: |
+                    echo "Updating ConfigMap..."
+                    kubectl apply -f k8s/configmap.yaml
+
+                    echo "Deploying services..."
+                    kubectl set image deployment/ingestion \
+                      ingestion=$(ACR_NAME).azurecr.io/guardian-ai-ingestion:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/fast-screening \
+                      screening=$(ACR_NAME).azurecr.io/guardian-ai-fast-screening:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/deep-vision \
+                      deep-vision=$(ACR_NAME).azurecr.io/guardian-ai-deep-vision:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/policy-engine \
+                      policy=$(ACR_NAME).azurecr.io/guardian-ai-policy-engine:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/human-review \
+                      human-review=$(ACR_NAME).azurecr.io/guardian-ai-human-review:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/api-gateway \
+                      api-gateway=$(ACR_NAME).azurecr.io/guardian-ai-api-gateway:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    kubectl set image deployment/guardian-frontend \
+                      frontend=$(ACR_NAME).azurecr.io/guardian-ai-frontend:$(Build.BuildId) \
+                      -n $(NAMESPACE) || true
+
+                    echo "Checking deployment status before rollouts..."
+                    kubectl get deployments -n $(NAMESPACE)
+                    kubectl get pods -n $(NAMESPACE) -o wide
+                    
+                    echo "Waiting for rollouts..."
+                    for deployment in ingestion fast-screening deep-vision policy-engine human-review api-gateway guardian-frontend; do
+                      echo "Checking rollout status for $deployment..."
+                      if kubectl rollout status deployment/$deployment -n $(NAMESPACE) --timeout=5m 2>&1; then
+                        echo "✅ $deployment rollout successful"
+                      else
+                        echo "⚠️ $deployment rollout timed out or failed"
+                        echo "Diagnostics for $deployment:"
+                        kubectl describe deployment/$deployment -n $(NAMESPACE) | tail -30 || true
+                        echo ""
+                        echo "Pods for $deployment:"
+                        kubectl get pods -n $(NAMESPACE) -l app=$deployment -o wide || true
+                        echo ""
+                        echo "Recent events for $deployment pods:"
+                        kubectl get events -n $(NAMESPACE) --sort-by='.lastTimestamp' | grep -i "$deployment" | tail -10 || true
+                      fi
+                    done
+                  displayName: 'Deploy to Kubernetes'
+                  env:
+                    ACR_NAME: $(ACR_NAME)
+                    NAMESPACE: $(NAMESPACE)
+
+                - bash: |
+                    echo "Verifying deployments..."
+                    kubectl get pods -n $(NAMESPACE)
+                    kubectl get deployments -n $(NAMESPACE)
+                  displayName: 'Verify Deployment'
+                  env:
+                    NAMESPACE: $(NAMESPACE)
