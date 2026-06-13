@@ -76,7 +76,7 @@ stages:
                 export AZURE_SUBSCRIPTION_ID="$DETECTED_SUB_ID"
                 export AZURE_RESOURCE_GROUP="$(AZURE_RESOURCE_GROUP)"
                 export AZURE_ML_WORKSPACE="$(AZURE_ML_WORKSPACE)"
-                cd mlops/deployment
+                cd MultiCloud_MLOps/mlops/deployment
                 "$(VENV_PYTHON)" deploy_model.py
           
           # Deploy models (Windows): use venv Python

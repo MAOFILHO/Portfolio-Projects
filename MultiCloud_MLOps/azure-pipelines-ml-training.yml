@@ -109,7 +109,7 @@ stages:
 
               Write-Host "Submitting NSFW training job..."
 
-              cd mlops/training
+              cd MultiCloud_MLOps/mlops/training
 
               python submit_training_job.py `
                 --model-type nsfw `
@@ -221,7 +221,7 @@ stages:
 
               Write-Host "Submitting Violence training job..."
 
-              cd mlops/training
+              cd MultiCloud_MLOps/mlops/training
 
               python submit_training_job.py `
                 --model-type violence `
