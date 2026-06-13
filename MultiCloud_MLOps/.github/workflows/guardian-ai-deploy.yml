@@ -52,13 +52,13 @@ jobs:
           ingestion=guardianacr03211.azurecr.io/guardian-ai-ingestion:${{ github.sha }} \
           -n production
         kubectl set image deployment/fast-screening \
-          fast-screening=guardianacr03211.azurecr.io/guardian-ai-fast-screening:${{ github.sha }} \
+          screening=guardianacr03211.azurecr.io/guardian-ai-fast-screening:${{ github.sha }} \
           -n production
         kubectl set image deployment/deep-vision \
           deep-vision=guardianacr03211.azurecr.io/guardian-ai-deep-vision:${{ github.sha }} \
           -n production
         kubectl set image deployment/policy-engine \
-          policy-engine=guardianacr03211.azurecr.io/guardian-ai-policy-engine:${{ github.sha }} \
+          policy=guardianacr03211.azurecr.io/guardian-ai-policy-engine:${{ github.sha }} \
           -n production
         kubectl set image deployment/human-review \
           human-review=guardianacr03211.azurecr.io/guardian-ai-human-review:${{ github.sha }} \
