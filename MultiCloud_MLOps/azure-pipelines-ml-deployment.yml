@@ -145,12 +145,21 @@ stages:
                     Write-Host "AKS_CLUSTER not set in variable group. Skip K8s ConfigMap update."
                 }
 
-          - task: Kubernetes@1
+          - task: AzureCLI@2
             displayName: 'Update ConfigMap with endpoints (fallback apply)'
             inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: 'guardian-azure-connection'
-              namespace: 'production'
-              command: 'apply'
-              arguments: '-f MultiCloud_MLOps/k8s/configmap.yaml'
-            continueOnError: true
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --name guardian-ai-aks --resource-group guardian-ai-prod --overwrite-existing
+                NSFW_URI=$(az ml online-endpoint show --name nsfw-detector-endpoint --resource-group guardian-ai-prod --workspace-name guardian-ai-ml-workspace-prod --query scoring_uri -o tsv 2>/dev/null || echo "")
+                VIOLENCE_URI=$(az ml online-endpoint show --name violence-detector-endpoint --resource-group guardian-ai-prod --workspace-name guardian-ai-ml-workspace-prod --query scoring_uri -o tsv 2>/dev/null || echo "")
+                KEY=$(az ml online-endpoint get-credentials --name nsfw-detector-endpoint --resource-group guardian-ai-prod --workspace-name guardian-ai-ml-workspace-prod --query primaryKey -o tsv 2>/dev/null || echo "")
+                if [ -n "$NSFW_URI" ] && [ -n "$VIOLENCE_URI" ]; then
+                  kubectl patch configmap guardian-config -n production --patch "{\"data\": {\"NSFW_MODEL_ENDPOINT\": \"$NSFW_URI\", \"VIOLENCE_MODEL_ENDPOINT\": \"$VIOLENCE_URI\", \"MODEL_ENDPOINT_KEY\": \"$KEY\"}}"
+                  kubectl rollout restart deployment/deep-vision -n production
+                  echo "ConfigMap updated successfully"
+                else
+                  echo "Endpoints not available yet — skipping ConfigMap update"
+                fi
