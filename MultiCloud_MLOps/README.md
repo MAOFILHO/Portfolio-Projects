@@ -1,3 +1,4 @@
+
 # Guardian AI — MultiCloud MLOps Video Content Moderation
 
 A production-grade, end-to-end MLOps application for automated video content moderation. Built on **Azure AKS** (Kubernetes) + **AWS** (S3, SQS, DynamoDB) with **Azure ML** for NSFW and Violence detection model training and deployment to a fully automated Python/CLI deployment pipeline.
@@ -265,6 +266,10 @@ Region: **us-east-1** (hardcoded guard — will error if unconfigured)
 
 <img width="970" height="716" alt="Screenshot 2026-06-12 at 6 19 28 PM" src="https://github.com/user-attachments/assets/0634cbd6-c7c1-4a47-bcee-4d6176ae524d" />
 
+<img width="1534" height="521" alt="Screenshot 2026-06-13 at 1 26 56 PM" src="https://github.com/user-attachments/assets/9789f8ad-e2fd-4fcd-aa53-4541e204063f" />
+<img width="1535" height="422" alt="Screenshot 2026-06-13 at 1 27 44 PM" src="https://github.com/user-attachments/assets/cfbe216c-3abe-44e5-beb7-a33b1b3c100f" />
+<img width="1530" height="421" alt="Screenshot 2026-06-13 at 1 28 35 PM" src="https://github.com/user-attachments/assets/df7f8ab0-7d9a-4966-a51c-daf76e393071" />
+
 
 ### Stage 2: Azure (`--stage azure`)
 Creates: Resource group, ACR, AKS cluster (4 nodes), NGINX Ingress  
@@ -272,6 +277,11 @@ Duration: ~15 minutes (AKS is the long step)
 Output: External IP for the app
 
 <img width="1009" height="710" alt="Screenshot 2026-06-12 at 6 21 24 PM" src="https://github.com/user-attachments/assets/8e7ab388-598d-48ba-b3c0-0a0d43b92cfb" />
+
+<img width="1534" height="548" alt="Screenshot 2026-06-13 at 1 38 58 PM" src="https://github.com/user-attachments/assets/9669c92f-3358-4de0-83df-1b51bac8d584" />
+<img width="1533" height="796" alt="Screenshot 2026-06-13 at 1 42 40 PM" src="https://github.com/user-attachments/assets/74d7f8cc-1da0-44a2-ad67-5671bd629167" />
+<img width="1541" height="491" alt="Screenshot 2026-06-13 at 1 44 03 PM" src="https://github.com/user-attachments/assets/c4f81e38-0cfa-42d9-bb0f-39283d1a8ee6" />
+
 
 
 ### Stage 3: Docker Images (`--stage images`)
@@ -284,6 +294,10 @@ Duration: ~20 minutes (first run; subsequent runs use layer cache)
 
 <img width="1069" height="710" alt="Screenshot 2026-06-12 at 6 32 32 PM" src="https://github.com/user-attachments/assets/060640bc-ee71-4d33-8b72-65afcf15b19c" />
 
+<img width="1534" height="554" alt="Screenshot 2026-06-13 at 1 47 13 PM" src="https://github.com/user-attachments/assets/9eb469f6-8cf6-4ee3-835c-eaf1c4df66ea" />
+
+
+
 ### Stage 4: Kubernetes (`--stage k8s`)
 Deploys: Namespace, ConfigMap, AWS secrets, all 8 services + Redis, Ingress  
 Duration: ~5 minutes  
@@ -292,6 +306,9 @@ Duration: ~5 minutes
 <img width="987" height="698" alt="Screenshot 2026-06-13 at 11 37 43 AM" src="https://github.com/user-attachments/assets/89e41772-5888-4db3-bd57-765976054416" />
 
 <img width="967" height="698" alt="Screenshot 2026-06-13 at 11 42 07 AM" src="https://github.com/user-attachments/assets/bc63b387-e617-45a4-9d42-1ea5445ed287" />
+
+<img width="1535" height="852" alt="Screenshot 2026-06-13 at 1 53 50 PM" src="https://github.com/user-attachments/assets/1aafeaae-745d-49a0-90dd-f0ea990a2b59" />
+
 
 
 ### Stage 5: DevOps (`--stage devops`)
@@ -303,6 +320,7 @@ Requires: `AZDO_PAT_TOKEN`, `AZURE_SP_APP_ID`, `AZURE_SP_SECRET`, `AZURE_TENANT_
 
 <img width="1020" height="712" alt="Screenshot 2026-06-12 at 9 56 49 PM" src="https://github.com/user-attachments/assets/8cf77e36-c1e6-419b-aec6-205745805b9e" />
 
+<img width="1538" height="563" alt="Screenshot 2026-06-13 at 1 57 21 PM" src="https://github.com/user-attachments/assets/4ba722c4-ff76-4429-905a-5f307f735f0e" />
 
 
 ### Stage 6: ML (`--stage ml`)
@@ -311,6 +329,13 @@ Duration: ~45 minutes (training on `cpu-training-cluster`)
 Output: NSFW + Violence detection endpoints; patches Kubernetes ConfigMap
 
 <img width="993" height="401" alt="Screenshot 2026-06-13 at 11 44 25 AM" src="https://github.com/user-attachments/assets/09b45678-d46d-46f0-9a17-6571e1b2e296" />
+
+<img width="1534" height="370" alt="Screenshot 2026-06-13 at 2 00 21 PM" src="https://github.com/user-attachments/assets/aec2e42d-2418-4f2d-acf0-39bf08be57de" />
+<img width="1536" height="827" alt="Screenshot 2026-06-13 at 2 00 58 PM" src="https://github.com/user-attachments/assets/a009a1c1-8ebf-4795-9eae-956c33d1d8d2" />
+<img width="1537" height="592" alt="Screenshot 2026-06-13 at 2 02 15 PM" src="https://github.com/user-attachments/assets/62240ac2-aecc-45fd-b05d-abedde41d032" />
+<img width="1532" height="533" alt="Screenshot 2026-06-13 at 2 02 30 PM" src="https://github.com/user-attachments/assets/eb638edb-96d5-4210-a431-afc3f7958a24" />
+<img width="1537" height="625" alt="Screenshot 2026-06-13 at 2 02 43 PM" src="https://github.com/user-attachments/assets/5895e801-b2b8-4d79-94e9-eb10e23a65e1" />
+<img width="1536" height="641" alt="Screenshot 2026-06-13 at 2 03 01 PM" src="https://github.com/user-attachments/assets/a145dae4-3685-40e6-83e6-53f6d2f869bf" />
 
 
 ---
@@ -378,6 +403,8 @@ Push any change to a service file and the workflow runs automatically.
 GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
 
 <img width="1432" height="379" alt="Screenshot 2026-06-13 at 9 51 23 AM" src="https://github.com/user-attachments/assets/31ea7939-2283-455c-afed-b1f098de4228" />
+
+<img width="1700" height="687" alt="Screenshot 2026-06-13 at 10 11 53 AM" src="https://github.com/user-attachments/assets/30dd0a3c-d825-45ae-9730-b67c2ae13741" />
 
 
 ### Important Notes
