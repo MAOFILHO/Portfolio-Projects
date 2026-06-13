@@ -100,30 +100,23 @@ stages:
                 # Set as pipeline variable (this will override any value from variable group)
                 echo "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$DETECTED_SUB_ID"
 
-          - powershell: |
-              $env:AZURE_SUBSCRIPTION_ID = "$(AZURE_SUBSCRIPTION_ID)"
-              $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
-              $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
-              $env:AZURE_ML_REGION = "$(AZURE_ML_REGION)"
-              $env:COMPUTE_CLUSTER = "$(COMPUTE_CLUSTER)"
-
-              Write-Host "Submitting NSFW training job..."
-
-              cd MultiCloud_MLOps/mlops/training
-
-              python submit_training_job.py `
-                --model-type nsfw `
-                --subscription-id "$env:AZURE_SUBSCRIPTION_ID" `
-                --resource-group "$env:AZURE_RESOURCE_GROUP" `
-                --workspace-name "$env:AZURE_ML_WORKSPACE" `
-                --compute-cluster "$env:COMPUTE_CLUSTER"
+          - task: AzureCLI@2
             displayName: 'Submit NSFW Training Job to Compute Cluster'
-            env:
-              AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
-              AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
-              AZURE_ML_WORKSPACE: $(AZURE_ML_WORKSPACE)
-              AZURE_ML_REGION: $(AZURE_ML_REGION)
-              COMPUTE_CLUSTER: $(COMPUTE_CLUSTER)
+            inputs:
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+                SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                export AZURE_SUBSCRIPTION_ID="$SUBSCRIPTION_ID"
+                export AZURE_RESOURCE_GROUP="$(AZURE_RESOURCE_GROUP)"
+                export AZURE_ML_WORKSPACE="$(AZURE_ML_WORKSPACE)"
+                export AZURE_ML_REGION="$(AZURE_ML_REGION)"
+                export COMPUTE_CLUSTER="$(COMPUTE_CLUSTER)"
+                cd MultiCloud_MLOps/mlops/training
+                pip install azure-ai-ml azure-identity --quiet
+                python submit_training_job.py                   --model-type nsfw                   --subscription-id "$AZURE_SUBSCRIPTION_ID"                   --resource-group "$AZURE_RESOURCE_GROUP"                   --workspace-name "$AZURE_ML_WORKSPACE"                   --compute-cluster "$COMPUTE_CLUSTER"
 
       - job: TrainViolenceModel
         displayName: 'Train Violence Detection Model'
@@ -212,27 +205,20 @@ stages:
                 # Set as pipeline variable (this will override any value from variable group)
                 echo "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]$DETECTED_SUB_ID"
 
-          - powershell: |
-              $env:AZURE_SUBSCRIPTION_ID = "$(AZURE_SUBSCRIPTION_ID)"
-              $env:AZURE_RESOURCE_GROUP = "$(AZURE_RESOURCE_GROUP)"
-              $env:AZURE_ML_WORKSPACE = "$(AZURE_ML_WORKSPACE)"
-              $env:AZURE_ML_REGION = "$(AZURE_ML_REGION)"
-              $env:COMPUTE_CLUSTER = "$(COMPUTE_CLUSTER)"
-
-              Write-Host "Submitting Violence training job..."
-
-              cd MultiCloud_MLOps/mlops/training
-
-              python submit_training_job.py `
-                --model-type violence `
-                --subscription-id "$env:AZURE_SUBSCRIPTION_ID" `
-                --resource-group "$env:AZURE_RESOURCE_GROUP" `
-                --workspace-name "$env:AZURE_ML_WORKSPACE" `
-                --compute-cluster "$env:COMPUTE_CLUSTER"
+          - task: AzureCLI@2
             displayName: 'Submit Violence Training Job to Compute Cluster'
-            env:
-              AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
-              AZURE_RESOURCE_GROUP: $(AZURE_RESOURCE_GROUP)
-              AZURE_ML_WORKSPACE: $(AZURE_ML_WORKSPACE)
-              AZURE_ML_REGION: $(AZURE_ML_REGION)
-              COMPUTE_CLUSTER: $(COMPUTE_CLUSTER)
+            inputs:
+              azureSubscription: 'guardian-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+                SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                export AZURE_SUBSCRIPTION_ID="$SUBSCRIPTION_ID"
+                export AZURE_RESOURCE_GROUP="$(AZURE_RESOURCE_GROUP)"
+                export AZURE_ML_WORKSPACE="$(AZURE_ML_WORKSPACE)"
+                export AZURE_ML_REGION="$(AZURE_ML_REGION)"
+                export COMPUTE_CLUSTER="$(COMPUTE_CLUSTER)"
+                cd MultiCloud_MLOps/mlops/training
+                pip install azure-ai-ml azure-identity --quiet
+                python submit_training_job.py                   --model-type violence                   --subscription-id "$AZURE_SUBSCRIPTION_ID"                   --resource-group "$AZURE_RESOURCE_GROUP"                   --workspace-name "$AZURE_ML_WORKSPACE"                   --compute-cluster "$COMPUTE_CLUSTER"
