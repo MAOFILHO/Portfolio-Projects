@@ -6,6 +6,8 @@
 [![Azure AI Search](https://img.shields.io/badge/Azure%20AI%20Search-Vector%20+%20Hybrid-0078D4?style=flat&logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/products/ai-services/ai-search)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+Designed and deployed a production-grade AI Smart Incident Assistant to enhance the analysis of urban safety incidents. The system is built on **Retrieval-Augmented Generation (RAG)** using **Microsoft Fabric**, which ensures accurate, context-driven answers, and Azure AI technologies, including: **Azure AI Search**, **Azure AI Vision**, **Azure Document Intelligence**, and **Azure AI Foundry** to power the assistant’s capabilities. The project involves processing both structured data (PDFs) and unstructured data (incident images) and using **Azure OpenAI** for text generation, image captioning, and question-answering tasks.
+
 ---
 
 ## 📋 Table of Contents
@@ -24,7 +26,7 @@
 
 ---
 
-## 🎯 Scenario
+## 🎯 Business Scenario
 
 You are part of a **municipal development team** building an AI-powered assistant to enhance the analysis of urban safety incidents. The assistant integrates three categories of data sources:
 
@@ -43,22 +45,32 @@ Using a **Retrieval-Augmented Generation (RAG)** approach, the assistant deliver
 
 ---
 
+## 📚 Results and Impact
+
+→ Improved incident triage efficiency by an estimated 35% faster
+
+→ Reduced SOP and incident search time by 60% faster
+
+→ Cut manual extraction effort by 50% through automated OCR, structured extraction, and AI-assisted retrieval.
+
+---
+
 ## 🏗️ Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        DATA INGESTION LAYER                         │
 │                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  Incident    │  │  Incident    │  │   Standard Operating     │  │
-│  │  PDFs        │  │  Images      │  │   Procedures (.txt)      │  │
-│  └──────┬───────┘  └──────┬───────┘  └────────────┬─────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐   │
+│  │  Incident    │  │  Incident    │  │   Standard Operating     │   │
+│  │  PDFs        │  │  Images      │  │   Procedures (.txt)      │   │
+│  └──────┬───────┘  └──────┬───────┘  └────────────┬─────────────┘   │
 │         │                 │                        │                │
 │         ▼                 ▼                        ▼                │
-│  ┌─────────────┐  ┌───────────────┐  ┌────────────────────────┐    │
-│  │  Azure Doc  │  │  Azure OpenAI │  │  extract_sops.py       │    │
-│  │Intelligence │  │  GPT-4o Vision│  │  (direct text parsing) │    │
-│  └──────┬──────┘  └──────┬────────┘  └────────────┬───────────┘    │
+│  ┌─────────────┐  ┌───────────────┐  ┌────────────────────────┐     │
+│  │  Azure Doc  │  │  Azure OpenAI │  │  extract_sops.py       │     │
+│  │Intelligence │  │  GPT-4o Vision│  │  (direct text parsing) │     │
+│  └──────┬──────┘  └──────┬────────┘  └────────────┬───────────┘     │
 │         │                │                         │                │
 │         ▼                ▼                         ▼                │
 │    parsed_incidents  parsed_images            parsed_sops           │
@@ -69,21 +81,21 @@ Using a **Retrieval-Augmented Generation (RAG)** approach, the assistant deliver
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      EMBEDDING & INDEXING LAYER                     │
 │                                                                     │
-│          Azure OpenAI text-embedding-3-small (1536-dim)            │
+│          Azure OpenAI text-embedding-3-small (1536-dim)             │
 │                              │                                      │
 │                              ▼                                      │
-│              Azure AI Search — HNSW Vector Index                   │
-│              (Hybrid: vector + keyword, API v2024-07-01)           │
+│              Azure AI Search — HNSW Vector Index                    │
+│              (Hybrid: vector + keyword, API v2024-07-01)            │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        RAG QUERY LAYER                              │
 │                                                                     │
-│   User Query → Embed → Hybrid Search → Top-k Docs → GPT-4o →      │
+│   User Query → Embed → Hybrid Search → Top-k Docs → GPT-4o →        │
 │                                                   Context-aware     │
 │                                                   Response          │
-│                    (with Chat History Memory: last 10 turns)       │
+│                    (with Chat History Memory: last 10 turns)        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -182,7 +194,7 @@ python script.py
 
 ## 🔐 Environment Configuration
 
-Create a `.env` file in the project root and populate with your Azure resource keys and endpoints:
+Create a `.env` file in the project root and populate it with your Azure resource keys and endpoints:
 
 ```env
 # Azure Document Intelligence
@@ -269,7 +281,7 @@ What incidents occurred in Zone B during May?
 Show me all road damage incidents with photos.
 Which SOP is used for minor fires?
 List pothole incidents and their actions taken.
-Was any flooding reported in East Zone?
+Was any flooding reported in the East Zone?
 Show the SOP used for blocked roads.
 Were there incidents reported from Exit 10?
 Give me reports involving both fire and flooding.
@@ -296,16 +308,6 @@ The RAG assistant maintains a rolling window of the last **10 conversation turns
 ### Multimodal Ingestion
 Incident images are processed through GPT-4o Vision to generate natural language captions, which are then embedded and indexed alongside text documents — enabling image content to be retrieved via text queries.
 
-
----
-
-## 📚 Results and Impact
-
-→ Improved incident triage efficiency by an estimated 35% faster
-
-→ Reduced SOP and incident search time by 60% faster
-
-→ Cut manual extraction effort by 50% through automated OCR, structured extraction, and AI-assisted retrieval.
 
 ---
 
