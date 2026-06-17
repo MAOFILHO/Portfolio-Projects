@@ -211,25 +211,29 @@ The starter toolkit automates the full build-and-deploy pipeline in two commands
 
 ---
 
-**`launch`** — pushes the Dockerfile to CodeBuild, builds an ARM64 container image, pushes it to ECR, and deploys it to a managed AgentCore Runtime endpoint:
+**`Launch`** — pushes the Dockerfile to CodeBuild, builds an ARM64 container image, pushes it to ECR, and deploys it to a managed AgentCore Runtime endpoint:
 
 ![Starter toolkit launch step — Dockerfile through CodeBuild and ECR to Runtime](images/launch.png)
 
 ---
 
-**`invoke`** — sends requests through the Runtime endpoint with a bearer token, routing through the full container stack:
+**`Invoke`** — sends requests through the Runtime endpoint with a bearer token, routing through the full container stack:
 
 ![Invoke flow — agent code through Docker container to ECR repository](images/invoke.png)
 
 ---
 
-![Step 4 Architecture — Full runtime with observability, Gateway, and Memory](images/architecture_lab4_runtime.png)
+**`Runtime`** — sends requests through the Runtime endpoint with a bearer token, routing through the full container stack:
 
 Uses the `bedrock-agentcore-starter-toolkit` `Runtime` class to:
 1. Generate a `Dockerfile` + `buildspec.yml` automatically
 2. Trigger a CodeBuild ARM64 build → push to ECR
 3. Deploy to a managed AgentCore Runtime endpoint with JWT auth
 4. Poll until status is `READY`, then run 3 live test invocations through the endpoint
+
+   
+![Step 4 Architecture — Full runtime with observability, Gateway, and Memory](images/architecture_lab4_runtime.png)
+
 
 Total cold-build time: ~15 minutes for the first deployment; subsequent redeploys reuse the ECR layer cache.
 
