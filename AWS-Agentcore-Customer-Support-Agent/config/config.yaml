@@ -1,0 +1,49 @@
+aws:
+  region: "us-east-1"
+
+bedrock:
+  model_id: "us.amazon.nova-2-lite-v1:0"
+  temperature: 0.3
+
+knowledge_base:
+  # SSM parameter paths (populated by prereq.sh + CloudFormation)
+  kb_id_param: "/{account_id}-{region}/kb/knowledge-base-id"
+  data_source_id_param: "/{account_id}-{region}/kb/data-source-id"
+  s3_bucket_pattern: "{account_id}-{region}-kb-data-bucket"
+
+memory:
+  name: "CustomerSupportMemory"
+  event_expiry_days: 90
+  ssm_param: "/app/customersupport/agentcore/memory_id"
+
+gateway:
+  name: "customersupport-gw"
+  ssm_params:
+    id: "/app/customersupport/agentcore/gateway_id"
+    url: "/app/customersupport/agentcore/gateway_url"
+    arn: "/app/customersupport/agentcore/gateway_arn"
+    iam_role: "/app/customersupport/agentcore/gateway_iam_role"
+    lambda_arn: "/app/customersupport/agentcore/lambda_arn"
+
+runtime:
+  agent_name: "customer_support_agent"
+  entrypoint: "runtime/agent_entrypoint.py"
+  requirements_file: "requirements.txt"
+  ssm_param: "/app/customersupport/agentcore/runtime_arn"
+
+cognito:
+  ssm_params:
+    client_id: "/app/customersupport/agentcore/client_id"
+    client_secret: "/app/customersupport/agentcore/client_secret"
+    discovery_url: "/app/customersupport/agentcore/cognito_discovery_url"
+    domain: "/app/customersupport/agentcore/cognito_domain"
+
+cloudformation:
+  stacks:
+    infrastructure: "CustomerSupportStack"
+    cognito: "CustomerSupportCognitoStack"
+
+observability:
+  log_group: "agents/customer-support-assistant-logs"
+  log_stream: "default"
+  service_name: "customer-support-assistant-strands"

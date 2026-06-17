@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env
+*.env
+
+# AWS / CDK
+cdk.out/
+.cdk.staging/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Knowledge base data (downloaded from S3)
+knowledge_base_data/
+
+# Starter toolkit generated files (account-specific, not portable)
+.bedrock_agentcore/
+.bedrock_agentcore.yaml
+agentcore.yaml
+Dockerfile
+
+# Build artifacts (binary — use S3/CI instead)
+lambda.zip
+*.zip
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
