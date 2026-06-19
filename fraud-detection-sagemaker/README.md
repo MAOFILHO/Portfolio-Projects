@@ -39,7 +39,7 @@ Financial institutions face three competing pressures:
 
 | Challenge | Detail |
 |---|---|
-| **Real-time detection** | A fraudulent transaction must be flagged within milliseconds, before payment is authorised |
+| **Real-time detection** | A fraudulent transaction must be flagged within milliseconds, before payment is authorized |
 | **Minimize false positives** | 32% of customers abandon a card after just one false decline |
 | **Class imbalance** | Fraud represents less than 0.2% of all transactions — traditional classifiers fail silently |
 
@@ -50,7 +50,7 @@ Financial institutions face three competing pressures:
 | Banks & Payment Processors | Reduce chargebacks, meet PCI-DSS compliance, protect customer trust |
 | E-commerce Platforms | Minimize payment fraud, reduce manual review queues |
 | FinTech Startups | Deploy production-grade detection without building ML infrastructure |
-| Insurance Companies | Apply same anomaly detection patterns to claims fraud |
+| Insurance Companies | Apply the same anomaly detection patterns to claims fraud |
 
 ---
 
@@ -58,7 +58,7 @@ Financial institutions face three competing pressures:
 
 This project implements a **dual-model fraud detection architecture** that mirrors real-world production systems:
 
-- **Random Cut Forest (RCF)** — Unsupervised anomaly detector. Catches novel, never-before-seen fraud patterns without labeled data.
+- **Random Cut Forest (RCF)** — Unsupervised anomaly detector. Catches novel, never-before-seen fraud patterns without labelled data.
 - **XGBoost + SMOTE** — Supervised classifier trained on historical fraud labels. Recognizes known fraud signatures with high precision.
 
 Combining both provides **defense in depth**: XGBoost catches fraud that looks like past fraud; RCF catches fraud that looks like nothing legitimate.
@@ -73,6 +73,24 @@ Combining both provides **defense in depth**: XGBoost catches fraud that looks l
 | 4 | Scalability | 10,000+ TPS | ✅ SageMaker auto-scaling |
 | 5 | Audit logging | Every prediction logged | ✅ Kinesis → S3 |
 | 6 | Reproducible infra | One-click deploy | ✅ CloudFormation |
+
+---
+
+## Project Results and Impact
+
+→ Improved fraud detection performance by increasing precision to **93%** and recall to **80%**, achieving an F1-score of **86%** through class rebalancing (SMOTE) and model optimization.
+
+→ Reduced false positives by approximately **15–25%** compared to baseline models, helping minimize unnecessary transaction declines and improve customer experience.
+
+→ Enabled real-time fraud scoring (<100ms latency), meeting industry standards for transaction authorization systems handling high-throughput workloads (10,000+ TPS).
+
+→ Implemented a dual-model architecture (supervised + unsupervised), improving detection coverage of previously unseen fraud patterns by **~20–30%** (aligned with anomaly detection benchmarks).
+
+→ Designed a scalable **AWS architecture** (API Gateway, Lambda, SageMaker, Kinesis, S3) capable of supporting millions of daily transactions with auto-scaling and high availability.
+
+→ Simulated business impact equivalent to saving **$2M–$5M** annually for a mid-sized financial institution by reducing fraud losses and operational investigation costs (based on industry averages of 0.1% fraud rates).
+
+→ Built a full MLOps pipeline with infrastructure-as-code **CloudFormation**, enabling reproducible deployments and reducing setup time by **~70%**.
 
 ---
 
@@ -141,7 +159,7 @@ Kinesis Firehose ──► S3 (Audit Log + Retraining Data)
 
 ### 1. XGBoost + SMOTE (Primary Classifier)
 
-XGBoost is trained on labeled transaction data with **SMOTE** (Synthetic Minority Oversampling Technique) applied to address the severe class imbalance (0.172% fraud).
+XGBoost is trained on labelled transaction data with **SMOTE** (Synthetic Minority Oversampling Technique) applied to address the severe class imbalance (0.172% fraud).
 
 Key hyperparameters:
 ```python
@@ -310,7 +328,7 @@ aws cloudformation create-stack \
     ParameterKey=CreateSageMakerNotebookInstance,ParameterValue=true
 ```
 
-This provisions:
+This provision:
 - S3 buckets (model data + output)
 - SageMaker Notebook Instance
 - Lambda function (`event-processor`)
@@ -419,24 +437,6 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 | S3 Storage (model artefacts) | ~$0.01 |
 | Lambda + API Gateway (demo calls) | < $0.01 |
 | **Total** | **< $0.40** |
-
----
-
-## Project Results and Impact
-
-→ Improved fraud detection performance by increasing precision to 93% and recall to 80%, achieving an F1-score of 86% through class rebalancing (SMOTE) and model optimization.
-
-→ Reduced false positives by approximately 15–25% compared to baseline models, helping minimize unnecessary transaction declines and improve customer experience.
-
-→ Enabled real-time fraud scoring (<100ms latency), meeting industry standards for transaction authorization systems handling high-throughput workloads (10,000+ TPS).
-
-→ Implemented a dual-model architecture (supervised + unsupervised), improving detection coverage of previously unseen fraud patterns by ~20–30% (aligned with anomaly detection benchmarks).
-
-→ Designed a scalable AWS architecture (API Gateway, Lambda, SageMaker, Kinesis, S3) capable of supporting millions of daily transactions with auto-scaling and high availability.
-
-→ Simulated business impact equivalent to saving $2M–$5M annually for a mid-sized financial institution by reducing fraud losses and operational investigation costs (based on industry averages of 0.1% fraud rates).
-
-→ Built a full MLOps pipeline with infrastructure-as-code (CloudFormation), enabling reproducible deployments and reducing setup time by ~70%.
 
 
 ---
