@@ -82,7 +82,7 @@ Combining both provides **defense in depth**: XGBoost catches fraud that looks l
 
 → Reduced false positives by approximately **15–25%** compared to baseline models, helping minimize unnecessary transaction declines and improve customer experience.
 
-→ Enabled real-time fraud scoring (<100ms latency), meeting industry standards for transaction authorization systems handling high-throughput workloads (10,000+ TPS).
+→ Enabled real-time fraud scoring (**<100ms latency**), meeting industry standards for transaction authorization systems handling high-throughput workloads (**10,000+ TPS**).
 
 → Implemented a dual-model architecture (supervised + unsupervised), improving detection coverage of previously unseen fraud patterns by **~20–30%** (aligned with anomaly detection benchmarks).
 
