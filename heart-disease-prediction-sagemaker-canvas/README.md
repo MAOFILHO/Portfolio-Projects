@@ -145,13 +145,17 @@ Input: Age = 68, Cholesterol = 250
 
 | Step | Preview |
 |---|---|
-| Data Wrangler Import | ![](screenshots/01-data-wrangler-import.png) |
-| Data Quality Report | ![](screenshots/02-data-quality-report.png) |
+| Data Wrangler Import | <img width="1669" height="515" alt="04-data-wrangler" src="https://github.com/user-attachments/assets/1183c5c3-7817-4aac-b8a0-d7c5e47c250f" /> |
+| Data Quality Report |  |
 | Model Build Config | ![](screenshots/03-model-build-config.png) |
 | Model Accuracy | ![](screenshots/04-model-accuracy.png) |
 | Batch Predictions | ![](screenshots/05-batch-predictions.png) |
 | Deployment In Service | ![](screenshots/06-deployment-inservice.png) |
 | Test Deployment | ![](screenshots/07-test-deployment.png) |
+
+
+
+
 
 ---
 
