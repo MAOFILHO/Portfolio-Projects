@@ -1,0 +1,20 @@
+ELECTRICAL HAZARD RESPONSE STANDARD OPERATING PROCEDURE
+
+1. Hazard Identification
+- Any visible spark, smoke, or burn smell near electrical infrastructure must be treated as high priority.
+- Residents should immediately report via hotline or emergency app.
+
+2. Immediate Response
+- Area must be cordoned off within 10 minutes of report.
+- On-call electrical technicians must isolate power supply to the affected circuit.
+- Nearby transformers and breakers should be inspected.
+
+3. Hazard Removal & Restoration
+- Burned wires or faulty components must be replaced within 4 hours.
+- Preventive maintenance must be conducted in the surrounding area.
+
+4. Post-Incident Actions
+- Safety audits and RCA (Root Cause Analysis) must be completed within 48 hours.
+- Follow-up inspections to be logged digitally.
+
+Maintained and approved by the City Electrical Safety Board.

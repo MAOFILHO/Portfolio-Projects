@@ -1,0 +1,21 @@
+# Core Azure
+openai>=1.30.0
+azure-core>=1.30.0
+azure-identity>=1.16.0
+azure-ai-formrecognizer==3.3.0
+
+# Web framework
+streamlit>=1.35.0
+watchdog>=4.0.0
+
+# Observability (Azure Monitor OpenTelemetry Distro)
+azure-monitor-opentelemetry>=1.6.0
+opentelemetry-api>=1.25.0
+opentelemetry-sdk>=1.25.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
+pydantic>=2.0.0
+pillow>=10.0.0
+tenacity>=8.2.0

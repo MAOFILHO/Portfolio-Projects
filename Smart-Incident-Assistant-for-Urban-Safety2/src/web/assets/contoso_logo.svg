@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" fill="none">
+  <rect width="200" height="40" rx="4" fill="#0078D4"/>
+  <text x="10" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="bold" fill="white">CONTOSO</text>
+  <circle cx="170" cy="20" r="12" fill="white" fill-opacity="0.2"/>
+  <path d="M164 20 L170 14 L176 20 L170 26 Z" fill="white" fill-opacity="0.6"/>
+</svg>

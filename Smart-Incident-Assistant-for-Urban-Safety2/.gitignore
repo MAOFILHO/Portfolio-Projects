@@ -1,0 +1,21 @@
+# Environment and secrets
+.env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Generated data (re-created by pipeline)
+data/
+
+# OS files
+.DS_Store
+
+# IDE and tooling
+.claude/
+.idea/
+.vscode/
