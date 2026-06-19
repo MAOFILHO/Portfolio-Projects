@@ -445,19 +445,15 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 
 <img width="2048" height="1408" alt="1779515764405" src="https://github.com/user-attachments/assets/3e2a352d-7a7b-4ad2-97b5-517396fdb7db" />
 
+<img width="1476" height="1406" alt="fraud_detector_edited" src="https://github.com/user-attachments/assets/d80715b5-fad2-4241-bb22-150730093053" />
+
+<img width="1478" height="1406" alt="fraud_detector_fraud_edited" src="https://github.com/user-attachments/assets/9e018d4b-48d6-48d3-8d78-bbb5607bbbeb" />
+
 <img width="1204" height="804" alt="1779515764302" src="https://github.com/user-attachments/assets/cc97205c-1701-4a70-8201-b408123f065b" />
 
 <img width="1398" height="746" alt="1779515764308" src="https://github.com/user-attachments/assets/8b2d7a20-31bb-42d4-8ef6-657abc88f1eb" />
 
 <img width="1378" height="816" alt="1779515764454" src="https://github.com/user-attachments/assets/a7d8ba4a-c33b-436b-ae19-a843d0c2d26a" />
-
-
-<img width="1476" height="1406" alt="1779515764690" src="https://github.com/user-attachments/assets/f2d562b7-88e2-4e59-bb8a-6ccec1c247f9" />
-
-
-<img width="1478" height="1406" alt="1779515764742" src="https://github.com/user-attachments/assets/3b4c3091-76d7-411a-9e7f-832dcc4b50b5" />
-
-<img width="2048" height="952" alt="1779515765226" src="https://github.com/user-attachments/assets/262766a0-1527-43fa-86d6-fd24bafbc1bd" />
 
 
 ---
