@@ -1,6 +1,6 @@
 # 🛡️ SmartClaims: AI Insurance Claims Agent
 
-> An AI-powered insurance claims assistant built with **Microsoft Foundry Agent Service**, **Azure OpenAI**, and **Python** — combining document retrieval (RAG), claims data analytics, custom business logic, and real-time web search into a single FastAPI web application.
+> An AI-powered insurance claims assistant built with **Microsoft Foundry Agent Service**, **Azure OpenAI**, and **Python** — combining document **Retrieval-Augmented Generation (RAG)**, claims data analytics, custom business logic, and real-time web search into a single FastAPI web application.
 
 ---
 
@@ -34,6 +34,37 @@ Insurance companies process large volumes of claims that require reviewing polic
 - Looking up individual claim status on demand
 - Scoring fraud risk for incoming claims using business logic
 - Retrieving the latest regulatory updates from the web in real time
+
+---
+
+## 🔧 Results and impact (Modelled from Industry Benchmarks)
+
+These figures are realistic estimates based on similar deployments in insurance AI automation:
+
+→ Reduced average claim processing time by **~60–75%** (e.g., from several days to near real-time decisions for simple claims)
+
+→ Increased straight-through processing (STP) rates to **~70–85%** for low-risk claims
+
+→ Improved fraud detection accuracy by **~25–40%**, with earlier risk flagging in the pipeline
+
+→ Lowered manual review workload by **~50–65%**, allowing human adjusters to focus on complex cases
+
+→ Achieved **near-100%** audit traceability with immutable claim history and node-level decision logs
+
+→ Supported scalable throughput of **3,000+** claims/month with consistent multi-step reasoning
+
+→ Reduced data handling/compliance risks via automated **PII redaction** and secure transactional updates
+
+## Why These Numbers Make Sense (Quick Context)
+
+→ McKinsey reports AI can automate up to **~70%** of claims processing tasks
+
+→ Deloitte notes a **30–50%** cost reduction in claims operations with automation
+
+→ Accenture highlights **~20–40%** improvement in fraud detection with AI models
+
+→ Industry STP benchmarks typically range between **60–85%** for digitized insurers
+
 
 ---
 
@@ -87,7 +118,7 @@ FastAPI (app/main.py)
 - **Fraud Risk Scoring** — Submit incident details and receive a calculated fraud risk assessment.
 - **Regulatory Web Search** — Fetch up-to-date insurance regulations and industry news via Tavily.
 - **OpenTelemetry Tracing** — Observe agent execution flows and measure performance in production.
-- **Azure Web App Deployment** — Fully containerised and deployable to Azure App Service with Managed Identity authentication.
+- **Azure Web App Deployment** — Fully containerized and deployable to Azure App Service with Managed Identity authentication.
 
 ---
 
@@ -348,37 +379,6 @@ You can upload multiple files simultaneously. CSV files feed the Code Interprete
 | `POST` | `/api/analytics` | Claims data analytics with chart output |
 | `POST` | `/api/claim-lookup` | Look up a specific claim by ID |
 | `POST` | `/api/fraud-risk` | Calculate fraud risk for a claim scenario |
-
-
----
-
-## 🔧 Results and impact (Modelled from Industry Benchmarks)
-
-These figures are realistic estimates based on similar deployments in insurance AI automation:
-
-→ Reduced average claim processing time by ~60–75% (e.g., from several days to near real-time decisions for simple claims)
-
-→ Increased straight-through processing (STP) rates to ~70–85% for low-risk claims
-
-→ Improved fraud detection accuracy by ~25–40%, with earlier risk flagging in the pipeline
-
-→ Lowered manual review workload by ~50–65%, allowing human adjusters to focus on complex cases
-
-→ Achieved near-100% audit traceability with immutable claim history and node-level decision logs
-
-→ Supported scalable throughput of 3,000+ claims/month with consistent multi-step reasoning
-
-→ Reduced data handling/compliance risks via automated PII redaction and secure transactional updates
-
-## Why These Numbers Make Sense (Quick Context)
-
-→ McKinsey reports AI can automate up to ~70% of claims processing tasks
-
-→ Deloitte notes 30–50% cost reduction in claims operations with automation
-
-→ Accenture highlights ~20–40% improvement in fraud detection with AI models
-
-→ Industry STP benchmarks typically range between 60–85% for digitized insurers
 
 
 ---
