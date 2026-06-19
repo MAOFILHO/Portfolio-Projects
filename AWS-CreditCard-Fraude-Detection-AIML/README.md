@@ -485,6 +485,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 **Built with ❤️ on Amazon SageMaker**
 
-[⭐ Star this repo](https://github.com/MAOFILHO/fraud-detection-sagemaker) · [🐛 Report an issue](https://github.com/MAOFILHO/fraud-detection-sagemaker/issues) · [🔗 Connect on LinkedIn](https://linkedin.com/in/MAOFILHO)
+[⭐ Star this repo](https://github.com/MAOFILHO/fraud-detection-sagemaker) · [🐛 Report an issue](https://github.com/MAOFILHO/fraud-detection-sagemaker/issues) · [🔗 Connect on LinkedIn](https://linkedin.com/in/mfilho1)
 
 </div>
