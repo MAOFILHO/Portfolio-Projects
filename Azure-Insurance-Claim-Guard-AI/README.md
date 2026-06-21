@@ -40,31 +40,20 @@ Insurance companies process large volumes of claims that require reviewing polic
 ## 🔧 Results and impact (Modelled from Industry Benchmarks)
 
 These figures are realistic estimates based on similar deployments in insurance AI automation:
-
-→ Reduced average claim processing time by **~60–75%** (e.g., from several days to near real-time decisions for simple claims)
-
-→ Increased straight-through processing (STP) rates to **~70–85%** for low-risk claims
-
-→ Improved fraud detection accuracy by **~25–40%**, with earlier risk flagging in the pipeline
-
-→ Lowered manual review workload by **~50–65%**, allowing human adjusters to focus on complex cases
-
-→ Achieved **near-100%** audit traceability with immutable claim history and node-level decision logs
-
-→ Supported scalable throughput of **3,000+** claims/month with consistent multi-step reasoning
-
-→ Reduced data handling/compliance risks via automated **PII redaction** and secure transactional updates
+- Reduced average claim processing time by **~60–75%** (e.g., from several days to near real-time decisions for simple claims)
+- Increased straight-through processing (STP) rates to **~70–85%** for low-risk claims
+- Improved fraud detection accuracy by **~25–40%**, with earlier risk flagging in the pipeline
+- Lowered manual review workload by **~50–65%**, allowing human adjusters to focus on complex cases
+- Achieved **near-100%** audit traceability with immutable claim history and node-level decision logs
+- Supported scalable throughput of **3,000+** claims/month with consistent multi-step reasoning
+- Reduced data handling/compliance risks via automated **PII redaction** and secure transactional updates
 
 ## Why These Numbers Make Sense (Quick Context)
 
-→ McKinsey reports AI can automate up to **~70%** of claims processing tasks
-
-→ Deloitte notes a **30–50%** cost reduction in claims operations with automation
-
-→ Accenture highlights **~20–40%** improvement in fraud detection with AI models
-
-→ Industry STP benchmarks typically range between **60–85%** for digitized insurers
-
+- McKinsey reports AI can automate up to **~70%** of claims processing tasks
+- Deloitte notes a **30–50%** cost reduction in claims operations with automation
+- Accenture highlights **~20–40%** improvement in fraud detection with AI models
+- Industry STP benchmarks typically range between **60–85%** for digitized insurers
 
 ---
 
