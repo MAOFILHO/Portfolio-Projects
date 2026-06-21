@@ -9,14 +9,9 @@
 
 ## 📌 Project Overview
 
-Heart disease is the world's #1 cause of death. Most healthcare providers already
-hold years of patient data (age, cholesterol, blood pressure, ECG readings) but
-lack in-house data science teams to extract predictive value from it.
+Heart disease is the world's #1 cause of death. Most healthcare providers already hold years of patient data (age, cholesterol, blood pressure, ECG readings), but lack in-house data science teams to extract predictive value from it.
 
-This project demonstrates how a **business analyst with zero ML coding experience**
-can build, train, and deploy a production-grade heart disease risk prediction model
-entirely through AWS's no-code tooling — no Python, no Jupyter notebooks, no ML
-expertise required.
+This project demonstrates how a **business analyst with zero ML coding experience** can build, train, and deploy a production-grade heart disease risk prediction model entirely through AWS's no-code tooling — no Python, no Jupyter notebooks, no ML expertise required.
 
 ---
 
