@@ -632,7 +632,7 @@ These estimates are grounded in real-world enterprise AgentCore and Bedrock depl
 
 → **~15-minute cold build** for the first ARM64 container; subsequent deploys reuse ECR layer cache (~5 min)
 
-→ **Cross-session memory recall demonstrated**: agent identifies customer device preference (ThinkPad + Linux) without the customer repeating it — mirrors what Salesforce and Zendesk AI report as a 15–25% CSAT lift from memory-enabled agents
+→ **Cross-session memory recall demonstrated**: agent identifies customer device preference (ThinkPad + Linux) without the customer repeating it — mirrors what Salesforce and Zendesk AI report as a **15–25% CSAT lift** from memory-enabled agents
 
 → **Zero-code tool integration**: Lambda warranty checker exposed to the agent purely through MCP schema — no agent code changes needed to add or remove tools
 
