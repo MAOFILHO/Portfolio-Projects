@@ -132,7 +132,7 @@ Customer → Streamlit Chat UI (Cognito OAuth)
         ┌───────┼───────────────────────┐
         │       │                       │
         ▼       ▼                       ▼
-┌──────────┐ ┌────────────────┐ ┌──────────────────────┐
+┌──────────┐ ┌────────────────┐ ┌───────────────────-───┐
 │ Bedrock  │ │ AgentCore      │ │ AgentCore Gateway     │
 │ KB       │ │ Memory         │ │ (MCP / HTTP)          │
 │ (S3 Vec) │ │ USER_PREFERENCE│ │                       │
@@ -142,7 +142,7 @@ Customer → Streamlit Chat UI (Cognito OAuth)
 │ ingested │ │ - device prefs │ │ ├────────────────────┤│
 │ via      │ │ - OS prefs     │ │ │ DDGS: Web Search   ││
 │ Titan    │ │ - past issues  │ │ └────────────────────┘│
-│ Embed v2 │ └────────────────┘ └──────────────────────┘
+│ Embed v2 │ └────────────────┘ └─────────────────-─────┘
 └──────────┘
 
 Infrastructure: CloudFormation (Lambda, DynamoDB, Cognito, S3, IAM)
