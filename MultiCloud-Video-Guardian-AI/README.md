@@ -1,5 +1,5 @@
 
-# MultiCloud-Video-Guardian-AI Content Moderation Project
+# MultiCloud-Video-Guardian-AI Content Moderation
 
 A production-grade, end-to-end MLOps application for automated video content moderation. Built on **Azure AKS** (Kubernetes) + **AWS** (S3, SQS, DynamoDB) with **Azure ML** for NSFW and Violence detection model training and deployment to a fully automated **Python/CLI** deployment pipeline.
 
