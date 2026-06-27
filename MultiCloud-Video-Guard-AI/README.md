@@ -1,5 +1,5 @@
 
-# MultiCloud-Video-Guard-AI Content Moderation Project
+# MultiCloud-Video-Guardian-AI Content Moderation Project
 
 A production-grade, end-to-end MLOps application for automated video content moderation. Built on **Azure AKS** (Kubernetes) + **AWS** (S3, SQS, DynamoDB) with **Azure ML** for NSFW and Violence detection model training and deployment to a fully automated **Python/CLI** deployment pipeline.
 
@@ -19,7 +19,7 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 
 **The Challenge:** To scale and standardize decisions, you need to **automate model training and deployment**: train NSFW and violence-detection models on scalable compute, register and version them, deploy to managed inference endpoints, and have application services (which store videos and metadata on AWS) call those endpoints for real-time scoring. 
 
-**The consequence**: platforms either miss harmful content, delay approvals unacceptably, or burn through reviewer capacity on routine cases that automation should handle. The Multi-Cloud-Guard-AI is built to close that gap — automating the high-volume, high-confidence decisions so human reviewers focus only on the cases that actually need judgment.
+**The consequence**: platforms either miss harmful content, delay approvals unacceptably, or burn through reviewer capacity on routine cases that automation should handle. The Multi-Cloud-Guardian-AI is built to close that gap — automating the high-volume, high-confidence decisions so human reviewers focus only on the cases that actually need judgment.
 
 **The Solution:** This project uses **Azure** for the ML platform and **AWS** for data and messaging, with **Azure DevOps** pipelines orchestrating training and deployment so that new model versions flow from code commit to production endpoints.
 
@@ -120,7 +120,7 @@ Upload → API Gateway → Ingestion (S3) → SQS → Fast Screening
 ## Project Structure
 
 ```
-MultiCloud-Video-Guard-AI/
+MultiCloud-Video-Guardian-AI/
 ├── setup.py                          # Main orchestrator (run this)
 ├── .env.example                      # Environment variables template
 ├── requirements.txt                  # Python dependencies
@@ -192,7 +192,7 @@ MultiCloud-Video-Guard-AI/
 ```bash
 # If using as a standalone project:
 git clone https://github.com/MAOFILHO/Portfolio-Projects.git
-cd Portfolio-Projects/MultiCloud-Video-Guard-AI
+cd Portfolio-Projects/MultiCloud-Video-Guardian-AI
 
 # Install Python dependencies
 python3.11 -m venv .venv
@@ -281,7 +281,7 @@ Required scopes: Agent Pools, Build, Code, Project & Team, Service Connections, 
 ### Stage 1: AWS (`--stage aws`)
 Creates: S3 bucket, 2 SQS queues, 2 DynamoDB tables  
 Duration: ~2 minutes  
-Region: **us-east-1** (hardcoded guard — will error if unconfigured)
+Region: **us-east-1** (hardcoded guardian — will error if unconfigured)
 
 <img width="970" height="716" alt="Screenshot 2026-06-12 at 6 19 28 PM" src="https://github.com/user-attachments/assets/0634cbd6-c7c1-4a47-bcee-4d6176ae524d" />
 
@@ -397,7 +397,7 @@ python -m pytest tests/smoke/test_smoke.py -v
 
 ## GitHub Actions CI/CD
 
-A GitHub Actions workflow at `.github/workflows/guardian-ai-deploy.yml` automatically builds and deploys service images to AKS on every push to `MultiCloud-Video-Guard-AI/services/**`.
+A GitHub Actions workflow at `.github/workflows/guardian-ai-deploy.yml` automatically builds and deploys service images to AKS on every push to `MultiCloud-Video-Guardian-AI/services/**`.
 
 ### Required GitHub Secrets
 
@@ -429,7 +429,7 @@ GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
 ### Important Notes
 
 - AKS must be running before deployment: `az aks start --name guardian-ai-aks --resource-group guardian-ai-prod`
-- Workflow only fires on changes under `MultiCloud-Video-Guard-AI/services/**`, `k8s/**`, or `frontend/**`
+- Workflow only fires on changes under `MultiCloud-Video-Guardian-AI/services/**`, `k8s/**`, or `frontend/**`
 - Rotate the `guardian-github-actions` SP secret annually
 
 
@@ -555,8 +555,8 @@ AZURE_TENANT_ID=<tenant>
 
 ### 8. Pipeline YAML "Could not find valid pipeline YAML file"
 **Symptom**: Azure DevOps pipeline fails immediately with YAML not found  
-**Root cause**: Azure Repos has the full Portfolio-Projects structure, so YAMLs are under `MultiCloud-Video-Guard-AI/` subfolder, not at root  
-**Fix**: Already patched — pipeline YAMLs reference correct paths. If you re-create pipelines, update the YAML path in Azure DevOps to `MultiCloud-Video-Guard-AI/azure-pipelines-*.yml`
+**Root cause**: Azure Repos has the full Portfolio-Projects structure, so YAMLs are under `MultiCloud-Video-Guardian-AI/` subfolder, not at root  
+**Fix**: Already patched — pipeline YAMLs reference correct paths. If you re-create pipelines, update the YAML path in Azure DevOps to `MultiCloud-Video-Guardian-AI/azure-pipelines-*.yml`
 
 ### 9. ML Training Pipeline "No agent found in pool Default"
 **Symptom**: Training jobs fail immediately  
@@ -565,8 +565,8 @@ AZURE_TENANT_ID=<tenant>
 
 ### 10. ML Training Path Error
 **Symptom**: `Cannot find path '/home/vsts/work/1/s/mlops/training'`  
-**Root cause**: Pipeline runs from Portfolio-Projects repo root, so MLOps scripts are under `MultiCloud-Video-Guard-AI/mlops/`  
-**Fix**: Already patched — pipeline YAMLs use `cd MultiCloud-Video-Guard-AI/mlops/training`
+**Root cause**: Pipeline runs from Portfolio-Projects repo root, so MLOps scripts are under `MultiCloud-Video-Guardian-AI/mlops/`  
+**Fix**: Already patched — pipeline YAMLs use `cd MultiCloud-Video-Guardian-AI/mlops/training`
 
 ### 11. Duplicate ACR Created on Each Azure Stage Run
 **Symptom**: New `guardianacr*` created every time `--stage azure` runs  
