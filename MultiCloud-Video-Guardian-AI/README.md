@@ -19,7 +19,7 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 
 **The Challenge:** To scale and standardize decisions, you need to **automate model training and deployment**: train NSFW and violence-detection models on scalable compute, register and version them, deploy to managed inference endpoints, and have application services (which store videos and metadata on AWS) call those endpoints for real-time scoring. 
 
-**The consequence**: platforms either miss harmful content, delay approvals unacceptably, or burn through reviewer capacity on routine cases that automation should handle. The Multi-Cloud-Guardian-AI is built to close that gap — automating the high-volume, high-confidence decisions so human reviewers focus only on the cases that actually need judgment.
+**The consequence**: platforms either miss harmful content, delay approvals unacceptably, or burn through reviewer capacity on routine cases that automation should handle. The **Multi-Cloud-Guardian-AI is built to close that gap** — automating the high-volume, high-confidence decisions so human reviewers focus only on the cases that actually need judgment.
 
 **The Solution:** This project uses **Azure** for the ML platform and **AWS** for data and messaging, with **Azure DevOps** pipelines orchestrating training and deployment so that new model versions flow from code commit to production endpoints.
 
@@ -38,11 +38,9 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 ---
 ## Design Decisions
 
-**Two-stage screening** (Fast Screening → Deep Vision) reduces Azure ML endpoint calls to only ambiguous content, lowering inference cost and latency.  
-
-**SQS decoupling** isolates ingestion from ML processing — a spike in uploads does not block scoring, and each layer scales independently.  
-
-**CI/CD-gated model promotion** via Azure DevOps ensures no model version reaches production without passing validation, enabling safe rollback to any registered version.
+- **Two-stage screening** (Fast Screening → Deep Vision) reduces Azure ML endpoint calls to only ambiguous content, lowering inference cost and latency.
+- **SQS decoupling** isolates ingestion from ML processing — a spike in uploads does not block scoring, and each layer scales independently.
+- **CI/CD-gated model promotion** via Azure DevOps ensures no model version reaches production without passing validation, enabling safe rollback to any registered version.
 
 ---
 ## Results and Impact
