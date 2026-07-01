@@ -91,7 +91,7 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 ---
 
-## Architecture
+## Azure Architecture
 
 <img width="642" height="948" alt="Screenshot 2026-06-30 at 11 45 42 PM" src="https://github.com/user-attachments/assets/7fa2be9e-c3c7-4986-95f7-5c2963b7f127" />
 
