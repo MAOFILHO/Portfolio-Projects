@@ -56,6 +56,15 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 ## Results and Impact
 
+| Metric | Project result	| Comparable benchmark / business interpretation |
+|--------|----------------|------------------------------------------------|
+| Evidence‑gathering time reduction	| ~40–45% (project target; aligns with CDSS study 445.1s → 249.5s) | Benchmarked CDSS study reported ≈44% reduction in chart‑review time, preserving decision accuracy | 
+| End‑to‑end decision latency	| < 10 seconds (streamed recommendation) | Significantly faster than minutes–hours for manual multi‑source reviews; enables near real‑time clinical support |
+| Clinician throughput gain	| Minutes saved per case → hours reclaimed weekly	| Benchmarks translate per‑case savings into tens of hours per year per clinician for routine workflows |
+| Recommendation consistency | Standardized, citation‑backed outputs with guardrails | Addresses variability and missed evidence inherent in manual review; aligns with best practices for auditable CDS | 
+
+
+
 **Impact:** This project demonstrates how an automated agentic RAG pipeline can improve clinical decision speed, evidence coverage, and operational consistency. By orchestrating multiple specialized agents in parallel, the system provides comprehensive evidence-backed recommendations in seconds rather than the minutes-to-hours required for manual multi-source review.
 
 **Business Value:** From an operational perspective, the system reduces the time clinicians spend searching across disparate systems, improves consistency of evidence-based recommendations, and provides full auditability through immutable Cosmos DB audit trails with HIPAA-compliant retention policies.
@@ -212,13 +221,14 @@ azure-cdss-pipeline/
 ├── docs/
 │   └── architecture.md               # Architecture diagrams
 │
-└── ../cdss-agentic-rag/              # Source codebase (sibling directory)
-    ├── src/cdss/                     # FastAPI backend + 5 AI agents
-    ├── frontend/                     # React 18 + Vite + MSAL
-    ├── infra/bicep/main.bicep        # Azure IaC (2204 lines)
-    ├── infra/scripts/                # Battle-tested deployment scripts
-    ├── sample_data/                  # Synthetic patient data
-    └── tests/                        # Backend test suite
+├── sample_data
+|     ├── sample_lab_report.pdf        # import data to RAG
+|     ├── sample_lab_literature.pdf    # import data to RAG
+|     ├── sample_lab_protocol.pdf      # import data to RAG
+|
+├── scripts
+      ├── purge-soft-deleted.sh        # delete script
+
 ```
 
 ---
