@@ -1,0 +1,62 @@
+CDSS Sample Protocol Upload
+
+Protocol ID: ENDO-DM-CKD-2026-v2
+Title: Integrated Outpatient Management Protocol for Type 2 Diabetes with CKD Stage 3
+Service Line: Endocrinology and Nephrology Co-Management
+Effective Date: 2026-01-15
+Review Cycle: Every 12 months
+
+Clinical Scope:
+- Adults age 18 years or older with type 2 diabetes and CKD stage 3 (eGFR 30-59 mL/min/1.73m2).
+- Applies to ambulatory care and post-discharge follow-up visits.
+- Excludes pregnancy, dialysis dependence, and kidney transplant recipients.
+
+Baseline Evaluation (within 14 days of enrollment):
+1. Confirm CKD stage using two eGFR values at least 90 days apart.
+2. Obtain urine albumin-creatinine ratio (UACR), basic metabolic panel, HbA1c, and CBC.
+3. Reconcile medication list, focusing on NSAIDs, RAAS agents, and glucose-lowering therapy.
+4. Document blood pressure, weight, BMI, smoking status, and volume status.
+
+Primary Treatment Recommendations:
+1. Start or continue an SGLT2 inhibitor if eGFR threshold and tolerability criteria are met.
+2. Use ACE inhibitor or ARB for albuminuric CKD unless contraindicated.
+3. Individualize glycemic target, generally HbA1c around 7.0-7.5%, with less stringent goals for high hypoglycemia risk.
+4. Target blood pressure below 130/80 mmHg when tolerated.
+5. Add statin therapy for cardiovascular risk reduction unless contraindicated.
+
+Medication Safety Rules:
+- Avoid routine NSAID use because of AKI and CKD progression risk.
+- During SGLT2 inhibitor initiation, assess orthostatic symptoms and reduce loop or thiazide dose if needed.
+- If recurrent hypoglycemia occurs, de-intensify insulin or sulfonylurea before stopping kidney-protective therapies.
+- Review potassium and creatinine 1-2 weeks after RAAS dose changes.
+
+Monitoring Cadence:
+- eGFR and creatinine: every 3 months for stable CKD stage 3, sooner after medication changes.
+- UACR: every 3-6 months.
+- HbA1c: every 3 months if uncontrolled, every 6 months if stable.
+- Blood pressure and weight: every visit.
+
+Escalation Triggers:
+- eGFR decline more than 5 mL/min/1.73m2 per year.
+- UACR increase more than 30% despite adherence.
+- Persistent potassium above 5.5 mmol/L.
+- Recurrent AKI, severe edema, or resistant hypertension.
+
+Referral Criteria:
+- Nephrology referral for rapid decline, eGFR below 30, or difficult electrolyte management.
+- Pharmacist referral for polypharmacy and drug interaction risk.
+- Dietitian referral for sodium, protein, and carbohydrate planning.
+
+Expected Outcomes at 6 Months:
+- Slower annualized eGFR decline.
+- Lower albuminuria trend.
+- Improved blood pressure control and reduced unplanned renal-related visits.
+
+Evidence Basis:
+- Strong evidence for SGLT2 use and RAAS blockade in albuminuric CKD.
+- Moderate evidence for structured multidisciplinary follow-up reducing avoidable deterioration.
+- Consensus-backed recommendations for stepwise medication safety monitoring.
+
+Operational Notes:
+- This is sample protocol content for testing ingestion, retrieval, filtering, and citation workflows.
+- Not a substitute for local clinical governance policies.

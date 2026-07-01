@@ -1,0 +1,419 @@
+[
+  {
+    "patient_id": "patient_1",
+    "last_updated": "2026-03-20T10:15:00+00:00",
+    "demographics": {
+      "age": 58,
+      "sex": "female",
+      "weight_kg": 74,
+      "height_cm": 163,
+      "blood_type": "A+",
+      "name": "Anita Coleman"
+    },
+    "active_conditions": [
+      {
+        "code": "I10",
+        "coding_system": "ICD-10",
+        "display": "Essential Hypertension",
+        "onset_date": "2018-04-01",
+        "status": "active"
+      },
+      {
+        "code": "E03.9",
+        "coding_system": "ICD-10",
+        "display": "Hypothyroidism",
+        "onset_date": "2020-11-16",
+        "status": "active"
+      }
+    ],
+    "active_medications": [
+      {
+        "rxcui": "979492",
+        "name": "Losartan",
+        "dose": "50mg",
+        "frequency": "Once daily",
+        "start_date": "2021-02-10",
+        "prescriber": "Dr. M. Owens"
+      },
+      {
+        "rxcui": "10582",
+        "name": "Levothyroxine",
+        "dose": "75mcg",
+        "frequency": "Once daily before breakfast",
+        "start_date": "2020-11-20",
+        "prescriber": "Dr. M. Owens"
+      }
+    ],
+    "allergies": [
+      {
+        "substance": "Latex",
+        "reaction": "Contact dermatitis",
+        "severity": "mild",
+        "code": "300916003",
+        "coding_system": "SNOMED-CT"
+      }
+    ],
+    "recent_labs": [
+      {
+        "code": "3016-3",
+        "coding_system": "LOINC",
+        "display": "TSH",
+        "value": 3.1,
+        "unit": "mIU/L",
+        "test_date": "2026-03-18",
+        "reference_range": "0.4 - 4.0 mIU/L"
+      },
+      {
+        "code": "2160-0",
+        "coding_system": "LOINC",
+        "display": "Creatinine, Serum",
+        "value": 0.9,
+        "unit": "mg/dL",
+        "test_date": "2026-03-18",
+        "reference_range": "0.6 - 1.1 mg/dL"
+      },
+      {
+        "code": "4548-4",
+        "coding_system": "LOINC",
+        "display": "Hemoglobin A1c",
+        "value": 5.8,
+        "unit": "%",
+        "test_date": "2026-03-18",
+        "reference_range": "4.0 - 5.6 %"
+      }
+    ]
+  },
+  {
+    "patient_id": "patient_2",
+    "last_updated": "2026-03-19T09:00:00+00:00",
+    "demographics": {
+      "age": 47,
+      "sex": "male",
+      "weight_kg": 102,
+      "height_cm": 180,
+      "blood_type": "O+",
+      "name": "David Brooks"
+    },
+    "active_conditions": [
+      {
+        "code": "E11.9",
+        "coding_system": "ICD-10",
+        "display": "Type 2 Diabetes Mellitus",
+        "onset_date": "2019-06-02",
+        "status": "active"
+      },
+      {
+        "code": "E66.9",
+        "coding_system": "ICD-10",
+        "display": "Obesity",
+        "onset_date": "2017-02-01",
+        "status": "active"
+      }
+    ],
+    "active_medications": [
+      {
+        "rxcui": "11124",
+        "name": "Metformin",
+        "dose": "1000mg",
+        "frequency": "Twice daily",
+        "start_date": "2019-07-01",
+        "prescriber": "Dr. C. Lee"
+      },
+      {
+        "rxcui": "1991302",
+        "name": "Semaglutide",
+        "dose": "1mg",
+        "frequency": "Once weekly",
+        "start_date": "2025-11-08",
+        "prescriber": "Dr. C. Lee"
+      }
+    ],
+    "allergies": [
+      {
+        "substance": "Shellfish",
+        "reaction": "Hives",
+        "severity": "moderate",
+        "code": "300913006",
+        "coding_system": "SNOMED-CT"
+      }
+    ],
+    "recent_labs": [
+      {
+        "code": "4548-4",
+        "coding_system": "LOINC",
+        "display": "Hemoglobin A1c",
+        "value": 8.1,
+        "unit": "%",
+        "test_date": "2026-03-17",
+        "reference_range": "4.0 - 5.6 %"
+      },
+      {
+        "code": "1558-6",
+        "coding_system": "LOINC",
+        "display": "Glucose, Fasting",
+        "value": 182,
+        "unit": "mg/dL",
+        "test_date": "2026-03-17",
+        "reference_range": "70 - 100 mg/dL"
+      },
+      {
+        "code": "1742-6",
+        "coding_system": "LOINC",
+        "display": "ALT",
+        "value": 56,
+        "unit": "U/L",
+        "test_date": "2026-03-17",
+        "reference_range": "7 - 56 U/L"
+      }
+    ]
+  },
+  {
+    "patient_id": "patient_3",
+    "last_updated": "2026-03-22T13:42:00+00:00",
+    "demographics": {
+      "age": 35,
+      "sex": "female",
+      "weight_kg": 61,
+      "height_cm": 168,
+      "blood_type": "B+",
+      "name": "Leah Morgan"
+    },
+    "active_conditions": [
+      {
+        "code": "J45.909",
+        "coding_system": "ICD-10",
+        "display": "Asthma, unspecified",
+        "onset_date": "2011-09-12",
+        "status": "active"
+      },
+      {
+        "code": "J30.9",
+        "coding_system": "ICD-10",
+        "display": "Allergic rhinitis",
+        "onset_date": "2014-03-18",
+        "status": "active"
+      }
+    ],
+    "active_medications": [
+      {
+        "rxcui": "352362",
+        "name": "Budesonide/Formoterol",
+        "dose": "160/4.5mcg",
+        "frequency": "Two puffs twice daily",
+        "start_date": "2022-04-14",
+        "prescriber": "Dr. T. Nguyen"
+      },
+      {
+        "rxcui": "435",
+        "name": "Albuterol",
+        "dose": "90mcg",
+        "frequency": "As needed",
+        "start_date": "2018-06-01",
+        "prescriber": "Dr. T. Nguyen"
+      }
+    ],
+    "allergies": [
+      {
+        "substance": "Peanuts",
+        "reaction": "Anaphylaxis",
+        "severity": "severe",
+        "code": "91935009",
+        "coding_system": "SNOMED-CT"
+      }
+    ],
+    "recent_labs": [
+      {
+        "code": "26449-9",
+        "coding_system": "LOINC",
+        "display": "Eosinophils %",
+        "value": 8.4,
+        "unit": "%",
+        "test_date": "2026-03-21",
+        "reference_range": "0.0 - 6.0 %"
+      },
+      {
+        "code": "3094-0",
+        "coding_system": "LOINC",
+        "display": "BUN",
+        "value": 14,
+        "unit": "mg/dL",
+        "test_date": "2026-03-21",
+        "reference_range": "7 - 20 mg/dL"
+      }
+    ]
+  },
+  {
+    "patient_id": "patient_4",
+    "last_updated": "2026-03-23T08:10:00+00:00",
+    "demographics": {
+      "age": 72,
+      "sex": "male",
+      "weight_kg": 84,
+      "height_cm": 172,
+      "blood_type": "AB-",
+      "name": "Harold Singh"
+    },
+    "active_conditions": [
+      {
+        "code": "I25.10",
+        "coding_system": "ICD-10",
+        "display": "Coronary artery disease",
+        "onset_date": "2010-05-10",
+        "status": "active"
+      },
+      {
+        "code": "I48.91",
+        "coding_system": "ICD-10",
+        "display": "Atrial fibrillation",
+        "onset_date": "2022-02-21",
+        "status": "active"
+      },
+      {
+        "code": "N18.3",
+        "coding_system": "ICD-10",
+        "display": "Chronic Kidney Disease, Stage 3",
+        "onset_date": "2024-01-08",
+        "status": "active"
+      }
+    ],
+    "active_medications": [
+      {
+        "rxcui": "1364430",
+        "name": "Apixaban",
+        "dose": "5mg",
+        "frequency": "Twice daily",
+        "start_date": "2022-03-01",
+        "prescriber": "Dr. R. Patel"
+      },
+      {
+        "rxcui": "6918",
+        "name": "Metoprolol Succinate",
+        "dose": "50mg",
+        "frequency": "Once daily",
+        "start_date": "2018-10-16",
+        "prescriber": "Dr. R. Patel"
+      },
+      {
+        "rxcui": "301542",
+        "name": "Rosuvastatin",
+        "dose": "20mg",
+        "frequency": "At bedtime",
+        "start_date": "2016-12-01",
+        "prescriber": "Dr. R. Patel"
+      }
+    ],
+    "allergies": [
+      {
+        "substance": "Penicillin",
+        "reaction": "Maculopapular rash",
+        "severity": "moderate",
+        "code": "91936005",
+        "coding_system": "SNOMED-CT"
+      }
+    ],
+    "recent_labs": [
+      {
+        "code": "48642-3",
+        "coding_system": "LOINC",
+        "display": "eGFR",
+        "value": 48,
+        "unit": "mL/min/1.73m2",
+        "test_date": "2026-03-22",
+        "reference_range": ">= 90 mL/min/1.73m2"
+      },
+      {
+        "code": "18262-6",
+        "coding_system": "LOINC",
+        "display": "LDL Cholesterol, Direct",
+        "value": 64,
+        "unit": "mg/dL",
+        "test_date": "2026-03-22",
+        "reference_range": "< 100 mg/dL"
+      },
+      {
+        "code": "2823-3",
+        "coding_system": "LOINC",
+        "display": "Potassium, Serum",
+        "value": 4.6,
+        "unit": "mEq/L",
+        "test_date": "2026-03-22",
+        "reference_range": "3.5 - 5.0 mEq/L"
+      }
+    ]
+  },
+  {
+    "patient_id": "patient_5",
+    "last_updated": "2026-03-24T16:05:00+00:00",
+    "demographics": {
+      "age": 29,
+      "sex": "female",
+      "weight_kg": 56,
+      "height_cm": 165,
+      "blood_type": "O-",
+      "name": "Nora Bennett"
+    },
+    "active_conditions": [
+      {
+        "code": "M06.9",
+        "coding_system": "ICD-10",
+        "display": "Rheumatoid arthritis",
+        "onset_date": "2021-05-28",
+        "status": "active"
+      },
+      {
+        "code": "E55.9",
+        "coding_system": "ICD-10",
+        "display": "Vitamin D deficiency",
+        "onset_date": "2023-08-14",
+        "status": "active"
+      }
+    ],
+    "active_medications": [
+      {
+        "rxcui": "860975",
+        "name": "Hydroxychloroquine",
+        "dose": "200mg",
+        "frequency": "Twice daily",
+        "start_date": "2022-01-12",
+        "prescriber": "Dr. P. Allen"
+      },
+      {
+        "rxcui": "2418",
+        "name": "Vitamin D3",
+        "dose": "2000IU",
+        "frequency": "Once daily",
+        "start_date": "2023-08-20",
+        "prescriber": "Dr. P. Allen"
+      }
+    ],
+    "allergies": [
+      {
+        "substance": "Sulfonamide antibiotics",
+        "reaction": "Nausea",
+        "severity": "mild",
+        "code": "294954007",
+        "coding_system": "SNOMED-CT"
+      }
+    ],
+    "recent_labs": [
+      {
+        "code": "1988-5",
+        "coding_system": "LOINC",
+        "display": "C-Reactive Protein",
+        "value": 9.2,
+        "unit": "mg/L",
+        "test_date": "2026-03-23",
+        "reference_range": "0.0 - 5.0 mg/L"
+      },
+      {
+        "code": "4537-7",
+        "coding_system": "LOINC",
+        "display": "Erythrocyte Sedimentation Rate",
+        "value": 24,
+        "unit": "mm/hr",
+        "test_date": "2026-03-23",
+        "reference_range": "0 - 20 mm/hr"
+      }
+    ]
+  }
+]

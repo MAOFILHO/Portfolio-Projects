@@ -1,0 +1,19 @@
+{
+  "text": "What are the treatment options for this patient's uncontrolled diabetes given their CKD stage 3?",
+  "patient_id": "patient_12345",
+  "session_id": null,
+  "context": {
+    "requesting_provider": "Dr. Sarah Chen",
+    "provider_role": "Primary Care Physician",
+    "clinical_setting": "outpatient",
+    "urgency": "routine"
+  },
+  "preferences": {
+    "include_literature": true,
+    "include_protocols": true,
+    "include_drug_interactions": true,
+    "max_literature_results": 10,
+    "evidence_level_minimum": "moderate",
+    "response_detail": "comprehensive"
+  }
+}

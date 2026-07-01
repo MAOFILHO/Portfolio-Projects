@@ -1,0 +1,470 @@
+{
+  "patient_id": "patient_12345",
+  "version": "1.0",
+  "last_updated": "2026-02-15T14:30:00Z",
+  "demographics": {
+    "first_name": "Robert",
+    "last_name": "Martinez",
+    "date_of_birth": "1960-08-14",
+    "age": 65,
+    "sex": "Male",
+    "gender_identity": "Male",
+    "race": "White",
+    "ethnicity": "Hispanic or Latino",
+    "preferred_language": "English",
+    "marital_status": "Married",
+    "contact": {
+      "phone": "555-012-3456",
+      "email": "r.martinez@example.com",
+      "address": {
+        "line1": "742 Evergreen Terrace",
+        "city": "Springfield",
+        "state": "IL",
+        "zip": "62704",
+        "country": "US"
+      }
+    },
+    "emergency_contact": {
+      "name": "Maria Martinez",
+      "relationship": "Spouse",
+      "phone": "555-012-3457"
+    }
+  },
+  "insurance": {
+    "primary": {
+      "payer": "Medicare",
+      "plan": "Medicare Part B",
+      "member_id": "1EG4-TE5-MK72",
+      "group_number": "N/A"
+    }
+  },
+  "conditions": [
+    {
+      "condition_id": "cond_001",
+      "description": "Type 2 Diabetes Mellitus without complications",
+      "icd10_code": "E11.9",
+      "snomed_ct_code": "44054006",
+      "snomed_ct_display": "Diabetes mellitus type 2 (disorder)",
+      "clinical_status": "active",
+      "verification_status": "confirmed",
+      "onset_date": "2015-03-20",
+      "recorded_date": "2015-03-20",
+      "severity": "moderate",
+      "notes": "Initially managed with lifestyle modifications; metformin started 2016. HbA1c trending upward over past 12 months."
+    },
+    {
+      "condition_id": "cond_002",
+      "description": "Chronic Kidney Disease, Stage 3",
+      "icd10_code": "N18.3",
+      "snomed_ct_code": "433144002",
+      "snomed_ct_display": "Chronic kidney disease stage 3 (disorder)",
+      "clinical_status": "active",
+      "verification_status": "confirmed",
+      "onset_date": "2023-06-12",
+      "recorded_date": "2023-07-01",
+      "severity": "moderate",
+      "notes": "Likely diabetic nephropathy. eGFR declining over past 18 months. Nephrology referral completed 2023-08."
+    },
+    {
+      "condition_id": "cond_003",
+      "description": "Essential Hypertension",
+      "icd10_code": "I10",
+      "snomed_ct_code": "59621000",
+      "snomed_ct_display": "Essential hypertension (disorder)",
+      "clinical_status": "active",
+      "verification_status": "confirmed",
+      "onset_date": "2012-11-05",
+      "recorded_date": "2012-11-05",
+      "severity": "mild",
+      "notes": "Well-controlled on current regimen. Last BP reading 132/78 mmHg."
+    },
+    {
+      "condition_id": "cond_004",
+      "description": "Hyperlipidemia",
+      "icd10_code": "E78.5",
+      "snomed_ct_code": "55822004",
+      "snomed_ct_display": "Hyperlipidemia (disorder)",
+      "clinical_status": "active",
+      "verification_status": "confirmed",
+      "onset_date": "2014-02-18",
+      "recorded_date": "2014-02-18",
+      "severity": "mild",
+      "notes": "LDL at goal on statin therapy."
+    }
+  ],
+  "medications": [
+    {
+      "medication_id": "med_001",
+      "name": "Metformin Hydrochloride",
+      "generic_name": "metformin",
+      "rxnorm_cui": "6809",
+      "ndc_code": "0093-7214-01",
+      "dose": "500mg",
+      "dose_unit": "mg",
+      "route": "oral",
+      "frequency": "BID",
+      "frequency_display": "Twice daily",
+      "status": "active",
+      "start_date": "2016-01-15",
+      "prescriber": "Dr. Sarah Chen",
+      "indication": "Type 2 Diabetes Mellitus (E11.9)",
+      "instructions": "Take with meals. Morning and evening doses.",
+      "notes": "Dose reduced from 1000mg BID to 500mg BID on 2023-08-01 due to declining eGFR."
+    },
+    {
+      "medication_id": "med_002",
+      "name": "Lisinopril",
+      "generic_name": "lisinopril",
+      "rxnorm_cui": "29046",
+      "ndc_code": "0093-7339-01",
+      "dose": "10mg",
+      "dose_unit": "mg",
+      "route": "oral",
+      "frequency": "QD",
+      "frequency_display": "Once daily",
+      "status": "active",
+      "start_date": "2012-12-01",
+      "prescriber": "Dr. Sarah Chen",
+      "indication": "Essential Hypertension (I10), Diabetic nephropathy protection",
+      "instructions": "Take in the morning.",
+      "notes": "ACE inhibitor for BP control and renal protection."
+    },
+    {
+      "medication_id": "med_003",
+      "name": "Atorvastatin Calcium",
+      "generic_name": "atorvastatin",
+      "rxnorm_cui": "83367",
+      "ndc_code": "0071-0155-23",
+      "dose": "20mg",
+      "dose_unit": "mg",
+      "route": "oral",
+      "frequency": "QD",
+      "frequency_display": "Once daily at bedtime",
+      "status": "active",
+      "start_date": "2014-03-10",
+      "prescriber": "Dr. Sarah Chen",
+      "indication": "Hyperlipidemia (E78.5)",
+      "instructions": "Take at bedtime.",
+      "notes": "LDL well-controlled. Last LDL 88 mg/dL."
+    }
+  ],
+  "allergies": [
+    {
+      "allergy_id": "allergy_001",
+      "substance": "Penicillin",
+      "rxnorm_cui": "7980",
+      "snomed_ct_code": "91936005",
+      "snomed_ct_display": "Allergy to penicillin (finding)",
+      "category": "medication",
+      "criticality": "high",
+      "reaction_type": "allergy",
+      "reactions": [
+        {
+          "manifestation": "Anaphylaxis",
+          "snomed_ct_code": "39579001",
+          "severity": "severe",
+          "onset": "minutes"
+        },
+        {
+          "manifestation": "Urticaria",
+          "snomed_ct_code": "126485001",
+          "severity": "moderate",
+          "onset": "minutes"
+        }
+      ],
+      "verification_status": "confirmed",
+      "recorded_date": "2005-09-12",
+      "notes": "Confirmed anaphylactic reaction in 2005 after amoxicillin administration. Epinephrine administered in ED. Cross-reactivity with cephalosporins should be considered."
+    },
+    {
+      "allergy_id": "allergy_002",
+      "substance": "Sulfonamide antibiotics",
+      "category": "medication",
+      "criticality": "low",
+      "reaction_type": "intolerance",
+      "reactions": [
+        {
+          "manifestation": "Nausea",
+          "snomed_ct_code": "422587007",
+          "severity": "mild",
+          "onset": "hours"
+        },
+        {
+          "manifestation": "Skin rash",
+          "snomed_ct_code": "271807003",
+          "severity": "mild",
+          "onset": "hours"
+        }
+      ],
+      "verification_status": "confirmed",
+      "recorded_date": "2010-04-22",
+      "notes": "Mild GI upset and rash with trimethoprim-sulfamethoxazole. Not a true allergy."
+    }
+  ],
+  "lab_results": [
+    {
+      "lab_id": "lab_001",
+      "test_name": "Hemoglobin A1c",
+      "loinc_code": "4548-4",
+      "value": 7.2,
+      "unit": "%",
+      "reference_range": {
+        "low": 4.0,
+        "high": 5.6,
+        "text": "4.0 - 5.6 %"
+      },
+      "interpretation": "high",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "Above target of <7.0% per ADA guidelines. Previous: 6.8% (2025-07-15), 6.5% (2025-01-20). Upward trend over 12 months."
+    },
+    {
+      "lab_id": "lab_002",
+      "test_name": "Estimated Glomerular Filtration Rate (eGFR)",
+      "loinc_code": "48642-3",
+      "value": 42,
+      "unit": "mL/min/1.73m2",
+      "reference_range": {
+        "low": 90,
+        "high": 120,
+        "text": ">= 90 mL/min/1.73m2"
+      },
+      "interpretation": "low",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "CKD Stage 3a (45-59) progressing toward 3b. Previous: 48 (2025-07-15), 55 (2025-01-20). Declining trend."
+    },
+    {
+      "lab_id": "lab_003",
+      "test_name": "Creatinine, Serum",
+      "loinc_code": "2160-0",
+      "value": 1.8,
+      "unit": "mg/dL",
+      "reference_range": {
+        "low": 0.7,
+        "high": 1.3,
+        "text": "0.7 - 1.3 mg/dL"
+      },
+      "interpretation": "high",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "Elevated, consistent with CKD Stage 3. Previous: 1.6 (2025-07-15), 1.4 (2025-01-20)."
+    },
+    {
+      "lab_id": "lab_004",
+      "test_name": "Glucose, Fasting",
+      "loinc_code": "1558-6",
+      "value": 145,
+      "unit": "mg/dL",
+      "reference_range": {
+        "low": 70,
+        "high": 100,
+        "text": "70 - 100 mg/dL"
+      },
+      "interpretation": "high",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "Elevated fasting glucose consistent with suboptimal glycemic control."
+    },
+    {
+      "lab_id": "lab_005",
+      "test_name": "Blood Urea Nitrogen (BUN)",
+      "loinc_code": "3094-0",
+      "value": 28,
+      "unit": "mg/dL",
+      "reference_range": {
+        "low": 7,
+        "high": 20,
+        "text": "7 - 20 mg/dL"
+      },
+      "interpretation": "high",
+      "effective_date": "2026-01-28",
+      "status": "final"
+    },
+    {
+      "lab_id": "lab_006",
+      "test_name": "Urine Albumin-to-Creatinine Ratio (UACR)",
+      "loinc_code": "9318-7",
+      "value": 180,
+      "unit": "mg/g",
+      "reference_range": {
+        "low": 0,
+        "high": 30,
+        "text": "< 30 mg/g"
+      },
+      "interpretation": "high",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "Moderately increased albuminuria (A2 category, 30-300 mg/g). Indicative of diabetic nephropathy."
+    },
+    {
+      "lab_id": "lab_007",
+      "test_name": "Potassium, Serum",
+      "loinc_code": "2823-3",
+      "value": 4.8,
+      "unit": "mEq/L",
+      "reference_range": {
+        "low": 3.5,
+        "high": 5.0,
+        "text": "3.5 - 5.0 mEq/L"
+      },
+      "interpretation": "normal",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "Upper end of normal. Monitor given ACE inhibitor use and CKD."
+    },
+    {
+      "lab_id": "lab_008",
+      "test_name": "LDL Cholesterol, Direct",
+      "loinc_code": "18262-6",
+      "value": 88,
+      "unit": "mg/dL",
+      "reference_range": {
+        "low": 0,
+        "high": 100,
+        "text": "< 100 mg/dL"
+      },
+      "interpretation": "normal",
+      "effective_date": "2026-01-28",
+      "status": "final",
+      "notes": "At goal on atorvastatin 20mg."
+    }
+  ],
+  "vital_signs": {
+    "recorded_date": "2026-02-10",
+    "blood_pressure": {
+      "systolic": 132,
+      "diastolic": 78,
+      "unit": "mmHg",
+      "position": "sitting"
+    },
+    "heart_rate": {
+      "value": 74,
+      "unit": "bpm"
+    },
+    "respiratory_rate": {
+      "value": 16,
+      "unit": "breaths/min"
+    },
+    "temperature": {
+      "value": 98.4,
+      "unit": "F"
+    },
+    "weight": {
+      "value": 92,
+      "unit": "kg"
+    },
+    "height": {
+      "value": 175,
+      "unit": "cm"
+    },
+    "bmi": {
+      "value": 30.0,
+      "unit": "kg/m2",
+      "interpretation": "obese_class_1"
+    },
+    "oxygen_saturation": {
+      "value": 97,
+      "unit": "%"
+    }
+  },
+  "surgical_history": [
+    {
+      "procedure": "Appendectomy",
+      "icd10_pcs_code": "0DTJ0ZZ",
+      "date": "1988-05-20",
+      "notes": "Uncomplicated laparoscopic appendectomy"
+    },
+    {
+      "procedure": "Right knee arthroscopy",
+      "icd10_pcs_code": "0SJC4ZZ",
+      "date": "2008-11-03",
+      "notes": "Meniscal debridement. Full recovery."
+    }
+  ],
+  "social_history": {
+    "tobacco_use": {
+      "status": "former",
+      "type": "cigarettes",
+      "quantity": "1 pack per day",
+      "start_year": 1982,
+      "quit_year": 2010,
+      "pack_years": 28,
+      "snomed_ct_code": "8517006"
+    },
+    "alcohol_use": {
+      "status": "current",
+      "frequency": "social",
+      "quantity": "2-3 drinks per week",
+      "type": "beer/wine",
+      "snomed_ct_code": "219006"
+    },
+    "illicit_drug_use": {
+      "status": "never"
+    },
+    "exercise": {
+      "frequency": "2-3 times per week",
+      "type": "walking",
+      "duration_minutes": 30,
+      "notes": "Limited by mild knee osteoarthritis"
+    },
+    "diet": {
+      "type": "general",
+      "notes": "Referred to diabetic diet education. Moderate carbohydrate intake. Inconsistent adherence reported."
+    },
+    "occupation": {
+      "current": "Retired",
+      "previous": "High school teacher (35 years)"
+    }
+  },
+  "family_history": [
+    {
+      "relationship": "Father",
+      "condition": "Type 2 Diabetes Mellitus",
+      "icd10_code": "E11.9",
+      "age_at_onset": 55,
+      "deceased": true,
+      "cause_of_death": "Myocardial infarction",
+      "age_at_death": 72
+    },
+    {
+      "relationship": "Mother",
+      "condition": "Hypertension",
+      "icd10_code": "I10",
+      "age_at_onset": 60,
+      "deceased": true,
+      "cause_of_death": "Cerebrovascular accident",
+      "age_at_death": 81
+    },
+    {
+      "relationship": "Brother",
+      "condition": "Type 2 Diabetes Mellitus",
+      "icd10_code": "E11.9",
+      "age_at_onset": 50,
+      "deceased": false
+    }
+  ],
+  "care_team": [
+    {
+      "role": "Primary Care Physician",
+      "name": "Dr. Sarah Chen",
+      "npi": "1234567890",
+      "specialty": "Internal Medicine",
+      "facility": "Springfield Medical Group"
+    },
+    {
+      "role": "Nephrologist",
+      "name": "Dr. James Wright",
+      "npi": "0987654321",
+      "specialty": "Nephrology",
+      "facility": "Springfield Renal Associates"
+    },
+    {
+      "role": "Endocrinologist",
+      "name": "Dr. Priya Patel",
+      "npi": "1122334455",
+      "specialty": "Endocrinology",
+      "facility": "Springfield Diabetes Center"
+    }
+  ]
+}

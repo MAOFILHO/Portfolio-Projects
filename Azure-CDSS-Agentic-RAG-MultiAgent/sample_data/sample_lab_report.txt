@@ -1,0 +1,176 @@
+================================================================================
+                      SPRINGFIELD MEDICAL CENTER
+                        LABORATORY REPORT
+================================================================================
+
+PATIENT INFORMATION
+--------------------------------------------------------------------------------
+Name:               Martinez, Robert J.
+Date of Birth:      08/14/1960
+Age:                65 years
+Sex:                Male
+MRN:                SMC-2019-084523
+Account #:          A-2026-0128-4471
+Physician:          Sarah Chen, MD
+Location:           Outpatient - Internal Medicine Clinic
+
+SPECIMEN INFORMATION
+--------------------------------------------------------------------------------
+Collection Date:    01/28/2026 07:15 AM
+Received Date:      01/28/2026 07:32 AM
+Report Date:        01/28/2026 02:45 PM
+Specimen Type:      Venous Blood (Fasting), Urine (Random)
+Fasting Status:     Yes (12 hours)
+
+================================================================================
+                    COMPLETE BLOOD COUNT (CBC)
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+White Blood Cell Count      6.8         x10^3/uL    4.0 - 11.0
+Red Blood Cell Count        4.52        x10^6/uL    4.50 - 5.50
+Hemoglobin                  13.8        g/dL        13.5 - 17.5
+Hematocrit                  41.2        %           38.0 - 50.0
+MCV                         91.2        fL          80.0 - 100.0
+MCH                         30.5        pg          27.0 - 33.0
+MCHC                        33.5        g/dL        32.0 - 36.0
+RDW                         13.8        %           11.5 - 14.5
+Platelet Count              218         x10^3/uL    150 - 400
+MPV                         9.8         fL          7.5 - 12.0
+
+DIFFERENTIAL
+--------------------------------------------------------------------------------
+Neutrophils                 62.1        %           40.0 - 70.0
+Lymphocytes                 28.4        %           20.0 - 40.0
+Monocytes                   6.2         %           2.0 - 8.0
+Eosinophils                 2.8         %           1.0 - 4.0
+Basophils                   0.5         %           0.0 - 1.0
+Neutrophils (Absolute)      4.22        x10^3/uL    1.5 - 8.0
+Lymphocytes (Absolute)      1.93        x10^3/uL    1.0 - 4.0
+Monocytes (Absolute)        0.42        x10^3/uL    0.1 - 1.0
+Eosinophils (Absolute)      0.19        x10^3/uL    0.0 - 0.5
+Basophils (Absolute)        0.03        x10^3/uL    0.0 - 0.2
+
+================================================================================
+                  COMPREHENSIVE METABOLIC PANEL (CMP)
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+Glucose, Fasting            145         mg/dL       70 - 100            HIGH
+Blood Urea Nitrogen (BUN)   28         mg/dL       7 - 20              HIGH
+Creatinine, Serum           1.8        mg/dL       0.7 - 1.3           HIGH
+eGFR (CKD-EPI 2021)         42         mL/min/     >= 90               LOW
+                                        1.73m2
+BUN/Creatinine Ratio        15.6       ratio       10 - 20
+Sodium                       139        mEq/L       136 - 145
+Potassium                    4.8        mEq/L       3.5 - 5.0
+Chloride                     102        mEq/L       98 - 106
+Carbon Dioxide (CO2)         22         mEq/L       23 - 29             LOW
+Anion Gap                    15         mEq/L       8 - 16
+Calcium, Total               9.2       mg/dL       8.5 - 10.5
+Protein, Total               6.8       g/dL        6.0 - 8.3
+Albumin                      3.9       g/dL        3.5 - 5.0
+Globulin                     2.9       g/dL        2.0 - 3.5
+A/G Ratio                    1.3       ratio       1.0 - 2.5
+Bilirubin, Total             0.8       mg/dL       0.1 - 1.2
+Alkaline Phosphatase         78        U/L         44 - 147
+AST (SGOT)                   24        U/L         10 - 40
+ALT (SGPT)                   28        U/L         7 - 56
+
+================================================================================
+                      HEMOGLOBIN A1C
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+Hemoglobin A1c               7.2        %           4.0 - 5.6           HIGH
+Estimated Avg Glucose       160         mg/dL       (calculated)
+
+  Interpretation:
+  HbA1c 7.2% corresponds to an estimated average glucose of 160 mg/dL.
+  Target for most adults with diabetes: < 7.0% (ADA 2026).
+  Previous results: 6.8% (07/15/2025), 6.5% (01/20/2025).
+  Trend: Increasing over 12 months.
+
+================================================================================
+                      LIPID PANEL (FASTING)
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+Total Cholesterol            178        mg/dL       < 200
+Triglycerides                165        mg/dL       < 150               HIGH
+HDL Cholesterol              42         mg/dL       >= 40
+LDL Cholesterol (Direct)     88         mg/dL       < 100
+VLDL Cholesterol (Calc)      33         mg/dL       < 30                HIGH
+Non-HDL Cholesterol          136        mg/dL       < 130               HIGH
+Total Chol/HDL Ratio         4.2        ratio       < 5.0
+
+================================================================================
+                      RENAL PANEL (ADDITIONAL)
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+Phosphorus, Serum            4.2        mg/dL       2.5 - 4.5
+Uric Acid, Serum             7.8        mg/dL       3.5 - 7.2          HIGH
+Magnesium, Serum             1.9        mg/dL       1.7 - 2.2
+Intact PTH                   68         pg/mL       15 - 65             HIGH
+
+================================================================================
+                      URINE STUDIES
+================================================================================
+
+Test                        Result      Units       Reference Range     Flag
+--------------------------------------------------------------------------------
+Urine Albumin                28.8       mg/L        < 20                HIGH
+Urine Creatinine             160        mg/dL       (varies)
+Urine Albumin/Creatinine     180        mg/g        < 30                HIGH
+  Ratio (UACR)
+
+  Interpretation:
+  UACR 180 mg/g indicates moderately increased albuminuria (Category A2).
+  Categories: A1 (< 30 mg/g), A2 (30-300 mg/g), A3 (> 300 mg/g).
+  Previous results: 145 mg/g (07/15/2025), 95 mg/g (01/20/2025).
+  Trend: Increasing. Consistent with diabetic nephropathy.
+
+================================================================================
+                          COMMENTS
+================================================================================
+
+1. CKD staging based on eGFR 42 mL/min/1.73m2 and UACR 180 mg/g:
+   CKD Stage G3a-A2 (Moderately decreased GFR, moderately increased
+   albuminuria). KDIGO risk category: HIGH.
+
+2. Declining eGFR trend noted:
+   - 01/20/2025: eGFR 55 mL/min/1.73m2
+   - 07/15/2025: eGFR 48 mL/min/1.73m2
+   - 01/28/2026: eGFR 42 mL/min/1.73m2
+   Rate of decline: approximately 13 mL/min/year. Exceeds threshold of
+   > 5 mL/min/year -- nephrology referral recommended if not already in place.
+
+3. Mildly low CO2 (22 mEq/L) may indicate early metabolic acidosis
+   associated with CKD. Consider serum bicarbonate monitoring and
+   supplementation if confirmed < 22 mEq/L on repeat testing.
+
+4. Elevated PTH (68 pg/mL) is consistent with early secondary
+   hyperparathyroidism of CKD. Monitor calcium, phosphorus, and PTH
+   per KDIGO guidelines.
+
+5. Elevated uric acid (7.8 mg/dL) is common in CKD. Monitor; consider
+   treatment if symptomatic (gout) or if further renal decline.
+
+================================================================================
+                     PERFORMING LABORATORY
+================================================================================
+Springfield Medical Center Clinical Laboratory
+100 Medical Center Drive, Springfield, IL 62704
+CLIA #: 14D0987654
+Laboratory Director: Michael R. Thompson, MD, PhD
+Report generated electronically. Verified by: Jennifer A. Kowalski, MT(ASCP)
+
+================================================================================
+*** END OF REPORT ***
+================================================================================

@@ -1,0 +1,61 @@
+CDSS Sample Literature Upload
+
+Citation:
+Lee T, Navarro P, Iqbal S, et al.
+Anticoagulation in Atrial Fibrillation with Chronic Kidney Disease Stage 3: Comparative Effectiveness and Safety.
+Journal of Translational Cardio-Renal Medicine. 2026;14(2):101-118.
+DOI: 10.5555/jtcrm.2026.142101
+
+Study Type:
+Multicenter retrospective cohort with propensity-score matching.
+
+Population:
+- Adults with non-valvular atrial fibrillation and CKD stage 3.
+- N = 8,420 patients from 12 health systems.
+- Mean follow-up: 22 months.
+
+Interventions:
+- Group A: warfarin-based anticoagulation.
+- Group B: direct oral anticoagulant (DOAC) strategy (apixaban-dominant).
+
+Primary Outcome:
+- Composite of ischemic stroke or systemic embolism.
+
+Key Secondary Outcomes:
+- Major bleeding.
+- Intracranial hemorrhage.
+- All-cause hospitalization.
+- All-cause mortality.
+
+Structured Abstract:
+Background:
+Patients with atrial fibrillation and CKD stage 3 have competing risks of thromboembolism and bleeding, making anticoagulant selection clinically complex.
+
+Methods:
+Investigators used propensity-score matching on age, sex, CHA2DS2-VASc score, baseline eGFR, prior bleeding history, and antiplatelet co-therapy. Time-to-event analyses were performed with Cox proportional hazards models.
+
+Results:
+- Stroke/systemic embolism: hazard ratio 0.92 (95% CI 0.81-1.05), DOAC vs warfarin.
+- Major bleeding: hazard ratio 0.74 (95% CI 0.65-0.84), favoring DOAC.
+- Intracranial hemorrhage: hazard ratio 0.63 (95% CI 0.47-0.85), favoring DOAC.
+- Benefit was most consistent in patients with baseline eGFR 35-55 mL/min/1.73m2.
+
+Conclusions:
+In AF with CKD stage 3, DOAC-based therapy showed similar thromboembolic protection and lower major bleeding than warfarin in real-world practice. Findings support individualized anticoagulation with strong attention to renal monitoring and interacting medications.
+
+Clinical Interpretation:
+1. DOAC therapy may be preferred in many CKD stage 3 patients with AF when not contraindicated.
+2. Warfarin remains appropriate for selected patients requiring tight titration or with cost/access constraints.
+3. Concomitant antiplatelet exposure increased bleeding risk in both groups.
+4. Renal trajectory and interaction burden should be re-evaluated at each follow-up visit.
+
+Limitations:
+- Observational design with residual confounding risk.
+- Predominantly urban tertiary-center data.
+- Limited subgroup power for eGFR below 35.
+
+Keywords:
+atrial fibrillation; chronic kidney disease stage 3; anticoagulation; DOAC; warfarin; major bleeding; stroke prevention
+
+Data Use Note:
+This is synthetic sample literature content intended for ingestion and retrieval validation workflows.
