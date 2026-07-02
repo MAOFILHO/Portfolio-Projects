@@ -14,7 +14,7 @@ A production-grade, end-to-end automated deployment pipeline for a **Clinical De
 
 This project orchestrates a **Multi-Agent Clinical AI Workflow** on Azure. Azure OpenAI provides the inference engine (GPT-5 for orchestration and synthesis, GPT-5-mini for lightweight agent tasks), Azure AI Search handles hybrid retrieval across patient records, treatment protocols, and cached literature, and Cosmos DB persists patient profiles, audit trails, and agent state.
 
-The **FastAPI backend** runs on **Azure Container Apps**, coordinates five specialized AI agents in parallel, and returns streaming clinical recommendations via SSE. The **React frontend** deploys to **Azure Static Web Apps** with Microsoft Entra ID (OAuth 2.0) authentication. Azure Bicep templates provision 56+ resources including VNet with private endpoints, Key Vault for secrets, Document Intelligence for PDF parsing, and Application Insights for distributed tracing.
+The **FastAPI backend** runs on **Azure Container Apps**, coordinates five specialized AI agents in parallel, and returns streaming clinical recommendations via SSE. The **React frontend** deploys to **Azure Static Web Apps** with Microsoft Entra ID (OAuth 2.0) authentication. Azure Bicep templates provision 56+ resources, including VNet with private endpoints, Key Vault for secrets, Document Intelligence for PDF parsing, and Application Insights for distributed tracing.
 
 The deployment pipeline wraps battle-tested infrastructure scripts with a Python CLI that handles everything from prerequisite checks through end-to-end validation — a single `cdss-deploy deploy` command replaces 20+ manual steps from the original project guide.
 
@@ -28,7 +28,7 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 **The Consequence:** Without automation, clinical teams either miss critical evidence, delay care decisions unacceptably, or burn through specialist capacity on routine cases that a well-designed AI system should handle. The gap between information volume and human review capacity is structural, not a staffing problem.
 
-**The Solution:** This project deploys a **Clinical Decision Support System (CDSS)** that uses an **agentic RAG architecture** with five specialized AI agents. Instead of a single monolithic response, the system decomposes clinical queries, dispatches them to domain-specific agents in parallel, fuses evidence from multiple sources, and synthesizes a citation-backed recommendation — all validated by a guardrails agent before delivery.
+**The Solution:** This project deploys a **Clinical Decision Support System (CDSS)** that uses an **agentic RAG architecture** with **five specialized AI agents**. Instead of a single monolithic response, the system decomposes clinical queries, dispatches them to domain-specific agents in parallel, fuses evidence from multiple sources, and synthesizes a citation-backed recommendation — all validated by a guardrails agent before delivery.
 
 ---
 
@@ -40,7 +40,7 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 **Use Case:** The Medical Literature Agent queries PubMed's 36M+ biomedical citations in real time; the Drug Safety Agent normalizes drug names via RxNorm and checks interactions via OpenFDA adverse event data; all results are cached in Azure AI Search for subsequent retrieval.
 
-**Example:** Clinician submits query → Orchestrator dispatches 5 agents in parallel → Patient History from Cosmos DB + AI Search, Literature from PubMed + cache, Protocols from Blob + Search index, Drug Safety from RxNorm + OpenFDA + DrugBank, Guardrails verifies citations → Synthesized recommendation with confidence score returned via SSE streaming.
+**Example:** Clinician submits query → Orchestrator dispatches **5 agents in parallel** → Patient History from Cosmos DB + AI Search, Literature from PubMed + cache, Protocols from Blob + Search index, Drug Safety from RxNorm + OpenFDA + DrugBank, Guardrails verifies citations → Synthesized recommendation with confidence score returned via SSE streaming.
 
 ---
 
