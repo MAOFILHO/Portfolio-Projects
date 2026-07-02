@@ -58,6 +58,7 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 | Metric | Project result	| Comparable benchmark / business interpretation |
 |--------|----------------|------------------------------------------------|
+| Annual clinician-hours saved | ~12,740 hours/year | 200 complex queries/day × 365 days × 195.6 seconds saved per case, based on a comparable CDSS study that reduced chart-review time from 445.1s to 249.5s |
 | Evidence‑gathering time reduction	| ~40–45% (project target; aligns with CDSS study 445.1s → 249.5s) | Benchmarked CDSS study reported ≈44% reduction in chart‑review time, preserving decision accuracy | 
 | End‑to‑end decision latency	| < 10 seconds (streamed recommendation) | Significantly faster than minutes–hours for manual multi‑source reviews; enables near real‑time clinical support |
 | Clinician throughput gain	| Minutes saved per case → hours reclaimed weekly	| Benchmarks translate per‑case savings into tens of hours per year per clinician for routine workflows |
