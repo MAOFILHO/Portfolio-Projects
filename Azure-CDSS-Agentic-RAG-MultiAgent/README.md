@@ -348,7 +348,7 @@ Prompts for PubMed API key and email (if not in `.env`)
 Duration: Interactive
 
 ### Stage 3: Deploy Infrastructure (`s03_deploy_infra`)
-Builds Docker image via ACR cloud build (~5 min), then deploys Bicep template provisioning 65 Azure resources: VNet with 4 subnets, 4 NSGs, managed identity, Key Vault, Log Analytics, App Insights, Azure OpenAI (3 model deployments), AI Search, Document Intelligence, Cosmos DB (5 containers), Blob Storage (3 containers), Container Apps Environment + API container, 5 private endpoints + DNS zones, 6 RBAC role assignments, diagnostic settings  
+Builds Docker image via ACR cloud build (~5 min), then deploys Bicep template provisioning 56+ Azure resources: VNet with 4 subnets, 4 NSGs, managed identity, Key Vault, Log Analytics, App Insights, Azure OpenAI (3 model deployments), AI Search, Document Intelligence, Cosmos DB (5 containers), Blob Storage (3 containers), Container Apps Environment + API container, 5 private endpoints + DNS zones, 6 RBAC role assignments, diagnostic settings  
 Duration: **~20-30 minutes** (longest stage — ACR build ~5 min + Bicep provisioning ~15-25 min)
 
 > **Apple Silicon note:** Set `CDSS_IMAGE_BUILD_MODE=acr` in `.env` to build Docker images in Azure cloud instead of locally. Local cross-compile (ARM → x86_64) via QEMU is extremely slow and may timeout.
