@@ -36,7 +36,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 **The Architecture:** Keeps the ML platform, compute, data, and identity on **Azure**, and integrates with external clinical data sources (**PubMed**, **OpenFDA**, **RxNorm**, optional **DrugBank**) for real-time evidence enrichment.
 
-**Definition:** Separation of responsibilities: **Azure** for OpenAI inference, vector search, document storage, identity, secrets, and container hosting; **External APIs** for live medical literature, drug safety signals, and medication normalization.
+**Definition:** Separation of responsibilities: **Azure for OpenAI** inference, vector search, document storage, identity, secrets, and container hosting; **External APIs** for live medical literature, drug safety signals, and medication normalization.
 
 **Use Case:** The Medical Literature Agent queries PubMed's 36M+ biomedical citations in real time; the Drug Safety Agent normalizes drug names via RxNorm and checks interactions via OpenFDA adverse event data; all results are cached in **Azure AI Search** for subsequent retrieval.
 
