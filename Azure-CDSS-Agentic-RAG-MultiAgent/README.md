@@ -101,9 +101,9 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 ## CDSS Agentic Architecture
 
 ```
-                      Clinician Query
-                            |
-                            v
+                       Clinician Query
+                             |
+                             v
   +------------------------------------------------------------+
   |              Agentic AI Orchestrator (GPT-5)               |
   |  Decomposes query → delegates to agents → synthesizes      |
