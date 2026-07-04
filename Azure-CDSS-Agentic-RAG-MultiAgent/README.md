@@ -66,9 +66,9 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 
 
-**Impact:** This project demonstrates how an automated agentic RAG pipeline can improve clinical decision speed, evidence coverage, and operational consistency. By orchestrating multiple specialized agents in parallel, the system provides comprehensive evidence-backed recommendations in seconds rather than the minutes-to-hours required for manual multi-source review.
+**Impact:** This project demonstrates how an automated **agentic RAG** pipeline can improve clinical decision speed, evidence coverage, and operational consistency. By orchestrating multiple specialized agents in parallel, the system provides comprehensive evidence-backed recommendations in seconds rather than the minutes-to-hours required for manual multi-source review.
 
-**Business Value:** From an operational perspective, the system reduces the time clinicians spend searching across disparate systems, improves consistency of evidence-based recommendations, and provides full auditability through immutable Cosmos DB audit trails with HIPAA-compliant retention policies.
+**Business Value:** From an operational perspective, the system reduces the time clinicians spend searching across disparate systems, improves consistency of evidence-based recommendations, and provides full auditability through immutable **Cosmos DB** audit trails with **HIPAA-compliant** retention policies.
 
 **Example:** For a clinical operations team handling **200 complex queries per day**, multi-agent orchestration provides evidence from **5 sources simultaneously** — patient records, medical literature, treatment protocols, drug safety databases, and guideline repositories — with citation provenance and confidence scoring on every response.
 
