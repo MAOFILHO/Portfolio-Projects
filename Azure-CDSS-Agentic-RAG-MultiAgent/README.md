@@ -474,6 +474,12 @@ The pipeline automatically configures **OpenTelemetry** with **Azure Application
 
 View traces in Azure Portal → Application Insights → Transaction search / Performance.
 
+<img width="1424" height="702" alt="Screenshot 2026-07-04 at 1 47 04 PM" src="https://github.com/user-attachments/assets/d8f201cb-eef9-49a6-8cb1-57ce49a2b834" />
+
+<img width="716" height="273" alt="Screenshot 2026-07-04 at 1 47 21 PM" src="https://github.com/user-attachments/assets/67141588-5291-4b66-aadd-9d76442064a0" />
+
+
+
 ---
 
 ## Teardown / Cleanup
