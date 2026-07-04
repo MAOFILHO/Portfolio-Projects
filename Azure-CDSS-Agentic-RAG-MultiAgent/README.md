@@ -233,8 +233,8 @@ azure-cdss-pipeline/
 |     ├── sample_lab_literature.pdf    # import data to RAG
 |     ├── sample_lab_protocol.pdf      # import data to RAG
 |
-├── scripts
-      ├── purge-soft-deleted.sh        # delete script
+└── scripts
+      └── purge-soft-deleted.sh        # delete script
 
 ```
 
