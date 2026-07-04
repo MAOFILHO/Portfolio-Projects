@@ -16,7 +16,7 @@ This project orchestrates a **Multi-Agent Clinical AI Workflow** on Azure. Azure
 
 The **FastAPI backend** runs on **Azure Container Apps**, coordinates five specialized AI agents in parallel, and returns streaming clinical recommendations via SSE. The **React frontend** deploys to **Azure Static Web Apps** with Microsoft Entra ID (OAuth 2.0) authentication. Azure Bicep templates provision 56+ resources, including VNet with private endpoints, Key Vault for secrets, Document Intelligence for PDF parsing, and Application Insights for distributed tracing.
 
-The deployment pipeline wraps battle-tested infrastructure scripts with a Python CLI that handles everything from prerequisite checks through end-to-end validation — a single `cdss-deploy deploy` command replaces 20+ manual steps from the original project guide.
+The **deployment pipeline** wraps battle-tested infrastructure scripts with a **Python CLI** that handles everything from prerequisite checks through end-to-end validation — a single `cdss-deploy deploy` command replaces 20+ manual steps from the original project guide.
 
 ---
 
