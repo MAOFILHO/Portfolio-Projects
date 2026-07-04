@@ -38,7 +38,7 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 
 **Definition:** Separation of responsibilities: **Azure** for OpenAI inference, vector search, document storage, identity, secrets, and container hosting; **External APIs** for live medical literature, drug safety signals, and medication normalization.
 
-**Use Case:** The Medical Literature Agent queries PubMed's 36M+ biomedical citations in real time; the Drug Safety Agent normalizes drug names via RxNorm and checks interactions via OpenFDA adverse event data; all results are cached in Azure AI Search for subsequent retrieval.
+**Use Case:** The Medical Literature Agent queries PubMed's 36M+ biomedical citations in real time; the Drug Safety Agent normalizes drug names via RxNorm and checks interactions via OpenFDA adverse event data; all results are cached in **Azure AI Search** for subsequent retrieval.
 
 **Example:** Clinician submits query → Orchestrator dispatches **5 agents in parallel** → Patient History from Cosmos DB + AI Search, Literature from PubMed + cache, Protocols from Blob + Search index, Drug Safety from RxNorm + OpenFDA + DrugBank, Guardrails verifies citations → Synthesized recommendation with confidence score returned via SSE streaming.
 
@@ -101,9 +101,9 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
 ## CDSS Agentic Architecture
 
 ```
-  Clinician Query
-       |
-       v
+                      Clinician Query
+                            |
+                            v
   +------------------------------------------------------------+
   |              Agentic AI Orchestrator (GPT-5)               |
   |  Decomposes query → delegates to agents → synthesizes      |
@@ -123,22 +123,22 @@ The deployment pipeline wraps battle-tested infrastructure scripts with a Python
   +---------+ +---------+ +---------+ +---------+ +------------+
        |           |          |            |          |
        +-----------+----------+------------+----------+
-                             |
-                             v
-                  +---------------------+
-                  |   Agent Synthesis   |
-                  |  (Fusion + Rerank)  |
-                  +---------------------+
-                             |
-                             v
-                  +---------------------+
-                  | Clinical            |
-                  | Recommendation      |
-                  | + Citations         |
-                  | + Drug Alerts       |
-                  | + Confidence Score  |
-                  | + Audit Trail       |
-                  +---------------------+
+                              |
+                              v
+                   +---------------------+
+                   |   Agent Synthesis   |
+                   |  (Fusion + Rerank)  |
+                   +---------------------+
+                              |
+                              v
+                   +---------------------+
+                   | Clinical            |
+                   | Recommendation      |
+                   | + Citations         |
+                   | + Drug Alerts       |
+                   | + Confidence Score  |
+                   | + Audit Trail       |
+                   +---------------------+
 ```
 
 **Azure** (East US):
@@ -289,7 +289,7 @@ az account set --subscription <YOUR_SUBSCRIPTION_ID>
 
 ### 3. Get PubMed API Key
 
-1. Create account at https://www.ncbi.nlm.nih.gov/account/
+1. Create an account at https://www.ncbi.nlm.nih.gov/account/
 2. Account Settings → API Key Management → Create API Key
 3. Add to `.env`: `CDSS_PUBMED_API_KEY=<your-key>` and `CDSS_PUBMED_EMAIL=<your-email>`
 
@@ -351,7 +351,7 @@ Duration: Interactive
 Builds Docker image via ACR cloud build (~5 min), then deploys Bicep template provisioning 56+ Azure resources: VNet with 4 subnets, 4 NSGs, managed identity, Key Vault, Log Analytics, App Insights, Azure OpenAI (3 model deployments), AI Search, Document Intelligence, Cosmos DB (5 containers), Blob Storage (3 containers), Container Apps Environment + API container, 5 private endpoints + DNS zones, 6 RBAC role assignments, diagnostic settings  
 Duration: **~20-30 minutes** (longest stage — ACR build ~5 min + Bicep provisioning ~15-25 min)
 
-> **Apple Silicon note:** Set `CDSS_IMAGE_BUILD_MODE=acr` in `.env` to build Docker images in Azure cloud instead of locally. Local cross-compile (ARM → x86_64) via QEMU is extremely slow and may timeout.
+> **Apple Silicon note:** Set `CDSS_IMAGE_BUILD_MODE=acr` in `.env` to build Docker images in Azure cloud instead of locally. Local cross-compilation (ARM → x86_64) via QEMU is extremely slow and may time out.
 
 ### Stage 4: Resolve Names (`s04_resolve_names`)
 Queries Azure for all deployed resource names, endpoints, and keys  
@@ -508,7 +508,7 @@ az role assignment create --assignee "<your-object-id>" \
 
 ### 2. Key Vault `ForbiddenByConnection`
 **Symptom:** `configure-pubmed-prod.sh` fails with `Public network access is disabled`  
-**Root cause:** Key Vault network rules blocking the caller IP  
+**Root cause:** Key Vault network rules are blocking the caller IP  
 **Fix:** Script auto-retries with temporary IP allowlist (`CDSS_KV_TEMP_IP_ALLOWLIST=true`, default)
 
 ### 3. OpenAI `403 Traffic Not From Approved Endpoint`
@@ -524,7 +524,7 @@ az role assignment create --assignee "<your-object-id>" \
 ### 5. GPT Model Deployment Fails — SKU Mismatch
 **Symptom:** `The specified SKU 'Standard' is not supported by the model 'gpt-5'`  
 **Root cause:** GPT-5 family requires `GlobalStandard` SKU, not `Standard`  
-**Fix:** Already patched in Bicep template. If using older version, update `sku.name` from `'Standard'` to `'GlobalStandard'`
+**Fix:** Already patched in Bicep template. If using an older version, update `sku.name` from `'Standard'` to `'GlobalStandard'`
 
 ### 6. Docker Build Timeout on Apple Silicon
 **Symptom:** Local Docker build hangs during cross-compile to linux/amd64  
@@ -533,7 +533,7 @@ az role assignment create --assignee "<your-object-id>" \
 
 ### 7. CORS Preflight Fails
 **Symptom:** Frontend gets CORS errors calling backend API  
-**Root cause:** Frontend origin not in allowed origins list  
+**Root cause:** Frontend origin not in the allowed origins list  
 **Fix:** Step 11 configures this automatically. Manual fix:
 ```bash
 az containerapp ingress cors update -g cdss-prod-rg -n <app-name> \
@@ -555,7 +555,7 @@ az containerapp update -g cdss-prod-rg -n <app-name> \
 ```
 
 ### 10. Deployment Fails Mid-Way
-**Symptom:** Any step fails and deployment stops  
+**Symptom:** Any step fails, and deployment stops  
 **Root cause:** Various (network, permissions, timeouts)  
 **Fix:** Re-run `cdss-deploy deploy` — it automatically resumes from the failed step. Use `cdss-deploy status` to see progress.
 
@@ -610,7 +610,7 @@ az containerapp exec --resource-group cdss-dev-rg --name cdss-dev-api \
 ### 17. Slow Query Orchestration in Dev Environment (Expected, Not a Bug)
 **Symptom:** Clinical queries take noticeably longer than expected to complete; "planning progress" appears to sit at low percentages for a while.
 **Root cause:** Intentional dev-tier cost optimization — the Container App uses `cpu: 0.5, memory: 1Gi` and `minReplicas: 0` (scale-to-zero) in dev vs. `cpu: 2.0, memory: 4Gi` and `minReplicas: 2` in prod ([main.bicep](../cdss-agentic-rag/infra/bicep/main.bicep), see `environment == 'prod'` conditionals). Requests after any idle period pay a cold-start penalty on top of reduced compute for the 5-agent orchestration.
-**Fix:** Not a bug — expected behavior for the dev tier to minimize cost. If faster response times are needed, increase `cpu`/`memory`/`minReplicas` for the dev environment or test against the `prod` parameter file, understanding this increases running cost.
+**Fix:** Not a bug — expected behaviour for the dev tier to minimize cost. If faster response times are needed, increase `cpu`/`memory`/`minReplicas` for the dev environment or test against the `prod` parameter file, understanding this increases running cost.
 
 ### 18. `--purge` Fails with Key Vault `MethodNotAllowed`
 **Symptom:** `cdss-deploy teardown --purge` prints `ERROR: (MethodNotAllowed) Operation 'DeletedVaultPurge' is not allowed.`
@@ -646,13 +646,13 @@ az containerapp ingress traffic set -g cdss-dev-rg -n cdss-dev-api --revision-we
 8. **All Bicep parameter files must match your target region** — check `parameters.prod.json`, `parameters.dev.json`, and `parameters.staging.json` for hardcoded region values
 9. **Never commit `.env`** — use `.env.example` + `.gitignore`, rotate credentials immediately if exposed
 10. **Deployment state enables resumability** — JSON checkpoint file means you never re-provision what already succeeded
-11. **Admin consent for Entra app registrations requires a tenant admin role** — Owner/Contributor on the subscription is not enough; `az ad app permission admin-consent` needs Global Administrator, Privileged Role Administrator, or Cloud Application Administrator on the directory. Automation can attempt it but cannot guarantee success for arbitrary accounts
+11. **Admin consent for Entra app registrations requires a tenant admin role** — Owner/Contributor on the subscription is not enough; `az ad app permission admin-consent` needs Global Administrator, Privileged Role Administrator, or Cloud Application Administrator on the directory. Automation can attempt it, but cannot guarantee success for arbitrary accounts
 12. **Automated subprocess calls to `az containerapp exec` need a pseudo-terminal** — the command always tries to allocate a TTY (`tty.setcbreak`), which fails under `subprocess.Popen(stdout=PIPE)`. Wrap with `script -q /dev/null <cmd>` when invoking from non-interactive automation
 13. **React hooks must be called unconditionally, even across auth-loading states** — an early `return` for an unauthenticated view before some (but not all) `useMemo`/`useState` calls will throw "Rendered more hooks than during the previous render" the moment auth state changes. Always place all hooks above any conditional early return
 14. **Don't trust LLM structured output to match your schema shape exactly** — GPT-5's JSON plan output nested an unrelated boolean field inside a dict meant to hold only strings. Defensively filter/validate LLM-generated dict/list fields before passing them into strict Pydantic models
 15. **`az containerapp update --image` does not shift traffic to the new revision automatically** — always follow up with `az containerapp ingress traffic set --revision-weight <new-revision>=100`, or the old image keeps serving requests silently
 16. **Dev-tier `minReplicas: 0` and reduced CPU/memory are intentional, not bugs** — expect slower orchestration and cold-start latency in dev; this is a deliberate cost tradeoff, not a defect to chase
-17. **Give each individual purge/long-running `az` call its own bounded timeout, not just the overall loop** — a single slow `az cognitiveservices account purge` sharing the generic 120s `run_az` timeout can make automation look "stuck" for two minutes. Add a per-call `timeout` override for genuinely slow operations so the caller sees the actual behavior sooner
+17. **Give each individual purge/long-running `az` call its own bounded timeout, not just the overall loop** — a single slow `az cognitiveservices account purge` sharing the generic 120s `run_az` timeout can make automation look "stuck" for two minutes. Add a per-call `timeout` override for genuinely slow operations so the caller sees the actual behaviour sooner
 18. **Key Vault purge protection cannot be bypassed by any script** — unlike soft-delete alone, purge protection is an Azure-enforced guarantee. Don't add retry/timeout logic expecting it to eventually succeed; treat `MethodNotAllowed` as terminal and surface it as-is
 19. **Discover soft-deleted resources live from Azure APIs, not local state, for any cleanup operation that might run standalone** — local state (JSON checkpoints, etc.) gets reset after teardown completes, so a later `--purge`-only run needs to rediscover what to purge by querying Azure directly, filtered by resource ID/name rather than a cached list
 20. **Auto-incremented resource group names (e.g. `cdss-dev-rg2`, `cdss-dev-rg3`) leave orphaned soft-deleted resources that scoped cleanup logic won't find** — when a script only searches within one named resource group, resources from prior auto-incremented runs need their original resource group name extracted from the deleted resource's `id` field and purged individually
