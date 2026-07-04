@@ -357,6 +357,11 @@ Duration: **~20-30 minutes** (longest stage — ACR build ~5 min + Bicep provisi
 Queries Azure for all deployed resource names, endpoints, and keys  
 Duration: ~15 seconds
 
+<img width="982" height="726" alt="Screenshot 2026-07-01 at 12 09 19 AM" src="https://github.com/user-attachments/assets/de8f78f9-290d-4a49-b021-e26b865beae4" />
+
+<img width="971" height="725" alt="Screenshot 2026-07-01 at 12 10 36 AM" src="https://github.com/user-attachments/assets/77b868e1-b5a4-45bf-8df1-6af459fbb946" />
+
+
 ### Stage 5: Health Check (`s05_health_check`)
 Validates backend `/api/v1/health` with exponential backoff retry (up to 5 minutes for cold start)  
 Duration: ~30 seconds
@@ -369,6 +374,10 @@ Duration: ~2 minutes
 Creates SPA + API app registrations, configures OAuth scopes, grants admin consent, aligns backend `CDSS_AUTH_AUDIENCE`  
 Duration: ~30 seconds
 
+<img width="979" height="731" alt="Screenshot 2026-07-01 at 12 10 50 AM" src="https://github.com/user-attachments/assets/c22d2c0a-000a-4a17-ac74-3a3b4bbe4a99" />
+
+
+
 ### Stage 8: PubMed Config (`s08_pubmed_config`)
 Stores PubMed credentials in Key Vault, wires Container App env vars via secretRef, handles Key Vault network isolation automatically  
 Duration: ~2 minutes
@@ -376,6 +385,9 @@ Duration: ~2 minutes
 ### Stage 9: Frontend Env (`s09_frontend_env`)
 Generates `frontend/.env.production` with API URL, Entra config, WebSocket endpoint; creates Static Web App if needed  
 Duration: ~15 seconds
+
+<img width="984" height="724" alt="Screenshot 2026-07-01 at 12 11 07 AM" src="https://github.com/user-attachments/assets/23b25893-8c42-4643-befd-231270c0892c" />
+
 
 ### Stage 10: Deploy Frontend (`s10_deploy_frontend`)
 Runs `npm ci` + `npm run build`, deploys to Azure Static Web Apps  
@@ -385,9 +397,16 @@ Duration: ~3 minutes
 Configures backend CORS origins, sets Entra redirect URIs for production frontend  
 Duration: ~15 seconds
 
+<img width="978" height="728" alt="Screenshot 2026-07-01 at 12 11 22 AM" src="https://github.com/user-attachments/assets/3d4fe942-c451-4857-ac70-34eb4e2d516d" />
+
+
+
 ### Stage 12: E2E Validation (`s12_validate_e2e`)
 Validates: backend health, API docs, frontend reachability, auth configuration, CORS, PubMed env vars  
 Duration: ~15 seconds
+
+<img width="978" height="664" alt="Screenshot 2026-07-01 at 12 11 49 AM" src="https://github.com/user-attachments/assets/3f1b7e5e-e627-4bd7-b3de-064d77945af8" />
+
 
 ---
 
@@ -407,6 +426,11 @@ make smoke-post
 # Lint
 make lint
 ```
+
+<img width="902" height="502" alt="Screenshot 2026-06-29 at 11 10 55 AM" src="https://github.com/user-attachments/assets/c9419acd-f516-4e28-8a34-c5893a0d49af" />
+
+<img width="905" height="395" alt="Screenshot 2026-06-29 at 11 10 01 AM" src="https://github.com/user-attachments/assets/ec7533a2-3845-4d06-a44e-3aae92635284" />
+
 
 ---
 
@@ -469,6 +493,10 @@ If you don't need that recovery window and want the resource *names* freed up im
 cdss-deploy teardown --purge          # Prompts twice: once for delete, once for purge
 cdss-deploy teardown -y --purge       # Skips both confirmations
 ```
+
+<img width="984" height="328" alt="Screenshot 2026-06-30 at 10 34 35 PM" src="https://github.com/user-attachments/assets/84a5ee96-7aff-4dea-acf8-143a12228bfc" />
+
+
 `--purge` is opt-in and irreversible. It waits briefly (up to 30 seconds, polling every 10s) for the resource group deletion to finish, then purges the Key Vault and Cognitive Services accounts. Resource group deletion normally takes several minutes, so purge will usually **not** complete on the first run — it prints a warning and skips rather than blocking until deletion finishes. Once the resource group is actually gone (check with `az group exists --name cdss-prod-rg`), re-run `cdss-deploy teardown --purge` to complete the purge, or purge manually:
 ```bash
 az keyvault purge --name <kv-name> --location eastus
@@ -491,6 +519,40 @@ for a in json.load(sys.stdin):
 "
 az cognitiveservices account purge --name <name> --location eastus --resource-group <original-rg>
 ```
+
+
+---
+
+## CDSS Web Application Screenshots
+
+<img width="1427" height="704" alt="Screenshot 2026-06-30 at 10 12 55 PM" src="https://github.com/user-attachments/assets/d3c8a1ab-6276-416b-8e89-51b815b4a684" />
+
+---
+
+<img width="1539" height="877" alt="Screenshot 2026-06-30 at 7 32 03 PM" src="https://github.com/user-attachments/assets/b1858c66-19ac-4e99-85fb-4c55d60e3aa2" />
+
+---
+<img width="1429" height="701" alt="Screenshot 2026-06-30 at 10 02 01 PM" src="https://github.com/user-attachments/assets/58661822-c834-433f-aafd-3ab525dfb426" />
+
+---
+<img width="1430" height="705" alt="Screenshot 2026-06-30 at 10 04 29 PM" src="https://github.com/user-attachments/assets/2c354060-1579-4c5a-b85c-a4e290e1161e" />
+
+---
+<img width="1429" height="699" alt="Screenshot 2026-06-30 at 10 06 35 PM" src="https://github.com/user-attachments/assets/e89ac32f-0a57-4f7f-92a0-6a3b70101cbb" />
+
+---
+<img width="1426" height="705" alt="Screenshot 2026-06-30 at 10 07 47 PM" src="https://github.com/user-attachments/assets/499b531c-c45c-49f3-8311-9cc5672ccb78" />
+
+
+
+
+
+
+
+
+
+
+
 
 ---
 
