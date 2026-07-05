@@ -543,10 +543,6 @@ az cognitiveservices account purge --name <name> --location eastus --resource-gr
 <img width="1427" height="704" alt="Screenshot 2026-06-30 at 10 12 55 PM" src="https://github.com/user-attachments/assets/d3c8a1ab-6276-416b-8e89-51b815b4a684" />
 
 ---
-
-<img width="1539" height="877" alt="Screenshot 2026-06-30 at 7 32 03 PM" src="https://github.com/user-attachments/assets/b1858c66-19ac-4e99-85fb-4c55d60e3aa2" />
-
----
 <img width="1429" height="701" alt="Screenshot 2026-06-30 at 10 02 01 PM" src="https://github.com/user-attachments/assets/58661822-c834-433f-aafd-3ab525dfb426" />
 
 ---
@@ -554,6 +550,11 @@ az cognitiveservices account purge --name <name> --location eastus --resource-gr
 <img width="1425" height="687" alt="Screenshot 2026-06-28 at 3 10 44 PM" src="https://github.com/user-attachments/assets/cc6887bc-f075-4981-b466-d77aea74940f" />
 
 ---
+
+<img width="1539" height="877" alt="Screenshot 2026-06-30 at 7 32 03 PM" src="https://github.com/user-attachments/assets/b1858c66-19ac-4e99-85fb-4c55d60e3aa2" />
+
+---
+
 <img width="1430" height="705" alt="Screenshot 2026-06-30 at 10 04 29 PM" src="https://github.com/user-attachments/assets/2c354060-1579-4c5a-b85c-a4e290e1161e" />
 
 ---
