@@ -1,7 +1,6 @@
 # Contoso · Bombay Surface Temperature Forecasting
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
-<!-- Replace OWNER/REPO above with your actual GitHub org/repo once pushed. -->
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
 
 An interactive full-stack showcase of time-series forecasting with
 **statistical models (ARIMA/SARIMAX)** and **LSTM neural networks in both
@@ -129,8 +128,9 @@ their checkpoints instead of retraining in the test).
 
 ### CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push
-and pull request to `main`: a `backend` job installs `requirements.txt` and
+[`tensorflow-pytorch-forecasting-dashboard-ci.yml`](../.github/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
+(at the repo root, scoped to this folder via a `paths:` filter) runs on every
+push and pull request to `main`: a `backend` job installs `requirements.txt` and
 runs the full smoke suite above, and a `frontend` job installs with `npm ci`
 and runs `npm run build` (TypeScript + Vite). Both LSTM checkpoints
 (TensorFlow and PyTorch) are committed to the repo, so CI loads them directly
