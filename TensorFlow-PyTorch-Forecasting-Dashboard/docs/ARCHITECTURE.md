@@ -8,54 +8,54 @@ frontend — and the design decisions behind each.
 ## System overview
 
 ```
-┌─────────────────────────────┐
+┌───────────────────────────-──┐
 │  GlobalLandTemperaturesBy    │
 │  MajorCity.csv (raw dataset) │
 └───────────────┬──────────────┘
                 │
                 ▼
-┌───────────────────────────────────────────────────────────┐
-│  DATA PIPELINE (backend/src/)                               │
+┌───────────────────────────────────────────────────────────────┐
+│  DATA PIPELINE (backend/src/)                                 │
 │                                                               │
-│  data_loading.py → validation.py → preprocessing.py → eda.py │
-│  (ingest)          (schema/quality  (clean, index,   (trend, │
-│                      fail-fast)      resample, trim)  season,│
+│  data_loading.py → validation.py → preprocessing.py → eda.py  │
+│  (ingest)          (schema/quality  (clean, index,   (trend,  │
+│                      fail-fast)      resample, trim)  season, │
 │                                                        tests) │
-└───────────────────────────┬─────────────────────────────────┘
-                             │  preprocessed DataFrame (cached)
-                             ▼
-┌───────────────────────────────────────────────────────────────────┐
-│  MODEL LAYER — model_registry.py (single dispatch table)            │
-│                                                                       │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐│
-│  │   ARIMA    │  │  SARIMAX #1  │  │  SARIMAX #2  │  │    LSTM    ││
-│  │ (pmdarima  │  │ (statsmodels)│  │ (statsmodels)│  │ TensorFlow ││
-│  │ auto_arima)│  │              │  │              │  │   /Keras   ││
-│  └────────────┘  └──────────────┘  └──────────────┘  └────────────┘│
+└───────────────────────────┬───────────────────────────────────┘
+                            │  preprocessed DataFrame (cached)
+                            ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  MODEL LAYER — model_registry.py (single dispatch table)             │
+│                                                                      │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │   ARIMA    │  │  SARIMAX #1  │  │  SARIMAX #2  │  │    LSTM    │  │
+│  │ (pmdarima  │  │ (statsmodels)│  │ (statsmodels)│  │ TensorFlow │  │
+│  │ auto_arima)│  │              │  │              │  │   /Keras   │  │
+│  └────────────┘  └──────────────┘  └──────────────┘  └────────────┘  │
 │                                                        ┌────────────┐│
 │                                                        │    LSTM    ││
 │                                                        │  PyTorch   ││
 │                                                        └────────────┘│
-└───────────────────────────┬───────────────────────────────────────┘
-                             │  RunContext(train, test, y, ...) in
-                             │  ModelResult(forecast, metrics, ...) out
-                             ▼
-┌───────────────────────────────────────────────────────────┐
-│  EXECUTION + PERSISTENCE (backend/api/)                      │
-│                                                                │
+└───────────────────────────┬──────────────────────────────────────────┘
+                            │  RunContext(train, test, y, ...) in
+                            │  ModelResult(forecast, metrics, ...) out
+                            ▼
+┌───────────────────────────────────────────────────────────────┐
+│  EXECUTION + PERSISTENCE (backend/api/)                       │
+│                                                               │
 │  jobs.py — ThreadPoolExecutor job runner (async, non-blocking)│
 │  results_store.py — outputs/results/{model_key}.json          │
 │  main.py — FastAPI: /api/models, /api/models/{k}/run,         │
-│            /api/jobs/{id}, /api/comparison, /api/eda/*         │
-└───────────────────────────┬─────────────────────────────────┘
+│            /api/jobs/{id}, /api/comparison, /api/eda/*        │
+└───────────────────────────┬───────────────────────────────────┘
                              │ REST/JSON
                              ▼
-┌───────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────┐
 │  FRONTEND (frontend/src/) — React + TypeScript + Vite          │
 │                                                                │
 │  Sidebar (model picker, live status) → ModelPage (run + view)  │
 │  ComparePage (overlay all run models) · EdaPage · LearnPage    │
-└───────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ## Data pipeline design
