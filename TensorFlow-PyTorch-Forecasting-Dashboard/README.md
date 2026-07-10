@@ -1,4 +1,4 @@
-# Contoso · Bombay Surface Temperature Forecasting
+# Bombay Surface Temperature Forecasting
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
 
@@ -14,7 +14,7 @@ still run, since all paths are relative and configurable via `.env` files.
 
 ## Why this project exists
 
-Beyond the modeling itself, the value here is in the pipeline discipline
+Beyond the modelling itself, the value here is in the pipeline discipline
 around it:
 
 - **Translating raw temporal data into structured, model-ready inputs** —
@@ -209,7 +209,7 @@ than silently fixed:
   sequentially in one notebook pass, this is resolved by construction — each
   model's zoom plot correctly uses its own forecast. See the module
   docstring for details.
-- Cells 72/74 in the notebook produced two near-identical ARIMA forecast
+- Cells 72/74 in the notebook produced two near-identical ARIMA forecasts
   plots; both are still preserved as separate output images
   (`arima_forecast_1.png` / `arima_forecast_2.png`).
 
