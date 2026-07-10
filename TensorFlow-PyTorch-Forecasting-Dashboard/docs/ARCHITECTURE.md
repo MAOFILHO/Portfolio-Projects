@@ -128,20 +128,27 @@ request (seconds for SARIMAX, up to ~2 minutes for ARIMA's full grid search,
 tens of seconds for either LSTM). The API layer runs each model run as a
 background job rather than blocking:
 
-```
-Frontend                         API                          Job runner
-  │  POST /api/models/{k}/run     │                              │
-  ├───────────────────────────────▶  submit_job()                │
-  │  ◀── {job_id, status:queued} ─┤ ─────────────────────────────▶ ThreadPoolExecutor
-  │                                │                              │ runs spec.run(ctx)
-  │  GET /api/jobs/{id} (poll)     │                              │
-  ├───────────────────────────────▶  status: running              │
-  │  ◀── {status: running} ───────┤                              │
-  │           … every ~1.5s …     │                              │
-  │  GET /api/jobs/{id}            │                              │
-  ├───────────────────────────────▶                              │  job completes,
-  │  ◀── {status: completed,      ┤ ◀────────────────────────────┤  result persisted
-  │       result: {...}} ─────────┤    save_result() to disk      │
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant API
+    participant JobRunner as Job runner (ThreadPoolExecutor)
+
+    Frontend->>API: POST /api/models/{key}/run
+    API->>JobRunner: submit_job()
+    JobRunner-->>API: job_id, status: queued
+    API-->>Frontend: {job_id, status: "queued"}
+
+    JobRunner->>JobRunner: runs spec.run(ctx)
+
+    loop poll every ~1.5s
+        Frontend->>API: GET /api/jobs/{id}
+        API-->>Frontend: {status: "running"}
+    end
+
+    JobRunner->>JobRunner: job completes, save_result() to disk
+    Frontend->>API: GET /api/jobs/{id}
+    API-->>Frontend: {status: "completed", result: {...}}
 ```
 
 This keeps the API responsive regardless of how long a given model takes,
