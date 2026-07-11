@@ -81,8 +81,8 @@ pip install -r requirements.txt
 cp .env.example .env          # adjust paths if needed; defaults work out of the box
 
 python run_pipeline.py        # seeds all 5 models once, so the dashboard has
-                               # data on first load (a few minutes, mostly the
-                               # auto-ARIMA search and the two LSTMs' training)
+                              # data on first load (a few minutes, mostly the
+                              # auto-ARIMA search and the two LSTMs' training)
 
 uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
 ```
@@ -104,7 +104,7 @@ convenience seed step, not a required one.
 ```bash
 cd frontend
 npm install
-cp .env.example .env           # optional: point at a non-default API URL
+cp .env.example .env            # optional: point at a non-default API URL
 npm run dev
 ```
 
@@ -126,7 +126,7 @@ variants) directly, plus the full `run_pipeline.py` seed run end-to-end,
 against the real dataset and pre-trained checkpoints (fast — LSTMs reuse
 their checkpoints instead of retraining in the test).
 
-### CI
+### Continuous Integration (CI) GitHub Actions
 
 [`tensorflow-pytorch-forecasting-dashboard-ci.yml`](../.github/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
 (at the repo root, scoped to this folder via a `paths:` filter) runs on every
