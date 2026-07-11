@@ -90,7 +90,7 @@ frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
 | **CI/CD** | GitHub Actions |
 | **Config management** | `.env` files (`python-dotenv`, Vite env vars) |
 
----
+
 
 ## Prerequisites
 
@@ -101,7 +101,7 @@ frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
 
 No API keys, tokens, or cloud credentials are required anywhere in this project — everything runs locally against the committed dataset and pre-trained checkpoints.
 
----
+
 
 ## Project Structure
 
@@ -157,7 +157,6 @@ tensorflow-pytorch-forecasting-dashboard/
 └── README.md
 ```
 
----
 
 ## Quickstart
 
@@ -171,12 +170,19 @@ pip install -r requirements.txt
 cp .env.example .env          # adjust paths if needed; defaults work out of the box
 ```
 
+<img width="1167" height="33" alt="Screenshot 2026-07-10 at 11 24 30 PM" src="https://github.com/user-attachments/assets/3dbf2d60-23b9-4992-a74f-872ed908aad5" />
+<br>
+
+
 ### 2. Backend — Tests
 
 ```bash
 cd backend
 pytest tests/test_smoke.py
 ```
+
+<img width="1181" height="306" alt="Screenshot 2026-07-10 at 10 53 46 PM" src="https://github.com/user-attachments/assets/d58aff2f-a504-4ed9-83cd-f3afb90b4125" />
+<br><br>
 
 Runs every model in the registry (ARIMA, both SARIMAX models, both LSTM
 variants) directly, plus the full `run_pipeline.py` seed run end-to-end,
@@ -194,12 +200,28 @@ python run_pipeline.py
 # auto-ARIMA search and the two LSTMs' training)
 ```
 
+<img width="1180" height="712" alt="Screenshot 2026-07-10 at 10 59 56 PM" src="https://github.com/user-attachments/assets/08b12970-88d8-4a3c-9e68-9496842445ff" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1178" height="719" alt="Screenshot 2026-07-10 at 11 08 45 PM" src="https://github.com/user-attachments/assets/f9e91612-1a6e-4cf8-9d03-103266c570fa" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1170" height="708" alt="Screenshot 2026-07-10 at 11 09 12 PM" src="https://github.com/user-attachments/assets/8a4434ca-e30b-42c7-85bb-7ad962e6ef90" />
+<br><br>
+
+
 ### 4. Backend — Start the API
 
 ```bash
 cd backend
 python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
 ```
+<img width="1181" height="239" alt="Screenshot 2026-07-10 at 11 18 44 PM" src="https://github.com/user-attachments/assets/bfa58527-a92c-4b4b-a639-afd864ef0aae" />
+<br><br>
 
 `--reload-dir` scopes the file watcher to just `api/` and `src/` — without it,
 `--reload` watches the whole `backend/` directory including `.venv/`, and
@@ -222,6 +244,9 @@ cp .env.example .env            # optional: point at a non-default API URL
 npm run dev
 ```
 
+<img width="1166" height="120" alt="Screenshot 2026-07-10 at 11 19 32 PM" src="https://github.com/user-attachments/assets/da629328-1445-4af8-85d9-e63052956d2f" />
+<br><br>
+
 Open `http://localhost:5173`. The Vite dev server proxies `/api` requests to
 the backend on port 8000 (see `vite.config.ts`), so no CORS configuration is
 needed for local development. Pick a model from the sidebar, click **Run
@@ -243,7 +268,7 @@ rather than retraining from scratch. If either checkpoint is ever missing
 — verified by simulating a missing checkpoint locally.
 
 <img width="1420" height="698" alt="Screenshot 2026-07-10 at 7 01 11 PM" src="https://github.com/user-attachments/assets/df6a2040-b384-4f28-9239-559f47e95fde" />
-
+<br><br>
 
 ## Data pipeline robustness
 
@@ -338,28 +363,32 @@ git-ignored; only `.env.example` files are committed.
 
 ## Web App Screenshots
 
-<img width="1426" height="649" alt="Screenshot 2026-07-10 at 5 46 01 PM" src="https://github.com/user-attachments/assets/f2a80b9f-4918-4b07-ae73-d63d76ea161d" />
+<img width="1436" height="723" alt="Screenshot 2026-07-10 at 11 16 42 PM" src="https://github.com/user-attachments/assets/8f5d979c-b762-4d27-a742-3d0f41b390db" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
+<img width="1426" height="649" alt="Screenshot 2026-07-10 at 5 46 01 PM" src="https://github.com/user-attachments/assets/f2a80b9f-4918-4b07-ae73-d63d76ea161d" />
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1421" height="643" alt="Screenshot 2026-07-10 at 5 46 19 PM" src="https://github.com/user-attachments/assets/4b2e0e8d-6646-4604-bc73-5a99d4eef2e3" />
-<br><br>
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1419" height="692" alt="Screenshot 2026-07-10 at 5 48 04 PM" src="https://github.com/user-attachments/assets/1320e989-d4ea-4d55-9e42-f94703e1c3a4" />
-<br><br>
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1420" height="698" alt="Screenshot 2026-07-10 at 5 48 15 PM" src="https://github.com/user-attachments/assets/3937b08a-6f7c-46a5-ac90-a577df9e59e9" />
-<br><br>
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1430" height="702" alt="Screenshot 2026-07-10 at 5 47 01 PM" src="https://github.com/user-attachments/assets/69a92e83-06eb-42fb-8fa1-a160a0c92c15" />
-<br><br>
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1427" height="704" alt="Screenshot 2026-07-10 at 5 47 24 PM" src="https://github.com/user-attachments/assets/b374322c-3226-44f3-878c-442de90023b1" />
-<br><br>
+
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 <img width="1434" height="701" alt="Screenshot 2026-07-10 at 5 47 49 PM" src="https://github.com/user-attachments/assets/73ed7ef3-8568-44d4-843b-a217e2cacc86" />
