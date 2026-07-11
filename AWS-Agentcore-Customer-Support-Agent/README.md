@@ -7,7 +7,7 @@
 
 Designed and deployed a production-grade AI customer support agent on **AWS Bedrock AgentCore**, progressing through a 7-step pipeline from local prototype to fully deployed cloud application. Built a **multi-layer agent architecture** (Knowledge Base retrieval, persistent long-term memory, JWT-secured tool gateway, ARM64 container runtime, OpenTelemetry observability, and a Streamlit chat frontend) — all automated through a single Python CLI with zero AWS Console interaction required.
 
----
+
 
 ## Why This Is Production-Grade
 
@@ -20,7 +20,7 @@ This is not a notebook or a demo — it is a deployable system built on enterpri
 - **Zero hardcoded credentials** — AWS CLI credential chain only; `.env` for config, never for secrets
 - **Full teardown + 15-resource audit script** — `bash scripts/verify_cleanup.sh` confirms a clean account
 
----
+
 
 ## 🔍 RAG Architecture — How the Agent Stays Grounded
 
@@ -87,7 +87,6 @@ python main.py --step 1
 
 The pipeline is document-format agnostic — Bedrock KB handles PDF, DOCX, HTML, MD, and TXT natively.
 
----
 
 ### The Problem
 
@@ -111,7 +110,8 @@ A fully automated pipeline that converts a Strands-based prototype into a produc
 - **AgentCore Runtime** deploys the agent into a managed, auto-scaling ARM64 container
 - **Streamlit Frontend** gives customers a browser-based chat interface with Cognito authentication
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 ### Results & Impact
 
@@ -135,7 +135,7 @@ These estimates are grounded in real-world enterprise AgentCore and Bedrock depl
 
 → **70%+ policy consistency improvement** when all agents draw from the same Knowledge Base index — no more conflicting answers across channels
 
----
+
 
 ## 🏗️ Architecture
 
@@ -175,7 +175,7 @@ Container registry: ECR (ARM64)
 Build: CodeBuild (ARM64 + Docker)
 ```
 
----
+
 
 ## 🧪 Seven-Step Production Pipeline
 
@@ -189,7 +189,7 @@ Build: CodeBuild (ARM64 + Docker)
 | **Step 6** | Customer-facing browser chat interface | Streamlit, Cognito auth |
 | **Step 7** | Full resource teardown | All of the above |
 
----
+
 
 ### Step 1 — Prototype Agent & Knowledge Base
 
@@ -203,7 +203,8 @@ Creates 4 `@tool` functions using the Strands framework:
 
 Automates the full Knowledge Base lifecycle: S3 Vectors index creation → Bedrock KB provisioning → S3 data source attachment → document ingestion job polling until COMPLETE.
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Step 2 — AgentCore Memory
 
@@ -215,7 +216,8 @@ Creates a `CustomerSupportMemory` resource with two strategies:
 
 Implements `CustomerSupportMemoryHooks(HookProvider)` that fires on every agent turn to retrieve context (MessageAddedEvent) and save interactions (AfterInvocationEvent). Seeded with fictional history, then polls until long-term memory extraction completes — demonstrating recall of "prefers Linux, uses ThinkPad" without the customer mentioning it again.
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Step 3 — AgentCore Gateway & MCP
 
@@ -223,7 +225,8 @@ Implements `CustomerSupportMemoryHooks(HookProvider)` that fires on every agent 
 
 Deploys a `customersupport-gw` endpoint with a `customJWTAuthorizer` backed by Cognito. Registers a Lambda-based warranty checker (reads DynamoDB) as an MCP tool schema. Demonstrates calling the warranty tool via MCPClient with the gateway URL — zero direct Lambda invocations from the agent code.
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Step 4 — AgentCore Runtime Deployment
 
@@ -233,19 +236,22 @@ The starter toolkit automates the full build-and-deploy pipeline in two commands
 
 ![Starter toolkit configure step — agent code to Dockerfile](images/configure.png)
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 **`Launch`** — pushes the Dockerfile to CodeBuild, builds an ARM64 container image, pushes it to ECR, and deploys it to a managed AgentCore Runtime endpoint:
 
 ![Starter toolkit launch step — Dockerfile through CodeBuild and ECR to Runtime](images/launch.png)
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 **`Invoke`** — sends requests through the Runtime endpoint with a bearer token, routing through the full container stack:
 
 ![Invoke flow — agent code through Docker container to ECR repository](images/invoke.png)
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 **`Runtime`** — sends requests through the Runtime endpoint with a bearer token, routing through the full container stack:
 
@@ -261,7 +267,8 @@ Uses the `bedrock-agentcore-starter-toolkit` `Runtime` class to:
 
 Total cold-build time: ~15 minutes for the first deployment; subsequent redeploys reuse the ECR layer cache.
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Step 5 — Observability
 
@@ -270,16 +277,19 @@ Configures OpenTelemetry via `aws-opentelemetry-distro` (ADOT), creates CloudWat
 **Agents view** — real-time metrics for sessions, traces, error rate, and P95 latency:
 
 ![CloudWatch GenAI Observability — Agents view showing sessions, traces, and latency](images/observability_agents.png)
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 **Sessions view** — per-session breakdown with trace count and latency per conversation:
 
 ![CloudWatch GenAI Observability — Sessions view](images/sessions_lab5_observability.png)
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 **Traces view** — end-to-end span detail for every agent invocation, tool call, and LLM round-trip:
 
 ![CloudWatch GenAI Observability — Trace detail](images/traces_lab4_observability.png)
 
----
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Step 6 — Streamlit Frontend
 
@@ -296,7 +306,7 @@ Launches a Streamlit chat application that authenticates users via Cognito OAuth
 
 > These credentials are created programmatically — no AWS Console setup required.
 
----
+
 
 ## 🛠️ Tech Stack
 
@@ -319,7 +329,7 @@ Launches a Streamlit chat application that authenticates users via Cognito OAuth
 | **Serverless tools** | AWS Lambda (Python) + Amazon DynamoDB |
 | **CLI** | Python `argparse` + `bedrock-agentcore-starter-toolkit` |
 
----
+
 
 ## ☁️ AWS Services Used
 
@@ -343,7 +353,7 @@ Launches a Streamlit chat application that authenticates users via Cognito OAuth
 | **Amazon CloudWatch** | Logs + OTEL traces via Application Signals |
 | **AWS IAM** | Execution roles for Lambda, Runtime, Bedrock, CodeBuild |
 
----
+
 
 ## Prerequisites
 
@@ -355,7 +365,7 @@ Launches a Streamlit chat application that authenticates users via Cognito OAuth
 
 AWS model access is auto-enabled on first invocation — no Console steps required.
 
----
+
 
 ## Setup
 
@@ -408,7 +418,7 @@ This installs both requirement files in one command:
 aws sts get-caller-identity
 ```
 
----
+
 
 ## 🚀 Running the Project
 
@@ -432,6 +442,8 @@ make test      # Unit tests — no AWS credentials required
 ```
 <img width="1135" height="389" alt="Screenshot 2026-06-17 at 10 32 16 AM" src="https://github.com/user-attachments/assets/496e8cbb-50e4-43e9-bcec-817492d33fbd" />
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Option B — CLI directly
 
@@ -467,16 +479,31 @@ python main.py --step all --skip-prereq  # Skip CloudFormation, run steps only
 ```
 
 <img width="1106" height="717" alt="Screenshot 2026-06-17 at 2 39 31 PM" src="https://github.com/user-attachments/assets/dba62587-6593-4ce3-9427-18338cc1e2f2" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1116" height="711" alt="Screenshot 2026-06-17 at 2 39 54 PM" src="https://github.com/user-attachments/assets/0da0107d-e7de-48e9-963c-1e85371e54d8" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1125" height="713" alt="Screenshot 2026-06-17 at 2 40 57 PM" src="https://github.com/user-attachments/assets/c652f88b-f88c-46e7-8b1f-3725e4436927" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1133" height="713" alt="Screenshot 2026-06-17 at 2 41 31 PM" src="https://github.com/user-attachments/assets/ea5e233f-c878-4065-9953-b4ef0670b28c" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1130" height="710" alt="Screenshot 2026-06-17 at 2 41 54 PM" src="https://github.com/user-attachments/assets/d659cdf0-5639-4756-a9fd-2b9de4bdd952" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1128" height="711" alt="Screenshot 2026-06-17 at 2 42 21 PM" src="https://github.com/user-attachments/assets/853f43e0-e623-495b-a647-9e699bc51d94" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1131" height="716" alt="Screenshot 2026-06-17 at 2 43 53 PM" src="https://github.com/user-attachments/assets/815d70ae-33b1-462b-8ce8-2871da941568" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1132" height="712" alt="Screenshot 2026-06-17 at 2 44 17 PM" src="https://github.com/user-attachments/assets/1fad0a34-a956-4cae-9d49-01b98847d972" />
 
 
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 
 #### Cleanup — delete all AWS resources
@@ -487,7 +514,8 @@ python main.py --cleanup --dry-run
 ```
 <img width="980" height="448" alt="Screenshot 2026-06-16 at 12 40 54 AM" src="https://github.com/user-attachments/assets/bef9a720-6185-4f21-ae3d-387f323de103" />
 
-# Delete everything
+
+### Delete everything
 ```bash
 python main.py --cleanup
 ```
@@ -518,7 +546,7 @@ When all 15 checks show ✅, the account is fully clean.
 
 <img width="1038" height="645" alt="Screenshot 2026-06-16 at 12 51 49 AM" src="https://github.com/user-attachments/assets/fe465ee2-013d-4c01-83c5-eb527a488621" />
 
----
+
 
 ## Project Structure
 
@@ -569,7 +597,7 @@ aws-bedrock-agentcore-customer-support/
     └── smoke_test.py          # End-to-end tests (requires Step 4 deployed)
 ```
 
----
+
 
 ## Running Tests
 
@@ -600,7 +628,7 @@ The smoke suite runs **24 tests across 7 layers** of the stack:
 | `TestRuntime` | Endpoint READY, ARN in SSM, basic invocation succeeds |
 | `TestAgentFlows` | Return policy, product info, KB retrieval, web search, warranty check, multi-turn memory |
 
----
+
 
 ## AWS Region
 
@@ -611,7 +639,7 @@ export AWS_DEFAULT_REGION=us-west-2
 python main.py --step all
 ```
 
----
+
 
 ## Cost Estimate
 
@@ -632,7 +660,7 @@ Always run cleanup when done:
 python main.py --cleanup
 ```
 
----
+
 
 ## Key Engineering Decisions
 
@@ -647,7 +675,7 @@ python main.py --cleanup
 | KB stuck in `DELETE_UNSUCCESSFUL` | Fixed deletion order: delete KB first → poll until gone → delete S3 Vectors |
 
 
----
+
 
 ## Architecture — Final State (Step 6)
 
@@ -674,32 +702,36 @@ agent_entrypoint.py → Strands Agent (Nova Pro)
                                       ├── check_warranty() → Lambda → DynamoDB
                                       └── web_search() → DuckDuckGo
 ```
----
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ## Customer Support Agent Web Application (screenshots)
 
 <img width="1342" height="713" alt="Screenshot 2026-06-16 at 8 41 40 PM" src="https://github.com/user-attachments/assets/8ffa4593-2a1d-4231-8175-224061a1ff65" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1431" height="662" alt="Screenshot 2026-06-16 at 9 33 27 PM" src="https://github.com/user-attachments/assets/18e8a30c-9c6c-4b71-96dc-d6a44d11d780" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1426" height="746" alt="Screenshot 2026-06-16 at 8 39 40 PM" src="https://github.com/user-attachments/assets/7f7783f6-ee5b-477e-be6e-715631ed445b" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1434" height="733" alt="Screenshot 2026-06-16 at 8 39 58 PM" src="https://github.com/user-attachments/assets/877ce2de-aaf8-4a6c-bab2-359b756b2b04" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1405" height="734" alt="Screenshot 2026-06-16 at 8 46 04 PM" src="https://github.com/user-attachments/assets/9186284a-21d7-4ad8-8534-a72a5dc1a7e8" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1399" height="730" alt="Screenshot 2026-06-16 at 8 47 26 PM" src="https://github.com/user-attachments/assets/3e160388-a022-4962-b64d-0cf44c47eb81" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1407" height="725" alt="Screenshot 2026-06-16 at 8 48 44 PM" src="https://github.com/user-attachments/assets/6e9dc448-bbc0-4b86-a79f-7832d0231627" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1406" height="737" alt="Screenshot 2026-06-16 at 8 49 38 PM" src="https://github.com/user-attachments/assets/538d7114-c14a-4860-9910-6fd3558e6abb" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1419" height="735" alt="Screenshot 2026-06-16 at 8 50 58 PM" src="https://github.com/user-attachments/assets/16189012-1bff-4599-a9e2-848b1af18e34" />
-
-
-
-
-
-
 
 
