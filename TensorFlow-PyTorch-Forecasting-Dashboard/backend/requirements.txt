@@ -8,7 +8,7 @@ pmdarima==2.0.4
 statsmodels==0.14.2
 scikit-learn==1.5.1
 seaborn==0.13.2
-matplotlib==3.9.1
+matplotlib==3.11.0
 fastapi==0.111.1
 uvicorn[standard]==0.30.3
 pydantic==2.8.2

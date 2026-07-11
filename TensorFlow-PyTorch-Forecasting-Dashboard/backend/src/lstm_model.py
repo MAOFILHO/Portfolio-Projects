@@ -140,7 +140,12 @@ def run_lstm(
     else:
         history = {"loss": []}
 
-    model = load_model(str(model_path))
+    # compile=False: we only forecast with this model, never resume training on
+    # it, so there's no need to reconstruct the optimizer. Loading it anyway
+    # triggers a spurious "variable count mismatch" warning whenever the saved
+    # optimizer's internal representation differs from the currently installed
+    # Keras version's.
+    model = load_model(str(model_path), compile=False)
 
     lstm_preds = forecast(model, scaler, train_scaled, test)
     plot_forecast(y, lstm_preds, output_dir)
