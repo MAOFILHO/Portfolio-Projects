@@ -70,6 +70,93 @@ frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
             Contoso theme) — sidebar model picker, run/compare/EDA/learn pages
 ```
 
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Deep learning (TensorFlow)** | TensorFlow / Keras (`tf.keras`, `tf.data`) |
+| **Deep learning (PyTorch)** | PyTorch (`torch.nn`, `DataLoader`) |
+| **Statistical forecasting** | statsmodels (ARIMA, SARIMAX) + `pmdarima` (`auto_arima`) |
+| **Data handling** | pandas, NumPy |
+| **Backend framework** | FastAPI |
+| **API server** | Uvicorn (ASGI) |
+| **Background job execution** | Python `ThreadPoolExecutor` (in-memory job runner) |
+| **Frontend framework** | React + TypeScript |
+| **Build tool** | Vite |
+| **Charting** | Recharts |
+| **Routing** | `react-router` |
+| **Styling** | Contoso-placeholder corporate theme (custom CSS) |
+| **Backend testing** | pytest |
+| **CI/CD** | GitHub Actions |
+| **Config management** | `.env` files (`python-dotenv`, Vite env vars) |
+
+---
+
+## Prerequisites
+
+- **Python 3.12** (backend — data pipeline, FastAPI, both LSTM frameworks)
+- **Node.js + npm** (frontend — React/TypeScript dashboard via Vite)
+- **pip** for Python dependency installation
+- **bash** (for running the quickstart commands below)
+
+No API keys, tokens, or cloud credentials are required anywhere in this project — everything runs locally against the committed dataset and pre-trained checkpoints.
+
+---
+
+## Project Structure
+
+​```
+tensorflow-pytorch-forecasting-dashboard/
+├── backend/
+│   ├── api/
+│   │   ├── main.py                # FastAPI app entrypoint, CORS config
+│   │   └── jobs.py                # ThreadPoolExecutor-based background job runner
+│   │
+│   ├── src/
+│   │   ├── data_loading.py        # CSV ingestion
+│   │   ├── validation.py          # Fail-fast schema/quality checks (DataValidationError)
+│   │   ├── preprocessing.py       # Scaling, rolling-window construction
+│   │   ├── arima_model.py         # auto_arima-selected ARIMA model
+│   │   ├── sarimax_model.py       # Two independent SARIMAX models
+│   │   ├── lstm_model.py          # LSTM — TensorFlow/Keras implementation
+│   │   └── lstm_model_pytorch.py  # LSTM — PyTorch implementation
+│   │
+│   ├── data/
+│   │   └── GlobalLandTemperaturesByMajorCity.csv
+│   │
+│   ├── models/
+│   │   ├── TemperatureForecastingModel.keras       # TensorFlow LSTM checkpoint
+│   │   └── TemperatureForecastingModel_pytorch.pt  # PyTorch LSTM checkpoint
+│   │
+│   ├── outputs/
+│   │   └── results/                # Per-model JSON results (persisted forecasts, metrics)
+│   │
+│   ├── tests/
+│   │   └── test_smoke.py           # Runs all 5 models + full pipeline seed end-to-end
+│   │
+│   ├── run_pipeline.py             # Seeds all 5 models for first dashboard load
+│   ├── requirements.txt
+│   └── .env.example
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/                  # Model detail, Compare All, Data & EDA, Learn pages
+│   │   ├── components/             # Sidebar model picker, charts, status indicators
+│   │   └── App.tsx
+│   ├── vite.config.ts              # Dev server + /api proxy to backend on :8000
+│   ├── package.json
+│   └── .env.example
+│
+├── docs/
+│   └── ARCHITECTURE.md             # Full system design + framework trade-off discussion
+│
+├── .github/
+│   └── workflows/
+│       └── tensorflow-pytorch-forecasting-dashboard-ci.yml
+│
+└── README.md
+​```
+
 ## Quickstart
 
 ### 1. Backend — Set up the Environment
