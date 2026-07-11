@@ -105,7 +105,7 @@ No API keys, tokens, or cloud credentials are required anywhere in this project 
 
 ## Project Structure
 
-​```
+```
 tensorflow-pytorch-forecasting-dashboard/
 ├── backend/
 │   ├── api/
@@ -155,7 +155,7 @@ tensorflow-pytorch-forecasting-dashboard/
 │       └── tensorflow-pytorch-forecasting-dashboard-ci.yml
 │
 └── README.md
-​```
+```
 
 ---
 
