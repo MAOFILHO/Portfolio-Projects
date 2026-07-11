@@ -1,4 +1,4 @@
-setuptools<81
+setuptools==69.5.1
 tensorflow==2.16.1
 torch==2.3.1
 numpy==1.26.4
