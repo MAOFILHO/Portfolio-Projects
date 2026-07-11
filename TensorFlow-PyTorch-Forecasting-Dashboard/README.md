@@ -5,7 +5,7 @@
 
 An interactive full-stack showcase of time-series forecasting with
 **statistical models (ARIMA/SARIMAX)** and **LSTM neural networks in both
-TensorFlow/Keras and PyTorch**, converted from a Jupyter notebook into a
+TensorFlow/Keras and PyTorch**, converted from a notebook into a
 self-contained, runnable project: a Python backend (data pipeline + FastAPI,
 with on-demand live model runs) and a React/TypeScript dashboard styled with
 a Contoso-placeholder corporate theme.
