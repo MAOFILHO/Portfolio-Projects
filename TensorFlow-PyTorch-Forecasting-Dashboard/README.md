@@ -119,7 +119,7 @@ tensorflow-pytorch-forecasting-dashboard/
 │   │   ├── arima_model.py         # auto_arima-selected ARIMA model
 │   │   ├── sarimax_model.py       # Two independent SARIMAX models
 │   │   ├── lstm_model.py          # LSTM — TensorFlow/Keras implementation
-│   │   └── lstm_model_pytorch.py  # LSTM — PyTorch implementation
+│   │   └── lstm_pytorch_model.py  # LSTM — PyTorch implementation
 │   │
 │   ├── data/
 │   │   └── GlobalLandTemperaturesByMajorCity.csv
