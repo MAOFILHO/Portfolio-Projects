@@ -8,7 +8,7 @@ A production-grade, end-to-end automated deployment pipeline for a **Clinical De
 ![React](https://img.shields.io/badge/React-18.2-61DAFB?style=for-the-badge&logo=react&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
----
+
 
 ## Project Description
 
@@ -18,7 +18,7 @@ The **FastAPI backend** runs on **Azure Container Apps**, coordinates five speci
 
 The **deployment pipeline** wraps battle-tested infrastructure scripts with a **Python CLI** that handles everything from prerequisite checks through end-to-end validation — a single `cdss-deploy deploy` command replaces 20+ manual steps from the original project guide.
 
----
+
 
 ## The Business Case: Why This Matters
 
@@ -30,7 +30,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 **The Solution:** This project deploys a **Clinical Decision Support System (CDSS)** that uses an **agentic RAG architecture** with **five specialized AI agents**. Instead of a single monolithic response, the system decomposes clinical queries, dispatches them to domain-specific agents in parallel, fuses evidence from multiple sources, and synthesizes a citation-backed recommendation — all validated by a guardrails agent before delivery.
 
----
+
 
 ## Cross-Cloud Integration — External APIs + Azure ML Platform
 
@@ -42,7 +42,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 **Example:** Clinician submits query → Orchestrator dispatches **5 agents in parallel** → Patient History from Cosmos DB + AI Search, Literature from PubMed + cache, Protocols from Blob + Search index, Drug Safety from RxNorm + OpenFDA + DrugBank, Guardrails verifies citations → Synthesized recommendation with confidence score returned via SSE streaming.
 
----
+
 
 ## Design Decisions
 
@@ -52,7 +52,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 - **Resumable deployment state** — a JSON checkpoint file tracks step completion. If deployment fails at step 8, re-running resumes from step 8 instead of re-provisioning infrastructure.
 - **OpenTelemetry + Application Insights (non-optional)** — observability is built-in from deployment, not bolted on later. Every agent call, external API request, and inference operation is traced.
 
----
+
 
 ## Results and Impact
 
@@ -72,7 +72,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 **Example:** For a clinical operations team handling **200 complex queries per day**, multi-agent orchestration provides evidence from **5 sources simultaneously** — patient records, medical literature, treatment protocols, drug safety databases, and guideline repositories — with citation provenance and confidence scoring on every response.
 
----
+
 
 ## Business Value Delivered
 
@@ -90,13 +90,13 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 - 18/18 unit tests + pre/post-deploy smoke tests gate broken deployments
 - Estimated ~$4-30 USD for short-lived deployment + testing
 
----
+
 
 ## Azure Architecture
 
 <img width="642" height="948" alt="Screenshot 2026-06-30 at 11 45 42 PM" src="https://github.com/user-attachments/assets/7fa2be9e-c3c7-4986-95f7-5c2963b7f127" />
 
----
+
 
 ## CDSS Agentic Architecture
 
@@ -156,7 +156,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 - RxNorm: Drug name normalization
 - DrugBank: Drug-drug interaction data (optional)
 
----
+
 
 ## Prerequisites
 
@@ -174,7 +174,7 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 > **Why Python 3.12 specifically?** The CDSS backend uses Python 3.12 features (modern type hints, `tomllib`, performance improvements) and the Docker container is built on `python:3.12-slim`. Python 3.11 or earlier will fail. Python 3.13+ has not been tested and may have dependency incompatibilities.
 
----
+
 
 ## Project Structure
 
@@ -238,7 +238,7 @@ azure-cdss-pipeline/
 
 ```
 
----
+
 
 ## Cost Estimates
 
@@ -261,7 +261,7 @@ azure-cdss-pipeline/
 > cdss-deploy teardown
 > ```
 
----
+
 
 ## Quick Start
 
@@ -304,7 +304,7 @@ After deployment completes, the app is live at the URLs shown in the deployment 
 
 > **Total deployment time: ~30-45 minutes** on first run. Breakdown: ACR cloud build (~5 min), Bicep infrastructure (~15-25 min), post-deploy config + frontend build (~10 min). Subsequent runs are faster if infrastructure already exists.
 
----
+
 
 ## Configuration
 
@@ -331,7 +331,7 @@ CDSS_SOURCE_DIR=../cdss-agentic-rag    # Path to source codebase
 CDSS_IMAGE_BUILD_MODE=acr              # Use Azure cloud build (recommended for Apple Silicon)
 ```
 
----
+
 
 ## Stage Details
 
@@ -358,6 +358,10 @@ Queries Azure for all deployed resource names, endpoints, and keys
 Duration: ~15 seconds
 
 <img width="982" height="726" alt="Screenshot 2026-07-01 at 12 09 19 AM" src="https://github.com/user-attachments/assets/de8f78f9-290d-4a49-b021-e26b865beae4" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="971" height="725" alt="Screenshot 2026-07-01 at 12 10 36 AM" src="https://github.com/user-attachments/assets/77b868e1-b5a4-45bf-8df1-6af459fbb946" />
 
@@ -408,7 +412,6 @@ Duration: ~15 seconds
 <img width="978" height="664" alt="Screenshot 2026-07-01 at 12 11 49 AM" src="https://github.com/user-attachments/assets/3f1b7e5e-e627-4bd7-b3de-064d77945af8" />
 
 
----
 
 ## Running Tests
 
@@ -429,19 +432,24 @@ make lint
 
 <img width="902" height="502" alt="Screenshot 2026-06-29 at 11 10 55 AM" src="https://github.com/user-attachments/assets/c9419acd-f516-4e28-8a34-c5893a0d49af" />  
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="905" height="395" alt="Screenshot 2026-06-29 at 11 10 01 AM" src="https://github.com/user-attachments/assets/ec7533a2-3845-4d06-a44e-3aae92635284" />  
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1418" height="706" alt="Screenshot 2026-06-30 at 7 10 21 PM" src="https://github.com/user-attachments/assets/219ce12c-46a6-47de-a589-8d7b2e4f8632" />  
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1421" height="746" alt="Screenshot 2026-06-30 at 7 10 34 PM" src="https://github.com/user-attachments/assets/e5dfdbd7-ce20-4f60-a9e5-a5062c75a0c3" />  
 
----
 
 ## CLI Commands
 
@@ -461,7 +469,7 @@ cdss-deploy smoke-test --stage pre   # Pre-deploy checks
 cdss-deploy smoke-test --stage post  # Post-deploy validation
 ```
 
----
+
 
 ## Observability
 
@@ -476,11 +484,14 @@ View traces in Azure Portal → Application Insights → Transaction search / Pe
 
 <img width="1424" height="702" alt="Screenshot 2026-07-04 at 1 47 04 PM" src="https://github.com/user-attachments/assets/d8f201cb-eef9-49a6-8cb1-57ce49a2b834" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="716" height="273" alt="Screenshot 2026-07-04 at 1 47 21 PM" src="https://github.com/user-attachments/assets/67141588-5291-4b66-aadd-9d76442064a0" />
 
 
 
----
 
 ## Teardown / Cleanup
 
@@ -536,45 +547,49 @@ az cognitiveservices account purge --name <name> --location eastus --resource-gr
 ```
 
 
----
 
 ## CDSS Web Application Screenshots
 
 <img width="1427" height="704" alt="Screenshot 2026-06-30 at 10 12 55 PM" src="https://github.com/user-attachments/assets/d3c8a1ab-6276-416b-8e89-51b815b4a684" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1429" height="701" alt="Screenshot 2026-06-30 at 10 02 01 PM" src="https://github.com/user-attachments/assets/58661822-c834-433f-aafd-3ab525dfb426" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1425" height="687" alt="Screenshot 2026-06-28 at 3 10 44 PM" src="https://github.com/user-attachments/assets/cc6887bc-f075-4981-b466-d77aea74940f" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1539" height="877" alt="Screenshot 2026-06-30 at 7 32 03 PM" src="https://github.com/user-attachments/assets/b1858c66-19ac-4e99-85fb-4c55d60e3aa2" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1430" height="705" alt="Screenshot 2026-06-30 at 10 04 29 PM" src="https://github.com/user-attachments/assets/2c354060-1579-4c5a-b85c-a4e290e1161e" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1429" height="699" alt="Screenshot 2026-06-30 at 10 06 35 PM" src="https://github.com/user-attachments/assets/e89ac32f-0a57-4f7f-92a0-6a3b70101cbb" />
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1426" height="705" alt="Screenshot 2026-06-30 at 10 07 47 PM" src="https://github.com/user-attachments/assets/499b531c-c45c-49f3-8311-9cc5672ccb78" />
 
 
 
-
-
-
-
-
-
-
-
-
----
 
 ## Troubleshooting — Known Issues & Workarounds
 
@@ -714,12 +729,11 @@ az containerapp revision list -g cdss-dev-rg -n cdss-dev-api -o table
 az containerapp ingress traffic set -g cdss-dev-rg -n cdss-dev-api --revision-weight <new-revision-name>=100
 ```
 
----
 
 ## Lessons Learned
 
 1. **Always use Owner role** — Contributor cannot create RBAC role assignments needed by Bicep
-2. **Use ACR cloud build on Apple Silicon** — local Docker cross-compile (ARM → x86_64) uses QEMU emulation which is extremely slow (15-30+ min) and may timeout. ACR cloud build runs on native linux/amd64 hardware and finishes in ~5 minutes
+2. **Use ACR cloud build on Apple Silicon** — local Docker cross-compile (ARM → x86_64) uses QEMU emulation which is extremely slow (15-30+ min) and may timeout. ACR cloud build runs on native Linux/amd64 hardware and finishes in ~5 minutes
 3. **GPT-5 family requires GlobalStandard SKU** — unlike GPT-4o which used Standard. The Bicep template must specify `GlobalStandard` in the deployment SKU
 4. **Azure Cache for Redis is retired** — replaced with Azure Managed Redis (`Microsoft.Cache/redisEnterprise`). If you see Redis-related deployment failures, ensure the Bicep template uses the new resource type
 5. **Azure RBAC propagation takes 5-10 minutes** — re-login with `az login` after role changes to refresh tokens
@@ -739,20 +753,20 @@ az containerapp ingress traffic set -g cdss-dev-rg -n cdss-dev-api --revision-we
 19. **Discover soft-deleted resources live from Azure APIs, not local state, for any cleanup operation that might run standalone** — local state (JSON checkpoints, etc.) gets reset after teardown completes, so a later `--purge`-only run needs to rediscover what to purge by querying Azure directly, filtered by resource ID/name rather than a cached list
 20. **Auto-incremented resource group names (e.g. `cdss-dev-rg2`, `cdss-dev-rg3`) leave orphaned soft-deleted resources that scoped cleanup logic won't find** — when a script only searches within one named resource group, resources from prior auto-incremented runs need their original resource group name extracted from the deleted resource's `id` field and purged individually
 
----
+
 
 ## Authors
 
 - **Marcos Oliveira** — VP AI/ML Engineering  
   [github.com/MAOFILHO](https://github.com/MAOFILHO)
 
----
+
 
 ## Disclaimer
 
 > This system is for research and educational purposes only. It is not approved for clinical use. The recommendations generated should not be used as the sole basis for clinical decisions. Always consult qualified healthcare professionals. The authors assume no liability for actions taken based on system output.
 
----
+
 
 ## License
 
