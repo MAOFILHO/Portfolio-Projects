@@ -2,7 +2,7 @@
 
 This document describes how the Bombay Surface Temperature Forecasting
 project is put together: the data pipeline, the model layer (statistical and
-deep learning, across two frameworks), the API/job-execution layer, and the
+deep learning, across two frameworks: TensorFlow/Keras and PyTorch), the API/job-execution layer, and the
 frontend — and the design decisions behind each.
 
 ## System overview
