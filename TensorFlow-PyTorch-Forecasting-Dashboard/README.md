@@ -1,4 +1,5 @@
-# Bombay Surface Temperature Forecasting
+# TensorFlow vs. PyTorch: Forecasting Dashboard
+### Bombay Surface Temperature, 1970–2012
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
 
@@ -71,7 +72,7 @@ frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
 
 ## Quickstart
 
-### 1. Backend — seed initial results and start the API
+### 1. Backend — Set up the Environment
 
 ```bash
 cd backend
@@ -79,12 +80,36 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # adjust paths if needed; defaults work out of the box
+```
 
-python run_pipeline.py        # seeds all 5 models once, so the dashboard has
-                              # data on first load (a few minutes, mostly the
-                              # auto-ARIMA search and the two LSTMs' training)
+### 2. Backend — Tests
 
-uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
+```bash
+cd backend
+pytest tests/test_smoke.py
+```
+
+Runs every model in the registry (ARIMA, both SARIMAX models, both LSTM
+variants) directly, plus the full `run_pipeline.py` seed run end-to-end,
+against the real dataset and pre-trained checkpoints (fast — LSTMs reuse
+their checkpoints instead of retraining in the test).
+
+
+### 3. Backend — seed initial results 
+
+```bash
+cd backend
+python run_pipeline.py                                  
+# seeds all 5 models once, so the dashboard has
+# data on first load (a few minutes, mostly the
+# auto-ARIMA search and the two LSTMs' training)
+```
+
+### 4. Backend — Start the API
+
+```bash
+cd backend
+python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
 ```
 
 `--reload-dir` scopes the file watcher to just `api/` and `src/` — without it,
@@ -99,7 +124,7 @@ The API is now available at `http://localhost:8000` (interactive docs at
 from the dashboard itself (see below) — `run_pipeline.py` is just a
 convenience seed step, not a required one.
 
-### 2. Frontend — run the dashboard
+### 5. Frontend — run the dashboard
 
 ```bash
 cd frontend
@@ -114,19 +139,8 @@ needed for local development. Pick a model from the sidebar, click **Run
 Model**, and watch it fit/train live; open **Compare All** once a few models
 have run, or **Learn: PyTorch vs. TensorFlow** any time.
 
-### 3. Tests
 
-```bash
-cd backend
-pytest tests/test_smoke.py
-```
-
-Runs every model in the registry (ARIMA, both SARIMAX models, both LSTM
-variants) directly, plus the full `run_pipeline.py` seed run end-to-end,
-against the real dataset and pre-trained checkpoints (fast — LSTMs reuse
-their checkpoints instead of retraining in the test).
-
-### Continuous Integration (CI) GitHub Actions
+### 6. Continuous Integration (CI) GitHub Actions
 
 [`tensorflow-pytorch-forecasting-dashboard-ci.yml`](../.github/workflows/tensorflow-pytorch-forecasting-dashboard-ci.yml)
 (at the repo root, scoped to this folder via a `paths:` filter) runs on every
@@ -138,6 +152,9 @@ rather than retraining from scratch. If either checkpoint is ever missing
 (e.g. deleted locally, or on a fresh clone before the first pipeline run),
 `run_lstm()` / `run_lstm_pytorch()` both fall back to training automatically
 — verified by simulating a missing checkpoint locally.
+
+<img width="1420" height="698" alt="Screenshot 2026-07-10 at 7 01 11 PM" src="https://github.com/user-attachments/assets/df6a2040-b384-4f28-9239-559f47e95fde" />
+
 
 ## Data pipeline robustness
 
@@ -173,7 +190,7 @@ model live before).
 
 ## Environment variables
 
-### `backend/.env`
+### backend/.env
 
 | Variable             | Default                                              | Purpose                                                        |
 |-----------------------|-------------------------------------------------------|------------------------------------------------------------------|
@@ -185,7 +202,7 @@ model live before).
 | `LSTM_RETRAIN`        | `true`                                                  | Retrain LSTMs each run, or reuse the existing checkpoints           |
 | `API_CORS_ORIGIN`     | `http://localhost:5173`                                | Allowed origin for the FastAPI CORS policy                          |
 
-### `frontend/.env`
+### frontend/.env
 
 | Variable              | Default (unset)                  | Purpose                                                      |
 |-----------------------|------------------------------------|----------------------------------------------------------------|
