@@ -143,7 +143,7 @@ tensorflow-pytorch-forecasting-dashboard/
 │   │   ├── pages/                  # Model detail, Compare All, Data & EDA, Learn pages
 │   │   ├── components/             # Sidebar model picker, charts, status indicators
 │   │   └── App.tsx
-│   ├── vite.config.ts              # Dev server + /api proxy to backend on :8000
+│   ├── vite.config.ts              # Dev server + /api proxy to backend on:8000
 │   ├── package.json
 │   └── .env.example
 │
@@ -156,6 +156,8 @@ tensorflow-pytorch-forecasting-dashboard/
 │
 └── README.md
 ​```
+
+---
 
 ## Quickstart
 
