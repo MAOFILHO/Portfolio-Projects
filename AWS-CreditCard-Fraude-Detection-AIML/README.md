@@ -8,7 +8,6 @@
 
 A production-ready, end-to-end machine learning pipeline for real-time credit card fraud detection, deployed on **Amazon SageMaker** using **XGBoost + SMOTE** and **Random Cut Forest**. 
 
----
 
 ## 📋 Table of Contents
 
@@ -27,7 +26,7 @@ A production-ready, end-to-end machine learning pipeline for real-time credit ca
 - [Cost & Cleanup](#-cost--cleanup)
 - [Acknowledgements](#-acknowledgements)
 
----
+
 
 ## 💳 Business Problem
 
@@ -52,7 +51,6 @@ Financial institutions face three competing pressures:
 | FinTech Startups | Deploy production-grade detection without building ML infrastructure |
 | Insurance Companies | Apply the same anomaly detection patterns to claims fraud |
 
----
 
 ## 🧠 Solution Overview
 
@@ -74,7 +72,7 @@ Combining both provides **defense in depth**: XGBoost catches fraud that looks l
 | 5 | Audit logging | Every prediction logged | ✅ Kinesis → S3 |
 | 6 | Reproducible infra | One-click deploy | ✅ CloudFormation |
 
----
+
 
 ## Project Results and Impact
 
@@ -92,7 +90,7 @@ Combining both provides **defense in depth**: XGBoost catches fraud that looks l
 
 → Built a full MLOps pipeline with infrastructure-as-code **CloudFormation**, enabling reproducible deployments and reducing setup time by **~70%**.
 
----
+
 
 ## 🏗️ Architecture
 
@@ -136,7 +134,7 @@ Kinesis Firehose ──► S3 (Audit Log + Retraining Data)
 | Infrastructure | AWS CloudFormation | Full stack as reproducible code |
 | Demo UI | Gradio | Scenario-based interactive testing |
 
----
+
 
 ## 📊 Dataset
 
@@ -153,7 +151,7 @@ Kinesis Firehose ──► S3 (Audit Log + Retraining Data)
 > ⚠️ The dataset (`creditcard.csv`, 143 MB) is excluded from this repository due to GitHub's file size limit.
 > Download it from [Kaggle](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) and place it at `notebooks/creditcard.csv`.
 
----
+
 
 ## 🤖 Models
 
@@ -191,7 +189,7 @@ feature_dim      = 30
 | Weakness | Blind to new attack vectors | Higher false positive rate |
 | Strength | High precision on known fraud | Future-proof coverage |
 
----
+
 
 ## 📈 Model Performance
 
@@ -206,7 +204,7 @@ Evaluated on a held-out test set (20% of 284,807 transactions):
 
 > At 10M daily transactions, a +2% recall improvement catches **thousands of additional fraudulent transactions per day**.
 
----
+
 
 ## 📁 Project Structure
 
@@ -240,7 +238,7 @@ fraud-detection-sagemaker/
 └── README.md
 ```
 
----
+
 
 ## ✅ Prerequisites
 
@@ -270,7 +268,6 @@ matplotlib>=3.6
 seaborn>=0.12
 ```
 
----
 
 ## 🚀 Quick Start
 
@@ -310,7 +307,7 @@ The notebook walks through:
 6. Endpoint deployment
 7. Real-time prediction testing
 
----
+
 
 ## ☁️ Deployment
 
@@ -364,7 +361,7 @@ predictor = model.deploy(
 | XGBoost + SMOTE | `sagemaker-soln-fdml--xgb-smote` |
 | Base XGBoost | `sagemaker-soln-fdml--xgb-2026-05-04-09-35-13-752` |
 
----
+
 
 ## 🎮 Demo App
 
@@ -395,7 +392,7 @@ The app launches at `http://localhost:7860` and also provides a public share lin
 
 Each scenario uses a **real row** from the ULB dataset — predictions reflect actual model behaviour on production data.
 
----
+
 
 ## 💡 Extending This Project
 
@@ -406,7 +403,7 @@ The architecture transfers directly to other imbalanced classification problems:
 - 🚗 **Insurance claims fraud** — same dual-model pattern
 - ⚙️ **Predictive maintenance** — equipment failure from sensor data
 
----
+
 
 ## 💰 Cost & Cleanup
 
@@ -439,24 +436,32 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 | **Total** | **< $0.40** |
 
 
----
 
 ## 📚 Screeenshots
 
 <img width="2048" height="1408" alt="1779515764405" src="https://github.com/user-attachments/assets/3e2a352d-7a7b-4ad2-97b5-517396fdb7db" />
-
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 <img width="1476" height="1406" alt="fraud_detector_edited" src="https://github.com/user-attachments/assets/d80715b5-fad2-4241-bb22-150730093053" />
-
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 <img width="1478" height="1406" alt="fraud_detector_fraud_edited" src="https://github.com/user-attachments/assets/9e018d4b-48d6-48d3-8d78-bbb5607bbbeb" />
-
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 <img width="1204" height="804" alt="1779515764302" src="https://github.com/user-attachments/assets/cc97205c-1701-4a70-8201-b408123f065b" />
-
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 <img width="1398" height="746" alt="1779515764308" src="https://github.com/user-attachments/assets/8b2d7a20-31bb-42d4-8ef6-657abc88f1eb" />
-
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 <img width="1378" height="816" alt="1779515764454" src="https://github.com/user-attachments/assets/a7d8ba4a-c33b-436b-ae19-a843d0c2d26a" />
 
 
----
 
 ## 📚 References
 
@@ -466,20 +471,22 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 - [SMOTE — imbalanced-learn](https://imbalanced-learn.org/stable/references/generated/imblearn.over_sampling.SMOTE.html)
 - [AWS CloudFormation Fraud Detection Solution (SO0056)](https://aws.amazon.com/solutions/implementations/fraud-detection-using-machine-learning/)
 
----
+
 
 ## 🙏 Acknowledgements
 
 - **ULB Machine Learning Group** — for the anonymised credit card dataset
 - **AWS SageMaker Team** — for the open-source CloudFormation solution template (SO0056)
 
----
+
 
 ## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
----
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <div align="center">
 
