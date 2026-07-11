@@ -8,12 +8,12 @@ frontend — and the design decisions behind each.
 ## System overview
 
 ```
-┌───────────────────────────-──┐
-│  GlobalLandTemperaturesBy    │
-│  MajorCity.csv (raw dataset) │
-└───────────────┬──────────────┘
-                │
-                ▼
+            ┌──────────────────────────────┐
+            │  GlobalLandTemperaturesBy    │
+            │  MajorCity.csv (raw dataset) │
+            └───────────────┬──────────────┘
+                            │
+                            ▼
 ┌───────────────────────────────────────────────────────────────┐
 │  DATA PIPELINE (backend/src/)                                 │
 │                                                               │
@@ -48,8 +48,8 @@ frontend — and the design decisions behind each.
 │  main.py — FastAPI: /api/models, /api/models/{k}/run,         │
 │            /api/jobs/{id}, /api/comparison, /api/eda/*        │
 └───────────────────────────┬───────────────────────────────────┘
-                             │ REST/JSON
-                             ▼
+                            │ REST/JSON
+                            ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  FRONTEND (frontend/src/) — React + TypeScript + Vite          │
 │                                                                │
@@ -159,7 +159,7 @@ single-process local app rather than pulling in Redis/Celery).
 
 ## From data to decisions
 
-Beyond the modeling mechanics, the pipeline is structured around what a
+Beyond the modelling mechanics, the pipeline is structured around what a
 forecast is actually *for*:
 
 - **Structured, model-ready inputs**: raw daily-noise temperature readings
@@ -172,9 +172,9 @@ forecast is actually *for*:
   is fit.
 - **Model-class comparison**: running interpretable statistical models and
   higher-capacity deep learning models against the same test period makes
-  the interpretability-vs-performance trade-off explicit and measurable,
-  rather than a one-off modeling choice.
+  the interpretability-vs-performance trade-off is explicit and measurable,
+  rather than a one-off modelling choice.
 - **Decision-ready output**: every model's forecast, confidence interval
   (where applicable), and error metrics are exposed identically through the
-  API and dashboard — the same shape a planning, risk, or resource-allocation
+  API and dashboard — the same shape as planning, risk, or resource allocation
   process would consume regardless of which model produced it.
