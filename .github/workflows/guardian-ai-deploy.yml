@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'MultiCloud_MLOps/services/**'
-      - 'MultiCloud_MLOps/k8s/**'
-      - 'MultiCloud_MLOps/frontend/**'
+      - 'MultiCloud-Video-Guardian-AI/services/**'
+      - 'MultiCloud-Video-Guardian-AI/k8s/**'
+      - 'MultiCloud-Video-Guardian-AI/frontend/**'
 
 jobs:
   build-and-deploy:
@@ -29,7 +29,7 @@ jobs:
           docker build \
             -t guardianacr03211.azurecr.io/guardian-ai-${service}:${{ github.sha }} \
             -t guardianacr03211.azurecr.io/guardian-ai-${service}:latest \
-            ./MultiCloud_MLOps/services/${service}
+            ./MultiCloud-Video-Guardian-AI/services/${service}
           docker push guardianacr03211.azurecr.io/guardian-ai-${service}:${{ github.sha }}
           docker push guardianacr03211.azurecr.io/guardian-ai-${service}:latest
         done
