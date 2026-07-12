@@ -771,3 +771,8 @@ az containerapp ingress traffic set -g cdss-dev-rg -n cdss-dev-api --revision-we
 ## License
 
 MIT License — see [LICENSE](LICENSE)
+
+
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
