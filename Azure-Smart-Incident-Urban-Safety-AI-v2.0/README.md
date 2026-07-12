@@ -207,6 +207,9 @@ make pipeline
 Extracts text from 50 PDFs, captions 130 images with GPT-4o Vision, parses 6 SOPs, generates embeddings, and uploads 186 documents to Azure AI Search. Takes ~15 minutes (image captioning is the bottleneck).
 
 <img width="926" height="909" alt="Screenshot 2026-06-18 at 5 47 09 PM" src="https://github.com/user-attachments/assets/3189e156-aef3-4d92-9d95-8f1c3f6950d7" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="919" height="904" alt="Screenshot 2026-06-18 at 5 47 42 PM" src="https://github.com/user-attachments/assets/fae80fd9-9318-4c41-8e16-1e3f4b474a25" />
 
 
@@ -216,11 +219,14 @@ Extracts text from 50 PDFs, captions 130 images with GPT-4o Vision, parses 6 SOP
 make run
 ```
 <img width="924" height="208" alt="Screenshot 2026-06-18 at 5 48 21 PM" src="https://github.com/user-attachments/assets/d214157f-48e6-48b6-8850-9c88733d5cd6" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 Open `http://localhost:8501` and log in with:
 
 <img width="1270" height="931" alt="Screenshot 2026-06-18 at 8 29 50 AM" src="https://github.com/user-attachments/assets/497cf683-6935-4d21-a3d3-ee7eed6903a1" />
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 | Field | Value |
 |---|---|
@@ -381,22 +387,16 @@ make verify-cleanup
 
 <img width="1538" height="920" alt="Screenshot 2026-06-18 at 8 28 24 AM" src="https://github.com/user-attachments/assets/5d5467d7-01c0-49a3-84ae-4d747e55b70c" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1535" height="917" alt="Screenshot 2026-06-18 at 8 29 04 AM" src="https://github.com/user-attachments/assets/b4df3670-4706-4ab4-b6a3-6ef131438092" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1531" height="914" alt="Screenshot 2026-06-18 at 3 11 42 PM" src="https://github.com/user-attachments/assets/75ab7daf-8c86-482d-b284-48355b1686c2" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1530" height="963" alt="Screenshot 2026-06-18 at 3 06 45 PM" src="https://github.com/user-attachments/assets/7b10f7a2-e0a3-41f3-a17b-4dac95ad7fe2" />
 
 
@@ -406,64 +406,44 @@ make verify-cleanup
 
 <img width="1270" height="931" alt="Screenshot 2026-06-18 at 8 29 50 AM" src="https://github.com/user-attachments/assets/380c141b-c5ec-4956-821c-1ff9192d1d03" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1535" height="963" alt="Screenshot 2026-06-18 at 8 34 36 AM" src="https://github.com/user-attachments/assets/a8dd67d0-f9fe-424a-bf22-30ebef1ecab9" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1534" height="959" alt="Screenshot 2026-06-18 at 8 34 59 AM" src="https://github.com/user-attachments/assets/bf843e72-edc8-46b7-b25a-7ecddb43e6ad" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1530" height="971" alt="Screenshot 2026-06-18 at 8 35 23 AM" src="https://github.com/user-attachments/assets/a63b3a1e-2201-4e2b-8f9f-2ced8c586322" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1533" height="963" alt="Screenshot 2026-06-18 at 8 35 48 AM" src="https://github.com/user-attachments/assets/40c9d17d-e331-4412-9bd6-57513856dc65" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1535" height="925" alt="Screenshot 2026-06-18 at 8 36 34 AM" src="https://github.com/user-attachments/assets/430d5fcb-6f7f-47aa-a78a-0fc52a568e71" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1536" height="928" alt="Screenshot 2026-06-18 at 8 37 31 AM" src="https://github.com/user-attachments/assets/a89ae24d-d9e3-4e59-b164-5a2dc4fe6e89" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1175" height="881" alt="Screenshot 2026-06-18 at 8 37 55 AM" src="https://github.com/user-attachments/assets/bd8b962d-b4cf-4665-be5f-1f423a75f849" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1121" height="871" alt="Screenshot 2026-06-18 at 8 38 03 AM" src="https://github.com/user-attachments/assets/7d295591-5924-4b6a-9363-fdfce2068a6d" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1532" height="964" alt="Screenshot 2026-06-18 at 8 39 15 AM" src="https://github.com/user-attachments/assets/7327c7d6-d240-461e-b1c1-7f2c177d2d69" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1184" height="886" alt="Screenshot 2026-06-18 at 8 39 53 AM" src="https://github.com/user-attachments/assets/16d64de1-a4f6-424f-abc1-132e67ba08f9" />
 
 
