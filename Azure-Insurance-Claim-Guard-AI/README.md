@@ -2,7 +2,7 @@
 
 > An AI-powered insurance claims assistant built with **Microsoft Foundry Agent Service**, **Azure OpenAI**, and **Python** — combining document **Retrieval-Augmented Generation (RAG)**, claims data analytics, custom business logic, and real-time web search into a single FastAPI web application.
 
----
+
 
 ## 📋 Table of Contents
 
@@ -21,7 +21,7 @@
 - [Troubleshooting](#-troubleshooting)
 - [Resources](#-resources)
 
----
+
 
 ## 💼 Business Scenario
 
@@ -35,7 +35,7 @@ Insurance companies process large volumes of claims that require reviewing polic
 - Scoring fraud risk for incoming claims using business logic
 - Retrieving the latest regulatory updates from the web in real time
 
----
+
 
 ## 🔧 Results and impact (Modelled from Industry Benchmarks)
 
@@ -55,7 +55,7 @@ These figures are realistic estimates based on similar deployments in insurance 
 - Accenture highlights **~20–40%** improvement in fraud detection with AI models
 - Industry STP benchmarks typically range between **60–85%** for digitized insurers
 
----
+
 
 ## 🔍 Project Overview
 
@@ -73,7 +73,7 @@ SmartClaims is built progressively across eight labs, each adding a new capabili
 | Step 8 | Monitoring & observability with OpenTelemetry |
 | Step 9 | FastAPI web application (local + Azure deployment) |
 
----
+
 
 ## 🏗️ Architecture
 
@@ -97,7 +97,7 @@ FastAPI (app/main.py)
                     └── Tavily Web Search  →  Regulatory updates
 ```
 
----
+
 
 ## ✨ Key Features
 
@@ -109,7 +109,7 @@ FastAPI (app/main.py)
 - **OpenTelemetry Tracing** — Observe agent execution flows and measure performance in production.
 - **Azure Web App Deployment** — Fully containerized and deployable to Azure App Service with Managed Identity authentication.
 
----
+
 
 ## 🛠️ Tech Stack
 
@@ -126,7 +126,7 @@ FastAPI (app/main.py)
 | Observability | OpenTelemetry + Azure Monitor |
 | Cloud | Azure App Service (Linux, Python 3.11) |
 
----
+
 
 ## 📁 Project Structure
 
@@ -159,7 +159,7 @@ smart-claims-agent-project/
 └── startup.sh                 # Azure App Service startup command
 ```
 
----
+
 
 ## ✅ Prerequisites
 
@@ -171,7 +171,7 @@ smart-claims-agent-project/
 | Azure Account | Free-tier or paid |
 | Tavily Account | Free (1,000 credits/month) |
 
----
+
 
 ## 🚀 Getting Started
 
@@ -251,7 +251,7 @@ python labs/lab7_tavily_search.py
 python labs/lab8_production.py
 ```
 
----
+
 
 ## 🌐 Running the Web Application
 
@@ -271,7 +271,7 @@ Open your browser at **http://127.0.0.1:8000**
    - **Claim Lookup** — Enter a claim ID (e.g. `CLM-0042`)
    - **Fraud Risk** — Describe a claim scenario for risk assessment
 
----
+
 
 ## ☁️ Deploying to Azure
 
@@ -344,7 +344,7 @@ az webapp up \
 
 > ⏳ Deployment takes approximately 15–20 minutes on first run.
 
----
+
 
 ## 📂 Supported File Formats
 
@@ -356,7 +356,7 @@ az webapp up \
 
 You can upload multiple files simultaneously. CSV files feed the Code Interpreter; Markdown/text files are indexed in the Vector Store.
 
----
+
 
 ## 🔌 API Endpoints
 
@@ -370,7 +370,7 @@ You can upload multiple files simultaneously. CSV files feed the Code Interprete
 | `POST` | `/api/fraud-risk` | Calculate fraud risk for a claim scenario |
 
 
----
+
 
 ## 🔧 Troubleshooting
 
@@ -396,7 +396,7 @@ Ensure the Managed Identity (or your user account locally) has the **Azure AI Us
 
 This is harmless — ignore it. It disappears once a file upload is performed.
 
----
+
 
 ## 📚 Resources
 
@@ -409,6 +409,6 @@ This is harmless — ignore it. It disappears once a file upload is performed.
 - [Azure OpenAI Pricing](https://azure.microsoft.com/en-us/pricing/details/azure-openai/)
 
 
----
 
-*Built as part of Microsoft Foundry Agent Development program*
+
+*Built as part of the Microsoft Foundry Agent Development program*
