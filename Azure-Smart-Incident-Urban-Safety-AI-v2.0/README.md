@@ -12,7 +12,7 @@ Designed and deployed a production-grade AI Smart Incident Assistant to enhance 
 
 **Key differentiator:** The project is fully automated with Zero Azure Portal visits required. One command provisions all cloud resources, another runs the full data pipeline, and a third launches the web app.
 
----
+
 
 ## Business Scenario
 
@@ -26,7 +26,6 @@ A **municipal development team** needs an AI-powered assistant to enhance the an
 
 Using **Retrieval-Augmented Generation (RAG)**, the assistant delivers accurate, context-grounded answers with source attribution, inline image display, and multi-turn conversation memory.
 
----
 
 ## The Problem
 
@@ -45,7 +44,7 @@ Cities and municipalities handle hundreds of urban safety incidents daily — tr
 
 **The result:** incident triage that should take minutes takes hours. The right SOP gets applied late — or not at all.
 
----
+
 
 ### The Solution: AI-Powered Multimodal Incident Intelligence System
 
@@ -61,7 +60,7 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
 - **Multi-Page Web App** — Chat: RAG chat interface with source attribution and inline images. Profile: User account details, session info, login duration. Settings: Model config, Azure resource endpoints, pipeline status, and session telemetry.
 - **Secure Login** — Username/password authentication with configurable credentials via `.env` Session tracking with unique session IDs.
 
----
+
 
 ### Results & Impact
 
@@ -72,7 +71,7 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
 → Cut manual extraction effort by **50%** — automated OCR, structured extraction, and AI-assisted retrieval eliminate manual copy-paste workflows.
 
 
----
+
 
 ## Architecture
 
@@ -123,7 +122,7 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
   └──────────────────────────────────────────────────────────────┘
 ```
 
----
+
 
 ## Azure Services
 
@@ -138,7 +137,7 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
 
 **Estimated cost:** ~$2–6/month for demo usage.
 
----
+
 
 ## Tech Stack
 
@@ -155,7 +154,7 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
 | **Language** | Python 3.10+ |
 
 
----
+
 
 ## Quick Start
 
@@ -230,7 +229,7 @@ Open `http://localhost:8501` and log in with:
 
 Credentials are configurable via `APP_USERNAME` and `APP_PASSWORD` in `.env`.
 
----
+
 
 ## Sample Queries
 
@@ -250,7 +249,7 @@ Try these in the web app:
 - "What images do we have related to that?"
 - "Summarize everything we've discussed so far"
 
----
+
 
 ## Project Structure
 
@@ -303,7 +302,7 @@ Smart-Incident-Assistant-for-Urban-Safety2/
 <img width="1425" height="789" alt="Screenshot 2026-06-18 at 7 39 55 PM" src="https://github.com/user-attachments/assets/7b6ef031-1676-41bd-949d-f01890c447d6" />
 
 
----
+
 
 ## Makefile Targets
 
@@ -322,7 +321,7 @@ make verify-cleanup   # Verify all Azure resources are deleted
 make clean-data       # Remove generated data/
 ```
 
----
+
 
 ## Web Search (Optional)
 
@@ -335,7 +334,7 @@ The assistant can supplement RAG answers with live web search results via SerpAP
 <img width="208" height="136" alt="Screenshot 2026-06-18 at 7 42 00 PM" src="https://github.com/user-attachments/assets/c277be65-76be-4eb1-8683-c3a75337dfa2" />
 
 
----
+
 
 ## Smoke Test
 
@@ -354,7 +353,7 @@ The smoke test validates: Python version, all packages, Azure CLI login, `.env` 
 <img width="924" height="772" alt="Screenshot 2026-06-18 at 5 46 48 PM" src="https://github.com/user-attachments/assets/a07ebedd-ad1e-46de-8924-f025a028918c" />
 
 
----
+
 
 ## Cleanup
 
@@ -375,35 +374,99 @@ make verify-cleanup
 <img width="925" height="697" alt="Screenshot 2026-06-18 at 3 14 20 PM" src="https://github.com/user-attachments/assets/976cd1d1-4807-4f6a-b5a9-707cbaf27f25" />
 
 
----
+
 
 ## Observability
 
 
 <img width="1538" height="920" alt="Screenshot 2026-06-18 at 8 28 24 AM" src="https://github.com/user-attachments/assets/5d5467d7-01c0-49a3-84ae-4d747e55b70c" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1535" height="917" alt="Screenshot 2026-06-18 at 8 29 04 AM" src="https://github.com/user-attachments/assets/b4df3670-4706-4ab4-b6a3-6ef131438092" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1531" height="914" alt="Screenshot 2026-06-18 at 3 11 42 PM" src="https://github.com/user-attachments/assets/75ab7daf-8c86-482d-b284-48355b1686c2" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1530" height="963" alt="Screenshot 2026-06-18 at 3 06 45 PM" src="https://github.com/user-attachments/assets/7b10f7a2-e0a3-41f3-a17b-4dac95ad7fe2" />
 
 
----
+
 
 ## Smart Incident Assistant for Urban Safety Web Application (screenshots)
 
 <img width="1270" height="931" alt="Screenshot 2026-06-18 at 8 29 50 AM" src="https://github.com/user-attachments/assets/380c141b-c5ec-4956-821c-1ff9192d1d03" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1535" height="963" alt="Screenshot 2026-06-18 at 8 34 36 AM" src="https://github.com/user-attachments/assets/a8dd67d0-f9fe-424a-bf22-30ebef1ecab9" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1534" height="959" alt="Screenshot 2026-06-18 at 8 34 59 AM" src="https://github.com/user-attachments/assets/bf843e72-edc8-46b7-b25a-7ecddb43e6ad" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1530" height="971" alt="Screenshot 2026-06-18 at 8 35 23 AM" src="https://github.com/user-attachments/assets/a63b3a1e-2201-4e2b-8f9f-2ced8c586322" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1533" height="963" alt="Screenshot 2026-06-18 at 8 35 48 AM" src="https://github.com/user-attachments/assets/40c9d17d-e331-4412-9bd6-57513856dc65" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1535" height="925" alt="Screenshot 2026-06-18 at 8 36 34 AM" src="https://github.com/user-attachments/assets/430d5fcb-6f7f-47aa-a78a-0fc52a568e71" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1536" height="928" alt="Screenshot 2026-06-18 at 8 37 31 AM" src="https://github.com/user-attachments/assets/a89ae24d-d9e3-4e59-b164-5a2dc4fe6e89" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1175" height="881" alt="Screenshot 2026-06-18 at 8 37 55 AM" src="https://github.com/user-attachments/assets/bd8b962d-b4cf-4665-be5f-1f423a75f849" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1121" height="871" alt="Screenshot 2026-06-18 at 8 38 03 AM" src="https://github.com/user-attachments/assets/7d295591-5924-4b6a-9363-fdfce2068a6d" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1532" height="964" alt="Screenshot 2026-06-18 at 8 39 15 AM" src="https://github.com/user-attachments/assets/7327c7d6-d240-461e-b1c1-7f2c177d2d69" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1184" height="886" alt="Screenshot 2026-06-18 at 8 39 53 AM" src="https://github.com/user-attachments/assets/16d64de1-a4f6-424f-abc1-132e67ba08f9" />
 
 
----
 
 ## Author
 
