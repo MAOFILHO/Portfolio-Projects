@@ -3,7 +3,7 @@
 
 A production-grade, end-to-end MLOps application for automated video content moderation. Built on **Azure AKS** (Kubernetes) + **AWS** (S3, SQS, DynamoDB) with **Azure ML** for NSFW and Violence detection model training and deployment to a fully automated **Python/CLI** deployment pipeline.
 
----
+
 
 ## Project Description
 
@@ -11,7 +11,7 @@ This project orchestrates a **Multi-Cloud MLOps Workflow**. Azure ML provides th
 
 Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service (AKS)**, read video references from **AWS S3** and metadata from **AWS DynamoDB**, process messages from SQS, and call **Azure ML endpoints** for model scoring. Code pushed to the repository triggers the training pipeline on the compute cluster, models appear in the registry, the deployment pipeline creates or updates endpoints, and Kubernetes ConfigMaps are updated so application pods use the new scoring URIs. This end-to-end flow demonstrates automated, reproducible model training and deployment across **AWS (data/messaging)** and **Azure (ML platform and CI/CD)**.
 
----
+
 
 ## The Business Case: Why This Matters
 
@@ -23,7 +23,7 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 
 **The Solution:** This project uses **Azure** for the ML platform and **AWS** for data and messaging, with **Azure DevOps** pipelines orchestrating training and deployment so that new model versions flow from code commit to production endpoints.
 
----
+
 
 ## Cross-Cloud Integration – Data on AWS, ML on Azure
 
@@ -35,14 +35,14 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 
 **Example**: Video upload → **S3 + DynamoDB (AWS)**; processing triggered by SQS (AWS); **Deep-Vision** runs on AKS, reads from S3/DynamoDB, calls Azure ML endpoints for scores, writes results back to DynamoDB; training and deployment are fully on Azure via **Azure DevOps** and **Azure ML**.
 
----
+
 ## Design Decisions
 
 - **Two-stage screening** (Fast Screening → Deep Vision) reduces Azure ML endpoint calls to only ambiguous content, lowering inference cost and latency.
 - **SQS decoupling** isolates ingestion from ML processing — a spike in uploads does not block scoring, and each layer scales independently.
 - **CI/CD-gated model promotion** via Azure DevOps ensures no model version reaches production without passing validation, enabling safe rollback to any registered version.
 
----
+
 ## Results and Impact
 
 **Impact**: This project demonstrates how an automated multi-cloud moderation pipeline can improve speed, consistency, and scalability. By using ML-driven pre-screening, the system is designed to reduce manual review volume by an estimated **70–80%** (industry benchmark) and shorten moderation turnaround by **80–90%** (industry benchmark) compared with a fully manual process.
@@ -51,7 +51,7 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 
 **Example**: For a platform handling **10,000 videos per day**, a **70% automation rate** would leave about **3,000 items** for human review. That creates a practical path to lower cost and faster response without sacrificing oversight.
 
----
+
 
 ## Business Value Delivered
 
@@ -68,7 +68,7 @@ Application microservices (e.g., Deep-Vision) run on **Azure Kubernetes Service 
 - Dual-cloud architecture: best-of-breed AWS (data) + Azure (ML) at ~$290/month
 - Compliance-ready: full model lineage, versioning, and audit trail via Azure ML + MLflow
 
----
+
 
 ## Architecture
 
@@ -97,7 +97,7 @@ Upload → API Gateway → Ingestion (S3) → SQS → Fast Screening
 - Azure DevOps: CI/CD pipelines (3 pipelines)
 
 
----
+
 
 ## Prerequisites
 
@@ -112,7 +112,7 @@ Upload → API Gateway → Ingestion (S3) → SQS → Fast Screening
 | Node.js | 20+ | `brew install node` |
 | git | any | pre-installed on macOS |
 
----
+
 
 
 ## Project Structure
@@ -161,7 +161,7 @@ MultiCloud-Video-Guardian-AI/
 ```
 
 
----
+
 
 ## Cost Estimates
 
@@ -179,7 +179,7 @@ MultiCloud-Video-Guardian-AI/
 > az aks start --name guardian-ai-aks --resource-group guardian-ai-prod
 > ```
 
----
+
 
 
 ## Quick Start
@@ -229,7 +229,7 @@ python setup.py --stage ml       # ~45 min:  Azure ML training + deployment
 
 After `--stage k8s` completes, the app is live at: `http://<EXTERNAL_IP>`
 
----
+
 
 ## Configuration
 
@@ -355,7 +355,7 @@ Output: NSFW + Violence detection endpoints; patches Kubernetes ConfigMap
 <img width="1536" height="641" alt="Screenshot 2026-06-13 at 2 03 01 PM" src="https://github.com/user-attachments/assets/a145dae4-3685-40e6-83e6-53f6d2f869bf" />
 
 
----
+
 
 ## Running Tests
 
@@ -369,7 +369,7 @@ python -m pytest tests/smoke/test_smoke.py -v
 <img width="997" height="696" alt="Screenshot 2026-06-13 at 11 27 52 AM" src="https://github.com/user-attachments/assets/1363d851-7ab6-4d79-98f2-19fe55d9bcce" />
 
 
----
+
 
 ## The Video Moderation Application (Screenshots)
 
@@ -391,7 +391,7 @@ python -m pytest tests/smoke/test_smoke.py -v
 
 
 
----
+
 
 ## GitHub Actions CI/CD
 
@@ -431,7 +431,6 @@ GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
 - Rotate the `guardian-github-actions` SP secret annually
 
 
----
 
 ## Project Key Benefits - Summary
 
@@ -447,7 +446,7 @@ GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
 Multi-cloud flexibility: Use AWS for data and messaging and Azure for ML and CI/CD, with clear boundaries and minimal coupling.
 
 
----
+
 
 ## Teardown / Cleanup
 
@@ -485,7 +484,7 @@ az resource list --resource-group guardian-ai-prod --output table
 
 <img width="967" height="207" alt="Screenshot 2026-06-13 at 2 43 54 PM" src="https://github.com/user-attachments/assets/2dbf163f-75e2-4cf0-ac0f-50627fde4040" />
 
----
+
 
 ## Lessons Learned
 
@@ -500,12 +499,11 @@ This lab required significant troubleshooting beyond the original manual. Key le
 7. **Never commit secrets** — use `.env` + `.gitignore`, rotate credentials immediately if exposed
 
 
----
 
 ## Troubleshooting - Known Issues & Workarounds
 
 ### 1. AWS Region Mismatch (CRITICAL)
-**Symptom**: Resources created in wrong region despite `AWS_REGION=us-east-1`  
+**Symptom**: Resources created in the wrong region despite `AWS_REGION=us-east-1`  
 **Root cause**: Original `setup-aws.sh` had `REGION="ap-south-1"` hardcoded  
 **Fix**: Already patched — script now reads `${AWS_REGION:-$(aws configure get region)}`
 
@@ -558,7 +556,7 @@ AZURE_TENANT_ID=<tenant>
 
 ### 9. ML Training Pipeline "No agent found in pool Default"
 **Symptom**: Training jobs fail immediately  
-**Root cause**: Pipeline YAML had `pool: name: 'Default'` requiring self-hosted agent  
+**Root cause**: Pipeline YAML had `pool: name: 'Default'` requiring a self-hosted agent  
 **Fix**: Already patched — all pipeline YAMLs use `pool: vmImage: 'ubuntu-latest'`
 
 ### 10. ML Training Path Error
@@ -571,15 +569,15 @@ AZURE_TENANT_ID=<tenant>
 **Root cause**: ACR name was timestamp-generated and not persisted  
 **Fix**: Already patched — `setup_azure.py` saves `AZURE_ACR_NAME=` to `.env` after first creation
 
----
 
----
+
+
 ## Authors
 
 - **Marcos Oliveira** — VP AI/ML Engineering   
   [github.com/MAOFILHO](https://github.com/MAOFILHO) | [Portfolio-Projects](https://github.com/MAOFILHO/Portfolio-Projects)
 
----
+
 
 ## License
 
