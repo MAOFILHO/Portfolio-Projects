@@ -553,40 +553,28 @@ az cognitiveservices account purge --name <name> --location eastus --resource-gr
 
 <img width="1427" height="704" alt="Screenshot 2026-06-30 at 10 12 55 PM" src="https://github.com/user-attachments/assets/d3c8a1ab-6276-416b-8e89-51b815b4a684" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1429" height="701" alt="Screenshot 2026-06-30 at 10 02 01 PM" src="https://github.com/user-attachments/assets/58661822-c834-433f-aafd-3ab525dfb426" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1425" height="687" alt="Screenshot 2026-06-28 at 3 10 44 PM" src="https://github.com/user-attachments/assets/cc6887bc-f075-4981-b466-d77aea74940f" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1539" height="877" alt="Screenshot 2026-06-30 at 7 32 03 PM" src="https://github.com/user-attachments/assets/b1858c66-19ac-4e99-85fb-4c55d60e3aa2" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1430" height="705" alt="Screenshot 2026-06-30 at 10 04 29 PM" src="https://github.com/user-attachments/assets/2c354060-1579-4c5a-b85c-a4e290e1161e" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1429" height="699" alt="Screenshot 2026-06-30 at 10 06 35 PM" src="https://github.com/user-attachments/assets/e89ac32f-0a57-4f7f-92a0-6a3b70101cbb" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1426" height="705" alt="Screenshot 2026-06-30 at 10 07 47 PM" src="https://github.com/user-attachments/assets/499b531c-c45c-49f3-8311-9cc5672ccb78" />
 
 
@@ -596,7 +584,7 @@ az cognitiveservices account purge --name <name> --location eastus --resource-gr
 
 ### 1. RBAC Authorization Failed (CRITICAL)
 **Symptom:** `Authorization failed for template resource of type Microsoft.Authorization/roleAssignments`  
-**Root cause:** Your Azure account has Contributor but not Owner role  
+**Root cause:** Your Azure account has "Contributor" but not "Owner" role  
 **Fix:** Assign Owner role on the subscription:
 ```bash
 az role assignment create --assignee "<your-object-id>" \
@@ -756,17 +744,9 @@ az containerapp ingress traffic set -g cdss-dev-rg -n cdss-dev-api --revision-we
 
 
 
-## Authors
-
-- **Marcos Oliveira** — VP AI/ML Engineering  
-  [github.com/MAOFILHO](https://github.com/MAOFILHO)
-
-
-
 ## Disclaimer
 
 > This system is for research and educational purposes only. It is not approved for clinical use. The recommendations generated should not be used as the sole basis for clinical decisions. Always consult qualified healthcare professionals. The authors assume no liability for actions taken based on system output.
-
 
 
 ## License
