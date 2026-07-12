@@ -412,3 +412,7 @@ This is harmless — ignore it. It disappears once a file upload is performed.
 
 
 *Built as part of the Microsoft Foundry Agent Development program*
+
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
