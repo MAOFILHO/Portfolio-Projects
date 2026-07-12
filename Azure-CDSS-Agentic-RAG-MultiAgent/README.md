@@ -1,4 +1,5 @@
-# Azure Agentic RAG Pipeline — Clinical Decision Support System
+# Azure Agentic RAG Pipeline
+### Clinical Decision Support System (CDSS)
 
 A production-grade, end-to-end automated deployment pipeline for a **Clinical Decision Support System** using **Agentic RAG** on Azure. Built with **Azure OpenAI** (GPT-5 + GPT-5-mini), **Azure AI Search**, **Cosmos DB**, **Container Apps**, and a **React** frontend — deployed via a fully automated **Python/CLI** pipeline with **zero Azure Portal clicks**.
 
