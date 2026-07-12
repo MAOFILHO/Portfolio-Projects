@@ -107,22 +107,22 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
   +------------------------------------------------------------+
   |              Agentic AI Orchestrator (GPT-5)               |
   |  Decomposes query → delegates to agents → synthesizes      |
-  +----+----------+----------+----------+----------+-----------+
-       |          |          |          |          |
-       v          v          v          v          v
+  +----+----------+----------+------------+-------------+------+
+       |          |          |            |             |
+       v          v          v            v             v
   +---------+ +----------+ +---------+ +---------+ +-----------+
   | Patient | | Medical  | |Protocol | |  Drug   | |Guardrails |
   | History | |Literature| | Agent   | | Safety  | |  Agent    |
   +---------+ +----------+ +---------+ +---------+ +-----------+
-       |          |            |          |          |
-       v          v            v          v          v
+       |          |            |           |            |
+       v          v            v           v            v
   +---------+ +---------+ +---------+ +---------+ +------------+
   |Azure AI | | PubMed  | |Azure AI | |DrugBank | | Citation   |
   | Search  | |  API    | | Search  | |OpenFDA  | |Verification|
   |Cosmos DB| | Cache   | |  Blob   | | RxNorm  | |Safety Val. |
   +---------+ +---------+ +---------+ +---------+ +------------+
-       |           |          |            |          |
-       +-----------+----------+------------+----------+
+       |           |          |            |            |
+       +-----------+----------+------------+------------+
                               |
                               v
                    +---------------------+
