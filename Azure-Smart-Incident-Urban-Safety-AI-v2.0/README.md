@@ -78,48 +78,48 @@ A production-grade RAG system that unifies structured reports, visual evidence, 
 ```
                         AZURE PROVISIONING (automated)
                         python -m src.provision
-  ┌──────────────────────────────────────────────────────────────┐
-  │  Resource Group ─► OpenAI (GPT-4o + Embeddings)              │
-  │                 ─► Document Intelligence (F0)                │
-  │                 ─► AI Vision (S1)                            │
-  │                 ─► AI Search (Free)                          │
-  │                 ─► Application Insights (telemetry)          │
-  │                 ─► .env auto-generated                       │
-  └──────────────────────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────────────────┐
+  │  Resource Group ─► OpenAI (GPT-4o + Embeddings)                │
+  │                 ─► Document Intelligence (F0)                  │
+  │                 ─► AI Vision (S1)                              │
+  │                 ─► AI Search (Free)                            │
+  │                 ─► Application Insights (telemetry)            │
+  │                 ─► .env auto-generated                         │
+  └────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
                       DATA PIPELINE (automated)
                       python -m src.pipeline
-  ┌──────────────────────────────────────────────────────────────┐
-  │                                                              │
-  │  50 PDFs ──► Azure Doc Intelligence ──► parsed_incidents.json│
-  │  130 Images ► GPT-4o Vision Captioning ► parsed_images.json  │
-  │  6 SOPs ──► Text Parsing ─────────────► parsed_sops.json     │
-  │                        │                                     │
-  │                        ▼                                     │
-  │              text-embedding-3-small (1536-dim)               │
-  │                        │                                     │
-  │                        ▼                                     │
-  │              Azure AI Search (HNSW Vector Index)             │
-  │              186 documents indexed                           │
-  │                                                              │
-  └──────────────────────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────────────────┐
+  │                                                                │
+  │  50 PDFs ──► Azure Doc Intelligence ──► parsed_incidents.json  │
+  │  130 Images ► GPT-4o Vision Captioning ► parsed_images.json    │
+  │  6 SOPs ──► Text Parsing ─────────────► parsed_sops.json       │
+  │                        │                                       │
+  │                        ▼                                       │
+  │              text-embedding-3-small (1536-dim)                 │
+  │                        │                                       │
+  │                        ▼                                       │
+  │              Azure AI Search (HNSW Vector Index)               │
+  │              186 documents indexed                             │
+  │                                                                │
+  └────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
                       STREAMLIT WEB APP (Contoso UI)
                       streamlit run src/web/app.py
-  ┌──────────────────────────────────────────────────────────────┐
-  │                                                              │
-  │  User Query ─► Embed ─► Hybrid Search ─► Top-k Docs ─► GPT   |
-  │                                                              |
-  │                                    Context-aware Response    │
-  │                                                              │
-  │  + Chat history memory (10-turn rolling window)              │
-  │  + Source attribution with inline image display              │
-  │  + Optional SerpAPI web search augmentation                  │
-  │  + Azure Monitor OpenTelemetry tracing                       │
-  │                                                              │
-  └──────────────────────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────────────────┐
+  │                                                                │
+  │  User Query ─► Embed ─► Hybrid Search ─► Top-k Docs ─► GPT     |
+  │                                                                |
+  │                                    Context-aware Response      │
+  │                                                                │
+  │  + Chat history memory (10-turn rolling window)                │
+  │  + Source attribution with inline image display                │
+  │  + Optional SerpAPI web search augmentation                    │
+  │  + Azure Monitor OpenTelemetry tracing                         │
+  │                                                                │
+  └────────────────────────────────────────────────────────────────┘
 ```
 
 
