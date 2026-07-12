@@ -283,8 +283,22 @@ Region: **us-east-1** (hardcoded guardian — will error if unconfigured)
 
 <img width="970" height="716" alt="Screenshot 2026-06-12 at 6 19 28 PM" src="https://github.com/user-attachments/assets/0634cbd6-c7c1-4a47-bcee-4d6176ae524d" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1534" height="521" alt="Screenshot 2026-06-13 at 1 26 56 PM" src="https://github.com/user-attachments/assets/9789f8ad-e2fd-4fcd-aa53-4541e204063f" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1535" height="422" alt="Screenshot 2026-06-13 at 1 27 44 PM" src="https://github.com/user-attachments/assets/cfbe216c-3abe-44e5-beb7-a33b1b3c100f" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1530" height="421" alt="Screenshot 2026-06-13 at 1 28 35 PM" src="https://github.com/user-attachments/assets/df7f8ab0-7d9a-4966-a51c-daf76e393071" />
 
 
@@ -295,8 +309,22 @@ Output: External IP for the app
 
 <img width="1009" height="710" alt="Screenshot 2026-06-12 at 6 21 24 PM" src="https://github.com/user-attachments/assets/8e7ab388-598d-48ba-b3c0-0a0d43b92cfb" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1534" height="548" alt="Screenshot 2026-06-13 at 1 38 58 PM" src="https://github.com/user-attachments/assets/9669c92f-3358-4de0-83df-1b51bac8d584" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1533" height="796" alt="Screenshot 2026-06-13 at 1 42 40 PM" src="https://github.com/user-attachments/assets/74d7f8cc-1da0-44a2-ad67-5671bd629167" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1541" height="491" alt="Screenshot 2026-06-13 at 1 44 03 PM" src="https://github.com/user-attachments/assets/c4f81e38-0cfa-42d9-bb0f-39283d1a8ee6" />
 
 
@@ -309,7 +337,15 @@ Duration: ~20 minutes (first run; subsequent runs use layer cache)
 
 <img width="1067" height="708" alt="Screenshot 2026-06-12 at 6 31 52 PM" src="https://github.com/user-attachments/assets/9562f432-7155-46c1-8dc5-661fa0398137" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1069" height="710" alt="Screenshot 2026-06-12 at 6 32 32 PM" src="https://github.com/user-attachments/assets/060640bc-ee71-4d33-8b72-65afcf15b19c" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1534" height="554" alt="Screenshot 2026-06-13 at 1 47 13 PM" src="https://github.com/user-attachments/assets/9eb469f6-8cf6-4ee3-835c-eaf1c4df66ea" />
 
@@ -322,7 +358,15 @@ Duration: ~5 minutes
 
 <img width="987" height="698" alt="Screenshot 2026-06-13 at 11 37 43 AM" src="https://github.com/user-attachments/assets/89e41772-5888-4db3-bd57-765976054416" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="967" height="698" alt="Screenshot 2026-06-13 at 11 42 07 AM" src="https://github.com/user-attachments/assets/bc63b387-e617-45a4-9d42-1ea5445ed287" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1535" height="852" alt="Screenshot 2026-06-13 at 1 53 50 PM" src="https://github.com/user-attachments/assets/1aafeaae-745d-49a0-90dd-f0ea990a2b59" />
 
@@ -335,7 +379,15 @@ Requires: `AZDO_PAT_TOKEN`, `AZURE_SP_APP_ID`, `AZURE_SP_SECRET`, `AZURE_TENANT_
 
 <img width="1027" height="717" alt="Screenshot 2026-06-12 at 9 56 33 PM" src="https://github.com/user-attachments/assets/b95000c8-d8ff-431a-8a5c-0c30fc30b1f8" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1020" height="712" alt="Screenshot 2026-06-12 at 9 56 49 PM" src="https://github.com/user-attachments/assets/8cf77e36-c1e6-419b-aec6-205745805b9e" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1538" height="563" alt="Screenshot 2026-06-13 at 1 57 21 PM" src="https://github.com/user-attachments/assets/4ba722c4-ff76-4429-905a-5f307f735f0e" />
 
@@ -347,14 +399,41 @@ Output: NSFW + Violence detection endpoints; patches Kubernetes ConfigMap
 
 <img width="993" height="401" alt="Screenshot 2026-06-13 at 11 44 25 AM" src="https://github.com/user-attachments/assets/09b45678-d46d-46f0-9a17-6571e1b2e296" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1534" height="370" alt="Screenshot 2026-06-13 at 2 00 21 PM" src="https://github.com/user-attachments/assets/aec2e42d-2418-4f2d-acf0-39bf08be57de" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1536" height="827" alt="Screenshot 2026-06-13 at 2 00 58 PM" src="https://github.com/user-attachments/assets/a009a1c1-8ebf-4795-9eae-956c33d1d8d2" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1537" height="592" alt="Screenshot 2026-06-13 at 2 02 15 PM" src="https://github.com/user-attachments/assets/62240ac2-aecc-45fd-b05d-abedde41d032" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1532" height="533" alt="Screenshot 2026-06-13 at 2 02 30 PM" src="https://github.com/user-attachments/assets/eb638edb-96d5-4210-a431-afc3f7958a24" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1537" height="625" alt="Screenshot 2026-06-13 at 2 02 43 PM" src="https://github.com/user-attachments/assets/5895e801-b2b8-4d79-94e9-eb10e23a65e1" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1536" height="641" alt="Screenshot 2026-06-13 at 2 03 01 PM" src="https://github.com/user-attachments/assets/a145dae4-3685-40e6-83e6-53f6d2f869bf" />
-
-
 
 
 ## Running Tests
@@ -375,22 +454,47 @@ python -m pytest tests/smoke/test_smoke.py -v
 
 <img width="1425" height="749" alt="Screenshot 2026-06-12 at 7 14 59 PM" src="https://github.com/user-attachments/assets/21b47b9c-a765-410d-b884-e6ddeeee3e1e" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1425" height="748" alt="Screenshot 2026-06-12 at 7 15 30 PM" src="https://github.com/user-attachments/assets/e3108378-abd4-4731-b7d1-bc896244c114" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1423" height="738" alt="Screenshot 2026-06-12 at 7 21 29 PM" src="https://github.com/user-attachments/assets/b9641869-4736-4a23-a368-198d3fd7d64f" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="947" height="633" alt="Screenshot 2026-06-12 at 7 21 45 PM" src="https://github.com/user-attachments/assets/b9089802-cc87-4b84-8c0e-63c8291fe623" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1106" height="747" alt="Screenshot 2026-06-12 at 7 22 09 PM" src="https://github.com/user-attachments/assets/0fc48727-5094-4ddd-8f40-5788ce14bbaa" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="955" height="644" alt="Screenshot 2026-06-12 at 7 24 39 PM" src="https://github.com/user-attachments/assets/f46df4af-4e39-4aae-a657-88d2af545359" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1130" height="745" alt="Screenshot 2026-06-12 at 7 29 56 PM" src="https://github.com/user-attachments/assets/b2051f61-7e64-4ea2-8255-de98af82b185" />
 
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="1424" height="742" alt="Screenshot 2026-06-12 at 7 29 38 PM" src="https://github.com/user-attachments/assets/e9454af0-e98a-42c2-97de-9e5e6a17762d" />
-
-
-
 
 
 ## GitHub Actions CI/CD
@@ -420,6 +524,10 @@ Push any change to a service file and the workflow runs automatically.
 GitHub UI: Actions tab → Guardian AI — Deploy to AKS → Run workflow
 
 <img width="1432" height="379" alt="Screenshot 2026-06-13 at 9 51 23 AM" src="https://github.com/user-attachments/assets/31ea7939-2283-455c-afed-b1f098de4228" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
 
 <img width="1700" height="687" alt="Screenshot 2026-06-13 at 10 11 53 AM" src="https://github.com/user-attachments/assets/30dd0a3c-d825-45ae-9730-b67c2ae13741" />
 
@@ -456,6 +564,11 @@ chmod +x aws_resource_cleanup.sh
 ./aws_resource_cleanup.sh
 ```
 <img width="993" height="698" alt="Screenshot 2026-06-13 at 2 13 43 PM" src="https://github.com/user-attachments/assets/6e3606e6-ee93-4af1-ac30-d30fcadc45ef" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="993" height="697" alt="Screenshot 2026-06-13 at 2 14 09 PM" src="https://github.com/user-attachments/assets/ac995030-2cf8-45af-b545-2b8295b734ad" />
 
 
@@ -467,6 +580,11 @@ az group delete --name guardian-ai-prod --yes --no-wait
 ```
 
 <img width="1002" height="339" alt="Screenshot 2026-06-13 at 2 32 41 PM" src="https://github.com/user-attachments/assets/592a314f-83d1-41ef-8f8d-85d969cdb898" />
+
+<br>
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
 <img width="991" height="232" alt="Screenshot 2026-06-13 at 2 40 31 PM" src="https://github.com/user-attachments/assets/437a021a-584b-4b84-ae06-14ed9505f842" />
 
 
