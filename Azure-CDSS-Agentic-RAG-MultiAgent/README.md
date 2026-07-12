@@ -360,10 +360,8 @@ Duration: ~15 seconds
 
 <img width="982" height="726" alt="Screenshot 2026-07-01 at 12 09 19 AM" src="https://github.com/user-attachments/assets/de8f78f9-290d-4a49-b021-e26b865beae4" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="971" height="725" alt="Screenshot 2026-07-01 at 12 10 36 AM" src="https://github.com/user-attachments/assets/77b868e1-b5a4-45bf-8df1-6af459fbb946" />
 
 
@@ -433,22 +431,16 @@ make lint
 
 <img width="902" height="502" alt="Screenshot 2026-06-29 at 11 10 55 AM" src="https://github.com/user-attachments/assets/c9419acd-f516-4e28-8a34-c5893a0d49af" />  
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="905" height="395" alt="Screenshot 2026-06-29 at 11 10 01 AM" src="https://github.com/user-attachments/assets/ec7533a2-3845-4d06-a44e-3aae92635284" />  
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1418" height="706" alt="Screenshot 2026-06-30 at 7 10 21 PM" src="https://github.com/user-attachments/assets/219ce12c-46a6-47de-a589-8d7b2e4f8632" />  
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1421" height="746" alt="Screenshot 2026-06-30 at 7 10 34 PM" src="https://github.com/user-attachments/assets/e5dfdbd7-ce20-4f60-a9e5-a5062c75a0c3" />  
 
 
@@ -485,10 +477,8 @@ View traces in Azure Portal → Application Insights → Transaction search / Pe
 
 <img width="1424" height="702" alt="Screenshot 2026-07-04 at 1 47 04 PM" src="https://github.com/user-attachments/assets/d8f201cb-eef9-49a6-8cb1-57ce49a2b834" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="716" height="273" alt="Screenshot 2026-07-04 at 1 47 21 PM" src="https://github.com/user-attachments/assets/67141588-5291-4b66-aadd-9d76442064a0" />
 
 
