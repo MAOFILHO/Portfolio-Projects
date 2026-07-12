@@ -735,3 +735,6 @@ agent_entrypoint.py → Strands Agent (Nova Pro)
 <img width="1419" height="735" alt="Screenshot 2026-06-16 at 8 50 58 PM" src="https://github.com/user-attachments/assets/16189012-1bff-4599-a9e2-848b1af18e34" />
 
 
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
