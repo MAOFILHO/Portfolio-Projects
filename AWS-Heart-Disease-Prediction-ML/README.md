@@ -250,3 +250,8 @@ Input: Age = 68, Cholesterol = 250
 
 `AWS` `SageMaker` `SageMakerCanvas` `NoCodeAI` `HealthcareAI`
 `MachineLearning` `Autopilot` `DataWrangler` `CloudAI` `AIF-C01` `MLA-C01`
+
+
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
