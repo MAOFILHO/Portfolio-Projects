@@ -156,58 +156,40 @@ Input: Age = 68, Cholesterol = 250
 
 <img width="1664" height="661" alt="01-sagemaker-create-domain" src="https://github.com/user-attachments/assets/2611caa3-b817-4ef6-b493-17581b563cbe" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="2852" height="1404" alt="02-heart-disease-dataset" src="https://github.com/user-attachments/assets/95e259e4-e97b-4c24-bcba-c8cb64abebc8" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1298" height="501" alt="03-sagemaker-canvas" src="https://github.com/user-attachments/assets/ff49a648-38d5-473f-a3f1-f4e30226b102" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1669" height="515" alt="04-data-wrangler" src="https://github.com/user-attachments/assets/93899765-10ad-458d-99ae-5e39d8de471d" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1661" height="896" alt="05-import-dataset" src="https://github.com/user-attachments/assets/9815f079-2a51-47d3-a761-0a956cc733fc" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1561" height="618" alt="06-model-quick-build" src="https://github.com/user-attachments/assets/7a692d20-26de-4300-bed3-8c0ab9f6d012" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1561" height="652" alt="07-creating-model" src="https://github.com/user-attachments/assets/862b91b0-363c-4648-93bd-4d7e98a074d0" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1562" height="588" alt="08-model-deployed" src="https://github.com/user-attachments/assets/4c5cf7df-f632-4989-9938-a4a409d097a3" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="1561" height="470" alt="09-prediction-01" src="https://github.com/user-attachments/assets/0b7ac37a-beb7-4502-a08f-2062b07aa305" />
 
-<br>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
+<br><br>
 <img width="644" height="482" alt="10-prediction-02" src="https://github.com/user-attachments/assets/d94da754-72e1-4d52-9872-f644ded026b7" />
 
 
