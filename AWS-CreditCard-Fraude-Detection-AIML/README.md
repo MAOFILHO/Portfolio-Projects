@@ -479,19 +479,13 @@ aws cloudformation delete-stack --stack-name fraud-detection-stack
 - **AWS SageMaker Team** — for the open-source CloudFormation solution template (SO0056)
 
 
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
+
+
 
 ## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-<br>
-<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br>
-
-<div align="center">
-
-**Built with ❤️ on Amazon SageMaker**
-
-[⭐ Star this repo](https://github.com/MAOFILHO/fraud-detection-sagemaker) · [🐛 Report an issue](https://github.com/MAOFILHO/fraud-detection-sagemaker/issues) · [🔗 Connect on LinkedIn](https://linkedin.com/in/mfilho1)
-
-</div>
