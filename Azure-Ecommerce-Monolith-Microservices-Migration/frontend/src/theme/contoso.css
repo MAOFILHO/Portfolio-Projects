@@ -1,0 +1,243 @@
+:root {
+  --contoso-blue: #0078d4;
+  --contoso-blue-dark: #005a9e;
+  --contoso-navy: #002050;
+  --contoso-bg: #f3f6fa;
+  --contoso-surface: #ffffff;
+  --contoso-text: #1b1b1f;
+  --contoso-muted: #5b6472;
+  --contoso-border: #d8dee6;
+  --contoso-success: #107c10;
+  --contoso-warning: #d0742a;
+  --contoso-danger: #c4314b;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --contoso-bg: #0f1720;
+    --contoso-surface: #17212c;
+    --contoso-text: #f0f3f7;
+    --contoso-muted: #9aa7b5;
+    --contoso-border: #2a3745;
+  }
+}
+
+:root[data-theme="dark"] {
+  --contoso-bg: #0f1720;
+  --contoso-surface: #17212c;
+  --contoso-text: #f0f3f7;
+  --contoso-muted: #9aa7b5;
+  --contoso-border: #2a3745;
+}
+
+:root[data-theme="light"] {
+  --contoso-bg: #f3f6fa;
+  --contoso-surface: #ffffff;
+  --contoso-text: #1b1b1f;
+  --contoso-muted: #5b6472;
+  --contoso-border: #d8dee6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--contoso-bg);
+  color: var(--contoso-text);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-nav {
+  background: linear-gradient(90deg, var(--contoso-navy), var(--contoso-blue));
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 1.5rem;
+  height: 56px;
+  box-shadow: var(--shadow);
+}
+
+.top-nav .brand {
+  font-weight: 600;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.top-nav .brand-badge {
+  background: white;
+  color: var(--contoso-blue-dark);
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}
+
+.top-nav nav {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.top-nav a {
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+}
+
+.top-nav a.active,
+.top-nav a:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+main.page {
+  flex: 1;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.card {
+  background: var(--contoso-surface);
+  border: 1px solid var(--contoso-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--contoso-navy);
+}
+
+:root[data-theme="dark"] h1,
+:root[data-theme="dark"] h2,
+:root[data-theme="dark"] h3 {
+  color: #cfe3ff;
+}
+
+.btn {
+  background: var(--contoso-blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.55rem 1.1rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--contoso-blue-dark);
+}
+
+.btn:disabled {
+  background: var(--contoso-muted);
+  cursor: not-allowed;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--contoso-blue);
+  border: 1px solid var(--contoso-blue);
+}
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pill.pending {
+  background: #e8eaed;
+  color: var(--contoso-muted);
+}
+
+.pill.running {
+  background: #fff3d6;
+  color: var(--contoso-warning);
+}
+
+.pill.done {
+  background: #dff6dd;
+  color: var(--contoso-success);
+}
+
+.pill.failed {
+  background: #fde7ea;
+  color: var(--contoso-danger);
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.grid.cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.grid.cols-3 {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.muted {
+  color: var(--contoso-muted);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.timeline li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--contoso-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: var(--contoso-surface);
+}
+
+.log-box {
+  background: #0c1420;
+  color: #b7f5c0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  border-radius: var(--radius);
+  padding: 1rem;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}

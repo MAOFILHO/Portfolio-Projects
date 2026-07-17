@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/bffclient.ts","./src/components/architecturediagram.tsx","./src/components/navbar.tsx","./src/pages/home.tsx","./src/pages/learn.tsx","./src/pages/metrics.tsx","./src/pages/migrate.tsx","./src/pages/shop.tsx"],"version":"5.9.3"}

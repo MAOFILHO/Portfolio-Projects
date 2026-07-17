@@ -1,0 +1,8 @@
+# Dev/test tooling — used by scripts/benchmark.py, tests/, and scripts/setup.py.
+# Each Flask service and the BFF has its own separate requirements.txt/venv;
+# this one is for the repo-root tooling that isn't deployed anywhere.
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx==0.28.1
+pydantic[email]==2.10.3
+psutil==6.1.0

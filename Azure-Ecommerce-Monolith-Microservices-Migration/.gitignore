@@ -1,0 +1,42 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.sqlite3
+*.db
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+.azure/
+.aws/
+infra/.state.json
+*.pem
+*.key
+
+# --- Node / React ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- Test / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+results/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# --- Flask-Migrate working files ---
+migrations/versions/__pycache__/
+
+# --- Staged for az acr build, cleaned up after (see infra/provision.py build_images) ---
+bff/scripts/

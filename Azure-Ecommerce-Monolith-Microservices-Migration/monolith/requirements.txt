@@ -1,0 +1,10 @@
+Flask==3.1.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.7
+Flask-Login==0.6.3
+SQLAlchemy==2.0.36
+PyMySQL==1.1.1
+passlib==1.7.4
+python-dotenv==1.0.1
+gunicorn==23.0.0
+pydantic[email]==2.10.3
