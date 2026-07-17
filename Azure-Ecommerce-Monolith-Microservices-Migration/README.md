@@ -50,6 +50,10 @@ Browser → BFF (proxy) →  ┌────────────────
                          └─────────────────────────────┘
 ```
 
+<img width="1428" height="976" alt="Screenshot 2026-07-16 at 8 55 57 PM" src="https://github.com/user-attachments/assets/7dae2caa-ceef-4a1c-917d-9e6b18b656b9" />
+
+
+
 ## Architecture — After (Microservices)
 
 ```
@@ -66,6 +70,9 @@ Browser → BFF ──────┤     ┌───────────�
                                      ▼
                           user-service :5001 (validates api_key)
 ```
+
+<img width="1456" height="986" alt="Screenshot 2026-07-16 at 8 18 11 PM" src="https://github.com/user-attachments/assets/9dd6f950-2fb3-4382-91e1-38cc4c5ca8f0" />
+
 
 Note the key architectural difference the migration introduces: in the monolith, order logic
 queries the `User` table directly in the same database session. In the microservices version,
@@ -121,6 +128,14 @@ product→add to cart→checkout flow against the post-migration microservices s
 
 
 
+<img width="1456" height="986" alt="Screenshot 2026-07-16 at 8 18 11 PM" src="https://github.com/user-attachments/assets/39e90fdd-3262-41e5-8a87-7872d3523da0" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="884" height="981" alt="Screenshot 2026-07-16 at 8 18 39 PM" src="https://github.com/user-attachments/assets/eb6cbcdf-d6bc-46e7-8b23-56e4a93847b7" />
+
+
+
 ## The Metrics page — real numbers, not fabricated ones
 
 `scripts/benchmark.py` hits the monolith and product-service **directly** (ports 6000 and 5002),
@@ -132,6 +147,8 @@ processes/three DBs," not an extra proxy hop or a different framework. Results a
 > **FastAPI is only used for the BFF** — the orchestration/proxy layer in front of both stacks,
 > not part of either side being measured. Both the monolith and all three microservices are Flask.
 
+
+<img width="1419" height="613" alt="Screenshot 2026-07-16 at 10 01 46 PM" src="https://github.com/user-attachments/assets/0bf95023-8d4e-4da7-9998-d3f62599fafe" />
 
 
 ## Tech stack
@@ -171,6 +188,10 @@ make setup                 # creates 5 Python 3.12 venvs + installs frontend npm
 make run-all                # starts monolith + all 3 microservices + bff + frontend together
 ```
 
+<img width="1059" height="711" alt="Screenshot 2026-07-15 at 4 27 57 PM" src="https://github.com/user-attachments/assets/1792d204-d6a4-411c-b147-a1a5bc0952ba" />
+
+
+
 Open **http://127.0.0.1:5173**.
 
 > Use `make run-all` (not plain `make run`) if you plan to run the benchmark: the benchmark needs
@@ -179,6 +200,10 @@ Open **http://127.0.0.1:5173**.
 > its last step, so the two are never both up together on that path). `make run-all` starts
 > everything at once with nothing auto-stopped, so both the walkthrough below and a real fresh
 > Migrate demo both work from the same starting point.
+
+<img width="1424" height="699" alt="Screenshot 2026-07-16 at 9 19 20 AM" src="https://github.com/user-attachments/assets/dfc83ddb-0f29-401f-9b95-7ed03a5d38e0" />
+
+
 
 ### Suggested first walkthrough
 
@@ -267,6 +292,9 @@ make teardown
 make verify     # polls until every resource is confirmed deleted
 ```
 
+<img width="1053" height="167" alt="Screenshot 2026-07-17 at 3 25 45 PM" src="https://github.com/user-attachments/assets/d4b896fe-4b16-4e32-88fd-a02d02ee5d43" />
+
+
 `provision.py` resolves collision-safe resource names (auto-incrementing on any naming collision
 — tested for real against a live throwaway Azure Container Registry during development, including
 discovering and fixing an ACR-specific naming-rule edge case), deploys the trimmed
@@ -311,7 +339,6 @@ monolith/tests/, microservices/*/tests/, bff/tests/   per-service unit tests
 ```
 
 
-
 ## Running tests
 
 ```bash
@@ -320,7 +347,7 @@ make smoke      # smoke tests — pre-setup checks always run; post-setup/post-r
                 # checks skip gracefully if their prerequisite (make setup / make run / an Azure
                 # deployment) hasn't happened yet, rather than failing
 ```
-
+<img width="1067" height="706" alt="Screenshot 2026-07-17 at 3 29 31 PM" src="https://github.com/user-attachments/assets/714b12bd-ccd9-4883-9bfd-ff72b94342f0" />
 
 
 ## Key engineering decisions
@@ -344,8 +371,45 @@ make smoke      # smoke tests — pre-setup checks always run; post-setup/post-r
 make teardown    # deletes every Azure resource
 make verify      # confirms deletion completed (polls — resource group deletion is asynchronous)
 ```
+<img width="1053" height="167" alt="Screenshot 2026-07-17 at 3 25 45 PM" src="https://github.com/user-attachments/assets/d4b896fe-4b16-4e32-88fd-a02d02ee5d43" />
 
 `make teardown` is a no-op if nothing was ever provisioned (checks for `infra/.state.json` first).
+
+## E-commerce Web App Screenshots
+
+<img width="1469" height="828" alt="Screenshot 2026-07-16 at 8 51 10 PM" src="https://github.com/user-attachments/assets/7289cd89-6e2d-4643-9340-eb9225ff03df" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1451" height="871" alt="Screenshot 2026-07-16 at 8 53 08 PM" src="https://github.com/user-attachments/assets/e120982f-3c5a-4c77-969b-d314fbc924cb" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1453" height="874" alt="Screenshot 2026-07-16 at 8 55 41 PM" src="https://github.com/user-attachments/assets/21a3924c-1a10-42d9-bac5-d91ecbed7fa5" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="867" height="394" alt="Screenshot 2026-07-16 at 8 55 27 PM" src="https://github.com/user-attachments/assets/e3ce6232-8f14-440d-8c78-4cfbf257e492" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1450" height="983" alt="Screenshot 2026-07-16 at 8 19 08 PM" src="https://github.com/user-attachments/assets/f7b35522-8570-41a9-8f94-6ab789e8046b" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1457" height="984" alt="Screenshot 2026-07-16 at 8 23 31 PM" src="https://github.com/user-attachments/assets/9f9e6d00-f69c-4972-9baa-63b2827d3125" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1456" height="986" alt="Screenshot 2026-07-16 at 8 18 11 PM" src="https://github.com/user-attachments/assets/1f24690b-f969-43f4-af10-25299730949c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1419" height="613" alt="Screenshot 2026-07-16 at 10 01 46 PM" src="https://github.com/user-attachments/assets/ff847e47-7a3e-4977-a68c-b814ef130a94" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="892" height="701" alt="Screenshot 2026-07-16 at 10 01 57 PM" src="https://github.com/user-attachments/assets/241ad6ee-342f-4f88-bfbc-9a5b1a737948" />
 
 
 
