@@ -147,6 +147,11 @@ processes/three DBs," not an extra proxy hop or a different framework. Results a
 > not part of either side being measured. Both the monolith and all three microservices are Flask.
 
 
+
+<img width="1393" height="674" alt="Screenshot 2026-07-17 at 4 32 10 PM" src="https://github.com/user-attachments/assets/ec0c1348-4810-49d8-9216-ace347fbb435" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1419" height="613" alt="Screenshot 2026-07-16 at 10 01 46 PM" src="https://github.com/user-attachments/assets/0bf95023-8d4e-4da7-9998-d3f62599fafe" />
 
 
@@ -267,6 +272,24 @@ before/after), which is what makes watching the migration actually happen feel r
 ```bash
 make provision BUDGET_EMAIL=you@example.com
 ```
+
+<img width="1063" height="708" alt="Screenshot 2026-07-17 at 4 07 55 PM" src="https://github.com/user-attachments/assets/7aadfd09-8311-4f78-915f-383eaeb10625" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1060" height="709" alt="Screenshot 2026-07-17 at 4 08 21 PM" src="https://github.com/user-attachments/assets/312b48fc-5fbf-42d7-8595-3f6203be2589" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1064" height="715" alt="Screenshot 2026-07-17 at 4 09 06 PM" src="https://github.com/user-attachments/assets/63dbe9f9-f25a-41f1-bae0-d6cf50ca704c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1064" height="659" alt="Screenshot 2026-07-17 at 4 25 21 PM" src="https://github.com/user-attachments/assets/43883ac7-90e2-4427-91ab-443f7f32969c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="843" height="590" alt="Screenshot 2026-07-17 at 4 20 49 PM" src="https://github.com/user-attachments/assets/4bd7c1fc-c686-43f5-a6f0-c1152c2683f0" />
 
 This deploys the foundation (ACR, Container Apps Environment, MySQL Flexible Server, Static Web
 App, Log Analytics, budget alert) plus exactly **two** Container Apps: `monolith` and `bff`. The
