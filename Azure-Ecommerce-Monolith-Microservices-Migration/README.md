@@ -316,6 +316,10 @@ make verify     # polls until every resource is confirmed deleted
 
 <img width="1053" height="167" alt="Screenshot 2026-07-17 at 3 25 45 PM" src="https://github.com/user-attachments/assets/d4b896fe-4b16-4e32-88fd-a02d02ee5d43" />
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1061" height="127" alt="Screenshot 2026-07-17 at 5 22 42 PM" src="https://github.com/user-attachments/assets/04847204-720e-412e-a33f-fa6d4320731c" />
+
 
 `provision.py` resolves collision-safe resource names (auto-incrementing on any naming collision
 — tested for real against a live throwaway Azure Container Registry during development, including
