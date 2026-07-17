@@ -43,12 +43,12 @@ with a real (not simulated) migration process you can trigger and watch.
 ## Architecture — Before (Monolith)
 
 ```
-Browser → BFF (proxy) → ┌─────────────────────────────┐
+Browser → BFF (proxy) →  ┌─────────────────────────────┐
                          │   monolith (Flask, :6000)   │
                          │   ├── auth blueprint        │
                          │   ├── catalog blueprint     │
                          │   └── orders blueprint      │
-                         │   one shared database        │  ← "Shared Persistence"
+                         │   one shared database       │  ← "Shared Persistence"
                          └─────────────────────────────┘
 ```
 
@@ -62,7 +62,7 @@ Browser → BFF ──────┤     ┌───────────�
  (proxy, :8000)     ├────►│ product-service :5002│──► product_db
                     │     └──────────────────────┘
                     │     ┌──────────────────────┐
-                    └────►│ order-service  :5003  │──► order_db
+                    └────►│ order-service  :5003 │──► order_db
                           └──────────┬───────────┘
                                      │ HTTP (Anti-Corruption Layer)
                                      ▼
@@ -317,7 +317,7 @@ monolith/tests/, microservices/*/tests/, bff/tests/   per-service unit tests
 ## Running tests
 
 ```bash
-make test      # unit tests — no services need to be running
+make test       # unit tests — no services need to be running
 make smoke      # smoke tests — pre-setup checks always run; post-setup/post-run/post-teardown
                 # checks skip gracefully if their prerequisite (make setup / make run / an Azure
                 # deployment) hasn't happened yet, rather than failing
@@ -344,7 +344,7 @@ make smoke      # smoke tests — pre-setup checks always run; post-setup/post-r
 
 ```bash
 make teardown    # deletes every Azure resource
-make verify       # confirms deletion completed (polls — resource group deletion is asynchronous)
+make verify      # confirms deletion completed (polls — resource group deletion is asynchronous)
 ```
 
 `make teardown` is a no-op if nothing was ever provisioned (checks for `infra/.state.json` first).
