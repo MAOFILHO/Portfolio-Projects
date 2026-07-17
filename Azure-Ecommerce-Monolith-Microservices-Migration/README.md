@@ -1,4 +1,6 @@
-# Flask Monolith → Microservices — A Live Migration Showcase
+# Azure-Ecommerce-Monolith-Microservices-Migration
+### A live Strangler Fig cutover — not an animation
+
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
@@ -13,10 +15,6 @@ shared database) and as **three independently deployable microservices** (user, 
 each owning its own database). Click **Migrate** and watch a real strangler-fig cutover happen
 live — not an animation. Compare real before/after performance numbers. Read the architectural
 reasoning behind it all.
-
-Built from [`python-flask-microservices`](https://github.com/cloudacademy/python-flask-microservices)
-(a 2020-era CloudAcademy course repo) and modernized into a self-contained, GitHub-ready project.
-
 
 
 ## The Problem
