@@ -181,6 +181,21 @@ processes/three DBs," not an extra proxy hop or a different framework. Results a
 
 
 
+## Two ways to run this — pick one
+
+| | **Local** (free, no Azure) | **Azure** (the flagship demo) |
+|---|---|---|
+| Command | `make setup` then `make run-all` | `az login`, then `make provision BUDGET_EMAIL=you@example.com` — **`make setup` is not required for this path** |
+| What it needs | Python 3.12 + Node.js only | Azure CLI logged in to a subscription — that's it |
+| Why | `make setup` creates the 5 local Python venvs + frontend npm deps that `make run` / `make run-all` / `make test` run against | `infra/provision.py` has zero third-party dependencies (stdlib only) and builds every container image remotely via `az acr build` — it never touches the local venvs, so skipping `make setup` is fine if you're going straight to Azure |
+| Cost | $0 | ~$0.21 for an 8-hour session, ~$19.51/mo if left running — see the cost table below. Run `make teardown` when done. |
+
+Doing both (local first, then Azure) is completely fine too — the two paths don't conflict — but
+**neither is a prerequisite for the other.** If you only care about the Azure demo, you can skip
+straight to `git clone` → `az login` → `make provision` below without ever running `make setup`.
+
+
+
 ## Setup & running locally (optional — 100% local, zero cost)
 
 ```bash
@@ -269,7 +284,16 @@ migration from the browser. Nothing runs side-by-side in the cloud the way `make
 locally — the cloud story is strictly sequential (deploy monolith → migrate live → compare
 before/after), which is what makes watching the migration actually happen feel real.
 
+> **You do not need to run `make setup` first.** `infra/provision.py` has zero third-party
+> dependencies and never touches the local Python venvs — the only prerequisite is being logged
+> into the Azure CLI (`az login`). Clone the repo and go straight to the command below.
+
 ```bash
+git clone <your-fork-url> flask-monolith-to-microservices
+cd flask-monolith-to-microservices
+az login
+az account set --subscription "<subscription-id-or-name>"   # if you have more than one
+
 make provision BUDGET_EMAIL=you@example.com
 ```
 

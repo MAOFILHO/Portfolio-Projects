@@ -90,6 +90,57 @@ def _redact_secrets(args: list[str]) -> list[str]:
     return redacted
 
 
+def clickable_url(url: str) -> str:
+    """Wraps a URL in an ANSI OSC-8 hyperlink plus underlined light-blue text,
+    so it's both clickable and visually prominent in terminals that support
+    it (iTerm2, Terminal.app, most modern Linux terminals). Falls back to a
+    plain URL when stdout isn't a real terminal (e.g. piped to a log file),
+    since raw escape codes would just show up as garbage there."""
+    if not sys.stdout.isatty():
+        return url
+    light_blue_underline = "\033[4;94m"
+    reset = "\033[0m"
+    return f"\033]8;;{url}\033\\{light_blue_underline}{url}{reset}\033]8;;\033\\"
+
+
+def deploy_frontend(resource_group: str, static_web_app_name: str, bff_fqdn: str) -> None:
+    """Builds the React frontend against the just-deployed bff's real FQDN and
+    uploads it into the Static Web App via the SWA CLI (`npx
+    @azure/static-web-apps-cli deploy`). Without this step the Static Web App
+    resource exists but has never received any content, so it permanently
+    shows Azure's "Congratulations on your new site! ... check back later"
+    placeholder — that page never resolves on its own, no matter how long
+    you wait, until something actually deploys to it."""
+    frontend_dir = REPO_ROOT / "frontend"
+    print(f"\n=== Building frontend against bff https://{bff_fqdn} ===")
+    if not (frontend_dir / "node_modules").exists():
+        subprocess.run(["npm", "install", "--silent"], cwd=frontend_dir, check=True)
+    build_env = {**os.environ, "VITE_BFF_BASE_URL": f"https://{bff_fqdn}"}
+    subprocess.run(["npm", "run", "build"], cwd=frontend_dir, env=build_env, check=True)
+
+    deployment_token = subprocess.run(
+        [
+            "az", "staticwebapp", "secrets", "list",
+            "--name", static_web_app_name,
+            "--resource-group", resource_group,
+            "--query", "properties.apiKey",
+            "--output", "tsv",
+        ],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    print(f"=== Deploying frontend/dist to Static Web App '{static_web_app_name}' ===")
+    subprocess.run(
+        [
+            "npx", "--yes", "@azure/static-web-apps-cli", "deploy",
+            str(frontend_dir / "dist"),
+            "--deployment-token", deployment_token,
+            "--env", "production",
+        ],
+        cwd=frontend_dir, check=True,
+    )
+
+
 def run_az(args: list[str], capture: bool = True) -> subprocess.CompletedProcess:
     cmd = ["az", *args, "--output", "json"]
     print(f"$ {' '.join(_redact_secrets(cmd))}")
@@ -375,6 +426,8 @@ def main() -> int:
 
     create_budget_alert(args.resource_group, subscription_id, args.budget_ceiling, args.budget_email)
 
+    deploy_frontend(args.resource_group, names["static_web_app_name"], output_values["bffFqdn"])
+
     acr_password = get_acr_password(args.resource_group, names["acr_name"])
 
     state = {
@@ -406,7 +459,8 @@ def main() -> int:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2))
     print(f"\nState persisted to {STATE_FILE} (gitignored).")
-    print(f"\nFoundation + monolith are live. Static Web App: https://{output_values['staticWebAppHostname']}")
+    static_web_app_url = f"https://{output_values['staticWebAppHostname']}"
+    print(f"\nFoundation + monolith are live. Static Web App: {clickable_url(static_web_app_url)}")
     print("Open that URL, use the Shop against the monolith, then click 'Start Migration' on the")
     print("Migrate page — that's what creates user-service/product-service/order-service for real.")
     print("\nRemember: MySQL Flexible Server bills whether idle or not — run `make teardown` when finished.")
