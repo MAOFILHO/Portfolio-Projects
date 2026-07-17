@@ -315,6 +315,11 @@ make provision BUDGET_EMAIL=you@example.com
 <br><br>
 <img width="843" height="590" alt="Screenshot 2026-07-17 at 4 20 49 PM" src="https://github.com/user-attachments/assets/4bd7c1fc-c686-43f5-a6f0-c1152c2683f0" />
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1469" height="828" alt="Screenshot 2026-07-16 at 8 51 10 PM" src="https://github.com/user-attachments/assets/ed3f49d1-4bb0-4db8-8129-7f9242c7948b" />
+
+
 This deploys the foundation (ACR, Container Apps Environment, MySQL Flexible Server, Static Web
 App, Log Analytics, budget alert) plus exactly **two** Container Apps: `monolith` and `bff`. The
 bff Container App gets a system-assigned managed identity with `Contributor` scoped to just this
@@ -422,6 +427,10 @@ make teardown    # deletes every Azure resource
 make verify      # confirms deletion completed (polls — resource group deletion is asynchronous)
 ```
 <img width="1053" height="167" alt="Screenshot 2026-07-17 at 3 25 45 PM" src="https://github.com/user-attachments/assets/d4b896fe-4b16-4e32-88fd-a02d02ee5d43" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1061" height="127" alt="Screenshot 2026-07-17 at 5 22 42 PM" src="https://github.com/user-attachments/assets/04847204-720e-412e-a33f-fa6d4320731c" />
 
 `make teardown` is a no-op if nothing was ever provisioned (checks for `infra/.state.json` first).
 
