@@ -50,7 +50,6 @@ Browser → BFF (proxy) →  ┌────────────────
                          └─────────────────────────────┘
 ```
 
-<img width="1428" height="976" alt="Screenshot 2026-07-16 at 8 55 57 PM" src="https://github.com/user-attachments/assets/7dae2caa-ceef-4a1c-917d-9e6b18b656b9" />
 
 
 
@@ -70,8 +69,6 @@ Browser → BFF ──────┤     ┌───────────�
                                      ▼
                           user-service :5001 (validates api_key)
 ```
-
-<img width="1456" height="986" alt="Screenshot 2026-07-16 at 8 18 11 PM" src="https://github.com/user-attachments/assets/9dd6f950-2fb3-4382-91e1-38cc4c5ca8f0" />
 
 
 Note the key architectural difference the migration introduces: in the monolith, order logic
@@ -126,8 +123,10 @@ browser, confirmed via direct port checks that the monolith was truly stopped an
 microservices were truly running afterward, then ran the full register→login→create
 product→add to cart→checkout flow against the post-migration microservices stack.
 
+<img width="1428" height="976" alt="Screenshot 2026-07-16 at 8 55 57 PM" src="https://github.com/user-attachments/assets/7dae2caa-ceef-4a1c-917d-9e6b18b656b9" />
 
-
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 <img width="1456" height="986" alt="Screenshot 2026-07-16 at 8 18 11 PM" src="https://github.com/user-attachments/assets/39e90fdd-3262-41e5-8a87-7872d3523da0" />
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
@@ -378,6 +377,10 @@ make verify      # confirms deletion completed (polls — resource group deletio
 ## E-commerce Web App Screenshots
 
 <img width="1469" height="828" alt="Screenshot 2026-07-16 at 8 51 10 PM" src="https://github.com/user-attachments/assets/7289cd89-6e2d-4643-9340-eb9225ff03df" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1424" height="699" alt="Screenshot 2026-07-16 at 9 19 20 AM" src="https://github.com/user-attachments/assets/dfc83ddb-0f29-401f-9b95-7ed03a5d38e0" />
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
