@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.pytest_cache/
+local.settings.json
+local.settings.json.example

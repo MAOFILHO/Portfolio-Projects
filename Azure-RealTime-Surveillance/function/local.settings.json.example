@@ -1,0 +1,19 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_CLIENT_ID": "",
+    "STORAGE_ACCOUNT_NAME": "",
+    "VISION_ENDPOINT": "",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
+    "ALERT_WATCH_TAGS": "person",
+    "ALERT_MIN_CONFIDENCE": "0.6",
+    "ALERT_MIN_COUNT": "1",
+    "ACS_CONNECTION_STRING": "",
+    "ACS_SENDER_EMAIL": "",
+    "ALERT_EMAIL_TO": "",
+    "ALERT_SMS_TO": "",
+    "ACS_SMS_FROM": ""
+  }
+}

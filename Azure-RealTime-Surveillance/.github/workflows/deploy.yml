@@ -1,0 +1,99 @@
+name: Deploy to Azure
+
+# Auto-deploys to Azure once CI (tests/lint/bicep-validate/frontend-build)
+# passes on main -- gated via workflow_run rather than a blind push trigger,
+# so a real Azure spend only happens after the tests actually pass.
+# workflow_dispatch is kept for manual runs (and the optional teardown_after
+# cost-safe validation run). Uses secretless federated (OIDC) Azure
+# credentials, the same pattern as
+# Video-Agents-Foundry-Solution/.github/workflows/azure-dev.yml.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      teardown_after:
+        description: "Tear down all resources immediately after a successful deploy + smoke test (useful for a scheduled cost-safe validation run)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      VISION_SKU: ${{ vars.VISION_SKU }}
+      STORAGE_SKU_NAME: ${{ vars.STORAGE_SKU_NAME }}
+      ALERT_WATCH_TAGS: ${{ vars.ALERT_WATCH_TAGS }}
+      ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+      IMAGE_BUILD_MODE: acr
+      # Nest doorbell ingestor (opt-in; adds an always-on Container App --
+      # see docs/cost.md). Leave NEST_INGESTOR_ENABLED unset/false to deploy
+      # everything else without it.
+      NEST_INGESTOR_ENABLED: ${{ vars.NEST_INGESTOR_ENABLED }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_DEVICE_ACCESS_PROJECT_ID: ${{ secrets.GOOGLE_DEVICE_ACCESS_PROJECT_ID }}
+      GOOGLE_DEVICES: ${{ secrets.GOOGLE_DEVICES }}
+      GCP_PUBSUB_PROJECT_ID: ${{ secrets.GCP_PUBSUB_PROJECT_ID }}
+      GCP_PUBSUB_SUBSCRIPTION_ID: ${{ vars.GCP_PUBSUB_SUBSCRIPTION_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Azure Functions Core Tools
+        run: npm install -g azure-functions-core-tools@4 --unsafe-perm true
+
+      - name: Install surveil-deploy
+        run: |
+          pip install -e ".[dev]"
+          pip install -e ./shared
+
+      - name: Write GCP service-account key (Nest ingestor only)
+        if: ${{ vars.NEST_INGESTOR_ENABLED == 'true' }}
+        run: echo "$GCP_KEY_JSON" > "$RUNNER_TEMP/gcp-key.json"
+        env:
+          GCP_KEY_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_JSON }}
+
+      - name: Deploy
+        run: surveil-deploy deploy
+        env:
+          GCP_SERVICE_ACCOUNT_KEY_PATH: ${{ vars.NEST_INGESTOR_ENABLED == 'true' && format('{0}/gcp-key.json', runner.temp) || '' }}
+
+      - name: Post-deploy smoke test
+        run: surveil-deploy smoke-test --stage post
+
+      - name: Tear down (if requested)
+        if: ${{ inputs.teardown_after }}
+        run: surveil-deploy teardown -y

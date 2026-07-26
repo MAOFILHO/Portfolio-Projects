@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "surveil-deploy"
+version = "0.1.0"
+description = "Zero-portal-click deployment CLI for the Azure Real-Time Surveillance system."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "typer==0.15.1",
+    "rich==13.9.4",
+    "pydantic==2.10.3",
+    "pydantic-settings==2.7.0",
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "pytest-cov==6.0.0",
+    "ruff==0.8.4",
+    "fastapi==0.115.6",
+    "httpx==0.28.1",
+]
+
+[project.scripts]
+surveil-deploy = "surveil_deploy.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/surveil_deploy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: requires a live Azure deployment (run after `surveil-deploy deploy`)"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

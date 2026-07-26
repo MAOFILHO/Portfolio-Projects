@@ -1,0 +1,20 @@
+azure-functions==1.21.3
+
+# Dependencies of shared/surveil_core, duplicated here (rather than referenced
+# by path) because Azure Functions' remote (Oryx) build only installs from
+# this file inside this app's own deployment package. The surveil_core
+# *source* itself is vendored into this folder by
+# src/surveil_deploy/steps/s06_deploy_function.py right before
+# `func azure functionapp publish` — see shared/README.md. Keep this list in
+# sync with shared/pyproject.toml's [project.dependencies]; a mismatch here
+# is caught by `make smoke-post` (function health check) after deploy.
+pydantic==2.10.3
+azure-ai-vision-imageanalysis==1.0.0b3
+azure-identity==1.19.0
+azure-storage-blob==12.24.0
+azure-storage-queue==12.12.0
+azure-data-tables==12.5.0
+azure-communication-email==1.0.0
+azure-communication-sms==1.1.0
+opencv-python-headless==4.10.0.84
+numpy==1.26.4

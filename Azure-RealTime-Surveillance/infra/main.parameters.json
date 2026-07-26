@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "surveil" },
+    "location": { "value": "eastus2" },
+    "resourceGroupName": { "value": "" },
+    "visionSkuName": { "value": "S1" },
+    "storageSkuName": { "value": "Standard_LRS" },
+    "alertWatchTags": { "value": "person" },
+    "alertMinConfidence": { "value": "0.6" },
+    "alertMinCount": { "value": "1" },
+    "acsSenderEmail": { "value": "" },
+    "alertEmailTo": { "value": "" },
+    "alertSmsTo": { "value": "" },
+    "acsSmsFrom": { "value": "" },
+    "nestIngestorEnabled": { "value": false },
+    "googleClientId": { "value": "" },
+    "googleClientSecret": { "value": "" },
+    "googleRefreshToken": { "value": "" },
+    "googleDeviceAccessProjectId": { "value": "" },
+    "googleDevices": { "value": "" },
+    "gcpPubsubProjectId": { "value": "" },
+    "gcpPubsubSubscriptionId": { "value": "nest-surveillance-sub" },
+    "gcpServiceAccountKeyJson": { "value": "" }
+  }
+}

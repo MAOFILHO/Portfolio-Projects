@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Env / secrets
+.env
+*.env.local
+deployment_state.json
+deployment_state.json.bak*
+ingestors/nest/.env
+.secrets/
+
+# Local-only scratch (backups, debug notes) — never committed
+.local/
+
+# Azure Functions
+function/local.settings.json
+function/.python_packages/
+function/__azurite_db*__.json
+function/__blobstorage__/
+function/__queuestorage__/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.production
+frontend/.env.local
+frontend/*.tsbuildinfo
+
+# Azure Developer CLI (not used here, but ignore if present)
+.azure/
+
+# Generated test fixtures (see tests/fixtures/README.md)
+tests/fixtures/*.jpg
+tests/fixtures/*.jpeg
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+ingestors/nest/received_frames/

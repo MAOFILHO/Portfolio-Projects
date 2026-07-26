@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "surveil-core"
+version = "0.1.0"
+description = "Shared detection, alerting, and storage logic for the Azure Real-Time Surveillance system (used by both the FastAPI backend and the Azure Function analysis worker)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic==2.10.3",
+    "azure-ai-vision-imageanalysis==1.0.0b3",
+    "azure-identity==1.19.0",
+    "azure-storage-blob==12.24.0",
+    "azure-storage-queue==12.12.0",
+    "azure-data-tables==12.5.0",
+    "azure-communication-email==1.0.0",
+    "azure-communication-sms==1.1.0",
+    "opencv-python-headless==4.10.0.84",
+    # Pinned below the 2.x line deliberately: numpy 2.5.1's published wheel
+    # for cp312 only targets manylinux_2_27/2_28, not manylinux2014 -- which
+    # is the platform tag s07_deploy_function.py must request to match Azure
+    # Functions' Linux Consumption runtime. 1.26.4 still ships a
+    # manylinux2014-compatible wheel and satisfies opencv-python-headless's
+    # own numpy>=1.21.2 requirement. Confirmed via a real `pip install
+    # --dry-run` against that exact platform/abi/python-version combination
+    # before landing this pin, after a live deploy failed on 2.5.1.
+    "numpy==1.26.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["surveil_core"]
+# Force-include the bundled SSD-MobileNet model weights -- hatchling's
+# default wheel file selection is VCS-status-aware, and these binary files
+# shouldn't silently drop out of the built package depending on git state.
+artifacts = ["surveil_core/models/ssd_mobilenet/*"]
