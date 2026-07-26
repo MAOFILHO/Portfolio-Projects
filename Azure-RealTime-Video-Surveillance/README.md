@@ -1,4 +1,4 @@
-# Azure Real-Time Surveillance
+# Azure Real-Time Video Surveillance
 
 ### Real-Time Camera Surveillance & Alerting on Azure AI
 
