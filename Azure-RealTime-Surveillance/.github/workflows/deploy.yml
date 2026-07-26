@@ -1,16 +1,17 @@
 name: Deploy to Azure
 
-# Auto-deploys to Azure once CI (tests/lint/bicep-validate/frontend-build)
-# passes on main -- gated via workflow_run rather than a blind push trigger,
-# so a real Azure spend only happens after the tests actually pass.
-# workflow_dispatch is kept for manual runs (and the optional teardown_after
-# cost-safe validation run). Uses secretless federated (OIDC) Azure
-# credentials, the same pattern as
+# Manual-only (workflow_dispatch): a human must explicitly click "Run
+# workflow" for this to fire -- there is no automatic trigger on push or on
+# CI success. This was deliberately tightened after starting out as an
+# automatic workflow_run-after-CI trigger: GitHub's required-reviewer
+# environment protection (the usual way to gate an auto-triggered deploy
+# behind approval) needs a paid plan for private repos, which this repo
+# doesn't have, so removing the automatic trigger entirely is the free-tier
+# equivalent of an approval gate -- every real Azure spend is a deliberate,
+# explicit action, never a side effect of a green CI run. Uses secretless
+# federated (OIDC) Azure credentials, the same pattern as
 # Video-Agents-Foundry-Solution/.github/workflows/azure-dev.yml.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       teardown_after:
@@ -22,11 +23,18 @@ permissions:
   id-token: write
   contents: read
 
+# Without this, two pushes close together (or a manual dispatch overlapping
+# an auto-triggered run) could start two concurrent deploys racing the same
+# resource group -- e.g. two `az deployment sub create` calls or two Function
+# code publishes at once. cancel-in-progress is deliberately false: cancelling
+# a live infra/Function deploy mid-flight is worse than making the next one
+# wait, since Azure resources can be left half-applied.
+concurrency:
+  group: deploy-to-azure-${{ vars.AZURE_ENV_NAME || 'surveil' }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -43,7 +51,7 @@ jobs:
       # Nest doorbell ingestor (opt-in; adds an always-on Container App --
       # see docs/cost.md). Leave NEST_INGESTOR_ENABLED unset/false to deploy
       # everything else without it.
-      NEST_INGESTOR_ENABLED: ${{ vars.NEST_INGESTOR_ENABLED }}
+      NEST_INGESTOR_ENABLED: ${{ vars.NEST_INGESTOR_ENABLED || 'false' }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
@@ -85,6 +93,12 @@ jobs:
         run: echo "$GCP_KEY_JSON" > "$RUNNER_TEMP/gcp-key.json"
         env:
           GCP_KEY_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_JSON }}
+
+      - name: Generate E2E test fixture (gitignored — licensing unconfirmed for redistribution, see tests/fixtures/README.md)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -i sample_videos/swat-soldier-with-weapon-13884574-720p.mp4 -vframes 1 tests/fixtures/person_test_frame.jpg
 
       - name: Deploy
         run: surveil-deploy deploy

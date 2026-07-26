@@ -1,13 +1,23 @@
 // ============================================================
 // Azure Function (Python, Consumption plan) — the async frame-analysis worker.
 //
-// Uses a native Blob-trigger binding (`path: frames/{name}`) rather than an
-// Event Grid subscription: Event Grid requires a webhook handshake against the
-// function's own extension endpoint, which only exists *after* the function
-// code is deployed — that's a circular dependency for a pure-Bicep-first
-// pipeline. The native blob trigger needs no extra resource and typically
-// fires within seconds on Consumption; see docs/architecture.md for the
-// tradeoff (a few minutes of worst-case latency vs. Event Grid).
+// Blob trigger source is Event Grid (source: "EventGrid" in function_app.py's
+// @app.blob_trigger), not the classic polling-based LogsAndContainerScan.
+// The classic source is documented by Microsoft as taking "up to 10 minutes"
+// to discover a new blob in the worst case, and in practice was observed
+// exceeding even a 600s wait repeatedly once this pipeline started running
+// under real CI/CD (every CI deploy redeploys fresh Function code, so the
+// polling mechanism cold-starts every single run -- see docs/troubleshooting.md
+// #10). An earlier version of this comment avoided Event Grid specifically
+// because a webhook-subscription destination requires the function's own
+// extension endpoint to already be live -- a circular dependency for a
+// Bicep-first pipeline where infra deploys before function code does. The
+// `AzureFunction` destination type doesn't need a webhook, but confirmed the
+// hard way that it still validates the function resource actually exists
+// ("Destination endpoint not found ... Resource should pre-exist") -- so the
+// event *subscription* (unlike the System Topic below, which doesn't
+// reference the function) is created in s07_deploy_function.py, after the
+// function code is published, not here.
 //
 // AzureWebJobsStorage is wired via an identity-based connection (no storage
 // keys) using the shared user-assigned managed identity.
@@ -132,6 +142,29 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'ACS_CONNECTION_STRING', value: acsConnectionString }
       ] : [])
     }
+  }
+}
+
+resource storageAccountRef 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: storageAccountName
+}
+
+// The System Topic itself doesn't reference the Function App, so it's safe
+// to create here at infra-deploy time. The event *subscription* -- which
+// does reference the Function by resource ID -- can NOT also live here: the
+// AzureFunction destination type validates that
+// `<functionAppId>/functions/AnalyzeFrame` already exists, and this Function
+// App's code hasn't been published yet at this point in the pipeline
+// (s07_deploy_function runs after s03_deploy_infra). That subscription is
+// created imperatively in s07_deploy_function.py instead, right after the
+// function code is actually deployed.
+resource blobEventsTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = {
+  name: '${storageAccountName}-blob-events'
+  location: location
+  tags: tags
+  properties: {
+    source: storageAccountRef.id
+    topicType: 'Microsoft.Storage.StorageAccounts'
   }
 }
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from surveil_deploy.config import DeployConfig
 from surveil_deploy.console import log_info, log_step, log_success
-from surveil_deploy.runner import CommandError, run as run_command
+from surveil_deploy.runner import CommandError, run as run_command, run_json
 from surveil_deploy.state import DeploymentState
 
 STEP_NAME = "s07_deploy_function"
@@ -24,6 +24,10 @@ DEPLOYMENT_CONTAINER = "function-deployments"
 STORAGE_DATA_ROLE = "Storage Blob Data Contributor"
 RBAC_PROPAGATION_RETRIES = 12
 RBAC_PROPAGATION_DELAY_SECONDS = 5
+
+BLOB_EVENT_SUBSCRIPTION_NAME = "analyze-frame-blob-created"
+FUNCTION_READY_RETRIES = 24
+FUNCTION_READY_DELAY_SECONDS = 10
 
 # This Linux Consumption ("run from package") Function App rejects every
 # push-based deploy mechanism tried here:
@@ -51,6 +55,22 @@ RBAC_PROPAGATION_DELAY_SECONDS = 5
 # about it looks like a bug until you try to use the deployment again later.
 
 
+def _current_principal_object_id() -> str:
+    """Object ID of whoever `az login` is currently authenticated as.
+
+    `az ad signed-in-user show` only works for an interactive/user principal
+    -- it errors outright under a service-principal login (e.g. GitHub
+    Actions' OIDC-based `azure/login`, which never went through this path
+    until the pipeline's first real CI/CD run). Branch on the principal
+    type reported by `az account show` instead of assuming a human user.
+    """
+    account = run_json(["az", "account", "show", "-o", "json"])
+    user = account["user"]
+    if user["type"] == "servicePrincipal":
+        return run_json(["az", "ad", "sp", "show", "--id", user["name"], "-o", "json"])["id"]
+    return run_command(["az", "ad", "signed-in-user", "show", "--query", "id", "-o", "tsv"], stream=False).stdout.strip()
+
+
 def _ensure_own_blob_data_access(storage_account: str, resource_group: str) -> None:
     """Self-grants Storage Blob Data Contributor on this storage account.
 
@@ -59,7 +79,7 @@ def _ensure_own_blob_data_access(storage_account: str, resource_group: str) -> N
     blob data operations behind a separate RBAC check even for Owners.
     Idempotent: safely re-run if the assignment already exists.
     """
-    user_oid = run_command(["az", "ad", "signed-in-user", "show", "--query", "id", "-o", "tsv"], stream=False).stdout.strip()
+    user_oid = _current_principal_object_id()
     storage_id = run_command(
         ["az", "storage", "account", "show", "--name", storage_account,
          "--resource-group", resource_group, "--query", "id", "-o", "tsv"],
@@ -92,6 +112,62 @@ def _retry_rbac_propagation(description: str, action):  # noqa: ANN001, ANN202
                 raise
             log_info(f"{description} not yet authorized (RBAC still propagating) -- retrying ({attempt}/{RBAC_PROPAGATION_RETRIES})")
             time.sleep(RBAC_PROPAGATION_DELAY_SECONDS)
+
+
+def _ensure_blob_created_event_subscription(storage_account: str, resource_group: str, function_app_name: str) -> None:
+    """Creates the Event Grid subscription that fires AnalyzeFrame on new blobs.
+
+    Confirmed the hard way that the `azurefunction` destination type is NOT
+    for this: it only accepts genuine Event Grid *trigger* functions
+    (`@app.event_grid_trigger`), and rejects a blob-trigger function
+    (`Unsupported Azure Function Trigger ... Azure Event Grid supports
+    EventGrid Trigger type only`) even with `source="EventGrid"` set on the
+    blob trigger. For an Event-Grid-sourced *blob* trigger, Microsoft's actual
+    mechanism is a `webhook` destination pointed at the Function's built-in
+    blob-extension endpoint, authenticated with the `blobs_extension` system
+    key (`az functionapp keys list`) -- both only obtainable once the
+    function code is deployed and running, hence this lives in s07 rather
+    than functionapp.bicep. Retried in case the function is still
+    cold-starting right after the restart above. Idempotent: an
+    `event-subscription create` on an existing name updates it in place.
+    """
+    log_info("Ensuring the Event Grid subscription for the blob-triggered Function exists")
+    storage_id = run_command(
+        ["az", "storage", "account", "show", "--name", storage_account,
+         "--resource-group", resource_group, "--query", "id", "-o", "tsv"],
+        stream=False,
+    ).stdout.strip()
+    system_key = run_json(
+        ["az", "functionapp", "keys", "list", "--name", function_app_name,
+         "--resource-group", resource_group, "-o", "json"],
+    )["systemKeys"]["blobs_extension"]
+    webhook_endpoint = (
+        f"https://{function_app_name}.azurewebsites.net/runtime/webhooks/blobs"
+        f"?functionName=Host.Functions.AnalyzeFrame&code={system_key}"
+    )
+
+    for attempt in range(1, FUNCTION_READY_RETRIES + 1):
+        try:
+            run_command(
+                ["az", "eventgrid", "event-subscription", "create",
+                 "--name", BLOB_EVENT_SUBSCRIPTION_NAME,
+                 "--source-resource-id", storage_id,
+                 "--endpoint-type", "webhook",
+                 "--endpoint", webhook_endpoint,
+                 "--included-event-types", "Microsoft.Storage.BlobCreated",
+                 "--subject-begins-with", "/blobServices/default/containers/frames/blobs/",
+                 "--event-delivery-schema", "eventgridschema"],
+                stream=False,
+            )
+            return
+        except CommandError:
+            if attempt == FUNCTION_READY_RETRIES:
+                raise
+            log_info(
+                f"Blob extension webhook not yet responding (Function still cold-starting) "
+                f"-- retrying ({attempt}/{FUNCTION_READY_RETRIES})"
+            )
+            time.sleep(FUNCTION_READY_DELAY_SECONDS)
 
 
 def run(config: DeployConfig, state: DeploymentState) -> dict:
@@ -175,6 +251,7 @@ def run(config: DeployConfig, state: DeploymentState) -> dict:
             stream=False,
         )
         run_command(["az", "functionapp", "restart", "--name", function_app_name, "--resource-group", resource_group])
+        _ensure_blob_created_event_subscription(storage_account, resource_group, function_app_name)
     finally:
         log_info("Cleaning up vendored copy, installed packages, and zip (source of truth stays in shared/surveil_core)")
         shutil.rmtree(vendored_dest, ignore_errors=True)

@@ -49,8 +49,13 @@ output id string = communicationService.id
 @description('Communication Services name')
 output name string = communicationService.name
 
+// mailFromSenderDomain is just the domain (e.g. "<guid>.azurecomm.net"), not
+// a full address -- confirmed the hard way when the ACS email API rejected
+// it outright: "Request body validation error. See property 'senderAddress'".
+// Azure-managed domains always use "DoNotReply" as the (non-customizable)
+// sender username, so prefix it to get an address the API actually accepts.
 @description('Default Azure-managed sender email address (MailFrom on AzureManagedDomain)')
-output senderEmail string = azureManagedDomain.properties.mailFromSenderDomain
+output senderEmail string = 'DoNotReply@${azureManagedDomain.properties.mailFromSenderDomain}'
 
 // Consumed directly as a Container App / Function secretRef by the deploy pipeline; never written to disk or logs.
 #disable-next-line outputs-should-not-contain-secrets

@@ -30,6 +30,12 @@ jobs:
       - name: Lint (ruff)
         run: ruff check src tests shared backend/app function ingestors/nest
 
+      - name: Generate test fixture (gitignored — licensing unconfirmed for redistribution, see tests/fixtures/README.md)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -i sample_videos/swat-soldier-with-weapon-13884574-720p.mp4 -vframes 1 tests/fixtures/person_test_frame.jpg
+
       - name: Unit tests
         run: pytest -v
 
