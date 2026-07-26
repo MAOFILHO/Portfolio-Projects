@@ -22,14 +22,11 @@ The Bicep deployment provisions an ACS resource with an **Azure-managed email do
 
 ### SMS alerting (optional, manual step)
 
-SMS requires purchasing an ACS phone number, which is a billing action this pipeline does not automate (to avoid an unexpected charge as part of `deploy`). After deployment, if you want SMS:
+SMS requires purchasing an ACS phone number, which is a billing action this pipeline does not automate (to avoid an unexpected charge as part of `deploy`). This is **Azure Portal-only** — confirmed the hard way that the `az communication phonenumber` CLI extension can only `list`/`show` numbers you already own; it cannot search availability or purchase one. In the Portal: your Communication Service resource -> **Phone numbers** -> **+ Get** -> pick country/toll-free/SMS-only capability -> purchase (toll-free is ~$2/month + a small per-message rate; see [Azure Communication Services pricing](https://learn.microsoft.com/en-us/azure/communication-services/concepts/sms-pricing) for current rates).
 
-```bash
-az communication phonenumber list --connection-string "<ACS connection string from Azure Portal or `az communication list-key`>"
-az communication phonenumber purchase-phonenumbers ... # provisioning flow — see Azure docs
-```
+**Before it can actually send SMS**, US/Canada toll-free numbers now require a mandatory carrier verification: same resource -> **Regulatory Documents** -> **Add** -> "Toll-free verification" application (program description, opt-in method, sample messages, etc. — see [toll-free verification guidelines](https://learn.microsoft.com/en-us/azure/communication-services/concepts/sms/toll-free-verification-guidelines)). This is a real carrier compliance review, not something Azure or this pipeline can skip: budget **5-6 weeks typically, up to 8 weeks** during high application volume, per Microsoft's own docs — not a same-day or same-week turnaround.
 
-Then set `ACS_SMS_FROM` and `ALERT_SMS_TO` in `.env` and re-run `surveil-deploy deploy` (the Container App / Function env vars will pick up the new values; no infra changes needed).
+Once you have a verified number, set `ACS_SMS_FROM` and `ALERT_SMS_TO` in `.env` (and the matching GitHub Actions repo variables, if deploying via `deploy.yml`) and re-run `surveil-deploy deploy` (the Container App / Function env vars will pick up the new values; no infra changes needed).
 
 ## 2. Deploy
 
