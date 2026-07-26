@@ -1,16 +1,20 @@
-name: Deploy to Azure
+name: Azure-RealTime-Surveillance — Deploy to Azure
 
 # Manual-only (workflow_dispatch): a human must explicitly click "Run
 # workflow" for this to fire -- there is no automatic trigger on push or on
-# CI success. This was deliberately tightened after starting out as an
-# automatic workflow_run-after-CI trigger: GitHub's required-reviewer
-# environment protection (the usual way to gate an auto-triggered deploy
-# behind approval) needs a paid plan for private repos, which this repo
-# doesn't have, so removing the automatic trigger entirely is the free-tier
-# equivalent of an approval gate -- every real Azure spend is a deliberate,
-# explicit action, never a side effect of a green CI run. Uses secretless
-# federated (OIDC) Azure credentials, the same pattern as
-# Video-Agents-Foundry-Solution/.github/workflows/azure-dev.yml.
+# CI success (see azure-realtime-surveillance-ci.yml for the free, no-cost
+# gate). Uses secretless federated (OIDC) Azure credentials.
+#
+# NOTE: this repo (Portfolio-Projects) is a different GitHub repo from the
+# standalone github.com/MAOFILHO/Azure-RealTime-Surveillance repo this
+# pipeline was originally developed/tested against. The Azure AD app
+# registration's federated credential trusts a specific
+# repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:... subject -- it will need a
+# *second* federated credential added (or a separate app registration)
+# trusting this repo's subject before `azure/login` below can authenticate.
+# The AZURE_CLIENT_ID/AZURE_TENANT_ID/etc. repository variables and the
+# GOOGLE_*/GCP_* secrets also need to be (re)configured here -- they don't
+# carry over automatically from the other repo.
 on:
   workflow_dispatch:
     inputs:
@@ -30,12 +34,15 @@ permissions:
 # a live infra/Function deploy mid-flight is worse than making the next one
 # wait, since Azure resources can be left half-applied.
 concurrency:
-  group: deploy-to-azure-${{ vars.AZURE_ENV_NAME || 'surveil' }}
+  group: deploy-azure-realtime-surveillance-${{ vars.AZURE_ENV_NAME || 'surveil' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-RealTime-Surveillance
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}

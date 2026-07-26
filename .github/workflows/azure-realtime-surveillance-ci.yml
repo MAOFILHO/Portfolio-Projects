@@ -1,17 +1,25 @@
-name: CI
+name: Azure-RealTime-Surveillance CI
 
-# Runs on every push/PR — the "green light" gate for the deployment CLI,
-# the shared detection/alert logic, the backend, and the frontend. This
-# workflow does NOT touch Azure or spend money; see deploy.yml for that.
+# Runs on every push/PR that touches this project's folder -- the "green
+# light" gate for the deployment CLI, the shared detection/alert logic, the
+# backend, and the frontend. This workflow does NOT touch Azure or spend
+# money; see azure-realtime-surveillance-deploy.yml for that.
 on:
   push:
     branches: [main]
+    paths:
+      - "Azure-RealTime-Surveillance/**"
   pull_request:
     branches: [main]
+    paths:
+      - "Azure-RealTime-Surveillance/**"
 
 jobs:
   python-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-RealTime-Surveillance
     steps:
       - uses: actions/checkout@v4
 
@@ -41,15 +49,23 @@ jobs:
 
   bicep-validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-RealTime-Surveillance
     steps:
       - uses: actions/checkout@v4
       - name: Validate Bicep templates
         uses: azure/cli@v2
         with:
-          inlineScript: az bicep build --file infra/main.bicep --stdout > /dev/null
+          inlineScript: |
+            cd Azure-RealTime-Surveillance
+            az bicep build --file infra/main.bicep --stdout > /dev/null
 
   frontend-build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-RealTime-Surveillance/frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -58,16 +74,13 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: Azure-RealTime-Surveillance/frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontend
         run: npm ci
 
       - name: Lint
-        working-directory: frontend
         run: npx eslint .
 
       - name: Type-check + build
-        working-directory: frontend
         run: npm run build
