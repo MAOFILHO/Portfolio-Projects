@@ -156,7 +156,7 @@ flowchart TB
     Identity -.keyless auth.- LogAnalytics
 ```
 
-## Detailed Request & Data Flow
+## API & Storage Reference
 
 Endpoint-level view of API routes, storage schema, and the analysis pipeline — for tracing a specific request end-to-end.
 
@@ -210,19 +210,19 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
 
 ## Azure Resources
 
-**Azure** (default region `eastus2`, except Vision — see below):
-- Container Apps: FastAPI backend (frame ingest, on-demand analysis, event/settings/audit/observability APIs, WebSocket alert fan-out)
-- Container Apps (optional, `minReplicas=maxReplicas=1`): Nest ingestor, when `NEST_INGESTOR_ENABLED=true`
-- Azure Functions (Consumption, Python): async frame analysis worker
-- Azure AI Vision (Cognitive Services, `ComputerVision` kind), deployed in **`eastus`** (`VISION_LOCATION`, independent of `AZURE_LOCATION`) so Image Analysis 4.0 Captions are available on the free `F0` tier: objects, people, caption, tags, read, smart crops
-- Storage Account (StorageV2, `Standard_LRS`): blob containers `frames`/`events`, queue `alerts`, tables `events`/`audit`
-- Azure Communication Services: email (Azure-managed domain) + optional SMS alerting
-- Static Web Apps (Free): React + TypeScript dashboard, gated by built-in Microsoft sign-in
-- Container Registry (Basic): builds the backend/ingestor images via `az acr build` (no local Docker needed)
-- Application Insights + Log Analytics: tracing/logging, queried live by the backend's Observability page (`Log Analytics Reader` RBAC) in addition to being viewable in the Portal
-- User-assigned Managed Identity: the only credential in the system — no storage account keys anywhere
+- **Azure Default Region** = `eastus2`, except Vision — see below):
+- **Container Apps**: FastAPI backend (frame ingest, on-demand analysis, event/settings/audit/observability APIs, WebSocket alert fan-out)
+- **Container Apps** (optional, `minReplicas=maxReplicas=1`): Nest ingestor, when `NEST_INGESTOR_ENABLED=true`
+- **Azure Functions** (Consumption, Python): async frame analysis worker
+- **Azure AI Vision** (Cognitive Services, `ComputerVision` kind), deployed in **`eastus`** (`VISION_LOCATION`, independent of `AZURE_LOCATION`) so Image Analysis 4.0 Captions are available on the free `F0` tier: objects, people, caption, tags, read, smart crops
+- **Storage Account** (StorageV2, `Standard_LRS`): blob containers `frames`/`events`, queue `alerts`, tables `events`/`audit`
+- **Azure Communication Services**: email (Azure-managed domain) + optional SMS alerting
+- **Static Web Apps** (Free): React + TypeScript dashboard, gated by built-in Microsoft sign-in
+- **Container Registry** (Basic): builds the backend/ingestor images via `az acr build` (no local Docker needed)
+- **Application Insights + Log Analytics**: tracing/logging, queried live by the backend's Observability page (`Log Analytics Reader` RBAC) in addition to being viewable in the Portal
+- **User-assigned Managed Identity**: the only credential in the system — no storage account keys anywhere
 
-## Data Flow
+## Frame Lifecycle
 
 What happens to a single frame, end to end:
 
@@ -257,24 +257,27 @@ sequenceDiagram
     Note over Cam, WS: Dashboard separately polls GET /api/v1/events for full history
 ```
 
-Two things worth calling out: the Function and the API never talk to each other directly — the `alerts` Storage Queue is the only coupling, so either side can be redeployed or briefly unavailable without losing an alert. And every frame gets a Table Storage record whether or not it triggers an alert, which is what powers the dashboard's event history view (as distinct from the live alert feed, which only shows matches).
+### Notable Details
 
-**On-demand analysis** (Tags / Read / Smart Crop buttons, triggered by clicking into an event) is a separate, synchronous path: the browser calls `POST /api/v1/frames/{camera_id}/{file}/analyze`, the backend re-downloads that already-stored frame from Blob Storage and calls Azure AI Vision directly (not via the Function), and returns the result inline — a live, billed Vision API call per click, by design not cached or run automatically.
-
-**Sign-in** happens before any of the above: Static Web Apps enforces `allowedRoles: ["authenticated"]` on every route (`staticwebapp.config.json`), redirecting an unauthenticated request straight to `/.auth/login/aad`. The React app treats "no signed-in user" as a first-class state (not just a hidden nav bar) and shows an explicit "You're signed out" screen with a re-authenticate link.
+| Aspect | How it works |
+|---|---|
+| Function ↔ API coupling | They never talk to each other directly — the `alerts` Storage Queue is the only link, so either side can redeploy or be briefly unavailable without losing an alert. |
+| Event history vs. alerts | Every frame gets a Table Storage record whether or not it triggers an alert — this powers the full Event History view, distinct from the Live Alert Feed (matches only). |
+| On-demand analysis | A separate, synchronous path, not the automatic one above: `POST /api/v1/frames/{camera_id}/{file}/analyze` re-downloads the stored frame and calls Azure AI Vision directly (not via the Function) — a live, billed call per click, triggered by the Tags/Read/Smart Crop buttons, never cached or automatic. |
+| Sign-in gate | Enforced before any of the above: Static Web Apps requires `allowedRoles: ["authenticated"]` on every route (`staticwebapp.config.json`), redirecting unauthenticated requests to `/.auth/login/aad`. The app treats "signed out" as a first-class UI state — an explicit screen with a re-authenticate link, not just a hidden nav bar. |
 
 ## CI/CD Pipeline
 
 Two very different things in this project both get called "pipelines" — easy to conflate, so here's the distinction up front:
 
-| | GitHub Actions CI/CD (this section) | Video-Analysis Flow (see [Data Flow](#data-flow)) |
+| | GitHub Actions CI/CD (this section) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
 |---|---|---|
 | Answers | "Did this code change break anything, and should it ship?" | "What happens to a frame the instant it arrives?" |
 | Where it runs | GitHub-hosted runners | Azure (Container Apps + Function), continuously |
 | Triggered by | A push (`ci.yml`) or a manual click (`deploy.yml`) | A blob upload |
 | If you deleted it | You'd deploy by hand via the `surveil-deploy` CLI instead — the running app is unaffected | The product itself stops working |
 
-In short: CI/CD is how safe changes get *into* the running system; Data Flow is what that system *does* once it's running.
+In short: CI/CD is how safe changes get *into* the running system; Frame Lifecycle is what that system *does* once it's running.
 
 ### Workflows
 
