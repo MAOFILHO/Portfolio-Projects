@@ -19,38 +19,53 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 
 ## Feature Scope
 
-**Capture sources**
-- **Browser webcam** — a React dashboard captures frames via `getUserMedia`, throttled to a configurable interval (default 3s), encoded as JPEG.
-- **Demo/video-file mode** — plays a bundled sample video instead of a live webcam, for demoing without hardware.
-- **Video Upload & Analysis** — batch-analyze a video file you already have, separate from live capture. The browser extracts frames client-side by seeking the file to a series of timestamps (not real-time playback, so a 10-minute file doesn't take 10 minutes to process) and posts each one through the exact same `POST /api/v1/frames` path as live capture — no backend changes needed. A configurable extraction interval caps the number of frames (and therefore billed Vision API calls) a single upload can produce.
-- **Home security camera ingestion (`ingestors/nest/`)** — watches one or more real Google Nest cameras for motion/person events (via Google Cloud Pub/Sub, event-driven rather than polling) and forwards each detected event's frame into the same ingest endpoint as the browser capture, so it's analyzed and alerted on identically. Frame extraction adapts automatically to what each camera model supports: a fast path for cameras that expose a clip-preview URL directly in the event payload, and a fallback that negotiates a real WebRTC media session (SDP/ICE/RTP) to pull a live frame from cameras that only expose a live-stream interface. Duplicate Pub/Sub redeliveries of the same event (common in practice — one real doorbell press is often redelivered 2-4 times) are de-duplicated in-process so they don't each spawn a competing WebRTC capture session.
-  - Runs two ways: locally (a laptop/Pi/NAS, zero Azure cost — the original design), or as an opt-in, always-on Container App (`NEST_INGESTOR_ENABLED=true`) deployed in the same Container Apps environment as the backend. Unlike the backend/Function (both scale-to-zero), this Container App is fixed at `minReplicas: 1, maxReplicas: 1` — it holds a persistent Pub/Sub streaming-pull connection that must never drop (scale to zero) or double-consume (scale out), which is a real, unavoidable ~$10-15/month always-on cost (see [docs/cost.md](docs/cost.md)).
-  - **Confirmed via real multi-camera hardware testing:** only the doorbell reliably produces frames end-to-end (both from a button press and from plain walk-by motion/person detection). Other camera models 400 on the direct clip-preview command (`"Command ... GenerateImage is not supported due to camera not supporting RTSP protocol"`) and correctly fall back to the WebRTC path — which negotiates a fully healthy connection (ICE completed, DTLS connected, audio demonstrably flowing) but never receives a single video RTP packet, even with an RTCP PLI (keyframe request) sent immediately using the SSRC parsed straight out of the SDP answer rather than waited-for via `getStats()`. This points to a Google-side limitation specific to WebRTC video for these camera models via the public SDM API, not a bug in this project's signaling — confirmed live against real hardware, not inferred. Diagnostic logging for connection/ICE/signaling state is left in place in `ingestors/nest/webrtc_capture.py` for whoever picks this back up. See `ingestors/nest/README.md` for the full root-cause writeup.
+### Capture Sources
 
-**Analysis & alerting**
-- Frame analysis via **Azure AI Vision Image Analysis 4.0** (object detection, people detection, captioning) behind a swappable analyzer interface. The Vision resource is deployed in **`eastus`** specifically (independent of the rest of the deployment's region, default `eastus2`) because Captions on Image Analysis 4.0 are available there on the free `F0` tier; all other resources stay in `AZURE_LOCATION`.
-- Configurable alert rules: watched tags (e.g. "person", "vehicle", "knife"), minimum confidence, minimum object count.
-- **Alert severity levels** (Critical/High/Medium/Low) — every alert is ranked via a configurable tag→severity map (`weapon`/`gun`/`knife` → critical, `trespassing` → high, `crowd` → medium, `person` → low by default), shown as a color-coded badge in the Live Alert Feed and Event History.
-- **Crowd rule** — synthesizes a `crowd` tag (severity: medium) whenever the number of detected people in a frame meets `ALERT_CROWD_THRESHOLD`. Disabled by default (`0`).
-- **Trespassing / restricted-zone rule** — synthesizes a `trespassing` tag (severity: high) whenever a detected person's bounding-box center falls inside a configured rectangular zone (`ALERT_RESTRICTED_ZONE`, normalized `x_min,y_min,x_max,y_max` image-fraction coordinates, so it's resolution-independent). Disabled by default (empty).
-- Both rules build entirely on what the existing detectors (Azure Vision Objects/People, or the self-hosted SSD-MobileNet backend) already produce — no additional model training or custom detection was required.
-- Dual alert delivery: instant **WebSocket** push to any connected dashboard, plus optional **email/SMS**.
-- Full event history (every analyzed frame, matched or not) queryable from the dashboard, with a thumbnail per event and a click-to-expand view showing the actual detection bounding boxes drawn on the full frame.
-- **On-demand Vision analysis** per frame, triggered from the dashboard: Tags, Read (OCR), and Smart Crop — separate, billed, user-initiated calls distinct from the automatic per-frame detection the Function runs for alerting.
+| Source | Description |
+|---|---|
+| Browser webcam | React dashboard captures frames via `getUserMedia`, throttled to a configurable interval (default 3s), JPEG-encoded. |
+| Demo/video-file mode | Plays a bundled sample video instead of a live webcam, for demoing without hardware. |
+| Video Upload & Analysis | Batch-analyzes a video file you already have, separate from live capture. Frames are extracted client-side by seeking to a series of timestamps (not real-time playback) and posted through the same `POST /api/v1/frames` path as live capture. A configurable extraction interval caps frame count — and billed Vision calls — per upload. |
+| Home security camera (`ingestors/nest/`) | Watches real Google Nest cameras via Cloud Pub/Sub (event-driven, not polling), forwarding each event's frame into the same ingest endpoint as browser capture. Extraction adapts per camera: a fast clip-preview path, or a WebRTC fallback (SDP/ICE/RTP) for live-stream-only cameras. Duplicate Pub/Sub redeliveries (common — one doorbell press is often redelivered 2-4 times) are de-duplicated in-process. |
 
-**Dashboard & access**
-- **Sign-in required**: the dashboard is gated behind Azure Static Web Apps' built-in authentication (Microsoft identity provider) — no passwords stored or handled by this system's own code.
-- **Top navigation**: Capture (webcam/demo video + live alerts + event history), Profile, Settings, Observability, Audit Trail.
-- **Capture page layout**: a 2x2 grid — Live Capture and Video Upload & Analysis side by side up top (each using an identical fixed-height "camera box" pattern via CSS Grid `align-self: stretch`, so their video placeholders and Start Capture/Start Analysis buttons always line up regardless of what's loaded), Event History and a compact Live Alerts ticker side by side below.
-- **Settings** — read-only view of the live alert configuration (watch tags, confidence, capture interval, crowd/trespassing rules, and the effective severity map — built-in defaults merged with any `ALERT_SEVERITY_MAP` override, shown with the same colour-coded badges as the rest of the dashboard) this deployment is actually running with.
-- **Observability** — backend health, an hourly request/failure chart, and a recent-exceptions table, all queried live from Application Insights (via its Log Analytics workspace) and rendered in-app — plus a deep link to the full Application Insights blade in the Azure Portal.
-- **Audit Trail** — sign-ins and on-demand analysis actions, logged to Table Storage and listed in-app.
+**Nest ingestor notes:**
+- Runs locally (laptop/Pi/NAS, zero Azure cost — the original design) or as an opt-in always-on Container App (`NEST_INGESTOR_ENABLED=true`). Unlike the backend/Function (scale-to-zero), it's fixed at `minReplicas=maxReplicas=1` since it holds a persistent Pub/Sub connection — a real, unavoidable ~$10-15/month cost (see [docs/cost.md](docs/cost.md)).
+- **Confirmed on real multi-camera hardware:** only the doorbell reliably produces frames end-to-end. Other models 400 on the direct clip-preview command and correctly fall back to WebRTC — which connects fully (ICE/DTLS/audio all healthy) but never receives a single video RTP packet, even with an immediate RTCP PLI keyframe request. This points to a Google-side limitation specific to WebRTC video for these models via the public SDM API, not a signaling bug — confirmed against real hardware, not inferred. Full root-cause writeup: [ingestors/nest/README.md](ingestors/nest/README.md).
 
-**Operational tooling**
-- A single **Python CLI** (`surveil-deploy`) drives the entire deployment as an ordered, resumable, 12-stage pipeline with descriptive step-by-step terminal output — provision infra, build and deploy the backend/ingestor/Function/frontend, run health checks, and validate an end-to-end detection, all from one command.
-- One-command **teardown**, including handling for soft-deleted Cognitive Services accounts.
-- A unit test suite (config, state, alert-rule engine, mocked analyzer, frame-naming regression tests) that requires no live Azure resources, plus a live end-to-end smoke test that does.
-- CI (lint + unit tests + Bicep validation + frontend build) on every push; a separate manual-only deployment workflow so nothing provisions real Azure resources without an explicit trigger. **Not yet exercised in this environment** — this repository has no GitHub remote configured yet, so these workflows have never actually run; only the local `surveil-deploy` CLI pipeline has.
+### Analysis & Alerting
+
+| Capability | Description |
+|---|---|
+| Detection | Azure AI Vision Image Analysis 4.0 (objects, people, captions) behind a swappable analyzer interface. Runs in `eastus` (Captions available free there on `F0`), independent of `AZURE_LOCATION` for everything else. |
+| Alert rules | Configurable watched tags, minimum confidence, minimum object count. |
+| Severity levels | Critical/High/Medium/Low via a configurable tag→severity map (`weapon`/`gun`/`knife`→critical, `trespassing`→high, `crowd`→medium, `person`→low by default), shown as color-coded badges. |
+| Crowd rule | Synthesizes a `crowd` tag (medium) when person count meets `ALERT_CROWD_THRESHOLD`. Disabled by default. |
+| Trespassing rule | Synthesizes a `trespassing` tag (high) when a person's bounding-box center falls inside a configured normalized zone (`ALERT_RESTRICTED_ZONE`). Disabled by default. |
+| Alert delivery | Instant WebSocket push to connected dashboards, plus optional email/SMS. |
+| Event history | Every analyzed frame (matched or not) is queryable, with a thumbnail and click-to-expand bounding-box view. |
+| On-demand analysis | Tags / Read (OCR) / Smart Crop, triggered per-frame from the dashboard — separate, billed calls distinct from the automatic per-frame alerting. |
+
+*(Crowd/trespassing rules build entirely on existing detector output — no additional model training required.)*
+
+### Dashboard & Access
+
+| Feature | Description |
+|---|---|
+| Sign-in | Gated behind Azure Static Web Apps' built-in Microsoft auth — no passwords handled by this system's own code. |
+| Navigation | Capture (webcam/demo + live alerts + event history), Profile, Settings, Observability, Audit Trail. |
+| Capture page layout | 2x2 grid: Live Capture and Video Upload & Analysis side by side (matching fixed-height camera boxes via CSS Grid), Event History and a compact Live Alerts ticker below. |
+| Settings | Read-only view of the live alert config this deployment is actually running with (watch tags, confidence, capture interval, crowd/trespassing rules, effective severity map). |
+| Observability | Backend health, hourly request/failure chart, recent-exceptions table — queried live from Application Insights/Log Analytics, plus a deep link to the Portal blade. |
+| Audit Trail | Sign-ins and on-demand analysis actions, logged to Table Storage. |
+
+### Operational Tooling
+
+| Tool | Description |
+|---|---|
+| Deploy CLI | `surveil-deploy` — a single, resumable 12-stage pipeline (infra → backend/ingestor/Function/frontend → health checks → e2e validation), one command. |
+| Teardown | One command, including soft-deleted Cognitive Services account handling. |
+| Tests | Unit test suite (no live Azure needed) plus a live end-to-end smoke test. |
+| CI/CD | GitHub Actions: automatic lint/test/Bicep-validate/frontend-build on every push, plus a manual-only deploy workflow — see [CI/CD Pipeline](#cicd-pipeline). |
 
 ## Tech Stack
 
