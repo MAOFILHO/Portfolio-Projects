@@ -226,12 +226,12 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
 
 Two very different things in this project both get called "pipelines" — easy to conflate, so here's the distinction up front:
 
-| | GitHub Actions CI/CD (this section) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
+| Aspect | GitHub Actions CI/CD (see [diagram](#github-actions-cicd) below) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
 |---|---|---|
-| Answers | "Did this code change break anything, and should it ship?" | "What happens to a frame the instant it arrives?" |
+| Answers | "Did this code change break, and should it ship?" | "What happens when a frame arrives?" |
 | Where it runs | GitHub-hosted runners | Azure (Container Apps + Function), continuously |
 | Triggered by | A push (`ci.yml`) or a manual click (`deploy.yml`) | A blob upload |
-| If you deleted it | You'd deploy by hand via the `surveil-deploy` CLI instead — the running app is unaffected | The product itself stops working |
+| If removed | You'd deploy by hand via `surveil-deploy` — the app keeps running | The product itself stops working |
 
 In short: CI/CD is how safe changes get *into* the running system; Frame Lifecycle is what that system *does* once it's running.
 
