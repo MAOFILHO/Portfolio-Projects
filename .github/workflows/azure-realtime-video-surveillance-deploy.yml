@@ -1,4 +1,4 @@
-name: Azure-RealTime-Surveillance — Deploy to Azure
+name: Azure-RealTime-Video-Surveillance — Deploy to Azure
 
 # Manual-only (workflow_dispatch): a human must explicitly click "Run
 # workflow" for this to fire -- there is no automatic trigger on push or on
@@ -6,7 +6,7 @@ name: Azure-RealTime-Surveillance — Deploy to Azure
 # gate). Uses secretless federated (OIDC) Azure credentials.
 #
 # NOTE: this repo (Portfolio-Projects) is a different GitHub repo from the
-# standalone github.com/MAOFILHO/Azure-RealTime-Surveillance repo this
+# standalone github.com/MAOFILHO/Azure-RealTime-Video-Surveillance repo this
 # pipeline was originally developed/tested against. The Azure AD app
 # registration's federated credential trusts a specific
 # repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:... subject -- it will need a
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-RealTime-Surveillance
+        working-directory: Azure-RealTime-Video-Surveillance
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
