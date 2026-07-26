@@ -226,12 +226,12 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
 
 Two very different things in this project both get called "pipelines" — easy to conflate, so here's the distinction up front:
 
-| Aspect | GitHub Actions CI/CD (see [diagram](#github-actions-cicd) below) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
+| Aspect | GitHub Actions CI/CD (see [diagram](#github-actions-cicd)) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
 |---|---|---|
 | Answers | "Did this code change break, and should it ship?" | "What happens when a frame arrives?" |
 | Where it runs | GitHub-hosted runners | Azure (Container Apps + Function), continuously |
 | Triggered by | A push (`ci.yml`) or a manual click (`deploy.yml`) | A blob upload |
-| If removed | You'd deploy by hand via `surveil-deploy` — the app keeps running | The product itself stops working |
+| If removed | You'd deploy by hand via `surveil-deploy` <br> and the app keeps running | The product itself stops working |
 
 In short: CI/CD is how safe changes get *into* the running system; Frame Lifecycle is what that system *does* once it's running.
 
@@ -246,7 +246,7 @@ In short: CI/CD is how safe changes get *into* the running system; Frame Lifecyc
 
 > **Status:** both workflows have been exercised for real against a GitHub remote (OIDC-federated Azure AD app registration for `azure/login`). `deploy.yml` briefly gained an automatic trigger during that testing, then was deliberately reverted to manual-only — GitHub's required-reviewer approval gate needs a paid plan for private repos, so removing the automatic trigger entirely is the free-tier equivalent: every real Azure spend is a deliberate action, never a side effect of a green CI run.
 
-### GitHub Actions CI/CD
+## GitHub Actions CI/CD
 
 ```mermaid
 flowchart LR
@@ -434,16 +434,16 @@ Copy `.env.example` to `.env`. Key settings:
 ```bash
 AZURE_SUBSCRIPTION_ID=<az account show --query id -o tsv>
 AZURE_LOCATION=eastus2
-VISION_LOCATION=eastus         # kept separate from AZURE_LOCATION — Captions require eastus on F0
+VISION_LOCATION=eastus               # kept separate from AZURE_LOCATION — Captions require eastus on F0
 AZURE_RESOURCE_GROUP=surveil-rg
-VISION_SKU=S1                 # or F0 for the free tier
-ALERT_WATCH_TAGS=person,knife,gun
+VISION_SKU=S1                        # or F0 for the free tier
+ALERT_WATCH_TAGS=person, knife, gun
 ALERT_MIN_CONFIDENCE=0.6
 ALERT_MIN_COUNT=1
-ALERT_SEVERITY_MAP=           # optional "tag:severity,tag:severity" override, e.g. dog:high — defaults built into alert_rules.py otherwise
-ALERT_CROWD_THRESHOLD=0        # person-count that synthesizes a "crowd" alert tag; 0 disables the rule
-ALERT_RESTRICTED_ZONE=         # "x_min,y_min,x_max,y_max" normalized 0.0-1.0 coords; empty disables the trespassing rule
-ALERT_EMAIL_TO=you@example.com   # leave empty to skip email alerting
+ALERT_SEVERITY_MAP=                  # optional "tag: severity, tag: severity" override, e.g. dog: high — defaults built into alert_rules.py otherwise
+ALERT_CROWD_THRESHOLD=0              # person-count that synthesizes a "crowd" alert tag; 0 disables the rule
+ALERT_RESTRICTED_ZONE=               # "x_min,y_min,x_max,y_max" normalized 0.0-1.0 coords; empty disables the trespassing rule
+ALERT_EMAIL_TO=you@example.com       # leave empty to skip email alerting
 ```
 
 See `.env.example` for the full list, including SMS and image-build-mode options.
