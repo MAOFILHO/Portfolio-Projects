@@ -17,6 +17,15 @@ A browser (or an IP/security camera) captures frames and uploads them to Blob St
 
 The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `shared/surveil_core/analyzer.py`) so a future Custom Vision or YOLOv4 object detector can be dropped in without touching capture, alerting, or the deployment pipeline — see [docs/extending-phase2.md](docs/extending-phase2.md).
 
+## The Business Case: Why This Matters
+
+**Problem:** Small sites (a garage, a storefront, a home office) want camera-based intrusion/threat alerting without paying for an enterprise video-analytics platform or hiring someone to watch a feed all day.
+
+**The Challenge:** Off-the-shelf security cameras either lock you into a vendor's cloud or require standing up expensive always-on infrastructure (GPU inference clusters, managed video-indexing services) that costs far more than the problem justifies.
+
+**The Solution:** A serverless-first architecture where the only components that run continuously are a Storage account and a Cognitive Services resource — the compute (Container App, Function) scales to zero when nothing is happening, and detection uses a pay-per-call Vision API instead of a dedicated model-serving cluster. The whole system deploys and tears down on demand via one CLI.
+
+
 ## Feature Scope
 
 ### Capture Sources
@@ -26,11 +35,11 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Browser webcam | React dashboard captures frames via `getUserMedia`, throttled to a configurable interval (default 3s), JPEG-encoded. |
 | Demo/video-file mode | Plays a bundled sample video instead of a live webcam, for demoing without hardware. |
 | Video Upload & Analysis | Batch-analyzes a video file you already have, separate from live capture. Frames are extracted client-side by seeking to a series of timestamps (not real-time playback) and posted through the same `POST /api/v1/frames` path as live capture. A configurable extraction interval caps frame count — and billed Vision calls — per upload. |
-| Home security camera (`ingestors/nest/`) | Watches real Google Nest cameras via Cloud Pub/Sub (event-driven, not polling), forwarding each event's frame into the same ingest endpoint as browser capture. Extraction adapts per camera: a fast clip-preview path, or a WebRTC fallback (SDP/ICE/RTP) for live-stream-only cameras. Duplicate Pub/Sub redeliveries (common — one doorbell press is often redelivered 2-4 times) are de-duplicated in-process. |
+| Home security camera (`ingestors/nest/`) | Watches real Google Nest cameras via Cloud Pub/Sub (event-driven, not polling), forwarding each event's frame into the same ingest endpoint as browser capture. Extraction adapts per camera: a fast clip-preview path, or a **WebRTC** fallback (SDP/ICE/RTP) for live-stream-only cameras. Duplicate Pub/Sub redeliveries (common — one doorbell press is often redelivered 2-4 times) are de-duplicated in-process. |
 
-**Nest ingestor notes:**
-- Runs locally (laptop/Pi/NAS, zero Azure cost — the original design) or as an opt-in always-on Container App (`NEST_INGESTOR_ENABLED=true`). Unlike the backend/Function (scale-to-zero), it's fixed at `minReplicas=maxReplicas=1` since it holds a persistent Pub/Sub connection — a real, unavoidable ~$10-15/month cost (see [docs/cost.md](docs/cost.md)).
-- **Confirmed on real multi-camera hardware:** only the doorbell reliably produces frames end-to-end. Other models 400 on the direct clip-preview command and correctly fall back to WebRTC — which connects fully (ICE/DTLS/audio all healthy) but never receives a single video RTP packet, even with an immediate RTCP PLI keyframe request. This points to a Google-side limitation specific to WebRTC video for these models via the public SDM API, not a signaling bug — confirmed against real hardware, not inferred. Full root-cause writeup: [ingestors/nest/README.md](ingestors/nest/README.md).
+### Google Nest ingestor notes:
+- **Runs locally (laptop/Pi/NAS, zero Azure cost** — the original design) or as an opt-in always-on Container App (`NEST_INGESTOR_ENABLED=true`). Unlike the backend/Function (scale-to-zero), it's fixed at `minReplicas=maxReplicas=1` since it holds a persistent Pub/Sub connection — a real, unavoidable ~$10-15/month cost (see [docs/cost.md](docs/cost.md)).
+- **Confirmed on real multi-camera hardware:** only the doorbell reliably produces frames end-to-end. Other models 400 on the direct clip-preview command and correctly fall back to WebRTC — which connects fully (ICE/DTLS/audio all healthy) but never receives a single video RTP packet, even with an immediate RTCP PLI keyframe request. This points to a Google-side limitation specific to **WebRTC** video for these models via the public SDM API, not a signalling bug — confirmed against real hardware, not inferred. Full root-cause writeup: [ingestors/nest/README.md](ingestors/nest/README.md).
 
 ### Analysis & Alerting
 
@@ -38,7 +47,7 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 |---|---|
 | Detection | Azure AI Vision Image Analysis 4.0 (objects, people, captions) behind a swappable analyzer interface. Runs in `eastus` (Captions available free there on `F0`), independent of `AZURE_LOCATION` for everything else. |
 | Alert rules | Configurable watched tags, minimum confidence, minimum object count. |
-| Severity levels | Critical/High/Medium/Low via a configurable tag→severity map (`weapon`/`gun`/`knife`→critical, `trespassing`→high, `crowd`→medium, `person`→low by default), shown as color-coded badges. |
+| Severity levels | Critical/High/Medium/Low via a configurable tag→severity map (`weapon`/`gun`/`knife`→critical, `trespassing`→high, `crowd`→medium, `person`→low by default), shown as colour-coded badges. |
 | Crowd rule | Synthesizes a `crowd` tag (medium) when person count meets `ALERT_CROWD_THRESHOLD`. Disabled by default. |
 | Trespassing rule | Synthesizes a `trespassing` tag (high) when a person's bounding-box center falls inside a configured normalized zone (`ALERT_RESTRICTED_ZONE`). Disabled by default. |
 | Alert delivery | Instant WebSocket push to connected dashboards, plus optional email/SMS. |
@@ -89,13 +98,6 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Linting | ruff (Python), ESLint + typescript-eslint (frontend) |
 | CI/CD | GitHub Actions |
 
-## The Business Case: Why This Matters
-
-**Problem:** Small sites (a garage, a storefront, a home office) want camera-based intrusion/threat alerting without paying for an enterprise video-analytics platform or hiring someone to watch a feed all day.
-
-**The Challenge:** Off-the-shelf security cameras either lock you into a vendor's cloud, or require standing up expensive always-on infrastructure (GPU inference clusters, managed video-indexing services) that costs far more than the problem justifies.
-
-**The Solution:** A serverless-first architecture where the only components that run continuously are a Storage account and a Cognitive Services resource — the compute (Container App, Function) scales to zero when nothing is happening, and detection uses a pay-per-call Vision API instead of a dedicated model-serving cluster. The whole system deploys and tears down on demand via one CLI.
 
 ## Azure Architecture
 
@@ -245,7 +247,7 @@ sequenceDiagram
     Func->>Func: evaluate_detections() against alert rules<br/>(tags / confidence / count, + crowd / trespassing synthesis)
     Func->>Func: compute_severity() -> Critical/High/Medium/Low
     Func->>Table: save SurveillanceEvent (every frame, incl. severity)
-    alt rule matched (tags / confidence / count)
+    alt rule matched (tags/confidence/count)
         Func->>Queue: enqueue AlertMessage (incl. severity)
         Func->>ACS: send email / SMS
         API->>Queue: background poll
@@ -285,7 +287,7 @@ In short: CI/CD is how safe changes get *into* the running system; Data Flow is 
 
 > **Status:** both workflows have been exercised for real against a GitHub remote (OIDC-federated Azure AD app registration for `azure/login`). `deploy.yml` briefly gained an automatic trigger during that testing, then was deliberately reverted to manual-only — GitHub's required-reviewer approval gate needs a paid plan for private repos, so removing the automatic trigger entirely is the free-tier equivalent: every real Azure spend is a deliberate action, never a side effect of a green CI run.
 
-### Pipeline Diagram
+## Pipeline Diagram
 
 ```mermaid
 flowchart LR
@@ -356,13 +358,13 @@ azure-realtime-surveillance/
 │   └── smoke/                    # pre_deploy.py, post_deploy.py
 │
 ├── shared/surveil_core/          # Detection, alert-rule, storage, notify logic
-│                                  # (shared verbatim by backend/ and function/)
+│                                 # (shared verbatim by backend/ and function/)
 ├── backend/                      # FastAPI app (Azure Container Apps)
 │   └── app/routes/               # frames, events, settings, audit, observability, health, ws
 ├── function/                     # Azure Function analysis worker
 ├── frontend/                     # React + TypeScript dashboard (-> Static Web Apps)
 │   └── src/pages/                # Profile, Settings, Observability, Audit Trail
-├── ingestors/nest/                # Optional: Google Nest camera event ingestor (local or Container App)
+├── ingestors/nest/               # Optional: Google Nest camera event ingestor (local or Container App)
 ├── infra/                        # Bicep (main.bicep + modules/)
 ├── docs/                         # architecture, deployment, cost, troubleshooting, extending-phase2
 ├── sample_videos/                # demo footage for video-file capture mode
