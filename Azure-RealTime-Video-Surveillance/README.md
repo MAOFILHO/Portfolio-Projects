@@ -84,55 +84,7 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 
 ## Azure Architecture
 
-```
-                     Browser (React + TS, Azure Static Web Apps — Free)
-                     Gated by Microsoft sign-in (SWA built-in auth) before anything loads
-                     Capture: LiveCamera (getUserMedia) / Demo Video     Nav: Capture, Profile,
-                                   |                                     Settings, Observability, Audit
-                                   |  throttled frames (default every 3s)
-                                   |  WebSocket (alerts) <----------------+
-                                   v                                      |
-        +-------------------------------------------------------------------------------------------------+
-        | FastAPI  (Azure Container Apps, minReplicas=0)                                                  |
-        |  POST /api/v1/frames                -> upload to Blob (API-key gated)                           |
-        |  GET  /api/v1/frames/{cam}/{file}    -> proxy frame image (thumbnails)                          |
-        |  POST /api/v1/frames/.../analyze     -> on-demand Vision (Tags/Read/SmartCrop, API-key gated)   |
-        |  WS   /ws/alerts                     -> fan-out to dashboards                                   |
-        |  GET  /api/v1/events                 -> recent events (Table)                                   |
-        |  GET  /api/v1/settings               -> current alert config (read-only)                        |
-        |  GET/POST /api/v1/audit              -> audit trail (Table, API-key gated writes)               |
-        |  GET  /api/v1/observability/*        -> requests summary + exceptions (Log Analytics query)     |
-        |  GET  /api/v1/health                                                                            |
-        |  background task: reads 'alerts' queue -> WS                                                    |
-        +---------------------+---------------------------------------------------------------------------+
-                              | frame blob upload (container: frames)
-                              v
-        Azure Storage (StorageV2, Standard_LRS, Hot, keyless RBAC)
-          containers: frames, events (annotated)
-          queue: alerts       | tables: events, audit
-                              | native blob trigger
-                              v
-        +-------------------------------------------------------------------------+
-        | Azure Function (Python, Consumption plan)                               |  
-        |  trigger: blob created in 'frames/{name}'                               |
-        |  FrameAnalyzer.detect(frame) --------------------> Azure AI Vision      |
-        |  evaluate_detections() -> alert rule engine        Image Analysis 4.0   |
-        |  on alert: write event (Table) + annotated blob    (F0 free or S1)      |
-        |            enqueue 'alerts' queue (-> WebSocket)                        |
-        |            send Azure Communication Services email/SMS                  | 
-        +-------------------------------------------------------------------------+
-
-        Home Camera Ingestor (ingestors/nest/) — optional 2nd capture source
-          Google Cloud Pub/Sub -> dedup -> WebRTC/clip-preview capture -> POST /api/v1/frames
-          runs locally (free) OR as an always-on Container App (minReplicas=maxReplicas=1, ~$10-15/mo)
-
-        Observability: Application Insights + Log Analytics (PerGB2018, 30d retention)
-          queried directly by the backend's Observability page — not just the Azure Portal
-        Identity: one user-assigned Managed Identity — keyless Blob/Queue/Table + Vision +
-                  Log Analytics Reader access; no credentials anywhere in this system's own code
-```
-
-## Azure Architecture
+High-level view of Azure services and how they connect.
 
 ```mermaid
 flowchart TB
@@ -186,6 +138,60 @@ flowchart TB
     Identity -.keyless auth.- Vision
     Identity -.keyless auth.- LogAnalytics
 ```
+
+## Detailed Request & Data Flow
+
+Endpoint-level view of API routes, storage schema, and the analysis pipeline — for tracing a specific request end-to-end.
+
+```
+                     Browser (React + TS, Azure Static Web Apps — Free)
+                     Gated by Microsoft sign-in (SWA built-in auth) before anything loads
+                     Capture: LiveCamera (getUserMedia) / Demo Video     Nav: Capture, Profile,
+                                   |                                     Settings, Observability, Audit
+                                   |  throttled frames (default every 3s)
+                                   |  WebSocket (alerts) <----------------+
+                                   v                                      |
+        +-------------------------------------------------------------------------------------------------+
+        | FastAPI  (Azure Container Apps, minReplicas=0)                                                  |
+        |  POST /api/v1/frames                -> upload to Blob (API-key gated)                           |
+        |  GET  /api/v1/frames/{cam}/{file}    -> proxy frame image (thumbnails)                          |
+        |  POST /api/v1/frames/.../analyze     -> on-demand Vision (Tags/Read/SmartCrop, API-key gated)   |
+        |  WS   /ws/alerts                     -> fan-out to dashboards                                   |
+        |  GET  /api/v1/events                 -> recent events (Table)                                   |
+        |  GET  /api/v1/settings               -> current alert config (read-only)                        |
+        |  GET/POST /api/v1/audit              -> audit trail (Table, API-key gated writes)               |
+        |  GET  /api/v1/observability/*        -> requests summary + exceptions (Log Analytics query)     |
+        |  GET  /api/v1/health                                                                            |
+        |  background task: reads 'alerts' queue -> WS                                                    |
+        +---------------------+---------------------------------------------------------------------------+
+                              | frame blob upload (container: frames)
+                              v
+        Azure Storage (StorageV2, Standard_LRS, Hot, keyless RBAC)
+          containers: frames, events (annotated)
+          queue: alerts       | tables: events, audit
+                              | native blob trigger
+                              v
+        +-------------------------------------------------------------------------+
+        | Azure Function (Python, Consumption plan)                               |  
+        |  trigger: blob created in 'frames/{name}'                               |
+        |  FrameAnalyzer.detect(frame) --------------------> Azure AI Vision      |
+        |  evaluate_detections() -> alert rule engine        Image Analysis 4.0   |
+        |  on alert: write event (Table) + annotated blob    (F0 free or S1)      |
+        |            enqueue 'alerts' queue (-> WebSocket)                        |
+        |            send Azure Communication Services email/SMS                  | 
+        +-------------------------------------------------------------------------+
+
+        Home Camera Ingestor (ingestors/nest/) — optional 2nd capture source
+          Google Cloud Pub/Sub -> dedup -> WebRTC/clip-preview capture -> POST /api/v1/frames
+          runs locally (free) OR as an always-on Container App (minReplicas=maxReplicas=1, ~$10-15/mo)
+
+        Observability: Application Insights + Log Analytics (PerGB2018, 30d retention)
+          queried directly by the backend's Observability page — not just the Azure Portal
+        Identity: one user-assigned Managed Identity — keyless Blob/Queue/Table + Vision +
+                  Log Analytics Reader access; no credentials anywhere in this system's own code
+```
+
+## Azure Resources
 
 **Azure** (default region `eastus2`, except Vision — see below):
 - Container Apps: FastAPI backend (frame ingest, on-demand analysis, event/settings/audit/observability APIs, WebSocket alert fan-out)
@@ -280,14 +286,7 @@ flowchart LR
 
 ## Design Decisions
 
-- **Hybrid compute, decoupled by a queue** — the Function never calls the FastAPI process directly; it enqueues an `AlertMessage` on the `alerts` Storage Queue, and a background task in FastAPI polls that queue and fans out to WebSocket clients. Each side is independently testable, and the API stays responsive even if analysis is slow.
-- **Native blob trigger over Event Grid** — the Function uses a plain `blob_trigger` binding on `frames/{name}` instead of an Event Grid subscription. Event Grid requires a webhook handshake against the function's own extension endpoint, which only exists *after* the function code is deployed — a circular dependency for a Bicep-first pipeline. The tradeoff is documented in [docs/architecture.md](docs/architecture.md).
-- **Everything keyless** — Blob/Queue/Table and Vision access all go through one user-assigned managed identity with scoped RBAC roles; the only secret in the whole system is the Azure Communication Services connection string (used only for sending alert email/SMS).
-- **Pluggable analyzer** — `FrameAnalyzer` is a `Protocol`; today only `AzureVisionAnalyzer` implements it. A Custom Vision or YOLOv4 backend can be added later without touching capture, alert rules, or infra.
-- **Wrap `az`/`func`/`npm`, don't reimplement them** — the Python CLI streams and orchestrates real Azure CLI, Functions Core Tools, and npm commands rather than reimplementing REST calls; every step prints exactly which command it's running.
-- **Resumable deployment state** — `deployment_state.json` checkpoints each completed step; re-running `surveil-deploy deploy` after a failure resumes from the failed step instead of re-provisioning everything.
-- **Deploy Container Apps from a unique per-build tag, never `: latest`** — `s05_build_backend.py`/`s06_deploy_ingestor.py` build both `surveil-backend:<timestamp>` and `: latest`, but `az containerapp update --image` is always pointed at the timestamped tag. Confirmed the hard way: pointing at an unchanged `: latest` string can make Container Apps report a successful update *without creating a new revision or restarting the running replica* — the deploy succeeds, the old code just keeps running.
-- **Static Web Apps built-in auth over a custom login form** — the dashboard is gated by Azure AD sign-in through Static Web Apps' native identity provider integration (`staticwebapp.config.json`), not a hand-rolled username/password system. No credential storage, no password hashing, no session-token code to get wrong — at the cost of only gating the frontend's own routes, not the backend Container App API (a separate origin), which still relies on the shared `X-Api-Key` anti-abuse gate on write endpoints. Real end-to-end auth would mean the backend validating a token too.
+See [docs/design-decisions.md](docs/design-decisions.md).
 
 ## Prerequisites
 
@@ -300,8 +299,6 @@ flowchart LR
 | Git | 2.40+ | `brew install git` |
 
 <img width="840" height="609" alt="Screenshot 2026-07-25 at 10 44 44 AM" src="https://github.com/user-attachments/assets/8ab2b31c-1106-478b-bbef-da5a2b136c6c" />
-
-
 
 
 **Azure subscription** with **Contributor** role is sufficient — unlike accelerators that provision cross-resource RBAC role assignments requiring Owner, this template's only role assignments are scoped to resources it creates itself (Storage, Cognitive Services, Container Registry), which Contributor can grant.
@@ -582,25 +579,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Lessons Learned
 
-1. **Ship the whole path, not half of it** — it's tempting to leave detection/alerting as "future work" once capture is working. This project implements capture-through-alert end to end rather than stopping at the easy part.
-2. **azd's `${VAR=default}` parameter substitution is azd-specific** — it does not work with raw `az deployment` calls. This project intentionally uses plain Azure CLI (per the zero-portal, IaC-only requirement) with parameters supplied by the Python CLI, not azd.
-3. **Event Grid requires the function to exist first** — a Bicep-first pipeline that wants to wire a Function's Event Grid subscription hits a circular dependency (the webhook target doesn't exist until code is deployed). A native blob trigger avoids this entirely for a demo-scale system.
-4. **Azure Functions remote build only sees its own deployment package** — shared code between the backend and the Function can't be referenced by a relative path; it must be vendored into the function's own directory immediately before publish (see `s07_deploy_function.py`).
-5. **Keyless (managed identity) everywhere is both cheaper to reason about and required for a "no hardcoded secrets" bar** — every credential in this system is a scoped RBAC role assignment, except the single Communication Services connection string; there are no storage account keys anywhere.
-6. **Not every "supported" API command actually works** — a device can advertise a trait (e.g. `CameraEventImage`) while the underlying command still 400s for that hardware generation. Building a layered fallback (cheapest path first, more expensive path only when needed) kept the system working across mixed hardware without hardcoding per-device special cases.
-7. **A SAS token is a ticking time bomb if the resource it authorizes is meant to outlive it** — the Function App originally loaded its code via a 1-hour user-delegation SAS URL in `WEBSITE_RUN_FROM_PACKAGE`. It worked at deploy time and then silently stopped working exactly one hour later, with no error anywhere (the host just couldn't fetch its own package). Switched to the identity-based mechanism (`WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID`, reusing the already-provisioned managed identity) — no expiry, matches the project's keyless-everywhere principle.
-8. **A Bicep `siteConfig.appSettings` block is a full replace, not a merge** — app settings intentionally set outside Bicep (like the fix above) get silently deleted by the next unrelated infra redeploy if that redeploy isn't immediately followed by whatever step re-applies them. This is easy to not notice: the Bicep deploy succeeds, the resource shows `Running`, and nothing looks wrong until you check whether anything is actually still being processed. See the CI/CD Pipeline section above.
-9. **`: latest` is not a safe redeploy target for Container Apps** — pointing `az containerapp update --image` at an unchanged tag string can report success without creating a new revision or restarting the running replica, since Container Apps decides whether to reconcile based on the image *reference string* in the template, not the digest behind it. Deploy from a unique per-build tag instead.
-10. **Azure Table Storage has no `ORDER BY`** — entities come back ordered by PartitionKey then RowKey, not by time. An earlier version of `list_recent_events()` fetched only the first page (`results_per_page=limit`) and sorted within it, which silently dropped whole camera partitions whenever an alphabetically-earlier `PartitionKey` (camera ID) alone filled that page — a real bug that looked like "some cameras' events just never show up," not an obvious query failure. Fixed by scanning every entity and sorting by timestamp in application code before trimming to the requested limit.
-11. **A perfectly healthy WebRTC connection doesn't guarantee media flows** — ICE completed, DTLS connected, and RTCP feedback (an immediate PLI keyframe request, using the SSRC parsed directly from the SDP answer rather than waited-for via `getStats()`, which has an inherent chicken-and-egg gap) can all be correct, and the remote side can still never send a single video RTP packet. Confirmed against real hardware (audio flows fine over the identical transport, ruling out a connectivity/NAT problem) — a reminder that connection-state and media-flow are genuinely separate failure domains worth instrumenting separately, not the same.
-12. **A tool version check that greps for an exact substring breaks the moment a version outpaces the check** — `s00_preflight.py` originally required Node's version string to literally contain `v20`, so Node 24 (still a valid 20+ LTS) failed with a warning. Worse, the Azure CLI check ran `az version` (JSON output) instead of `az --version` (human-readable), so the "version string" it compared against was just `{`, the first line of the JSON blob. Both were silent false positives that would only get worse over time as tool versions moved forward. Fixed by parsing an actual major-version integer and comparing `>=`, and by using the flag that produces a stable single-line first output.
-13. **"Purge the old resource" isn't the only shape soft-delete takes** — Cognitive Services accounts soft-delete for 48h and expose a `purge` API to free the name immediately; Log Analytics workspaces soft-delete for 14 days but have no purge API at all, only `recover` (which brings the original resource back so the next Bicep deploy updates it in place instead of creating fresh). A redeploy-after-teardown pipeline that only checks the first pattern still fails on the second the first time a workspace name collides. `soft_delete.py` now checks and auto-resolves both before every deploy.
-14. **A blob-triggered Function's "wait for it to fire" smoke test needs to budget for the trigger mechanism's actual worst case, not its typical case** — this project's Function uses the classic polling-based blob trigger (not Event Grid), which Azure documents as taking up to 10 minutes to discover a new blob in the worst case. `s11_validate_e2e`'s original 90s wait failed reliably; two consecutive real test uploads took 4.5 and 6.5 minutes respectively, confirming this isn't a rare cold-start fluke but the trigger's normal variance. Bumped to 600s with periodic progress logging so a long wait doesn't look hung. If this still isn't enough headroom in practice, the durable fix is switching to an Event Grid-based blob trigger rather than further widening the timeout — see `docs/troubleshooting.md` #10.
-15. **"Contributor is enough" had never actually been tested** — every local dry-run ran under a subscription-Owner human account, so a documented claim that plain Contributor suffices went unchallenged for a long time. The first real test under a purpose-built, Contributor-only OIDC service principal immediately failed: Contributor explicitly excludes `Microsoft.Authorization/roleAssignments/write`, and the Bicep template creates several role assignments. The identity needs Contributor **plus User Access Administrator** (or Owner).
-16. **An unset GitHub Actions repo variable becomes an empty string, not "absent"** — passing it straight through to an env var meant Pydantic's boolean parser rejected `""` outright. A local `.env` simply omits the key, which pydantic-settings treats as `False` — so this only ever surfaced in Actions. Fixed with `${{ vars.X || 'false' }}`.
-17. **GitHub's OIDC subject claim now embeds immutable owner/repo IDs by default** (`repo:OWNER@<owner-id>/REPO@<repo-id>:ref:refs/heads/main`), not the plain `repo:OWNER/REPO:ref:...` format most docs still show. A federated credential registered with the plain form fails `AADSTS700213` on the first real run — confirmed by reading the actual subject GitHub presented in the error and registering a second credential against it. This also means renaming a GitHub repo requires updating the credential's subject to match the new name (the numeric owner/repo IDs stay the same, only the name portion changes).
-18. **A blob trigger's Event Grid "source" and a genuine Event Grid "trigger" are two different things that share a name** — a blob trigger with `source="EventGrid"` is still a blob trigger; Event Grid's `azurefunction` destination type rejects it ("supports EventGrid Trigger type only"). The real mechanism is a `webhook` destination against the function's built-in blob-extension endpoint, authenticated with the `blobs_extension` system key.
-19. **GitHub's required-reviewer environment protection is a paid-plan feature for private repos** — discovered only by trying to create it via the API. The free-tier equivalent is removing the automatic deploy trigger entirely, making every real Azure spend a deliberate manual action.
+See [docs/lessonslearned.md](docs/lessonslearned.md).
 
 ## Disclaimer
 
