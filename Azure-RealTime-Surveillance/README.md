@@ -132,6 +132,8 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
                   Log Analytics Reader access; no credentials anywhere in this system's own code
 ```
 
+## Azure Architecture
+
 ```mermaid
 flowchart TB
     Auth["Microsoft Sign-In<br/>(SWA built-in auth)"] -.gates.- Browser
@@ -229,7 +231,7 @@ sequenceDiagram
         Queue-->>API: AlertMessage
         API->>WS: broadcast alert
     end
-    Note over Cam,WS: Dashboard separately polls GET /api/v1/events for full history
+    Note over Cam, WS: Dashboard separately polls GET /api/v1/events for full history
 ```
 
 Two things worth calling out: the Function and the API never talk to each other directly — the `alerts` Storage Queue is the only coupling, so either side can be redeployed or briefly unavailable without losing an alert. And every frame gets a Table Storage record whether or not it triggers an alert, which is what powers the dashboard's event history view (as distinct from the live alert feed, which only shows matches).
@@ -240,7 +242,7 @@ Two things worth calling out: the Function and the API never talk to each other 
 
 ## CI/CD Pipeline
 
-> **Status in this environment: not yet exercised.** This repository has no GitHub remote configured and no commits yet, so `ci.yml`/`deploy.yml` have never actually run — GitHub Actions only exists once code is pushed to a GitHub-hosted repo. Every deployment so far has gone through the local `surveil-deploy` CLI directly (see [CLI Commands](#cli-commands)). The diagram below describes what these workflows *will* do once this repo is pushed to GitHub, not something already observed running.
+**Status in this environment: not yet exercised.** This repository has no GitHub remote configured and no commits yet, so `ci.yml`/`deploy.yml` have never actually run — GitHub Actions only exists once code is pushed to a GitHub-hosted repo. Every deployment so far has gone through the local `surveil-deploy` CLI directly (see [CLI Commands](#cli-commands)). The diagram below describes what these workflows *will* do once this repo is pushed to GitHub, not something already observed running.
 
 ```mermaid
 flowchart LR
@@ -271,13 +273,13 @@ flowchart LR
 
 ## Design Decisions
 
-- **Hybrid compute, decoupled by a queue** — the Function never calls the FastAPI process directly; it enqueues an `AlertMessage` on the `alerts` Storage Queue, and a background task in FastAPI polls that queue and fans out to WebSocket clients. Each side is independently testable and the API stays responsive even if analysis is slow.
+- **Hybrid compute, decoupled by a queue** — the Function never calls the FastAPI process directly; it enqueues an `AlertMessage` on the `alerts` Storage Queue, and a background task in FastAPI polls that queue and fans out to WebSocket clients. Each side is independently testable, and the API stays responsive even if analysis is slow.
 - **Native blob trigger over Event Grid** — the Function uses a plain `blob_trigger` binding on `frames/{name}` instead of an Event Grid subscription. Event Grid requires a webhook handshake against the function's own extension endpoint, which only exists *after* the function code is deployed — a circular dependency for a Bicep-first pipeline. The tradeoff is documented in [docs/architecture.md](docs/architecture.md).
 - **Everything keyless** — Blob/Queue/Table and Vision access all go through one user-assigned managed identity with scoped RBAC roles; the only secret in the whole system is the Azure Communication Services connection string (used only for sending alert email/SMS).
 - **Pluggable analyzer** — `FrameAnalyzer` is a `Protocol`; today only `AzureVisionAnalyzer` implements it. A Custom Vision or YOLOv4 backend can be added later without touching capture, alert rules, or infra.
 - **Wrap `az`/`func`/`npm`, don't reimplement them** — the Python CLI streams and orchestrates real Azure CLI, Functions Core Tools, and npm commands rather than reimplementing REST calls; every step prints exactly which command it's running.
 - **Resumable deployment state** — `deployment_state.json` checkpoints each completed step; re-running `surveil-deploy deploy` after a failure resumes from the failed step instead of re-provisioning everything.
-- **Deploy Container Apps from a unique per-build tag, never `:latest`** — `s05_build_backend.py`/`s06_deploy_ingestor.py` build both `surveil-backend:<timestamp>` and `:latest`, but `az containerapp update --image` is always pointed at the timestamped tag. Confirmed the hard way: pointing at an unchanged `:latest` string can make Container Apps report a successful update *without creating a new revision or restarting the running replica* — the deploy succeeds, the old code just keeps running.
+- **Deploy Container Apps from a unique per-build tag, never `: latest`** — `s05_build_backend.py`/`s06_deploy_ingestor.py` build both `surveil-backend:<timestamp>` and `: latest`, but `az containerapp update --image` is always pointed at the timestamped tag. Confirmed the hard way: pointing at an unchanged `: latest` string can make Container Apps report a successful update *without creating a new revision or restarting the running replica* — the deploy succeeds, the old code just keeps running.
 - **Static Web Apps built-in auth over a custom login form** — the dashboard is gated by Azure AD sign-in through Static Web Apps' native identity provider integration (`staticwebapp.config.json`), not a hand-rolled username/password system. No credential storage, no password hashing, no session-token code to get wrong — at the cost of only gating the frontend's own routes, not the backend Container App API (a separate origin), which still relies on the shared `X-Api-Key` anti-abuse gate on write endpoints. Real end-to-end auth would mean the backend validating a token too.
 
 ## Prerequisites
@@ -289,6 +291,11 @@ flowchart LR
 | Node.js | 20+ LTS | `brew install node` |
 | Azure Functions Core Tools | 4.x | `npm install -g azure-functions-core-tools@4 --unsafe-perm true` |
 | Git | 2.40+ | `brew install git` |
+
+<img width="840" height="609" alt="Screenshot 2026-07-25 at 10 44 44 AM" src="https://github.com/user-attachments/assets/8ab2b31c-1106-478b-bbef-da5a2b136c6c" />
+
+
+
 
 **Azure subscription** with **Contributor** role is sufficient — unlike accelerators that provision cross-resource RBAC role assignments requiring Owner, this template's only role assignments are scoped to resources it creates itself (Storage, Cognitive Services, Container Registry), which Contributor can grant.
 
@@ -371,6 +378,16 @@ surveil-deploy smoke-test --stage pre     # ~5s: verify local prerequisites
 surveil-deploy deploy                     # ~10-20 min: full deployment (12 stages)
 ```
 
+<img width="916" height="326" alt="Screenshot 2026-07-25 at 10 52 31 AM" src="https://github.com/user-attachments/assets/66842c9c-f13f-4f29-afc5-8aa2f0d88546" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="882" height="649" alt="Screenshot 2026-07-25 at 11 32 30 AM" src="https://github.com/user-attachments/assets/a2efca6e-a3cb-4dce-a163-a77cba0c09ab" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+
 After deployment, the dashboard and API URLs are printed in the deployment summary.
 
 ## Configuration
@@ -396,7 +413,7 @@ See `.env.example` for the full list, including SMS and image-build-mode options
 
 **Alert severity, crowd, and trespassing rules** — all three ship **disabled/safe by default** and are entirely opt-in:
 - Severity uses a built-in default map (weapons → critical, trespassing → high, crowd → medium, person → low); override with `ALERT_SEVERITY_MAP` (JSON) if you want different rankings.
-- Crowd alerting is off until you set `ALERT_CROWD_THRESHOLD` to a person-count above zero.
+- Crowd alerting is off until you set `ALERT_CROWD_THRESHOLD` to a person count above zero.
 - The trespassing/zone rule is off until you set `ALERT_RESTRICTED_ZONE` to real normalized coordinates for your camera's framing (e.g. `0.1,0.1,0.9,0.9` covers most of the frame, leaving a small border).
 
 ## Stage Details
@@ -441,6 +458,11 @@ surveil-deploy status                # show pipeline progress
 surveil-deploy smoke-test --stage pre|post
 ```
 
+<img width="882" height="649" alt="Screenshot 2026-07-25 at 11 32 30 AM" src="https://github.com/user-attachments/assets/c80256d2-b33b-4937-86bf-7b2eff9ad607" />
+
+
+
+
 ## Teardown / Cleanup
 
 ```bash
@@ -449,15 +471,107 @@ surveil-deploy teardown             # delete the resource group
 az group delete --name surveil-rg --yes --no-wait
 ```
 
+<img width="953" height="219" alt="Screenshot 2026-07-25 at 6 12 30 PM" src="https://github.com/user-attachments/assets/71847d3b-b09f-4a61-a4df-bc3694750f1d" />
+
+
+
+
 Cognitive Services (Vision) accounts are soft-deleted for 48h by default. If you need the account name freed immediately for a same-name redeploy:
 ```bash
 surveil-deploy teardown --purge
 ```
-Purge calls are individually time-boxed (30s) so a slow purge can't stall the rest of teardown — see `src/surveil_deploy/steps/s12_teardown.py`.
+
+<img width="918" height="352" alt="Screenshot 2026-07-25 at 7 55 43 PM" src="https://github.com/user-attachments/assets/9c1e317a-5dd4-4a18-a5ed-c5fbec958f2a" />
+
+
+
+Purge calls are individually time-boxed (30s), so a slow purge can't stall the rest of teardown — see `src/surveil_deploy/steps/s12_teardown.py`.
+
+
+## Web App Screenshots
+
+<img width="1147" height="525" alt="Screenshot 2026-07-25 at 11 07 40 AM" src="https://github.com/user-attachments/assets/2241f70c-fb65-4e3b-9a31-dd24f1803168" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="508" height="538" alt="Screenshot 2026-07-25 at 11 08 00 AM" src="https://github.com/user-attachments/assets/eb1f4f28-b171-4cd7-9945-ceb095287a36" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1162" height="650" alt="Screenshot 2026-07-25 at 11 08 17 AM" src="https://github.com/user-attachments/assets/923ddb68-3e66-467a-b42c-80afa3d346a7" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="992" height="664" alt="Screenshot 2026-07-25 at 11 10 15 AM" src="https://github.com/user-attachments/assets/d79a0d85-9dbd-43d4-95df-7c7c16a533ea" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="963" height="666" alt="Screenshot 2026-07-25 at 11 12 23 AM" src="https://github.com/user-attachments/assets/d25a540e-dd7b-49a9-bdb0-f2a69c5c680c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="680" height="612" alt="Screenshot 2026-07-25 at 11 13 02 AM" src="https://github.com/user-attachments/assets/94051029-5971-4ede-a3f2-2c1cfcafe822" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="915" height="824" alt="Screenshot 2026-07-24 at 11 29 22 AM" src="https://github.com/user-attachments/assets/b03a5c91-ebaf-461d-9f5e-5788a6487096" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="912" height="824" alt="Screenshot 2026-07-24 at 11 30 18 AM" src="https://github.com/user-attachments/assets/b4e1a7a5-b0c2-49c8-942e-04b1e7b001ef" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="915" height="829" alt="Screenshot 2026-07-24 at 11 30 43 AM" src="https://github.com/user-attachments/assets/d751ec0a-06ab-44de-a3bb-1d91716d247d" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1173" height="664" alt="Screenshot 2026-07-25 at 12 18 55 AM" src="https://github.com/user-attachments/assets/737c10cf-3ba3-47f0-a827-b516098b45e3" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1147" height="652" alt="Screenshot 2026-07-25 at 12 19 18 AM" src="https://github.com/user-attachments/assets/f53bdab9-1746-4100-8271-1a3d8823314d" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1132" height="561" alt="Screenshot 2026-07-25 at 12 23 52 AM" src="https://github.com/user-attachments/assets/05b5bd9d-622c-4764-8637-21f343871d58" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="612" height="610" alt="Screenshot 2026-07-25 at 12 23 35 AM" src="https://github.com/user-attachments/assets/ed6e5ee2-7bb5-4588-aa5c-7f55b61e9b2f" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1174" height="645" alt="Screenshot 2026-07-25 at 12 14 50 AM" src="https://github.com/user-attachments/assets/dfb7d9d9-86c1-42ec-895f-381616236c4a" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1159" height="657" alt="Screenshot 2026-07-25 at 12 17 12 AM" src="https://github.com/user-attachments/assets/fcee3e0a-d028-40ab-a8f4-1c09e3fa474e" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1153" height="506" alt="Screenshot 2026-07-25 at 12 17 24 AM" src="https://github.com/user-attachments/assets/e37ea82f-fb51-4e85-99a4-6143c3ed33da" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1160" height="576" alt="Screenshot 2026-07-25 at 12 17 36 AM" src="https://github.com/user-attachments/assets/bf231f7c-4798-406e-bf0a-7819c55fa6cc" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1160" height="664" alt="Screenshot 2026-07-25 at 12 17 51 AM" src="https://github.com/user-attachments/assets/0145f820-e630-4b3d-a30b-8329e80c91ef" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1160" height="659" alt="Screenshot 2026-07-25 at 12 18 02 AM" src="https://github.com/user-attachments/assets/56090de9-9dca-4a61-ba9f-a96324d63740" />
+
+
+
 
 ## Troubleshooting
 
 See [docs/troubleshooting.md](docs/troubleshooting.md).
+
+
 
 ## Lessons Learned
 
@@ -469,17 +583,22 @@ See [docs/troubleshooting.md](docs/troubleshooting.md).
 6. **Not every "supported" API command actually works** — a device can advertise a trait (e.g. `CameraEventImage`) while the underlying command still 400s for that hardware generation. Building a layered fallback (cheapest path first, more expensive path only when needed) kept the system working across mixed hardware without hardcoding per-device special cases.
 7. **A SAS token is a ticking time bomb if the resource it authorizes is meant to outlive it** — the Function App originally loaded its code via a 1-hour user-delegation SAS URL in `WEBSITE_RUN_FROM_PACKAGE`. It worked at deploy time and then silently stopped working exactly one hour later, with no error anywhere (the host just couldn't fetch its own package). Switched to the identity-based mechanism (`WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID`, reusing the already-provisioned managed identity) — no expiry, matches the project's keyless-everywhere principle.
 8. **A Bicep `siteConfig.appSettings` block is a full replace, not a merge** — app settings intentionally set outside Bicep (like the fix above) get silently deleted by the next unrelated infra redeploy if that redeploy isn't immediately followed by whatever step re-applies them. This is easy to not notice: the Bicep deploy succeeds, the resource shows `Running`, and nothing looks wrong until you check whether anything is actually still being processed. See the CI/CD Pipeline section above.
-9. **`:latest` is not a safe redeploy target for Container Apps** — pointing `az containerapp update --image` at an unchanged tag string can report success without creating a new revision or restarting the running replica, since Container Apps decides whether to reconcile based on the image *reference string* in the template, not the digest behind it. Deploy from a unique per-build tag instead.
+9. **`: latest` is not a safe redeploy target for Container Apps** — pointing `az containerapp update --image` at an unchanged tag string can report success without creating a new revision or restarting the running replica, since Container Apps decides whether to reconcile based on the image *reference string* in the template, not the digest behind it. Deploy from a unique per-build tag instead.
 10. **Azure Table Storage has no `ORDER BY`** — entities come back ordered by PartitionKey then RowKey, not by time. An earlier version of `list_recent_events()` fetched only the first page (`results_per_page=limit`) and sorted within it, which silently dropped whole camera partitions whenever an alphabetically-earlier `PartitionKey` (camera ID) alone filled that page — a real bug that looked like "some cameras' events just never show up," not an obvious query failure. Fixed by scanning every entity and sorting by timestamp in application code before trimming to the requested limit.
-11. **A perfectly healthy WebRTC connection doesn't guarantee media flows** — ICE completed, DTLS connected, and RTCP feedback (an immediate PLI keyframe request, using the SSRC parsed directly from the SDP answer rather than waited-for via `getStats()`, which has an inherent chicken-and-egg gap) can all be correct, and the remote side can still never send a single video RTP packet. Confirmed against real hardware (audio flows fine over the identical transport, ruling out a connectivity/NAT problem) — a reminder that connection-state and media-flow are genuinely separate failure domains worth instrumenting separately, not one and the same.
+11. **A perfectly healthy WebRTC connection doesn't guarantee media flows** — ICE completed, DTLS connected, and RTCP feedback (an immediate PLI keyframe request, using the SSRC parsed directly from the SDP answer rather than waited-for via `getStats()`, which has an inherent chicken-and-egg gap) can all be correct, and the remote side can still never send a single video RTP packet. Confirmed against real hardware (audio flows fine over the identical transport, ruling out a connectivity/NAT problem) — a reminder that connection-state and media-flow are genuinely separate failure domains worth instrumenting separately, not the same.
 12. **A tool version check that greps for an exact substring breaks the moment a version outpaces the check** — `s00_preflight.py` originally required Node's version string to literally contain `v20`, so Node 24 (still a valid 20+ LTS) failed with a warning. Worse, the Azure CLI check ran `az version` (JSON output) instead of `az --version` (human-readable), so the "version string" it compared against was just `{`, the first line of the JSON blob. Both were silent false positives that would only get worse over time as tool versions moved forward. Fixed by parsing an actual major-version integer and comparing `>=`, and by using the flag that produces a stable single-line first output.
 13. **"Purge the old resource" isn't the only shape soft-delete takes** — Cognitive Services accounts soft-delete for 48h and expose a `purge` API to free the name immediately; Log Analytics workspaces soft-delete for 14 days but have no purge API at all, only `recover` (which brings the original resource back so the next Bicep deploy updates it in place instead of creating fresh). A redeploy-after-teardown pipeline that only checks the first pattern still fails on the second the first time a workspace name collides. `soft_delete.py` now checks and auto-resolves both before every deploy.
 14. **A blob-triggered Function's "wait for it to fire" smoke test needs to budget for the trigger mechanism's actual worst case, not its typical case** — this project's Function uses the classic polling-based blob trigger (not Event Grid), which Azure documents as taking up to 10 minutes to discover a new blob in the worst case. `s11_validate_e2e`'s original 90s wait failed reliably; two consecutive real test uploads took 4.5 and 6.5 minutes respectively, confirming this isn't a rare cold-start fluke but the trigger's normal variance. Bumped to 600s with periodic progress logging so a long wait doesn't look hung. If this still isn't enough headroom in practice, the durable fix is switching to an Event Grid-based blob trigger rather than further widening the timeout — see `docs/troubleshooting.md` #10.
 
 ## Disclaimer
 
-> This is a demo/portfolio project, not a certified security or life-safety system. Detection accuracy depends entirely on Azure AI Vision's pretrained models; there is no guarantee of detecting all threats, and false negatives/positives should be expected. Do not rely on this system as a sole security measure.
+This is a portfolio project, not a certified security or life-safety system. Detection accuracy depends entirely on Azure AI Vision's pretrained models; there is no guarantee of detecting all threats, and false negatives/positives should be expected. Do not rely on this system as a sole security measure.
 
 ## License
 
 MIT License — see [LICENSE](LICENSE)
+
+
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
