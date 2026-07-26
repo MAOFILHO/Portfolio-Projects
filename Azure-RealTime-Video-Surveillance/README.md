@@ -263,14 +263,29 @@ Two things worth calling out: the Function and the API never talk to each other 
 
 ## CI/CD Pipeline
 
-**This is not the same thing as the video-analysis pipeline described in the Data Flow section** — it's easy to conflate the two since both get called "pipelines." The distinction:
+Two very different things in this project both get called "pipelines" — easy to conflate, so here's the distinction up front:
 
-- **GitHub Actions CI/CD** (`ci.yml` / `deploy.yml`) is about the *codebase*. It answers "did this code change break anything, and should it actually go live?" It lints, tests, validates Bicep, and (on manual trigger) redeploys the app to Azure. Delete it entirely and the running system keeps working exactly the same — you'd just be back to deploying by hand via the `surveil-deploy` CLI.
-- **The video-analysis flow** (blob upload → Function → Vision API → alert) is the *application itself*, running continuously in Azure and processing real frames. Nothing about it builds, tests, or deploys code — it's the product, not the shipping mechanism.
+| | GitHub Actions CI/CD (this section) | Video-Analysis Flow (see [Data Flow](#data-flow)) |
+|---|---|---|
+| Answers | "Did this code change break anything, and should it ship?" | "What happens to a frame the instant it arrives?" |
+| Where it runs | GitHub-hosted runners | Azure (Container Apps + Function), continuously |
+| Triggered by | A push (`ci.yml`) or a manual click (`deploy.yml`) | A blob upload |
+| If you deleted it | You'd deploy by hand via the `surveil-deploy` CLI instead — the running app is unaffected | The product itself stops working |
 
-In short: CI/CD is how safe changes get *into* the running system; the Data Flow section is what that system *does* once it's running.
+In short: CI/CD is how safe changes get *into* the running system; Data Flow is what that system *does* once it's running.
 
-`ci.yml`/`deploy.yml` have both been exercised for real against a GitHub remote (OIDC-federated Azure AD app registration for `azure/login`). `deploy.yml` briefly gained an automatic trigger during that testing, then was deliberately reverted to manual-only `workflow_dispatch` — GitHub's required-reviewer approval gate needs a paid plan for private repos, so removing the automatic trigger entirely is the free-tier equivalent: every real Azure spend is a deliberate action, never a side effect of a green CI run.
+### Workflows
+
+| Workflow | Trigger | Touches Azure? | What it does |
+|---|---|---|---|
+| `ci.yml` | Every push/PR | No — free, fast correctness gate | Lint (`ruff`), unit tests (`pytest`), Bicep template validation, frontend build |
+| `deploy.yml` | Manual only (`workflow_dispatch`) | Yes — real spend | OIDC login → 12-stage `surveil-deploy deploy` → post-deploy smoke test → optional teardown |
+
+`deploy.yml` is deliberately **manual-only**: provisioning real Azure resources costs money, so nothing triggers it on a push. It authenticates via OIDC federated credentials (no secrets stored in GitHub).
+
+> **Status:** both workflows have been exercised for real against a GitHub remote (OIDC-federated Azure AD app registration for `azure/login`). `deploy.yml` briefly gained an automatic trigger during that testing, then was deliberately reverted to manual-only — GitHub's required-reviewer approval gate needs a paid plan for private repos, so removing the automatic trigger entirely is the free-tier equivalent: every real Azure spend is a deliberate action, never a side effect of a green CI run.
+
+### Pipeline Diagram
 
 ```mermaid
 flowchart LR
@@ -295,9 +310,11 @@ flowchart LR
     end
 ```
 
-`ci.yml` runs automatically and never touches Azure — it's the fast, free correctness gate (lint, unit tests, Bicep compiles, frontend builds). `deploy.yml` is deliberately **manual-only** (`workflow_dispatch`): provisioning real Azure resources costs money, so nothing triggers it on a push. It authenticates via OIDC federated credentials (no secrets stored in GitHub), runs the same 12-stage `surveil-deploy deploy` pipeline described below, then a post-deploy smoke test, with an optional immediate teardown for cost-safe scheduled validation runs.
+### Known Gotcha: `s03` / `s07` Coupling
 
-**A real operational hazard worth knowing before relying on this**: `s03_deploy_infra` (Bicep) and `s07_deploy_function` are more tightly coupled than the stage numbering suggests. The Function App's `WEBSITE_RUN_FROM_PACKAGE` app setting is deliberately set outside Bicep (by `s07`, via `az functionapp config appsettings set`) rather than in `functionapp.bicep`'s `siteConfig.appSettings` — but that `appSettings` block is a **full replace** on every Bicep deploy, not a merge. Re-running `s03` without immediately re-running `s07` afterward silently deletes the Function's code package reference: the deploy reports success, the Function host reports `Running`, and nothing gets analyzed ever again until `s07` runs. The full `surveil-deploy deploy` sequence always runs `s07` right after `s03`, so this only bites if you cherry-pick individual stages — which the pipeline supports (each step is independently callable), but should be done with this coupling in mind. Documented directly in `s03_deploy_infra.py`.
+`s03_deploy_infra` (Bicep) and `s07_deploy_function` are more tightly coupled than the stage numbering suggests. The Function App's `WEBSITE_RUN_FROM_PACKAGE` app setting is deliberately set outside Bicep (by `s07`, via `az functionapp config appsettings set`) rather than in `functionapp.bicep`'s `siteConfig.appSettings` — but that `appSettings` block is a **full replace** on every Bicep deploy, not a merge. Re-running `s03` without immediately re-running `s07` afterward silently deletes the Function's code package reference: the deploy reports success, the Function host reports `Running`, and nothing gets analyzed ever again until `s07` runs.
+
+The full `surveil-deploy deploy` sequence always runs `s07` right after `s03`, so this only bites if you cherry-pick individual stages — which the pipeline supports (each step is independently callable), but should be done with this coupling in mind. Documented directly in `s03_deploy_infra.py`.
 
 ## Design Decisions
 
