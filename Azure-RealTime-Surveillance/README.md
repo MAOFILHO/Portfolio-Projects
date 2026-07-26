@@ -42,7 +42,7 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 - **Sign-in required**: the dashboard is gated behind Azure Static Web Apps' built-in authentication (Microsoft identity provider) — no passwords stored or handled by this system's own code.
 - **Top navigation**: Capture (webcam/demo video + live alerts + event history), Profile, Settings, Observability, Audit Trail.
 - **Capture page layout**: a 2x2 grid — Live Capture and Video Upload & Analysis side by side up top (each using an identical fixed-height "camera box" pattern via CSS Grid `align-self: stretch`, so their video placeholders and Start Capture/Start Analysis buttons always line up regardless of what's loaded), Event History and a compact Live Alerts ticker side by side below.
-- **Settings** — read-only view of the live alert configuration (watch tags, confidence, capture interval, crowd/trespassing rules, and the effective severity map — built-in defaults merged with any `ALERT_SEVERITY_MAP` override, shown with the same color-coded badges as the rest of the dashboard) this deployment is actually running with.
+- **Settings** — read-only view of the live alert configuration (watch tags, confidence, capture interval, crowd/trespassing rules, and the effective severity map — built-in defaults merged with any `ALERT_SEVERITY_MAP` override, shown with the same colour-coded badges as the rest of the dashboard) this deployment is actually running with.
 - **Observability** — backend health, an hourly request/failure chart, and a recent-exceptions table, all queried live from Application Insights (via its Log Analytics workspace) and rendered in-app — plus a deep link to the full Application Insights blade in the Azure Portal.
 - **Audit Trail** — sign-ins and on-demand analysis actions, logged to Table Storage and listed in-app.
 
@@ -91,36 +91,36 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
                                    |                                     Settings, Observability, Audit
                                    |  throttled frames (default every 3s)
                                    |  WebSocket (alerts) <----------------+
-                                   v                                     |
-        +-----------------------------------------------------------------+
-        | FastAPI  (Azure Container Apps, minReplicas=0)                  |
-        |  POST /api/v1/frames                -> upload to Blob (API-key gated)   |
-        |  GET  /api/v1/frames/{cam}/{file}    -> proxy frame image (thumbnails)  |
-        |  POST /api/v1/frames/.../analyze     -> on-demand Vision (Tags/Read/SmartCrop, API-key gated) |
-        |  WS   /ws/alerts                     -> fan-out to dashboards ---------+---+
-        |  GET  /api/v1/events                 -> recent events (Table)         |   |
-        |  GET  /api/v1/settings               -> current alert config (read-only)  |
-        |  GET/POST /api/v1/audit              -> audit trail (Table, API-key gated writes) |
-        |  GET  /api/v1/observability/*        -> requests summary + exceptions (Log Analytics query) |
-        |  GET  /api/v1/health                                                   |
-        |  background task: reads 'alerts' queue -> WS                          |
-        +---------------------+----------------------------------------------------+
+                                   v                                      |
+        +-------------------------------------------------------------------------------------------------+
+        | FastAPI  (Azure Container Apps, minReplicas=0)                                                  |
+        |  POST /api/v1/frames                -> upload to Blob (API-key gated)                           |
+        |  GET  /api/v1/frames/{cam}/{file}    -> proxy frame image (thumbnails)                          |
+        |  POST /api/v1/frames/.../analyze     -> on-demand Vision (Tags/Read/SmartCrop, API-key gated)   |
+        |  WS   /ws/alerts                     -> fan-out to dashboards                                   |
+        |  GET  /api/v1/events                 -> recent events (Table)                                   |
+        |  GET  /api/v1/settings               -> current alert config (read-only)                        |
+        |  GET/POST /api/v1/audit              -> audit trail (Table, API-key gated writes)               |
+        |  GET  /api/v1/observability/*        -> requests summary + exceptions (Log Analytics query)     |
+        |  GET  /api/v1/health                                                                            |
+        |  background task: reads 'alerts' queue -> WS                                                    |
+        +---------------------+---------------------------------------------------------------------------+
                               | frame blob upload (container: frames)
                               v
         Azure Storage (StorageV2, Standard_LRS, Hot, keyless RBAC)
           containers: frames, events (annotated)
-          queue: alerts        tables: events, audit
+          queue: alerts       | tables: events, audit
                               | native blob trigger
                               v
-        +------------------------------------------------+
-        | Azure Function (Python, Consumption plan)       |
-        |  trigger: blob created in 'frames/{name}'       |
-        |  FrameAnalyzer.detect(frame) --------------------> Azure AI Vision
-        |  evaluate_detections() -> alert rule engine        Image Analysis 4.0
-        |  on alert: write event (Table) + annotated blob    (F0 free or S1)
-        |            enqueue 'alerts' queue (-> WebSocket)
-        |            send Azure Communication Services email/SMS
-        +------------------------------------------------+
+        +-------------------------------------------------------------------------+
+        | Azure Function (Python, Consumption plan)                               |  
+        |  trigger: blob created in 'frames/{name}'                               |
+        |  FrameAnalyzer.detect(frame) --------------------> Azure AI Vision      |
+        |  evaluate_detections() -> alert rule engine        Image Analysis 4.0   |
+        |  on alert: write event (Table) + annotated blob    (F0 free or S1)      |
+        |            enqueue 'alerts' queue (-> WebSocket)                        |
+        |            send Azure Communication Services email/SMS                  | 
+        +-------------------------------------------------------------------------+
 
         Home Camera Ingestor (ingestors/nest/) — optional 2nd capture source
           Google Cloud Pub/Sub -> dedup -> WebRTC/clip-preview capture -> POST /api/v1/frames
