@@ -74,7 +74,7 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Deploy CLI | `surveil-deploy` — a single, resumable 12-stage pipeline (infra → backend/ingestor/Function/frontend → health checks → e2e validation), one command. |
 | Teardown | One command, including soft-deleted Cognitive Services account handling. |
 | Tests | Unit test suite (no live Azure needed) plus a live end-to-end smoke test. |
-| CI/CD | GitHub Actions: automatic lint/test/Bicep-validate/frontend-build on every push, plus a manual-only deploy workflow — see [CI/CD Pipeline](#cicd-pipeline). |
+| CI/CD | GitHub Actions: automatic lint/test/Bicep-validate/frontend-build on every push, plus a manual-only deploy workflow — see [CI/CD Pipelines](#cicd-pipelines). |
 
 ## Tech Stack
 
