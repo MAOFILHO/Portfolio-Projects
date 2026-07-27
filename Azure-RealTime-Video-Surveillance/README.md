@@ -238,7 +238,7 @@ Two very different things in this project both get called "pipelines" — easy t
 | Triggered by | A push (`ci.yml`) or a manual click (`deploy.yml`) | A blob upload |
 | If removed | You'd deploy by hand via `surveil-deploy` <br> and the app keeps running | The product itself stops working |
 
-In short: CI/CD is how safe changes get *into* the running system; Frame Lifecycle is what that system *does* once it's running.
+In short: The CI/CD pipeline is how safe changes get *into* the running system; The Frame Lifecycle is what that system *does* once it's running.
 
 ### GitHub Workflows
 
