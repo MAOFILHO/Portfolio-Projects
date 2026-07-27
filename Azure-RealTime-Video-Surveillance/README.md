@@ -181,12 +181,17 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
         |  GET  /api/v1/health                                                                            |
         |  background task: reads 'alerts' queue -> WS                                                    |
         +---------------------+---------------------------------------------------------------------------+
+                              | 
                               | frame blob upload (container: frames)
                               v
-        Azure Storage (StorageV2, Standard_LRS, Hot, keyless RBAC)
-          containers: frames, events (annotated)
-          queue: alerts       | tables: events, audit
-                              | native blob trigger
+        +-------------------------------------------------------------------------+
+        |     Azure Storage (StorageV2, Standard_LRS, Hot, keyless RBAC)          |
+        |     containers: frames, events (annotated)                              |
+        |     queue: alerts        tables: events, audit                          |
+        |                          native blob trigger                            |
+        +-------------------------------------------------------------------------+
+                              |
+                              |
                               v
         +-------------------------------------------------------------------------+
         | Azure Function (Python, Consumption plan)                               |  
