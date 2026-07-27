@@ -231,7 +231,7 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
 
 Two very different things in this project both get called "pipelines" — easy to conflate, so here's the distinction up front:
 
-| Aspect | GitHub Actions CI/CD (see [diagram](#github-actions-cicd)) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
+| Aspect | GitHub Actions (see [diagram](#github-actions-cicd)) | Video-Analysis Flow (see [Frame Lifecycle](#frame-lifecycle)) |
 |---|---|---|
 | Answers | "Did this code change break, and should it ship?" | "What happens when a frame arrives?" |
 | Where it runs | GitHub-hosted runners | Azure (Container Apps + Function), continuously |
@@ -251,7 +251,7 @@ In short: CI/CD is how safe changes get *into* the running system; Frame Lifecyc
 
 > **Status:** both workflows have been exercised for real against a GitHub remote (OIDC-federated Azure AD app registration for `azure/login`). `deploy.yml` briefly gained an automatic trigger during that testing, then was deliberately reverted to manual-only — GitHub's required-reviewer approval gate needs a paid plan for private repos, so removing the automatic trigger entirely is the free-tier equivalent: every real Azure spend is a deliberate action, never a side effect of a green CI run.
 
-## GitHub Actions CI/CD
+## GitHub Actions
 
 ```mermaid
 flowchart LR
