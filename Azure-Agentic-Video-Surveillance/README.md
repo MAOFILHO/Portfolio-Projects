@@ -1,8 +1,8 @@
-# Azure Real-Time Video Surveillance
+# Azure Agentic Video Surveillance
 
-### Real-Time Camera Surveillance & Alerting on Azure AI
+### Real-Time Camera Surveillance, Agentic AI Reasoning & Alerting on Azure AI
 
-A cost-aware, end-to-end **real-time video surveillance system** built on **Azure AI Vision**, deployed via a fully automated **Python CLI** with **zero Azure Portal clicks**. A **React + TypeScript** dashboard — gated behind Microsoft sign-in via Static Web Apps' built-in authentication — captures webcam frames (or ingests a real Google Nest camera), an **Azure Function** analyzes each frame with **Azure AI Vision Image Analysis 4.0**, and alerts are pushed live over **WebSocket** plus optional **email/SMS** via **Azure Communication Services**. An in-app Observability page queries Application Insights directly for live request/error telemetry, and an Audit Trail records user-facing actions — no separate ops tooling required.
+A cost-aware, end-to-end **real-time video surveillance system** built on **Azure AI Vision**, deployed via a fully automated **Python CLI** with **zero Azure Portal clicks**. A **React + TypeScript** dashboard — gated behind Microsoft sign-in via Static Web Apps' built-in authentication — captures webcam frames (or ingests a real Google Nest camera), an **Azure Function** analyzes each frame with **Azure AI Vision Image Analysis 4.0**, and alerts are pushed live over **WebSocket** plus optional **email/SMS** via **Azure Communication Services**. Layered on top of that deterministic pipeline, five **Semantic Kernel** agents backed by **Azure OpenAI** add judgment and natural-language capability — triaging detections, deciding notification channels, answering plain-English questions about event history, and flagging observability anomalies — without ever being able to override what the rule engine already decided (see [Agentic AI Architecture](#agentic-ai-architecture)). An in-app Observability page queries Application Insights directly for live request/error telemetry, and an Audit Trail records user-facing actions — no separate ops tooling required.
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Azure](https://img.shields.io/badge/Azure-Cloud-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)
@@ -121,13 +121,14 @@ flowchart TB
     Nest -->|JPEG + API key| API
 
     subgraph ContainerApps["Azure Container Apps (scale-to-zero)"]
-        API["FastAPI Backend<br/>frames / events / settings /<br/>audit / observability / ws"]
+        API["FastAPI Backend<br/>frames / events / settings /<br/>audit / observability / ws / query"]
     end
 
     API -->|upload| Frames
     API -->|on-demand Tags/Read/SmartCrop| Vision
     API -->|log action| AuditTable
     API -->|KQL query| LogAnalytics["Log Analytics<br/>(requests + exceptions)"]
+    API -->|NL Query + Observability<br/>Monitoring agents| AOAI["Azure OpenAI<br/>gpt-5-mini"]
 
     subgraph Storage["Azure Storage (keyless RBAC)"]
         Frames[("frames container")]
@@ -141,21 +142,27 @@ flowchart TB
     subgraph Function["Azure Function (Consumption)"]
         Analyze["FrameAnalyzer.detect()"]
         Rules["Alert rule engine<br/>(tags / confidence / count)"]
+        Agents["Triage + Notification<br/>Policy Agents"]
     end
 
     Analyze <--> Vision["Azure AI Vision<br/>Image Analysis 4.0"]
     Analyze --> Rules
     Rules -->|every frame| EventsTable
-    Rules -->|on match| AlertsQueue
-    Rules -->|on match| ACS["Azure Communication Services<br/>Email / SMS"]
+    Rules -->|"severity != critical"| Agents
+    Agents -->|chat completion| AOAI
+    Agents -->|final severity + channels| AlertsQueue
+    Rules -->|"severity == critical<br/>(agents skipped)"| AlertsQueue
+    AlertsQueue -->|on match| ACS["Azure Communication Services<br/>Email / SMS"]
 
     AlertsQueue -->|background poll| API
     API -->|WebSocket push| Dashboard["Live Alert Feed<br/>(React Dashboard)"]
     LogAnalytics -.telemetry ingest.- Function
     LogAnalytics -.telemetry ingest.- API
+    AOAI -.optional OTLP export.- Langfuse["Langfuse<br/>(LLM tracing, opt-in)"]
 
     Identity["User-Assigned Managed Identity"] -.keyless auth.- Storage
     Identity -.keyless auth.- Vision
+    Identity -.keyless auth.- AOAI
     Identity -.keyless auth.- LogAnalytics
 ```
 
@@ -223,6 +230,7 @@ Endpoint-level view of API routes, storage schema, and the analysis pipeline —
 - **Container Apps** (optional, `minReplicas=maxReplicas=1`): Nest ingestor, when `NEST_INGESTOR_ENABLED=true`
 - **Azure Functions** (Consumption, Python): async frame analysis worker
 - **Azure AI Vision** (Cognitive Services, `ComputerVision` kind), deployed in **`eastus`** (`VISION_LOCATION`, independent of `AZURE_LOCATION`) so Image Analysis 4.0 Captions are available on the free `F0` tier: objects, people, caption, tags, read, smart crops
+- **Azure OpenAI** (Cognitive Services, `OpenAI` kind, `disableLocalAuth: true`): one `gpt-5-mini` GlobalStandard chat deployment backing all 5 Semantic Kernel agents, authenticated via the same user-assigned Managed Identity (RBAC only, no API keys) — see [Agentic AI Architecture](#agentic-ai-architecture)
 - **Storage Account** (StorageV2, `Standard_LRS`): blob containers `frames`/`events`, queue `alerts`, tables `events`/`audit`
 - **Azure Communication Services**: email (Azure-managed domain) + optional SMS alerting
 - **Static Web Apps** (Free): React + TypeScript dashboard, gated by built-in Microsoft sign-in
@@ -247,8 +255,8 @@ In short: The CI/CD pipeline is how safe changes get *into* the running system; 
 
 | Workflow | Trigger | Touches Azure? | What it does |
 |---|---|---|---|
-| `ci.yml` | Every push/PR | No — free, fast correctness gate | Lint (`ruff`), unit tests (`pytest`), Bicep template validation, frontend build |
-| `deploy.yml` | Manual only (`workflow_dispatch`) | Yes — real spend | OIDC login → 12-stage `surveil-deploy deploy` → post-deploy smoke test → optional teardown |
+| `ci.yml` | Every push/PR | No — free, fast correctness gate | Lint (`ruff`), **Agentic AI unit tests** (Triage/Notification Policy/NL Query/Monitoring/Diagnostic agents, mocked kernel — no live Azure OpenAI call), full unit test suite (`pytest`), Bicep template validation, frontend build |
+| `deploy.yml` | Manual only (`workflow_dispatch`) | Yes — real spend | OIDC login → 12-stage `surveil-deploy deploy` (provisions Azure OpenAI + threads `LANGFUSE_*` tracing config) → post-deploy smoke test (includes a live NL Query Agent check) → optional teardown |
 
 `deploy.yml` is deliberately **manual-only**: provisioning real Azure resources costs money, so nothing triggers it on a push. It authenticates via OIDC federated credentials (no secrets stored in GitHub).
 
@@ -262,9 +270,12 @@ flowchart LR
 
     subgraph CI["ci.yml — every push/PR, no Azure cost"]
         direction TB
-        Lint["ruff + pytest<br/>(Python unit tests)"]
+        Lint["ruff"]
+        AgentTests["Agentic AI unit tests<br/>(Triage/Notification Policy/NL Query/<br/>Monitoring/Diagnostic agents, mocked kernel)"]
+        FullSuite["pytest<br/>(full unit test suite)"]
         Bicep["az bicep build<br/>(template validation only)"]
         FE["eslint + npm run build<br/>(frontend)"]
+        Lint --> AgentTests --> FullSuite
     end
 
     Manual["Manual workflow_dispatch"] --> Deploy
@@ -272,8 +283,8 @@ flowchart LR
     subgraph Deploy["deploy.yml — manual trigger only"]
         direction TB
         OIDC["OIDC azure/login<br/>(federated, no stored secrets)"]
-        Pipeline["surveil-deploy deploy<br/>12 resumable stages: infra -> backend -> ingestor -> function -> frontend"]
-        Smoke["surveil-deploy smoke-test --stage post"]
+        Pipeline["surveil-deploy deploy<br/>12 resumable stages: infra (incl. Azure OpenAI) -><br/>backend -> ingestor -> function -> frontend<br/>threads LANGFUSE_* tracing config"]
+        Smoke["surveil-deploy smoke-test --stage post<br/>(incl. live NL Query Agent check)"]
         Teardown["optional: surveil-deploy teardown"]
         OIDC --> Pipeline --> Smoke --> Teardown
     end
@@ -448,7 +459,7 @@ See [docs/design-decisions.md](docs/design-decisions.md).
 ## Project Structure
 
 ```
-azure-realtime-surveillance/
+azure-agentic-video-surveillance/
 ├── pyproject.toml                # surveil-deploy CLI package
 ├── Makefile                      # make deploy / teardown / test / smoke-pre / smoke-post
 ├── .env.example                  # all configuration knobs
@@ -493,7 +504,7 @@ azure-realtime-surveillance/
 | Application Insights + Log Analytics (PerGB2018, 30d) | ~$0.1-2 |
 | Azure Communication Services | ~$0-1 (per email/SMS sent) |
 | Nest ingestor Container App (optional, `NEST_INGESTOR_ENABLED=true`) | ~$10-15/month flat — fixed at `minReplicas=maxReplicas=1`, the one other always-on cost besides ACR |
-| **Total** | **~$1-10 for a short-lived deployment without the Nest ingestor; +~$10-15/month if it's enabled** |
+| **Total** | **$1-10 for a short-lived deployment without the Nest ingestor; +$10-15/month if it's enabled** |
 
 > Set `VISION_SKU=F0` in `.env` for the free Vision tier (1 per subscription, 20 calls/min) to cut Vision cost to $0 for light demo use. Tear down when done:
 > ```bash
@@ -505,7 +516,7 @@ azure-realtime-surveillance/
 ### 1. Clone and Configure
 
 ```bash
-cd azure-realtime-surveillance
+cd azure-agentic-video-surveillance
 make install                 # creates .venv, installs surveil-deploy + shared/surveil_core
 cp .env.example .env
 # edit .env — at minimum set AZURE_SUBSCRIPTION_ID

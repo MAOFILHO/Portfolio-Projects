@@ -5,12 +5,14 @@ from functools import lru_cache
 from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient
 from fastapi import Depends, Header, HTTPException
-from semantic_kernel import Kernel
 from surveil_core import AlertRuleConfig
+# Must come before `semantic_kernel` is imported anywhere in this process --
+# see function_app.py's identical comment and tracing.py's module docstring.
 from surveil_core.agents import EventQueryAgent, MonitoringAgent, build_kernel
 from surveil_core.analyzer import AzureVisionAnalyzer
 from surveil_core.notify import AcsNotifier
 from surveil_core.storage import SurveillanceStorage
+from semantic_kernel import Kernel
 
 from app.config import Settings, get_settings
 

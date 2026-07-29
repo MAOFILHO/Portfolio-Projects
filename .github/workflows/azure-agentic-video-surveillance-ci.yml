@@ -1,18 +1,18 @@
-name: Azure-RealTime-Video-Surveillance CI
+name: Azure-Agentic-Video-Surveillance CI
 
 # Runs on every push/PR that touches this project's folder -- the "green
 # light" gate for the deployment CLI, the shared detection/alert logic, the
 # backend, and the frontend. This workflow does NOT touch Azure or spend
-# money; see azure-realtime-surveillance-deploy.yml for that.
+# money; see azure-agentic-video-surveillance-deploy.yml for that.
 on:
   push:
     branches: [main]
     paths:
-      - "Azure-RealTime-Video-Surveillance/**"
+      - "Azure-Agentic-Video-Surveillance/**"
   pull_request:
     branches: [main]
     paths:
-      - "Azure-RealTime-Video-Surveillance/**"
+      - "Azure-Agentic-Video-Surveillance/**"
   workflow_dispatch: {}
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-RealTime-Video-Surveillance
+        working-directory: Azure-Agentic-Video-Surveillance
     steps:
       - uses: actions/checkout@v4
 
@@ -63,21 +63,21 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-RealTime-Video-Surveillance
+        working-directory: Azure-Agentic-Video-Surveillance
     steps:
       - uses: actions/checkout@v4
       - name: Validate Bicep templates
         uses: azure/cli@v2
         with:
           inlineScript: |
-            cd Azure-RealTime-Video-Surveillance
+            cd Azure-Agentic-Video-Surveillance
             az bicep build --file infra/main.bicep --stdout > /dev/null
 
   frontend-build:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-RealTime-Video-Surveillance/frontend
+        working-directory: Azure-Agentic-Video-Surveillance/frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +86,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: Azure-RealTime-Video-Surveillance/frontend/package-lock.json
+          cache-dependency-path: Azure-Agentic-Video-Surveillance/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci

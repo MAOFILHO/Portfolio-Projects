@@ -1,13 +1,15 @@
-name: Azure-RealTime-Video-Surveillance — Deploy to Azure
+name: Azure-Agentic-Video-Surveillance — Deploy to Azure
 
 # Manual-only (workflow_dispatch): a human must explicitly click "Run
 # workflow" for this to fire -- there is no automatic trigger on push or on
-# CI success (see azure-realtime-surveillance-ci.yml for the free, no-cost
+# CI success (see azure-agentic-video-surveillance-ci.yml for the free, no-cost
 # gate). Uses secretless federated (OIDC) Azure credentials.
 #
 # NOTE: this repo (Portfolio-Projects) is a different GitHub repo from the
 # standalone github.com/MAOFILHO/Azure-RealTime-Video-Surveillance repo this
-# pipeline was originally developed/tested against. The Azure AD app
+# pipeline was originally developed/tested against (that standalone repo's
+# name was NOT changed as part of this project's Azure-Agentic-Video-Surveillance
+# rename -- it's a separate repo). The Azure AD app
 # registration's federated credential trusts a specific
 # repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:... subject -- it will need a
 # *second* federated credential added (or a separate app registration)
@@ -34,7 +36,7 @@ permissions:
 # a live infra/Function deploy mid-flight is worse than making the next one
 # wait, since Azure resources can be left half-applied.
 concurrency:
-  group: deploy-azure-realtime-surveillance-${{ vars.AZURE_ENV_NAME || 'surveil' }}
+  group: deploy-azure-agentic-video-surveillance-${{ vars.AZURE_ENV_NAME || 'surveil' }}
   cancel-in-progress: false
 
 jobs:
@@ -42,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-RealTime-Video-Surveillance
+        working-directory: Azure-Agentic-Video-Surveillance
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}

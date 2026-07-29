@@ -22,7 +22,6 @@ import azure.functions as func
 import cv2
 import numpy as np
 from azure.identity import DefaultAzureCredential
-from semantic_kernel import Kernel
 from surveil_core import (
     AlertRuleConfig,
     AzureVisionAnalyzer,
@@ -32,11 +31,26 @@ from surveil_core import (
     AlertMessage,
     evaluate_detections,
 )
-from surveil_core.agents import NotificationPolicyAgent, TriageAgent, build_kernel
+# surveil_core.agents (specifically its tracing submodule) must be imported
+# before `semantic_kernel` -- directly, or transitively via anything else
+# below -- gets imported anywhere in this process. See tracing.py's module
+# docstring: Semantic Kernel freezes its own OTel-diagnostics env vars into a
+# module-level settings singleton the first time it's imported, so importing
+# `semantic_kernel` even one line earlier than this silently breaks Langfuse
+# tracing for every agent call, with no error anywhere.
+from surveil_core.agents import (
+    NotificationPolicyAgent,
+    TriageAgent,
+    agent_span,
+    build_kernel,
+    flush_langfuse_tracing,
+    set_agent_output,
+)
 from surveil_core.agents.activity_log import log_agent_event
 from surveil_core.alert_rules import SEVERITY_ORDER, compute_severity
 from surveil_core.notify import AcsNotifier
 from surveil_core.storage import SurveillanceStorage
+from semantic_kernel import Kernel
 
 app = func.FunctionApp()
 logger = logging.getLogger("surveil.function")
@@ -262,6 +276,21 @@ async def _run_blocking(func, *args, **kwargs):
 @app.function_name(name="AnalyzeFrame")
 @app.blob_trigger(arg_name="frame", path="frames/{name}", connection="AzureWebJobsStorage", source="EventGrid")
 async def analyze_frame(frame: func.InputStream) -> None:
+    # Azure Functions Consumption invocations are short-lived -- the worker
+    # process can be reused or torn down well before Langfuse's
+    # BatchSpanProcessor's own periodic export timer would fire on its own,
+    # silently dropping this invocation's agent spans (confirmed live: no
+    # traces appeared in Langfuse despite live triage/notification agent
+    # calls succeeding, until this flush was added -- see
+    # docs/troubleshooting.md #20). `finally` guarantees this runs on every
+    # return path and on any unhandled exception, not just the happy path.
+    try:
+        await _analyze_frame_impl(frame)
+    finally:
+        flush_langfuse_tracing()
+
+
+async def _analyze_frame_impl(frame: func.InputStream) -> None:
     blob_name = frame.name.split("/", 1)[-1] if "/" in frame.name else frame.name
     camera_id = blob_name.split("/", 1)[0] if "/" in blob_name else "unknown"
     logger.info("Analyzing frame %s (%d bytes) for camera %s", blob_name, frame.length or 0, camera_id)
@@ -284,23 +313,36 @@ async def analyze_frame(frame: func.InputStream) -> None:
     # deterministic rule engine produced.
     final_severity = severity
     if is_alert and severity != "critical" and _agents_enabled():
-        try:
-            triage_result = await asyncio.wait_for(
-                _triage_agent().triage(caption=caption, matched_tags=matched_tags, rule_severity=severity),
-                timeout=_AGENT_CALL_TIMEOUT_SECONDS,
-            )
-            if triage_result.escalate and _is_higher_severity(triage_result.escalated_severity, severity):
-                final_severity = triage_result.escalated_severity
-            if triage_result.suppress_recommended:
-                await _run_blocking(
-                    storage.log_audit_event,
-                    actor="triage_agent",
-                    action="suppress_recommended_not_applied",
-                    details=f"tags={matched_tags} reason={triage_result.suppress_reason}",
+        with agent_span(
+            "triage-detection",
+            input={"caption": caption, "matched_tags": matched_tags, "rule_severity": severity},
+            metadata={"camera_id": camera_id, "frame_blob_name": blob_name},
+            tags=["triage_agent"],
+        ) as span:
+            try:
+                triage_result = await asyncio.wait_for(
+                    _triage_agent().triage(caption=caption, matched_tags=matched_tags, rule_severity=severity),
+                    timeout=_AGENT_CALL_TIMEOUT_SECONDS,
                 )
-        except Exception:
-            logger.exception("Triage agent call failed for frame %s -- falling back to rule-engine severity", blob_name)
-            final_severity = severity
+                if triage_result.escalate and _is_higher_severity(triage_result.escalated_severity, severity):
+                    final_severity = triage_result.escalated_severity
+                if triage_result.suppress_recommended:
+                    await _run_blocking(
+                        storage.log_audit_event,
+                        actor="triage_agent",
+                        action="suppress_recommended_not_applied",
+                        details=f"tags={matched_tags} reason={triage_result.suppress_reason}",
+                    )
+                set_agent_output(span, {
+                    "escalate": triage_result.escalate,
+                    "escalated_severity": triage_result.escalated_severity,
+                    "suppress_recommended": triage_result.suppress_recommended,
+                    "final_severity": final_severity,
+                })
+            except Exception:
+                logger.exception("Triage agent call failed for frame %s -- falling back to rule-engine severity", blob_name)
+                final_severity = severity
+                set_agent_output(span, {"error": "triage_agent_call_failed", "final_severity": final_severity})
         log_agent_event(
             logger, "Orchestrator", "triage_decision",
             frame=blob_name, rule_severity=severity, final_severity=final_severity,
@@ -358,16 +400,24 @@ async def analyze_frame(frame: func.InputStream) -> None:
     # fails.
     channels: list[str] | None = None
     if _agents_enabled():
-        try:
-            decision = await asyncio.wait_for(
-                _notification_policy_agent().decide(alert), timeout=_AGENT_CALL_TIMEOUT_SECONDS
-            )
-            channels = decision.channels
-        except Exception:
-            logger.exception(
-                "Notification policy agent call failed for event %s -- falling back to all channels", event.event_id
-            )
-            channels = None
+        with agent_span(
+            "notification-policy-decide",
+            input={"severity": final_severity, "matched_tags": matched_tags, "camera_id": camera_id},
+            metadata={"camera_id": camera_id, "event_id": event.event_id},
+            tags=["notification_policy_agent"],
+        ) as span:
+            try:
+                decision = await asyncio.wait_for(
+                    _notification_policy_agent().decide(alert), timeout=_AGENT_CALL_TIMEOUT_SECONDS
+                )
+                channels = decision.channels
+                set_agent_output(span, {"channels": channels, "reasoning": decision.reasoning})
+            except Exception:
+                logger.exception(
+                    "Notification policy agent call failed for event %s -- falling back to all channels", event.event_id
+                )
+                channels = None
+                set_agent_output(span, {"error": "notification_policy_agent_call_failed", "channels": ["email", "sms"]})
         log_agent_event(
             logger, "Orchestrator", "notification_decision",
             event_id=event.event_id, channels=channels or ["email", "sms"],
