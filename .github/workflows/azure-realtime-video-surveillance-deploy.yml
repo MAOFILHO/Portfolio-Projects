@@ -54,6 +54,13 @@ jobs:
       STORAGE_SKU_NAME: ${{ vars.STORAGE_SKU_NAME }}
       ALERT_WATCH_TAGS: ${{ vars.ALERT_WATCH_TAGS }}
       ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+      # Langfuse (opt-in agent/LLM-level tracing, see shared/surveil_core/agents/tracing.py).
+      # Leave LANGFUSE_PUBLIC_KEY unset to deploy with it disabled -- Application Insights
+      # tracing is unaffected either way. The public key is not secret by Langfuse's own
+      # threat model, but the secret key must be a repo secret, never a variable.
+      LANGFUSE_PUBLIC_KEY: ${{ vars.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST || 'https://cloud.langfuse.com' }}
       IMAGE_BUILD_MODE: acr
       # Nest doorbell ingestor (opt-in; adds an always-on Container App --
       # see docs/cost.md). Leave NEST_INGESTOR_ENABLED unset/false to deploy
