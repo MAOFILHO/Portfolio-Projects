@@ -10,7 +10,7 @@ from surveil_deploy.runner import run_json
 from surveil_deploy.state import DeploymentState
 
 STEP_NAME = "s11_validate_e2e"
-STEP_TITLE = "End-to-end validation — capture -> analyze -> alert"
+STEP_TITLE = "End-to-end validation — capture -> analyze -> alert -> agentic query"
 
 # The Function App's blob trigger here is the classic polling-based kind
 # (not Event Grid) -- Azure documents discovery as taking "up to 10 minutes"
@@ -110,4 +110,41 @@ def run(config: DeployConfig, state: DeploymentState) -> dict:
             "just confirms the detection path executed without raising an alert."
         )
 
-    return {"e2e_validated": True, "e2e_alert_fired": is_alert}
+    agent_query_validated = _validate_nl_query_agent(api_base_url)
+
+    return {"e2e_validated": True, "e2e_alert_fired": is_alert, "agent_query_validated": agent_query_validated}
+
+
+def _validate_nl_query_agent(api_base_url: str) -> bool:
+    # Proves the Semantic Kernel -> Azure OpenAI wiring is actually live in
+    # THIS deployment, not just that the code compiles and unit tests (which
+    # mock the kernel entirely) pass. Every earlier gap in this pipeline
+    # that actually bit in production -- the AnalyzeFrame timeout chain, the
+    # retired-model SKU mismatch -- was invisible to the unit tests and only
+    # caught by exercising the real deployed thing. Best-effort: a transient
+    # Azure OpenAI hiccup here shouldn't fail the whole deploy, since the
+    # agents already degrade gracefully to deterministic behavior on error
+    # (see function_app.py's triage/notification-policy fallback paths).
+    log_info("Validating the NL Event Query Agent (Semantic Kernel -> Azure OpenAI) is live")
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.post(
+                f"{api_base_url}/api/v1/query",
+                json={"question": "How many events have been recorded recently?"},
+            )
+            response.raise_for_status()
+            answer = response.json().get("answer", "")
+    except httpx.HTTPError as exc:
+        log_warning(
+            f"NL Event Query Agent check failed ({exc}) -- this does not fail the deploy, since the "
+            "deterministic capture/analyze/alert path just validated above is unaffected either way. "
+            "Investigate the Azure OpenAI deployment/RBAC if this persists."
+        )
+        return False
+
+    if not answer.strip():
+        log_warning("NL Event Query Agent returned an empty answer -- investigate before trusting agent output.")
+        return False
+
+    log_success(f"Agentic AI validated: NL Event Query Agent answered live ({len(answer)} chars)")
+    return True
