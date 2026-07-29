@@ -68,12 +68,11 @@ Both channels are backed by one Azure Communication Services (ACS) resource ([`i
 
 Example alert email as actually delivered by this pipeline:
 
-<img width="1433" height="449" alt="Screenshot 2026-07-26 at 3 39 08 PM" src="https://github.com/user-attachments/assets/5ac32791-da0e-449b-8ef2-e0168a15b22e" />
-
+<img width="1103" height="394" alt="Screenshot 2026-07-29 at 4 02 52 PM" src="https://github.com/user-attachments/assets/bcd73716-f840-43cb-95c1-82d353ba80d0" />
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
-<img width="1092" height="498" alt="Screenshot 2026-07-29 at 10 32 49 AM" src="https://github.com/user-attachments/assets/ffb1bd5a-cf8e-49ea-aff7-a425cd81ba0b" />
 
+<img width="1092" height="498" alt="Screenshot 2026-07-29 at 10 32 49 AM" src="https://github.com/user-attachments/assets/ffb1bd5a-cf8e-49ea-aff7-a425cd81ba0b" />
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
@@ -308,14 +307,13 @@ flowchart LR
         OIDC --> Pipeline --> Smoke --> Teardown
     end
 ```
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1407" height="633" alt="Screenshot 2026-07-29 at 11 55 29 AM" src="https://github.com/user-attachments/assets/9ab513ce-7dd6-42fe-a784-f717a001d2d0" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 > **Known gotcha:** `s03_deploy_infra` and `s07_deploy_function` are more tightly coupled than the stage numbering suggests — cherry-picking `s03` alone can silently break the Function's code reference. Full explanation in [Lessons Learned](docs/lessonslearned.md).
-
-
-<img width="1407" height="633" alt="Screenshot 2026-07-29 at 11 55 29 AM" src="https://github.com/user-attachments/assets/9ab513ce-7dd6-42fe-a784-f717a001d2d0" />
-
-
-
 
 ## Frame Lifecycle
 
@@ -466,7 +464,8 @@ Application Insights (above) answers "did this agent run, and what did it decide
 - **Isolated from other projects sharing the same Langfuse account.** Every span carries `service.name=azure-agentic-video-surveillance` and a `langfuse.environment` tag (`production` for the deployed Function/backend, override via `LANGFUSE_TRACING_ENVIRONMENT` for local runs) as OTel resource attributes, so this system's traces can be filtered out from any other, unrelated codebase reusing the same Langfuse project/API key.
 - **Dual-export, not a replacement.** Nothing about the existing Application Insights instrumentation changes — every span still reaches Azure Monitor too; Langfuse is an additional destination for the LLM-specific detail Application Insights doesn't model well (prompts/completions as span *events*, not span input/output).
 
-<!-- Langfuse trace screenshot goes here -->
+<img width="1421" height="670" alt="Screenshot 2026-07-29 at 10 43 18 AM" src="https://github.com/user-attachments/assets/5fd03a27-2258-4cd8-8939-b19215e31b2a" />
+
 
 ### Deployment
 
