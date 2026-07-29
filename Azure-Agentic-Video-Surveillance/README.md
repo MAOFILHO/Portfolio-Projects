@@ -255,7 +255,7 @@ In short: The CI/CD pipeline is how safe changes get *into* the running system; 
 
 | Workflow | Trigger | Touches Azure? | What it does |
 |---|---|---|---|
-| `ci.yml` | Every push/PR | No — free, fast correctness gate | Lint (`ruff`), **Agentic AI unit tests** (Triage/Notification Policy/NL Query/Monitoring/Diagnostic agents, mocked kernel — no live Azure OpenAI call), full unit test suite (`pytest`), Bicep template validation, frontend build |
+| `ci.yml` | Every push/PR | No — free, fast correctness gate | 4 parallel jobs: `python-tests` (lint + full `pytest` suite), **`agentic-ai-tests`** (Triage/Notification Policy/NL Query/Monitoring/Diagnostic agents, mocked kernel — no live Azure OpenAI call), `bicep-validate`, `frontend-build` |
 | `deploy.yml` | Manual only (`workflow_dispatch`) | Yes — real spend | OIDC login → 12-stage `surveil-deploy deploy` (provisions Azure OpenAI + threads `LANGFUSE_*` tracing config) → post-deploy smoke test (includes a live NL Query Agent check) → optional teardown |
 
 `deploy.yml` is deliberately **manual-only**: provisioning real Azure resources costs money, so nothing triggers it on a push. It authenticates via OIDC federated credentials (no secrets stored in GitHub).
@@ -268,14 +268,12 @@ In short: The CI/CD pipeline is how safe changes get *into* the running system; 
 flowchart LR
     PR["Push / Pull Request"] --> CI
 
-    subgraph CI["ci.yml — every push/PR, no Azure cost"]
+    subgraph CI["ci.yml — every push/PR, no Azure cost (4 parallel jobs)"]
         direction TB
-        Lint["ruff"]
-        AgentTests["Agentic AI unit tests<br/>(Triage/Notification Policy/NL Query/<br/>Monitoring/Diagnostic agents, mocked kernel)"]
-        FullSuite["pytest<br/>(full unit test suite)"]
-        Bicep["az bicep build<br/>(template validation only)"]
-        FE["eslint + npm run build<br/>(frontend)"]
-        Lint --> AgentTests --> FullSuite
+        PyTests["python-tests<br/>ruff -> pytest (full unit test suite)"]
+        AgentTests["agentic-ai-tests<br/>Triage/Notification Policy/NL Query/<br/>Monitoring/Diagnostic agents (mocked kernel)"]
+        Bicep["bicep-validate<br/>az bicep build (template validation only)"]
+        FE["frontend-build<br/>eslint + npm run build"]
     end
 
     Manual["Manual workflow_dispatch"] --> Deploy

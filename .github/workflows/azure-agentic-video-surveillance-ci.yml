@@ -45,7 +45,28 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           ffmpeg -i sample_videos/swat-soldier-with-weapon-13884574-720p.mp4 -vframes 1 tests/fixtures/person_test_frame.jpg
 
-      - name: Agentic AI unit tests (Semantic Kernel agents, mocked)
+      - name: Unit tests (full suite)
+        run: pytest -v
+
+  agentic-ai-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Agentic-Video-Surveillance
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package + shared dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install -e ./shared
+
+      - name: Agentic AI unit tests (Semantic Kernel agents, mocked kernel — no live Azure OpenAI call)
         run: |
           pytest -v \
             tests/test_triage_agent.py \
@@ -55,9 +76,6 @@ jobs:
             tests/test_query_route.py \
             tests/test_agents_activity_route.py \
             tests/test_function_app_agents.py
-
-      - name: Unit tests (full suite)
-        run: pytest -v
 
   bicep-validate:
     runs-on: ubuntu-latest
