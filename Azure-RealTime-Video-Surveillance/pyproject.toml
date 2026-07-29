@@ -11,8 +11,17 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "typer==0.15.1",
+    # typer 0.15.1's rich help formatting breaks under click>=8.2 (a
+    # transitive dep, e.g. pulled in by newer azure-functions/semantic-kernel
+    # installs, can silently upgrade it) -- `Parameter.make_metavar()
+    # missing 1 required positional argument: 'ctx'`. Confirmed the hard way
+    # after installing this feature's new dependencies.
+    "click<8.2",
     "rich==13.9.4",
-    "pydantic==2.10.3",
+    # Bumped 2.10.3 -> 2.10.6: semantic-kernel (a shared/surveil_core
+    # dependency, installed into this same venv) excludes 2.10.0-2.10.3
+    # exactly. Keep in sync with shared/pyproject.toml.
+    "pydantic==2.10.6",
     "pydantic-settings==2.7.0",
     "httpx==0.28.1",
 ]
@@ -25,6 +34,10 @@ dev = [
     "ruff==0.8.4",
     "fastapi==0.115.6",
     "httpx==0.28.1",
+    # Needed to import function/function_app.py under test (tests/
+    # test_function_app_agents.py) -- otherwise deploy-only, see
+    # function/requirements.txt.
+    "azure-functions==1.21.3",
 ]
 
 [project.scripts]

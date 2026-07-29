@@ -25,11 +25,27 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.codecs import h264 as _aiortc_h264
 from aiortc.rtcrtpreceiver import RTCRtpReceiver
 
+from diagnostics import DiagnosticLogWriter
 from sdm_client import SdmClient
 
 logger = logging.getLogger("nest_ingestor.webrtc")
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
+
+# Opt-in structured (JSONL) diagnostic log, additive to the free-text
+# logger.warning/info calls throughout this module -- see diagnose_webrtc.py.
+# None (default) means disabled: zero overhead, no file written.
+_diagnostic_writer: DiagnosticLogWriter | None = None
+
+
+def set_diagnostic_log_path(path: str | None) -> None:
+    global _diagnostic_writer
+    _diagnostic_writer = DiagnosticLogWriter(path) if path else None
+
+
+def _diag(kind: str, camera_id: str | None = None, **fields) -> None:
+    if _diagnostic_writer is not None:
+        _diagnostic_writer.write(kind, camera_id=camera_id, **fields)
 
 # --- Temporary diagnostic: log the Annex-B NAL unit types present in every
 # assembled JitterFrame that fails to decode, so we can tell whether Google's
@@ -76,6 +92,14 @@ def _diagnostic_h264_decode(self, encoded_frame):  # noqa: ANN001, ANN202
                 len(encoded_frame.data),
                 names,
             )
+            _diag(
+                "h264_decode_fail",
+                attempt=_diagnostic_counts["attempts"],
+                with_idr_so_far=_diagnostic_counts["with_idr"],
+                byte_count=len(encoded_frame.data),
+                nal_types=names,
+                has_idr=has_idr,
+            )
     return frames
 
 
@@ -101,7 +125,7 @@ def _patch_missing_candidate_foundations(sdp: str) -> str:
     return _MISSING_FOUNDATION_CANDIDATE.sub(_insert_foundation, sdp)
 
 
-async def _log_inbound_video_stats(pc: RTCPeerConnection) -> None:
+async def _log_inbound_video_stats(pc: RTCPeerConnection, camera_id: str | None = None) -> None:
     """Diagnostic for when no video frame decodes in time -- distinguishes
     "no video RTP packets ever arrived" (transport/demux problem) from
     "packets arrived but never assembled into a decodable frame" (codec/
@@ -114,13 +138,25 @@ async def _log_inbound_video_stats(pc: RTCPeerConnection) -> None:
         return
     for report in stats.values():
         if getattr(report, "kind", None) == "video" and report.type == "inbound-rtp":
+            packets_received = getattr(report, "packetsReceived", "?")
+            packets_lost = getattr(report, "packetsLost", "?")
+            frames_received = getattr(report, "framesReceived", "?")
+            frames_decoded = getattr(report, "framesDecoded", "?")
             logger.error(
                 "Video inbound-rtp stats: packetsReceived=%s packetsLost=%s "
                 "framesReceived=%s framesDecoded=%s",
-                getattr(report, "packetsReceived", "?"),
-                getattr(report, "packetsLost", "?"),
-                getattr(report, "framesReceived", "?"),
-                getattr(report, "framesDecoded", "?"),
+                packets_received,
+                packets_lost,
+                frames_received,
+                frames_decoded,
+            )
+            _diag(
+                "stats_snapshot",
+                camera_id=camera_id,
+                packets_received=packets_received,
+                packets_lost=packets_lost,
+                frames_received=frames_received,
+                frames_decoded=frames_decoded,
             )
 
 
@@ -150,7 +186,10 @@ def _video_ssrc_from_sdp(sdp: str) -> int | None:
 
 
 async def _request_keyframes_until_done(
-    pc: RTCPeerConnection, frame_future: asyncio.Future, initial_ssrc: int | None
+    pc: RTCPeerConnection,
+    frame_future: asyncio.Future,
+    initial_ssrc: int | None,
+    camera_id: str | None = None,
 ) -> None:
     """Periodically asks the sender for a keyframe (RTCP PLI).
 
@@ -175,6 +214,7 @@ async def _request_keyframes_until_done(
     ssrc = initial_ssrc
     if ssrc is not None:
         logger.info("Requesting keyframe (RTCP PLI) for ssrc=%s (from SDP)", ssrc)
+        _diag("rtcp_pli", camera_id=camera_id, ssrc=ssrc, source="sdp")
         await video_receiver._send_rtcp_pli(ssrc)
 
     while not frame_future.done():
@@ -193,10 +233,13 @@ async def _request_keyframes_until_done(
         ssrc = stats_ssrc or ssrc
         if ssrc is not None:
             logger.info("Requesting keyframe (RTCP PLI) for ssrc=%s", ssrc)
+            _diag("rtcp_pli", camera_id=camera_id, ssrc=ssrc, source="stats")
             await video_receiver._send_rtcp_pli(ssrc)
 
 
-async def _log_state_heartbeat(pc: RTCPeerConnection, frame_future: asyncio.Future) -> None:
+async def _log_state_heartbeat(
+    pc: RTCPeerConnection, frame_future: asyncio.Future, camera_id: str | None = None
+) -> None:
     """Temporary diagnostic: logs connection/ICE state every 5s regardless of
     whether it changes, so a connection that's stuck (never fires a
     statechange event because it never leaves its initial state) is still
@@ -206,12 +249,21 @@ async def _log_state_heartbeat(pc: RTCPeerConnection, frame_future: asyncio.Futu
         await asyncio.sleep(5.0)
         if frame_future.done():
             return
+        receiver_kinds = [(r.track.kind if r.track else None) for r in pc.getReceivers()]
         logger.warning(
             "Heartbeat: ice=%s conn=%s signaling=%s receivers=%s",
             pc.iceConnectionState,
             pc.connectionState,
             pc.signalingState,
-            [(r.track.kind if r.track else None) for r in pc.getReceivers()],
+            receiver_kinds,
+        )
+        _diag(
+            "heartbeat",
+            camera_id=camera_id,
+            ice_state=pc.iceConnectionState,
+            connection_state=pc.connectionState,
+            signaling_state=pc.signalingState,
+            receiver_kinds=receiver_kinds,
         )
 
 
@@ -244,14 +296,17 @@ async def _capture_frame_async(
     @pc.on("iceconnectionstatechange")
     def _on_ice_state() -> None:
         logger.warning("ICE connection state: %s", pc.iceConnectionState)
+        _diag("ice_state", camera_id=device_name, state=pc.iceConnectionState)
 
     @pc.on("connectionstatechange")
     def _on_conn_state() -> None:
         logger.warning("Peer connection state: %s", pc.connectionState)
+        _diag("connection_state", camera_id=device_name, state=pc.connectionState)
 
     @pc.on("signalingstatechange")
     def _on_signaling_state() -> None:
         logger.warning("Signaling state: %s", pc.signalingState)
+        _diag("signaling_state", camera_id=device_name, state=pc.signalingState)
 
     @pc.on("track")
     def _on_track(track) -> None:  # noqa: ANN001 - aiortc's MediaStreamTrack
@@ -305,26 +360,40 @@ async def _capture_frame_async(
         answer_sdp = _patch_missing_candidate_foundations(results["answerSdp"])
         answer = RTCSessionDescription(sdp=answer_sdp, type="answer")
         await pc.setRemoteDescription(answer)
-        for line in answer_sdp.splitlines():
-            if line.startswith("a=rtpmap") and ("H264" in line or "VP8" in line or "VP9" in line):
-                logger.info("Negotiated video codec line: %s", line.strip())
+        rtpmap_lines = [
+            line.strip()
+            for line in answer_sdp.splitlines()
+            if line.startswith("a=rtpmap") and ("H264" in line or "VP8" in line or "VP9" in line)
+        ]
+        for line in rtpmap_lines:
+            logger.info("Negotiated video codec line: %s", line)
         m_lines = [line.strip() for line in answer_sdp.splitlines() if line.startswith("m=")]
         logger.warning("Answer SDP m-lines: %s", m_lines)
         logger.warning(
             "Immediately after setRemoteDescription: ice=%s conn=%s signaling=%s",
             pc.iceConnectionState, pc.connectionState, pc.signalingState,
         )
+        _diag(
+            "sdp_negotiated",
+            camera_id=device_name,
+            m_lines=m_lines,
+            rtpmap_lines=rtpmap_lines,
+            ice_state=pc.iceConnectionState,
+            connection_state=pc.connectionState,
+            signaling_state=pc.signalingState,
+        )
 
         video_ssrc = _video_ssrc_from_sdp(answer_sdp)
         logger.warning("Video SSRC parsed from SDP answer: %s", video_ssrc)
+        _diag("video_ssrc", camera_id=device_name, ssrc=video_ssrc)
         keyframe_requester = asyncio.ensure_future(
-            _request_keyframes_until_done(pc, frame_future, video_ssrc)
+            _request_keyframes_until_done(pc, frame_future, video_ssrc, camera_id=device_name)
         )
-        heartbeat = asyncio.ensure_future(_log_state_heartbeat(pc, frame_future))
+        heartbeat = asyncio.ensure_future(_log_state_heartbeat(pc, frame_future, camera_id=device_name))
         try:
             frame = await asyncio.wait_for(frame_future, timeout=timeout)
         except asyncio.TimeoutError:
-            await _log_inbound_video_stats(pc)
+            await _log_inbound_video_stats(pc, camera_id=device_name)
             raise
         finally:
             keyframe_requester.cancel()
@@ -342,12 +411,24 @@ async def _capture_frame_async(
 
 
 def capture_frame_via_webrtc(
-    sdm_client: SdmClient, device_name: str, timeout: float = DEFAULT_TIMEOUT_SECONDS
+    sdm_client: SdmClient,
+    device_name: str,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    diagnostic_log_path: str | None = None,
 ) -> bytes:
     """Synchronous entry point -- runs its own asyncio event loop.
 
     Safe to call from a plain (non-async) Pub/Sub callback thread since each
     call gets a fresh loop; not meant for high-throughput use, just one
     frame per motion/person event.
+
+    `diagnostic_log_path`: opt-in structured JSONL diagnostic log (see
+    diagnostics.py) for `diagnose_webrtc.py` to feed to the diagnostic
+    agent. None (default) disables it -- zero overhead, no file written.
     """
-    return asyncio.run(_capture_frame_async(sdm_client, device_name, timeout))
+    set_diagnostic_log_path(diagnostic_log_path)
+    try:
+        return asyncio.run(_capture_frame_async(sdm_client, device_name, timeout))
+    finally:
+        if _diagnostic_writer is not None:
+            _diagnostic_writer.close()

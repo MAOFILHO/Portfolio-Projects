@@ -62,6 +62,12 @@ class DeployConfig(BaseSettings):
     alert_sms_to: str = ""
     acs_sms_from: str = ""
 
+    # Langfuse (opt-in LLM/agent-level tracing via OpenTelemetry). Empty
+    # public key disables it entirely -- see shared/surveil_core/agents/tracing.py.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     # Build / deploy behavior
     image_build_mode: str = "acr"  # "acr" (cloud build, recommended) or "local"
     source_dir: Path = Field(default=REPO_ROOT)

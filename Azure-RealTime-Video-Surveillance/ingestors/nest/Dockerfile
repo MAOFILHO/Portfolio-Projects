@@ -16,9 +16,11 @@ COPY ingestors/nest/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Only production runtime files -- excludes stub_backend.py, received_frames/,
-# get_refresh_token.py, and .env (dev-only tools / local secrets).
+# get_refresh_token.py, diagnose_webrtc.py (local-only diagnostic CLI, needs
+# semantic-kernel/surveil_core which this image deliberately doesn't carry),
+# and .env (dev-only tools / local secrets).
 COPY ingestors/nest/main.py ingestors/nest/auth.py ingestors/nest/backend_client.py \
      ingestors/nest/config.py ingestors/nest/pubsub_parser.py ingestors/nest/sdm_client.py \
-     ingestors/nest/webrtc_capture.py /app/
+     ingestors/nest/webrtc_capture.py ingestors/nest/diagnostics.py /app/
 
 CMD ["python", "main.py"]

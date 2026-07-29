@@ -53,7 +53,7 @@ export function AuditTrailPage() {
           <tbody>
             {events.map((event) => (
               <tr key={event.RowKey}>
-                <td>{new Date(event.Timestamp).toLocaleString()}</td>
+                <td>{new Date(event.LoggedAt).toLocaleString()}</td>
                 <td>{event.Actor}</td>
                 <td>{event.Action}</td>
                 <td>{event.Details || "-"}</td>

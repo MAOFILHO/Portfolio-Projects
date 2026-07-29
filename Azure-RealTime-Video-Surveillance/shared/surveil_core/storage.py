@@ -8,6 +8,7 @@ used, matching the "no hardcoded secrets" fix called out in docs/architecture.md
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -17,6 +18,8 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.storage.queue import QueueClient, TextBase64EncodePolicy, TextBase64DecodePolicy
 
 from surveil_core.models import AlertMessage, SurveillanceEvent
+
+logger = logging.getLogger("surveil_core.storage")
 
 FRAMES_CONTAINER = "frames"
 EVENTS_CONTAINER = "events"
@@ -134,6 +137,84 @@ class SurveillanceStorage:
         }
         self._events_table.upsert_entity(entity)
 
+    def query_events(
+        self,
+        camera_id: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        is_alert: bool | None = None,
+        severity: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 50,
+        continuation_token: str | None = None,
+    ) -> tuple[list[dict], str | None]:
+        """Server-side filtered query, for the NL Event Query Agent and any
+        future feature that needs more than "give me everything" -- unlike
+        `list_recent_events` above, this uses OData filters so Table Storage
+        only returns matching partitions/rows instead of a full table scan.
+
+        `parameters=` (rather than interpolating values into `query_filter`
+        directly) is azure-data-tables' own parameterized-query mechanism --
+        it substitutes `@name` placeholders safely, so this is not vulnerable
+        to OData filter injection the way naive string interpolation would
+        be.
+
+        `tags` is filtered client-side after the fact: `MatchedTags` is
+        stored as an opaque JSON-string column, which Table Storage's OData
+        filters can't inspect (no substring/array-contains support).
+        """
+        filters: list[str] = []
+        params: dict[str, object] = {}
+        if camera_id:
+            filters.append("PartitionKey eq @camera_id")
+            params["camera_id"] = camera_id
+        if start:
+            filters.append("AnalyzedAt ge @start")
+            params["start"] = start.isoformat()
+        if end:
+            filters.append("AnalyzedAt le @end")
+            params["end"] = end.isoformat()
+        if is_alert is not None:
+            filters.append("IsAlert eq @is_alert")
+            params["is_alert"] = is_alert
+        if severity:
+            filters.append("Severity eq @severity")
+            params["severity"] = severity
+
+        if filters:
+            query_filter = " and ".join(filters)
+            logger.info("query_events filter=%r params=%r limit=%r", query_filter, params, limit)
+            entities = self._events_table.query_entities(
+                query_filter=query_filter, parameters=params, results_per_page=limit
+            )
+        else:
+            query_filter = None
+            entities = self._events_table.list_entities(results_per_page=limit)
+
+        pages = entities.by_page(continuation_token=continuation_token)
+        try:
+            page = next(pages, None)
+        except Exception:
+            # query_entities()/list_entities() only build the lazy ItemPaged;
+            # the actual HTTP request (and thus any "InvalidInput" rejection)
+            # happens here, at first iteration -- log the exact filter/params
+            # that triggered it, since Azure Monitor's own HTTP auto-tracing
+            # redacts $filter query-string contents as sensitive data.
+            logger.exception("query_events filter=%r params=%r rejected by Table Storage", query_filter, params)
+            raise
+        results = [dict(entity) for entity in page] if page is not None else []
+
+        if tags:
+            wanted = {t.strip().lower() for t in tags if t.strip()}
+            results = [
+                r
+                for r in results
+                if wanted & {t.lower() for t in json.loads(r.get("MatchedTags") or "[]")}
+            ]
+
+        results.sort(key=lambda e: e.get("AnalyzedAt", ""), reverse=True)
+        return results, pages.continuation_token
+
     def list_recent_events(self, limit: int = 50) -> list[dict]:
         # Table Storage has no ORDER BY -- entities come back ordered by
         # PartitionKey then RowKey, not by time. Fetching only the first page
@@ -154,19 +235,25 @@ class SurveillanceStorage:
             "Actor": actor,
             "Action": action,
             "Details": details,
-            "Timestamp": now.isoformat(),
+            # NOT "Timestamp" -- that's a Table Storage system-reserved
+            # property (service-managed for optimistic concurrency, exposed
+            # via TableEntity.metadata, not as a regular dict key). Writing a
+            # custom "Timestamp" value is silently absorbed by the service
+            # and never comes back from `dict(entity)` -- confirmed live,
+            # this produced "Invalid Date" in the Audit Trail UI.
+            "LoggedAt": now.isoformat(),
         }
         self._audit_table.upsert_entity(entity)
 
     def list_recent_audit_events(self, limit: int = 50) -> list[dict]:
-        entities = self._audit_table.list_entities(results_per_page=limit)
-        results = []
-        for page in entities.by_page():
-            for entity in page:
-                results.append(dict(entity))
-                if len(results) >= limit:
-                    return sorted(results, key=lambda e: e.get("Timestamp", ""), reverse=True)
-        return sorted(results, key=lambda e: e.get("Timestamp", ""), reverse=True)
+        # Same reasoning as list_recent_events above: Table Storage orders
+        # entities by PartitionKey/RowKey, not time, so returning as soon as
+        # `limit` entities are collected (in that raw order) can silently
+        # drop genuinely recent entries once the table holds more than one
+        # page -- every entity must be scanned before sorting and trimming.
+        results = [dict(entity) for entity in self._audit_table.list_entities()]
+        results.sort(key=lambda e: e.get("LoggedAt", ""), reverse=True)
+        return results[:limit]
 
     # ---- alerts queue ------------------------------------------------------
 

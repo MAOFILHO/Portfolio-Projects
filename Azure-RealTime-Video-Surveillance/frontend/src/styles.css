@@ -723,6 +723,75 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.agent-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 640px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.agent-log-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.agent-log-line:hover {
+  background: var(--panel);
+}
+
+.agent-log-time {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.agent-log-name {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-log-phase {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.agent-phase-invoke {
+  background: rgba(0, 120, 212, 0.12);
+  color: var(--accent);
+}
+
+.agent-phase-result {
+  background: rgba(16, 124, 16, 0.12);
+  color: var(--ok);
+}
+
+.agent-phase-error {
+  background: rgba(164, 38, 44, 0.12);
+  color: var(--danger);
+}
+
+.agent-phase-decision {
+  background: rgba(96, 94, 92, 0.12);
+  color: var(--muted);
+}
+
+.agent-log-detail {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 900px) {
   .observability-grid {
     grid-template-columns: 1fr;

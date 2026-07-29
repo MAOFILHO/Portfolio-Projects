@@ -114,7 +114,9 @@ export interface AuditEvent {
   Actor: string;
   Action: string;
   Details: string;
-  Timestamp: string;
+  // Not "Timestamp" -- that name collides with Table Storage's own
+  // system-reserved property and never comes back as a regular field.
+  LoggedAt: string;
 }
 
 export async function fetchAuditEvents(limit = 50): Promise<AuditEvent[]> {
@@ -172,6 +174,22 @@ export async function fetchRecentExceptions(limit = 20): Promise<ExceptionEvent[
   }
   const payload = (await response.json()) as { exceptions: ExceptionEvent[] };
   return payload.exceptions;
+}
+
+export interface AgentActivityEntry {
+  timestamp: string;
+  message: string;
+}
+
+export async function fetchAgentActivity(hours = 24, limit = 100): Promise<AgentActivityEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/activity?hours=${hours}&limit=${limit}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch agent activity: ${response.status}`);
+  }
+  const payload = (await response.json()) as { entries: AgentActivityEntry[] };
+  return payload.entries;
 }
 
 export { API_BASE_URL };

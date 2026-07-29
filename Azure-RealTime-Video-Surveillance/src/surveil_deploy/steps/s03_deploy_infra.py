@@ -71,6 +71,9 @@ def run(config: DeployConfig, state: DeploymentState) -> dict:
         f"alertEmailTo={config.alert_email_to}",
         f"alertSmsTo={config.alert_sms_to}",
         f"acsSmsFrom={config.acs_sms_from}",
+        f"langfusePublicKey={config.langfuse_public_key}",
+        f"langfuseSecretKey={config.langfuse_secret_key}",
+        f"langfuseHost={config.langfuse_host}",
     ]
 
     if config.nest_ingestor_enabled:

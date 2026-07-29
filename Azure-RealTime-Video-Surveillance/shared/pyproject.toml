@@ -10,7 +10,19 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "pydantic==2.10.3",
+    # Bumped from 2.10.3 -> 2.10.6 for semantic-kernel compatibility:
+    # semantic-kernel's own pydantic constraint is
+    # ">=2.0,!=2.10.0,!=2.10.1,!=2.10.2,!=2.10.3,<2.14" -- it explicitly
+    # excludes 2.10.0 through 2.10.3. 2.10.6 stays in the same 2.10.x patch
+    # line (no behavior change expected) while satisfying that constraint.
+    "pydantic==2.10.6",
+    "semantic-kernel==1.34.0",
+    # Pinned to the same OTel core release train azure-monitor-opentelemetry
+    # 1.6.4 pulls (1.43.x) -- a newer/unpinned version upgrades
+    # opentelemetry-sdk past what azure-monitor-opentelemetry's bundled
+    # exporter supports, breaking its own `LogData` import. Confirmed the
+    # hard way.
+    "opentelemetry-exporter-otlp-proto-http==1.43.0",
     "azure-ai-vision-imageanalysis==1.0.0b3",
     "azure-identity==1.19.0",
     "azure-storage-blob==12.24.0",

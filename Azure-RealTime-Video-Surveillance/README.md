@@ -61,10 +61,11 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Feature | Description |
 |---|---|
 | Sign-in | Gated behind Azure Static Web Apps' built-in Microsoft auth — no passwords handled by this system's own code. |
-| Navigation | Capture (webcam/demo + live alerts + event history), Profile, Settings, Observability, Audit Trail. |
+| Navigation | Capture (webcam/demo + live alerts + event history), Profile, Settings, Observability, AI Agents, Audit Trail. |
 | Capture page layout | 2x2 grid: Live Capture and Video Upload & Analysis side by side (matching fixed-height camera boxes via CSS Grid), Event History and a compact Live Alerts ticker below. |
 | Settings | Read-only view of the live alert config this deployment is actually running with (watch tags, confidence, capture interval, crowd/trespassing rules, effective severity map). |
-| Observability | Backend health, hourly request/failure chart, recent-exceptions table — queried live from Application Insights/Log Analytics, plus a deep link to the Portal blade. |
+| Observability | Backend health, hourly request/failure chart, recent-exceptions table — queried live from Application Insights/Log Analytics, plus an AI-generated anomaly analysis from the Observability Monitoring Agent and a deep link to the Portal blade. |
+| AI Agents | Live, auto-refreshing log of every agent invocation, tool call, orchestration decision, and error, across the Function and backend. See [Agentic AI Architecture](#agentic-ai-architecture). |
 | Audit Trail | Sign-ins and on-demand analysis actions, logged to Table Storage. |
 
 ### Operational Tooling
@@ -83,6 +84,8 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Cloud platform | Microsoft Azure |
 | Compute | Azure Container Apps (FastAPI backend), Azure Functions (Consumption, Python) |
 | AI/ML | Azure AI Vision — Image Analysis 4.0 |
+| Agentic AI | Azure OpenAI (`gpt-5-mini`) + Microsoft Semantic Kernel SDK — 5 agents (Triage, Notification Policy, NL Event Query, Observability Monitoring, Nest WebRTC Diagnostic); see [Agentic AI Architecture](#agentic-ai-architecture) |
+| LLM/agent tracing | OpenTelemetry (OTLP) — optional dual-export to Langfuse, layered on the same Application Insights instrumentation |
 | Storage | Azure Storage (Blob, Queue, Table) |
 | Messaging/alerting | Azure Storage Queue, WebSocket, Azure Communication Services (email/SMS) |
 | Frontend hosting | Azure Static Web Apps |
@@ -90,7 +93,7 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 | Observability | Application Insights, Log Analytics — queried live and rendered in-app (`azure-monitor-query`), not just viewed in the Portal |
 | Identity / Auth | Azure Managed Identity (user-assigned), RBAC — no credential keys in the core system; dashboard sign-in via Static Web Apps built-in auth (Microsoft identity provider) |
 | Infrastructure as Code | Bicep (subscription-scoped, modular) |
-| Backend | Python 3.12, FastAPI, Pydantic / Pydantic Settings, WebSockets, `azure-ai-vision-imageanalysis`, `azure-storage-*`, `azure-communication-*` SDKs |
+| Backend | Python 3.12, FastAPI, Pydantic / Pydantic Settings, WebSockets, `azure-ai-vision-imageanalysis`, `azure-storage-*`, `azure-communication-*`, `semantic-kernel` SDKs |
 | Deployment CLI | Python, Typer, Rich, streamed Azure CLI/Functions Core Tools/npm orchestration |
 | Frontend | React 18, TypeScript, Vite |
 | Home camera ingestion | Python, Google Cloud Pub/Sub, Smart Device Management API, OpenCV, `aiortc` (WebRTC) |
@@ -322,6 +325,105 @@ sequenceDiagram
 | On-demand analysis | A separate, synchronous path, not the automatic one above: `POST /api/v1/frames/{camera_id}/{file}/analyze` re-downloads the stored frame and calls Azure AI Vision directly (not via the Function) — a live, billed call per click, triggered by the Tags/Read/Smart Crop buttons, never cached or automatic. |
 | Sign-in gate | Enforced before any of the above: Static Web Apps requires `allowedRoles: ["authenticated"]` on every route (`staticwebapp.config.json`), redirecting unauthenticated requests to `/.auth/login/aad`. The app treats "signed out" as a first-class UI state — an explicit screen with a re-authenticate link, not just a hidden nav bar. |
 
+## Agentic AI Architecture
+
+Layered on top of the deterministic Vision-based pipeline above (which stays the single source of truth for *what counts as an alert*), five agents built on **Microsoft's Semantic Kernel SDK** against **Azure OpenAI** add judgment and natural-language capability around that pipeline — they augment it, they never replace it. See `shared/surveil_core/agents/` for the full implementation.
+
+| Agent | Runs in | Triggered by | What it does |
+|---|---|---|---|
+| **Triage Agent** | Azure Function | Every alert-worthy detection (unless already `critical`) | May recommend escalating severity upward, or recommend (never enact) suppression with a reason |
+| **Notification Policy Agent** | Azure Function | Immediately before sending an alert | Chooses which channels (email/SMS) to notify through and how to frame the message — cannot change `is_alert` or `severity` |
+| **NL Event Query Agent** | Backend (Container App) | `POST /api/v1/query` | Answers plain-English questions about event history by calling a `query_events` tool against Table Storage, then summarizes the results |
+| **Observability Monitoring Agent** | Backend (Container App) | `GET /api/v1/observability/analysis` | Reasons over the same Application Insights data the Observability page charts, flagging anomalies in plain language |
+| **Nest WebRTC Diagnostic Agent** | Local CLI only (`ingestors/nest/diagnose_webrtc.py`) | Run on demand by a developer | Reads a structured capture-session log and writes a plain-language root-cause report for the known WebRTC video limitation |
+
+### Why Semantic Kernel, not LangChain/AutoGen/MCP
+
+Chosen over LangGraph/AutoGen/a full Azure AI Foundry Agent Service deployment: it's Microsoft's actively-maintained production path (AutoGen was merged into it in 2025), integrates with Azure OpenAI via the same managed-identity/RBAC pattern as every other Azure client in this project (no API keys), and its function-calling/plugin model maps directly onto the tool ideas here without introducing a portal-managed Foundry resource — consistent with this project's "zero Azure Portal clicks" ethos.
+
+**No MCP (Model Context Protocol) is used.** Tool calling here goes through Semantic Kernel's native plugin mechanism (`@kernel_function`-decorated Python methods, invoked via the underlying model's own function-calling API) — a single in-process tool (`query_events`), not a separate MCP server/client boundary. MCP earns its cost when tools need to be shared across multiple independent clients/processes; this project's tools are private implementation details of one plugin registered directly on the kernel, so that extra protocol layer isn't warranted here.
+
+### Orchestration flow
+
+```mermaid
+flowchart TB
+    subgraph FunctionSide["Azure Function (per-frame alert path)"]
+        direction TB
+        Rule["Rule engine<br/>evaluate_detections() + compute_severity()"]
+        Triage["Triage Agent<br/>(skipped entirely if severity == critical)"]
+        Notify["Notification Policy Agent"]
+        Rule -->|"severity != critical"| Triage
+        Triage -->|"escalate? (upward only)"| FinalSeverity["final_severity"]
+        FinalSeverity --> Notify
+        Notify -->|channels| Send["AcsNotifier.send_selected() / send_all()"]
+    end
+
+    subgraph BackendSide["Backend (on-demand, user-triggered)"]
+        direction TB
+        Query["NL Event Query Agent"]
+        Tool["query_events tool call<br/>(Semantic Kernel plugin)"]
+        Monitor["Observability Monitoring Agent"]
+        Query -->|function-calling| Tool
+        Tool -->|OData filter| TableStorage[("events table")]
+        TableStorage --> Tool --> Query
+        Monitor -->|KQL query| LogAnalytics[("Log Analytics")]
+    end
+
+    Triage -.->|chat completion| AOAI["Azure OpenAI<br/>gpt-5-mini"]
+    Notify -.->|chat completion| AOAI
+    Query -.->|chat completion + tool calling| AOAI
+    Monitor -.->|chat completion| AOAI
+
+    AOAI -.->|optional OTLP export| Langfuse["Langfuse<br/>(LLM-level tracing, opt-in)"]
+    Triage -.->|"[AGENT] log line"| Activity["AI Agents Activity page<br/>(Application Insights AppTraces)"]
+    Notify -.-> Activity
+    Query -.-> Activity
+    Monitor -.-> Activity
+```
+
+### Agent invocation during frame analysis (extends the Frame Lifecycle sequence above)
+
+```mermaid
+sequenceDiagram
+    participant Func as Azure Function
+    participant Rules as Rule Engine
+    participant Triage as Triage Agent
+    participant Notify as Notification Policy Agent
+    participant AOAI as Azure OpenAI
+    participant ACS as Communication Services
+
+    Func->>Rules: evaluate_detections() + compute_severity()
+    Rules-->>Func: matched_tags, severity
+    alt severity != critical
+        Func->>Triage: triage(caption, tags, severity)
+        Triage->>AOAI: chat completion (structured output)
+        AOAI-->>Triage: escalate?, suppress_recommended?
+        Triage-->>Func: TriageResult
+        Note over Func: escalation applied only if strictly<br/>higher than rule-engine severity
+    else severity == critical
+        Note over Func: Triage Agent never invoked --<br/>no code path can reach it
+    end
+    Func->>Notify: decide(alert)
+    Notify->>AOAI: chat completion (structured output)
+    AOAI-->>Notify: channels, framing
+    Notify-->>Func: NotificationDecision
+    Func->>ACS: send_selected(alert, channels)
+    Note over Func,ACS: any agent failure -> fall back to<br/>today's deterministic behavior, alert still sent
+```
+
+### Safety guardrail (non-negotiable)
+
+A rule-engine `critical` severity classification (gun/knife/weapon) can **never** be silently downgraded or suppressed by an agent — this is enforced in code, not just prompted: `function_app.py` never even calls the Triage Agent when severity is already `critical`, so there is no code path where a critical alert could reach agent-suppression logic at all. If any agent call errors or times out, the pipeline falls back to today's deterministic behavior — never fails closed (alert lost) or open. Covered by `tests/test_function_app_agents.py`'s regression test, which simulates a maximally adversarial agent that always recommends suppression and asserts the alert still fires.
+
+### Observing the agents
+
+- **AI Agents Activity page** (dashboard nav) — a live, auto-refreshing log of every agent invocation, tool call, result, and orchestration decision, across both the Function and backend. Sourced from the same Application Insights instance as the Observability page: every agent call logs a structured `[AGENT] <agent> | <phase> | <details>` line (`shared/surveil_core/agents/activity_log.py`), and `GET /api/v1/agents/activity` queries Application Insights' `AppTraces` table for lines matching that tag — no new telemetry pipeline.
+- **Langfuse (optional)** — setting `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in `.env` additionally exports full LLM-level traces (prompts, completions, token counts, tool-call arguments/results, latency) via OpenTelemetry (OTLP) to Langfuse, layered on top of the Application Insights tracing already configured — both destinations receive every span, nothing about the existing wiring changes. Semantic Kernel's own OTel instrumentation for chat-completion and tool-call spans is enabled automatically whenever Langfuse tracing is turned on (`shared/surveil_core/agents/tracing.py`).
+
+### Deployment
+
+One Azure OpenAI account (`infra/modules/openai.bicep`) is provisioned alongside Vision, with a `gpt-5-mini` GlobalStandard deployment and a dedicated "Cognitive Services OpenAI User" RBAC role granted to the same managed identity used everywhere else in this system — no new credential type, no API keys.
+
 ## Design Decisions
 
 See [docs/design-decisions.md](docs/design-decisions.md).
@@ -362,12 +464,14 @@ azure-realtime-surveillance/
 │   └── smoke/                    # pre_deploy.py, post_deploy.py
 │
 ├── shared/surveil_core/          # Detection, alert-rule, storage, notify logic
+│   └── agents/                   # Semantic Kernel agents -- Triage, Notification Policy,
+│                                 # NL Event Query, Observability Monitoring, Nest Diagnostic
 │                                 # (shared verbatim by backend/ and function/)
 ├── backend/                      # FastAPI app (Azure Container Apps)
-│   └── app/routes/               # frames, events, settings, audit, observability, health, ws
-├── function/                     # Azure Function analysis worker
+│   └── app/routes/               # frames, events, settings, audit, observability, agents, query, health, ws
+├── function/                     # Azure Function analysis worker (runs Triage + Notification Policy agents)
 ├── frontend/                     # React + TypeScript dashboard (-> Static Web Apps)
-│   └── src/pages/                # Profile, Settings, Observability, Audit Trail
+│   └── src/pages/                # Profile, Settings, Observability, AI Agents Activity, Audit Trail
 ├── ingestors/nest/               # Optional: Google Nest camera event ingestor (local or Container App)
 ├── infra/                        # Bicep (main.bicep + modules/)
 ├── docs/                         # architecture, deployment, cost, troubleshooting, extending-phase2
@@ -380,6 +484,7 @@ azure-realtime-surveillance/
 | Resource | Monthly cost (idle-heavy demo usage) |
 |----------|-------------|
 | Azure AI Vision (S1, pay-per-call) | ~$0.10-3 (per-transaction) |
+| Azure OpenAI (`gpt-5-mini`, GlobalStandard, pay-per-token) | ~$0.05-1 (one small call per alert/query, not per frame) |
 | Container Apps (Consumption, scale-to-zero) | ~$0-2 |
 | Azure Functions (Consumption) | ~$0-1 |
 | Storage Account (LRS, Hot) | ~$0.05-0.5 |

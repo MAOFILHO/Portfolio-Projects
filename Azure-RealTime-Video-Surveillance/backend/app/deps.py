@@ -5,7 +5,9 @@ from functools import lru_cache
 from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient
 from fastapi import Depends, Header, HTTPException
+from semantic_kernel import Kernel
 from surveil_core import AlertRuleConfig
+from surveil_core.agents import EventQueryAgent, MonitoringAgent, build_kernel
 from surveil_core.analyzer import AzureVisionAnalyzer
 from surveil_core.notify import AcsNotifier
 from surveil_core.storage import SurveillanceStorage
@@ -36,6 +38,26 @@ def get_vision_analyzer() -> AzureVisionAnalyzer:
 @lru_cache
 def get_logs_client() -> LogsQueryClient:
     return LogsQueryClient(credential=get_credential())
+
+
+@lru_cache
+def get_kernel() -> Kernel:
+    settings = get_settings()
+    return build_kernel(
+        endpoint=settings.openai_endpoint,
+        deployment_name=settings.openai_chat_deployment,
+        credential=get_credential(),
+    )
+
+
+@lru_cache
+def get_query_agent() -> EventQueryAgent:
+    return EventQueryAgent(kernel=get_kernel(), storage=get_storage())
+
+
+@lru_cache
+def get_monitoring_agent() -> MonitoringAgent:
+    return MonitoringAgent(kernel=get_kernel())
 
 
 @lru_cache

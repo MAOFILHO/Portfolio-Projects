@@ -47,6 +47,12 @@ param storageAccountName string
 @description('Vision account endpoint')
 param visionEndpoint string
 
+@description('Azure OpenAI endpoint, backing the Semantic Kernel agents')
+param openAiEndpoint string = ''
+
+@description('Azure OpenAI chat model deployment name')
+param openAiChatDeploymentName string = 'chat'
+
 @description('Application Insights connection string')
 param appInsightsConnectionString string
 
@@ -87,6 +93,17 @@ param alertSmsTo string = ''
 @description('ACS SMS "from" number (E.164 format, leave empty if SMS not provisioned)')
 param acsSmsFrom string = ''
 
+@description('Langfuse public key (empty disables Langfuse agent tracing)')
+@secure()
+param langfusePublicKey string = ''
+
+@description('Langfuse secret key')
+@secure()
+param langfuseSecretKey string = ''
+
+@description('Langfuse host (cloud or self-hosted)')
+param langfuseHost string = 'https://cloud.langfuse.com'
+
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: hostingPlanName
   location: location
@@ -126,6 +143,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'AZURE_CLIENT_ID', value: managedIdentityClientId }
         { name: 'STORAGE_ACCOUNT_NAME', value: storageAccountName }
         { name: 'VISION_ENDPOINT', value: visionEndpoint }
+        { name: 'OPENAI_ENDPOINT', value: openAiEndpoint }
+        { name: 'OPENAI_CHAT_DEPLOYMENT', value: openAiChatDeploymentName }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
         { name: 'ALERT_WATCH_TAGS', value: alertWatchTags }
         { name: 'ALERT_MIN_CONFIDENCE', value: alertMinConfidence }
@@ -140,6 +159,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'ACS_SMS_FROM', value: acsSmsFrom }
       ], !empty(acsConnectionString) ? [
         { name: 'ACS_CONNECTION_STRING', value: acsConnectionString }
+      ] : [], !empty(langfusePublicKey) ? [
+        { name: 'LANGFUSE_PUBLIC_KEY', value: langfusePublicKey }
+        { name: 'LANGFUSE_SECRET_KEY', value: langfuseSecretKey }
+        { name: 'LANGFUSE_HOST', value: langfuseHost }
       ] : [])
     }
   }

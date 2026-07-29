@@ -8,7 +8,11 @@ azure-functions==1.21.3
 # `func azure functionapp publish` — see shared/README.md. Keep this list in
 # sync with shared/pyproject.toml's [project.dependencies]; a mismatch here
 # is caught by `make smoke-post` (function health check) after deploy.
-pydantic==2.10.3
+# pydantic bumped 2.10.3 -> 2.10.6: semantic-kernel excludes 2.10.0-2.10.3
+# exactly (see shared/pyproject.toml comment). Keep in sync.
+pydantic==2.10.6
+semantic-kernel==1.34.0
+opentelemetry-exporter-otlp-proto-http==1.43.0
 azure-ai-vision-imageanalysis==1.0.0b3
 azure-identity==1.19.0
 azure-storage-blob==12.24.0

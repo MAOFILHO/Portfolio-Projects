@@ -6,6 +6,7 @@ import { IdleWarningModal } from "./components/IdleWarningModal";
 import { TopNav, type PageId } from "./components/TopNav";
 import { useAuth } from "./hooks/useAuth";
 import { useIdleLogout } from "./hooks/useIdleLogout";
+import { AgentActivityPage } from "./pages/AgentActivityPage";
 import { AuditTrailPage } from "./pages/AuditTrailPage";
 import { ObservabilityPage } from "./pages/ObservabilityPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -62,6 +63,7 @@ export default function App() {
             {activePage === "profile" && <ProfilePage user={user} />}
             {activePage === "settings" && <SettingsPage />}
             {activePage === "observability" && <ObservabilityPage />}
+            {activePage === "agents" && <AgentActivityPage />}
             {activePage === "audit" && <AuditTrailPage />}
           </main>
           {secondsRemaining !== null && (

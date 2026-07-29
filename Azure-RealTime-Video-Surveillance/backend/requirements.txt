@@ -1,6 +1,11 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
-pydantic==2.10.3
+# Bumped 2.10.3 -> 2.10.6 to match shared/pyproject.toml -- semantic-kernel
+# (installed transitively via the shared/ package, see backend/Dockerfile)
+# excludes pydantic 2.10.0-2.10.3 exactly. Keeping this pin in sync avoids
+# pip's second install step here silently downgrading pydantic back into
+# the excluded range after `pip install /app/shared` already satisfied it.
+pydantic==2.10.6
 pydantic-settings==2.7.0
 python-multipart==0.0.19
 websockets==14.1

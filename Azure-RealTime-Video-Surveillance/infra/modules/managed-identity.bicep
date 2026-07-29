@@ -23,6 +23,9 @@ param storageAccountId string
 @description('Resource ID of the Cognitive Services (Vision) account to grant access to')
 param visionAccountId string
 
+@description('Resource ID of the Azure OpenAI account to grant access to')
+param openAiAccountId string
+
 @description('Resource ID of the Log Analytics workspace to grant read access to (backend Observability page queries traces/exceptions from here)')
 param logAnalyticsWorkspaceId string
 
@@ -43,6 +46,11 @@ var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 var logAnalyticsReaderRoleId = '73c42c96-874c-492b-b04d-ab87d138a893'
+// Distinct from cognitiveServicesUserRoleId above: Azure OpenAI's own
+// data-plane access (chat completions) requires the OpenAI-specific role,
+// not the generic Cognitive Services User role granted to the Vision
+// account.
+var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 
 // Storage Account CONTRIBUTOR (control-plane, not a data-plane role) here:
 // functionapp.bicep's native (poll-based, non-Event-Grid) blob trigger uses
@@ -70,6 +78,10 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing 
 
 resource visionAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
   name: last(split(visionAccountId, '/'))
+}
+
+resource openAiAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: last(split(openAiAccountId, '/'))
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
@@ -121,6 +133,16 @@ resource cognitiveServicesUserAssignment 'Microsoft.Authorization/roleAssignment
   scope: visionAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource openAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(openAiAccountId, managedIdentity.id, cognitiveServicesOpenAiUserRoleId)
+  scope: openAiAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAiUserRoleId)
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }

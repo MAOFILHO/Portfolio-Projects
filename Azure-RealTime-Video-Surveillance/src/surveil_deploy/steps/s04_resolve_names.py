@@ -31,7 +31,14 @@ def run(config: DeployConfig, state: DeploymentState) -> dict:
             for k, v in payload.get("properties", {}).get("outputs", {}).items()
         }
 
-    required = ["STORAGE_ACCOUNT_NAME", "VISION_ENDPOINT", "CONTAINER_APP_NAME", "FUNCTION_APP_NAME", "STATIC_WEB_APP_NAME"]
+    required = [
+        "STORAGE_ACCOUNT_NAME",
+        "VISION_ENDPOINT",
+        "OPENAI_ENDPOINT",
+        "CONTAINER_APP_NAME",
+        "FUNCTION_APP_NAME",
+        "STATIC_WEB_APP_NAME",
+    ]
     missing = [key for key in required if not outputs.get(key)]
     if missing:
         raise RuntimeError(f"Missing expected deployment outputs: {missing}. Re-run `surveil-deploy deploy --fresh`.")

@@ -45,6 +45,12 @@ param storageBlobEndpoint string
 @description('Vision account endpoint')
 param visionEndpoint string
 
+@description('Azure OpenAI endpoint, backing the Semantic Kernel agents')
+param openAiEndpoint string = ''
+
+@description('Azure OpenAI chat model deployment name')
+param openAiChatDeploymentName string = 'chat'
+
 @description('Alert rule: comma-separated tags to watch')
 param alertWatchTags string
 
@@ -85,6 +91,17 @@ param acsSmsFrom string = ''
 @description('Shared secret required on POST /api/v1/frames via the X-Api-Key header (empty disables the check)')
 @secure()
 param frameUploadApiKey string = ''
+
+@description('Langfuse public key (empty disables Langfuse agent tracing)')
+@secure()
+param langfusePublicKey string = ''
+
+@description('Langfuse secret key')
+@secure()
+param langfuseSecretKey string = ''
+
+@description('Langfuse host (cloud or self-hosted)')
+param langfuseHost string = 'https://cloud.langfuse.com'
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: last(split(logAnalyticsId, '/'))
@@ -141,6 +158,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'acs-connection-string'
           value: acsConnectionString
         }
+      ] : [], !empty(langfusePublicKey) ? [
+        {
+          name: 'langfuse-secret-key'
+          value: langfuseSecretKey
+        }
       ] : [])
     }
     template: {
@@ -156,6 +178,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID', value: managedIdentityClientId }
             { name: 'STORAGE_BLOB_ENDPOINT', value: storageBlobEndpoint }
             { name: 'VISION_ENDPOINT', value: visionEndpoint }
+            { name: 'OPENAI_ENDPOINT', value: openAiEndpoint }
+            { name: 'OPENAI_CHAT_DEPLOYMENT', value: openAiChatDeploymentName }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'LOG_ANALYTICS_WORKSPACE_ID', value: logAnalyticsWorkspaceGuid }
             { name: 'ALERT_WATCH_TAGS', value: alertWatchTags }
@@ -172,6 +196,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FRAME_UPLOAD_API_KEY', secretRef: 'frame-upload-api-key' }
           ], !empty(acsConnectionString) ? [
             { name: 'ACS_CONNECTION_STRING', secretRef: 'acs-connection-string' }
+          ] : [], !empty(langfusePublicKey) ? [
+            { name: 'LANGFUSE_PUBLIC_KEY', value: langfusePublicKey }
+            { name: 'LANGFUSE_SECRET_KEY', secretRef: 'langfuse-secret-key' }
+            { name: 'LANGFUSE_HOST', value: langfuseHost }
           ] : [])
         }
       ]

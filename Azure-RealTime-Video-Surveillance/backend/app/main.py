@@ -11,7 +11,7 @@ from app.alerts.queue_consumer import run_queue_consumer
 from app.alerts.ws_manager import manager
 from app.config import get_settings
 from app.deps import get_storage
-from app.routes import audit, clips, events, frames, health, observability, ws
+from app.routes import agents, audit, clips, events, frames, health, observability, query, ws
 from app.routes import settings as settings_route
 
 logging.basicConfig(level=logging.INFO)
@@ -87,6 +87,8 @@ def create_app() -> FastAPI:
     app.include_router(frames.router)
     app.include_router(clips.router)
     app.include_router(events.router)
+    app.include_router(query.router)
+    app.include_router(agents.router)
     app.include_router(settings_route.router)
     app.include_router(audit.router)
     app.include_router(observability.router)

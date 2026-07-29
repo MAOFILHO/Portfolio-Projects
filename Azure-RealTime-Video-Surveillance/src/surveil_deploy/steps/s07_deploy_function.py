@@ -196,6 +196,16 @@ def run(config: DeployConfig, state: DeploymentState) -> dict:
         run_command(
             [
                 "pip", "install", "--only-binary=:all:", *_PYTHON_TAGS,
+                # pybars4/PyMeta3 (transitive deps of semantic-kernel, via
+                # openapi_core -> prance's Handlebars templating) publish no
+                # wheel on PyPI at all, only an sdist -- which --only-binary
+                # can't build cross-platform. Both build as universal
+                # (py3-none-any, pure Python, no native code) wheels, so
+                # they're vendored here once and installed from that local
+                # cache instead -- confirmed the hard way after this step
+                # failed against a real deploy with "No matching
+                # distribution found for pybars4".
+                "--find-links", str(function_dir / "vendor_wheels"),
                 "--target", str(packages_dir),
                 "-r", "requirements.txt",
             ],

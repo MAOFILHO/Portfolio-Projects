@@ -53,6 +53,25 @@ param alertSeverityMap string = ''
 @description('Azure region for the Vision resource specifically -- must support Image Analysis 4.0 Captions (e.g. eastus). Independent of `location` since ARM cannot move an existing resource between regions in-place.')
 param visionLocation string = 'eastus'
 
+@description('Azure region for the Azure OpenAI resource specifically -- must support the chosen chat model deployment. Independent of `location`/`visionLocation` since Azure OpenAI model availability is its own constraint.')
+param openAiLocation string = 'eastus2'
+
+@allowed(['S0'])
+@description('Azure OpenAI only offers the S0 SKU.')
+param openAiSkuName string = 'S0'
+
+@description('Chat model name backing the Semantic Kernel agents (Triage, Notification Policy, NL Event Query, Diagnostic, Monitoring)')
+param openAiChatModelName string = 'gpt-5-mini'
+
+@description('Chat model version')
+param openAiChatModelVersion string = '2025-08-07'
+
+@description('Deployment SKU for the chat model -- must match a SKU this subscription has quota under (see infra/modules/openai.bicep)')
+param openAiChatSkuName string = 'GlobalStandard'
+
+@description('Chat model deployment capacity, in thousands of tokens-per-minute. Kept small by default to keep cost low.')
+param openAiChatCapacity int = 100
+
 @description('ACS sender email address (leave empty until the Bicep-provisioned Azure-managed domain address is known; wired post-deploy by the CLI)')
 param acsSenderEmail string = ''
 
@@ -64,6 +83,17 @@ param alertSmsTo string = ''
 
 @description('ACS SMS "from" number (E.164 format). Leave empty if you have not provisioned an ACS phone number.')
 param acsSmsFrom string = ''
+
+@description('Langfuse public key -- enables LLM/agent-level tracing export via OpenTelemetry. Empty disables it entirely.')
+@secure()
+param langfusePublicKey string = ''
+
+@description('Langfuse secret key')
+@secure()
+param langfuseSecretKey string = ''
+
+@description('Langfuse host -- cloud.langfuse.com by default, or a self-hosted instance URL')
+param langfuseHost string = 'https://cloud.langfuse.com'
 
 @description('Deploy the always-on Nest doorbell ingestor Container App (opt-in; adds a fixed 24/7 compute cost -- see docs/cost.md)')
 param nestIngestorEnabled bool = false
@@ -134,6 +164,21 @@ module vision 'modules/vision.bicep' = {
   }
 }
 
+module openAi 'modules/openai.bicep' = {
+  name: 'openai'
+  scope: rg
+  params: {
+    name: 'oai-${resourceToken}'
+    location: openAiLocation
+    tags: tags
+    skuName: openAiSkuName
+    chatModelName: openAiChatModelName
+    chatModelVersion: openAiChatModelVersion
+    chatSkuName: openAiChatSkuName
+    chatCapacity: openAiChatCapacity
+  }
+}
+
 module managedIdentity 'modules/managed-identity.bicep' = {
   name: 'managed-identity'
   scope: rg
@@ -143,6 +188,7 @@ module managedIdentity 'modules/managed-identity.bicep' = {
     tags: tags
     storageAccountId: storage.outputs.id
     visionAccountId: vision.outputs.id
+    openAiAccountId: openAi.outputs.id
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsId
   }
 }
@@ -194,6 +240,8 @@ module containerApp 'modules/containerapp.bicep' = {
     registryLoginServer: registry.outputs.loginServer
     storageBlobEndpoint: storage.outputs.blobEndpoint
     visionEndpoint: vision.outputs.endpoint
+    openAiEndpoint: openAi.outputs.endpoint
+    openAiChatDeploymentName: openAi.outputs.chatDeploymentName
     alertWatchTags: alertWatchTags
     alertMinConfidence: alertMinConfidence
     alertMinCount: alertMinCount
@@ -207,6 +255,9 @@ module containerApp 'modules/containerapp.bicep' = {
     alertSmsTo: alertSmsTo
     acsSmsFrom: acsSmsFrom
     frameUploadApiKey: frameUploadApiKey
+    langfusePublicKey: langfusePublicKey
+    langfuseSecretKey: langfuseSecretKey
+    langfuseHost: langfuseHost
   }
 }
 
@@ -245,6 +296,8 @@ module functionApp 'modules/functionapp.bicep' = {
     managedIdentityClientId: managedIdentity.outputs.clientId
     storageAccountName: storage.outputs.name
     visionEndpoint: vision.outputs.endpoint
+    openAiEndpoint: openAi.outputs.endpoint
+    openAiChatDeploymentName: openAi.outputs.chatDeploymentName
     appInsightsConnectionString: observability.outputs.connectionString
     alertWatchTags: alertWatchTags
     alertMinConfidence: alertMinConfidence
@@ -258,6 +311,9 @@ module functionApp 'modules/functionapp.bicep' = {
     alertEmailTo: alertEmailTo
     alertSmsTo: alertSmsTo
     acsSmsFrom: acsSmsFrom
+    langfusePublicKey: langfusePublicKey
+    langfuseSecretKey: langfuseSecretKey
+    langfuseHost: langfuseHost
   }
 }
 
@@ -280,6 +336,9 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.name
 output STORAGE_BLOB_ENDPOINT string = storage.outputs.blobEndpoint
 output VISION_ACCOUNT_NAME string = vision.outputs.name
 output VISION_ENDPOINT string = vision.outputs.endpoint
+output OPENAI_ACCOUNT_NAME string = openAi.outputs.name
+output OPENAI_ENDPOINT string = openAi.outputs.endpoint
+output OPENAI_CHAT_DEPLOYMENT string = openAi.outputs.chatDeploymentName
 output MANAGED_IDENTITY_ID string = managedIdentity.outputs.id
 output MANAGED_IDENTITY_CLIENT_ID string = managedIdentity.outputs.clientId
 output CONTAINER_REGISTRY_NAME string = registry.outputs.name

@@ -28,8 +28,20 @@ class AcsNotifier:
         alert_sms_to: str | None = None,
         sms_from: str | None = None,
     ) -> None:
-        self._email_client = EmailClient.from_connection_string(connection_string) if connection_string else None
-        self._sms_client = SmsClient.from_connection_string(connection_string) if connection_string else None
+        # retry_total=0: the ACS SDK's default retry policy silently retries
+        # on 429 (TooManyRequests) with backoff before raising -- confirmed
+        # live, the Azure-managed email domain's low rate limit gets tripped
+        # under heavy test traffic, and each retry-then-raise cycle can eat
+        # the caller's entire timeout budget before the failure ever
+        # surfaces. Failing fast here lets the caller's own timeout/fallback
+        # logic (which already treats a failed send as non-fatal -- the
+        # alert is still recorded either way) react immediately instead.
+        self._email_client = (
+            EmailClient.from_connection_string(connection_string, retry_total=0) if connection_string else None
+        )
+        self._sms_client = (
+            SmsClient.from_connection_string(connection_string, retry_total=0) if connection_string else None
+        )
         self._sender_email = sender_email
         self._alert_email_to = alert_email_to
         self._alert_sms_to = alert_sms_to
@@ -83,3 +95,16 @@ class AcsNotifier:
             "email": self.send_alert_email(alert),
             "sms": self.send_alert_sms(alert),
         }
+
+    def send_selected(self, alert: AlertMessage, channels: list[str]) -> dict[str, bool]:
+        """Like `send_all`, but only sends the named channels -- used when the
+        Notification Policy Agent has narrowed the channel list. `send_all`
+        itself is untouched so the no-agents/agent-failure path is bit-for-bit
+        today's behavior.
+        """
+        result: dict[str, bool] = {"email": False, "sms": False}
+        if "email" in channels:
+            result["email"] = self.send_alert_email(alert)
+        if "sms" in channels:
+            result["sms"] = self.send_alert_sms(alert)
+        return result

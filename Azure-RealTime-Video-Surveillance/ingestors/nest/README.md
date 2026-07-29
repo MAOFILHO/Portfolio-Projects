@@ -331,6 +331,26 @@ working the moment Google adds `CameraClipPreview` (or a working
 `main.py` already prefers those cheaper paths whenever a device advertises
 them.
 
+### Diagnosing further: `diagnose_webrtc.py`
+
+If you want to re-investigate the limitation above (e.g. after an `aiortc`
+upgrade, or against new hardware), `diagnose_webrtc.py` runs a single capture
+attempt with structured diagnostic logging enabled and feeds the result to an
+LLM-based diagnostic agent (`WebrtcDiagnosticAgent`, Semantic Kernel + Azure
+OpenAI) that writes a plain-language status report -- covering ICE/DTLS
+health, SDP negotiation, packet/frame counters, and H264 NAL types seen,
+compared against the conclusion above.
+
+This is a local/on-demand tool only -- it is not deployed to Azure, and adds
+no telemetry infrastructure to the ingestor itself (see the module docstring
+in `diagnose_webrtc.py` for the one-time RBAC grant needed and full usage):
+
+```bash
+OPENAI_ENDPOINT=https://<name>.openai.azure.com/ \
+OPENAI_CHAT_DEPLOYMENT=chat \
+    python diagnose_webrtc.py nest-front-yard --output report.md
+```
+
 ## Why Pub/Sub instead of polling
 
 `CameraEventImage.GenerateImage` requires a real `eventId` from a motion/

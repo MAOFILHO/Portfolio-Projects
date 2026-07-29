@@ -1,10 +1,11 @@
-export type PageId = "capture" | "profile" | "settings" | "observability" | "audit";
+export type PageId = "capture" | "profile" | "settings" | "observability" | "audit" | "agents";
 
 const NAV_ITEMS: { id: PageId; label: string }[] = [
   { id: "capture", label: "Capture" },
   { id: "profile", label: "Profile" },
   { id: "settings", label: "Settings" },
   { id: "observability", label: "Observability" },
+  { id: "agents", label: "AI Agents" },
   { id: "audit", label: "Audit Trail" },
 ];
 

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     storage_blob_endpoint: str = ""
     vision_endpoint: str = ""
+    openai_endpoint: str = ""
+    openai_chat_deployment: str = "chat"
     log_analytics_workspace_id: str = ""
 
     alert_watch_tags: str = "person"
