@@ -290,6 +290,12 @@ flowchart LR
 
 > **Known gotcha:** `s03_deploy_infra` and `s07_deploy_function` are more tightly coupled than the stage numbering suggests — cherry-picking `s03` alone can silently break the Function's code reference. Full explanation in [Lessons Learned](docs/lessonslearned.md).
 
+
+<img width="1407" height="633" alt="Screenshot 2026-07-29 at 11 55 29 AM" src="https://github.com/user-attachments/assets/9ab513ce-7dd6-42fe-a784-f717a001d2d0" />
+
+
+
+
 ## Frame Lifecycle
 
 What happens to a single frame, end to end:
@@ -352,7 +358,7 @@ Chosen over LangGraph/AutoGen/a full Azure AI Foundry Agent Service deployment: 
 
 **No MCP (Model Context Protocol) is used.** Tool calling here goes through Semantic Kernel's native plugin mechanism (`@kernel_function`-decorated Python methods, invoked via the underlying model's own function-calling API) — a single in-process tool (`query_events`), not a separate MCP server/client boundary. MCP earns its cost when tools need to be shared across multiple independent clients/processes; this project's tools are private implementation details of one plugin registered directly on the kernel, so that extra protocol layer isn't warranted here.
 
-### Orchestration flow
+## Agent Orchestration flow
 
 ```mermaid
 flowchart TB
@@ -390,7 +396,7 @@ flowchart TB
     Monitor -.-> Activity
 ```
 
-### Agent invocation during frame analysis (extends the Frame Lifecycle sequence above)
+## Agent invocation during frame analysis (extends the Frame Lifecycle sequence above)
 
 ```mermaid
 sequenceDiagram
