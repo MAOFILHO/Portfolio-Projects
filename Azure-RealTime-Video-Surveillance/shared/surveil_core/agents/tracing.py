@@ -66,7 +66,14 @@ def configure_langfuse_tracing() -> None:
         # No real SDK provider configured yet (Application Insights wasn't
         # set up in this process, or this is the local diagnose_webrtc.py
         # CLI) -- create one so Langfuse still gets spans either way.
-        provider = TracerProvider(resource=Resource.create({"service.name": "surveil-agents"}))
+        # A specific, non-generic name matters here: this project's Langfuse
+        # traces share one project/API-key pair with every other unrelated
+        # codebase reusing the same Langfuse account (see docs/troubleshooting.md
+        # "Langfuse traces show up mixed with other projects"), so this is the
+        # only thing that lets you filter/search for just this system's spans
+        # inside that shared project.
+        service_name = os.environ.get("OTEL_SERVICE_NAME", "azure-realtime-video-surveillance")
+        provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
         trace.set_tracer_provider(provider)
     provider.add_span_processor(processor)
     logger.info("Langfuse tracing configured (host=%s)", host)
