@@ -56,6 +56,20 @@ The detection backend is deliberately pluggable (`FrameAnalyzer` protocol in `sh
 
 *(Crowd/trespassing rules build entirely on existing detector output — no additional model training required.)*
 
+### Email/SMS Alerting via Azure Communication Services
+
+Both channels are backed by one Azure Communication Services (ACS) resource ([`infra/modules/communication.bicep`](infra/modules/communication.bicep)) and one `AcsNotifier` client ([`shared/surveil_core/notify.py`](shared/surveil_core/notify.py)):
+
+- **Email** uses ACS's free, Azure-managed sender domain (`DoNotReply@<guid>.azurecomm.net`) — no custom domain verification needed to get started. Provisioning the ACS resource is free; cost is per-email/per-SMS send only.
+- **SMS** requires a phone number purchased separately in the ACS resource (a manual, one-time step — see [docs/deployment.md](docs/deployment.md)); the resource and connection string are provisioned either way, so SMS can be turned on later without redeploying infra.
+- Each channel independently no-ops (rather than erroring) when its own config is missing — `ALERT_EMAIL_TO`/`ALERT_SMS_TO` unset means that channel is simply skipped, so email-only, SMS-only, or neither all work without special-casing at call sites.
+- On a high-severity detection, the deterministic rule engine decides `is_alert`/`severity` first; the **Notification Policy Agent** (a Semantic Kernel agent, see [Agentic AI Architecture](#agentic-ai-architecture)) then chooses which of `["email", "sms"]` to actually send through and drafts a one-line framing note — it can only pick channels, never suppress a notification outright or change the severity. `critical` alerts default to every available channel; lower severities may go out on fewer channels to reduce notification fatigue. If the agent call fails or times out, delivery falls back to sending on every configured channel (`send_all`) — today's exact pre-agent behavior.
+- Authentication to ACS uses a connection string threaded through as a deploy-time secret (Container App / Function `secretRef`), never written to disk or logs.
+
+Example alert email as actually delivered by this pipeline:
+
+<!-- screenshot goes here -->
+
 ### Dashboard & Access
 
 | Feature | Description |
