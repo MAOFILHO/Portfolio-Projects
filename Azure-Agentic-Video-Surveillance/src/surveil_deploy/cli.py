@@ -122,7 +122,10 @@ def teardown(
     state = load_state(config.state_file())
     s12_teardown.run(config, state, purge=purge)
     delete_state(config.state_file())
-    log_success("Teardown initiated. Local deployment state cleared.")
+    if purge:
+        log_success("Teardown complete (resources deleted, soft-deleted accounts purged). Local deployment state cleared.")
+    else:
+        log_success("Teardown initiated. Local deployment state cleared.")
 
 
 @app.command()

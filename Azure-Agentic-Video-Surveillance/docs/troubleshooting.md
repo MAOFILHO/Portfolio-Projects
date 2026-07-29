@@ -34,7 +34,7 @@
 
 ### 8. `--purge` on teardown reports no soft-deleted accounts found
 
-**Cause:** resource group deletion (`az group delete --no-wait`) hasn't finished yet — soft-deleted Cognitive Services accounts are only discoverable once the parent resource group is actually gone. **Fix:** wait a few minutes (`az group exists --name <rg>` to check), then re-run `surveil-deploy teardown --purge`.
+**Fixed** in `src/surveil_deploy/steps/s12_teardown.py` — `--purge` now blocks, polling `az group exists` every 15s (up to 15 minutes), until the resource group actually finishes deleting before checking for soft-deleted Cognitive Services accounts. Previously this check ran immediately after `az group delete --no-wait` returned, before the group (and the accounts inside it) had actually finished deleting, so it always reported nothing to purge — confirmed live, then fixed. If the 15-minute wait is exceeded (an unusually slow subscription/region), teardown logs a warning and exits; just re-run `surveil-deploy teardown --purge` once `az group exists --name <rg>` returns `false`.
 
 ### 9. `func azure functionapp publish` prompts for confirmation or hangs
 

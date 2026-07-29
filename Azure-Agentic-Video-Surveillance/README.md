@@ -670,10 +670,11 @@ az group delete --name surveil-rg --yes --no-wait
 
 
 
-Cognitive Services (Vision) accounts are soft-deleted for 48h by default. If you need the account name freed immediately for a same-name redeploy:
+Cognitive Services (Vision/OpenAI) accounts are soft-deleted for 48h by default. If you need the account names freed immediately for a same-name redeploy:
 ```bash
 surveil-deploy teardown --purge
 ```
+Unlike a plain `teardown` (which fires `az group delete --no-wait` and returns immediately), `--purge` blocks — it polls for the resource group to actually finish deleting (up to 15 minutes) before checking for and purging soft-deleted accounts, since Azure only reports them as soft-deleted once the group they lived in is fully gone. Each purge call is individually time-boxed (30s) so one slow purge can't stall the others — see `src/surveil_deploy/steps/s12_teardown.py`.
 
 <img width="918" height="352" alt="Screenshot 2026-07-25 at 7 55 43 PM" src="https://github.com/user-attachments/assets/9c1e317a-5dd4-4a18-a5ed-c5fbec958f2a" />
 
