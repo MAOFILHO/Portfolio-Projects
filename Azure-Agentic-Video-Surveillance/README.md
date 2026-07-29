@@ -68,7 +68,14 @@ Both channels are backed by one Azure Communication Services (ACS) resource ([`i
 
 Example alert email as actually delivered by this pipeline:
 
-<!-- screenshot goes here -->
+<img width="1433" height="449" alt="Screenshot 2026-07-26 at 3 39 08 PM" src="https://github.com/user-attachments/assets/5ac32791-da0e-449b-8ef2-e0168a15b22e" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1092" height="498" alt="Screenshot 2026-07-29 at 10 32 49 AM" src="https://github.com/user-attachments/assets/ffb1bd5a-cf8e-49ea-aff7-a425cd81ba0b" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Dashboard & Access
 
