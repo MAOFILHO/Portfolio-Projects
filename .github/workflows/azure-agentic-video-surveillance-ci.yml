@@ -61,10 +61,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install package + shared dependencies
+      - name: Install package + shared + backend dependencies
         run: |
           pip install -e ".[dev]"
           pip install -e ./shared
+          pip install -r backend/requirements.txt
 
       - name: Agentic AI unit tests (Semantic Kernel agents, mocked kernel — no live Azure OpenAI call)
         run: |
