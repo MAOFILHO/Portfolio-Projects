@@ -1,0 +1,238 @@
+/* Contoso theme.
+ *
+ * Contoso is Microsoft's long-standing fictional company used in documentation
+ * and demos, so the palette leans on the familiar four-square tile mark and a
+ * restrained blue/grey corporate surface. Every demo styles itself on top of
+ * these tokens rather than shipping its own colors, so a fifth demo inherits
+ * the look for free. */
+
+:root {
+  --brand: #2b7cd3;
+  --brand-dark: #1f5fa8;
+  --ink: #1a1a1a;
+  --muted: #6b6b70;
+  --line: #e2e2e6;
+  --surface: #ffffff;
+  --canvas: #f6f7f9;
+  --danger: #a12622;
+  --radius: 6px;
+  --nav-width: 15%;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+  font-size: 15px;
+}
+
+a { color: var(--brand-dark); }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.error { color: var(--danger); }
+
+/* --- brand mark --------------------------------------------------------- */
+
+.brand { display: flex; align-items: center; gap: 0.55rem; }
+.logo { width: 26px; height: 26px; flex: none; }
+.wordmark { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+.brand-lg .logo { width: 34px; height: 34px; }
+.brand-lg .wordmark { font-size: 1.7rem; }
+
+/* --- sign-in ------------------------------------------------------------ */
+
+.signin {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 2rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.signin-card h1 { font-size: 1.5rem; margin: 1.5rem 0 0.4rem; }
+.signin-card > .muted { margin: 0 0 1.5rem; }
+.signin-card label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+.signin-card input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+.signin-card input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
+.signin-card button { width: 100%; }
+
+.demo-note {
+  margin: 1.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* --- shell -------------------------------------------------------------- */
+
+.shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.session { display: flex; align-items: center; gap: 0.9rem; }
+
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--brand-dark);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.body { flex: 1; display: flex; align-items: stretch; min-height: 0; }
+
+/* The nav is permanent: it never unmounts, and the demo panel is the only
+ * thing that swaps. min-width keeps it usable when 15% is too narrow to read. */
+.sidenav {
+  width: var(--nav-width);
+  min-width: 190px;
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 1.1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-heading {
+  margin: 0 0 0.75rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidenav ul { list-style: none; margin: 0; padding: 0; }
+.sidenav li + li { margin-top: 0.2rem; }
+
+.sidenav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink);
+}
+.sidenav button:hover { background: #f0f4fa; }
+.sidenav button.active { background: #eaf2fd; border-left-color: var(--brand); }
+
+.nav-title { display: block; font-weight: 600; font-size: 0.92rem; }
+.nav-mechanism { display: block; font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+
+.nav-footer { margin-top: auto; padding: 0.75rem 0.5rem 0; font-size: 0.75rem; color: var(--muted); }
+
+.panel { flex: 1; min-width: 0; overflow-y: auto; padding: 1.75rem 2rem 3rem; }
+
+.empty-state {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+/* --- demo chrome (rendered by demos/shared.js) -------------------------- */
+
+.demo-header { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+.demo-header h1 { font-size: 1.35rem; margin: 0 0 0.15rem; }
+.demo-header .demo-mechanism {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--brand-dark);
+  background: #eaf2fd;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.demo-header p.blurb { margin: 0; color: var(--muted); font-size: 0.92rem; max-width: 70ch; }
+
+/* --- shared controls ---------------------------------------------------- */
+
+textarea, select, input[type="text"] {
+  width: 100%;
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+textarea { height: 4rem; resize: vertical; }
+textarea:focus, select:focus, input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+
+button {
+  padding: 0.5rem 1.2rem;
+  font: inherit;
+  color: #fff;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--brand-dark); border-color: var(--brand-dark); }
+button:disabled { opacity: 0.55; cursor: default; }
+button.secondary { color: var(--brand-dark); background: var(--surface); border-color: var(--line); }
+button.secondary:hover:not(:disabled) { background: #f0f4fa; border-color: var(--brand); }
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.badge.pending { background: #fff3cd; color: #7a5c00; }
+.badge.final { background: #d4edda; color: #14532d; }
+
+/* Stacked button + its explanation, left-aligned to the button's edge. */
+.action { margin-top: 0.5rem; }
+.action button { display: block; margin: 0; }
+.action p { margin: 0.15rem 0 0 0; font-size: 0.78rem; color: var(--muted); max-width: 60ch; }
+
+@media (max-width: 720px) {
+  .body { flex-direction: column; }
+  .sidenav { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--line); }
+  .sidenav ul { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .sidenav li + li { margin-top: 0; }
+  .nav-footer { display: none; }
+  .panel { padding: 1.25rem; }
+}

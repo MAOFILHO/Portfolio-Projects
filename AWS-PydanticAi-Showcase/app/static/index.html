@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Contoso AI Showcase</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/static/theme.css" />
+</head>
+<body>
+  <!-- Sign-in screen. Shown until GET /api/session reports a signed-in user. -->
+  <div id="signin" class="signin" hidden>
+    <form class="signin-card" id="signin-form">
+      <div class="brand brand-lg">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="1"  y="1"  width="13" height="13" fill="#2b7cd3" />
+          <rect x="18" y="1"  width="13" height="13" fill="#7fb3ec" />
+          <rect x="1"  y="18" width="13" height="13" fill="#c7ddf7" />
+          <rect x="18" y="18" width="13" height="13" fill="#4f9bea" />
+        </svg>
+        <span class="wordmark">Contoso</span>
+      </div>
+      <h1>Sign in</h1>
+      <p class="muted">Use your Contoso account to access the AI showcase.</p>
+
+      <label for="username">Email</label>
+      <input id="username" name="username" type="email" autocomplete="username"
+             placeholder="demo@contoso.com" required />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+      <button type="submit" id="signin-button">Sign in</button>
+      <p class="error" id="signin-error" hidden></p>
+
+      <p class="demo-note">
+        <strong>Demo sign-in.</strong> One static account, no user directory and no SSO —
+        it exists to show the corporate shell and to keep the public demo endpoints from being
+        called by anyone who finds the URL. Credentials are in the README.
+      </p>
+    </form>
+  </div>
+
+  <!-- The app shell: top bar, permanent left nav, demo panel. -->
+  <div id="shell" class="shell" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="1"  y="1"  width="13" height="13" fill="#2b7cd3" />
+          <rect x="18" y="1"  width="13" height="13" fill="#7fb3ec" />
+          <rect x="1"  y="18" width="13" height="13" fill="#c7ddf7" />
+          <rect x="18" y="18" width="13" height="13" fill="#4f9bea" />
+        </svg>
+        <span class="wordmark">Contoso</span>
+      </div>
+      <div class="session">
+        <span class="muted">Signed in as <span id="session-user"></span></span>
+        <button type="button" class="linklike" id="signout-button">Sign out</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <nav class="sidenav" id="sidenav" aria-label="Demos">
+        <p class="nav-heading">AI Showcase</p>
+        <ul id="nav-list"></ul>
+        <p class="nav-footer">
+          Built with <a href="https://ai.pydantic.dev/" target="_blank" rel="noopener">Pydantic AI</a>
+        </p>
+      </nav>
+
+      <main class="panel" id="panel">
+        <div class="empty-state" id="empty-state">
+          <p>Choose a project on the left panel to begin.</p>
+        </div>
+        <div id="demo-root"></div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module">
+    import { renderDemoHeader } from "/static/demos/shared.js";
+
+    const signinEl = document.getElementById("signin");
+    const shellEl = document.getElementById("shell");
+    const navListEl = document.getElementById("nav-list");
+    const panelEl = document.getElementById("panel");
+    const emptyStateEl = document.getElementById("empty-state");
+    const demoRootEl = document.getElementById("demo-root");
+    const errorEl = document.getElementById("signin-error");
+
+    let demos = [];
+    // Demo modules are fetched on first selection and kept, so switching back
+    // to a demo is instant and doesn't re-import.
+    const loadedModules = new Map();
+
+    async function boot() {
+      const { username } = await (await fetch("/api/session")).json();
+      if (username) {
+        await enterApp(username);
+      } else {
+        signinEl.hidden = false;
+        document.getElementById("username").focus();
+      }
+    }
+
+    async function enterApp(username) {
+      document.getElementById("session-user").textContent = username;
+      signinEl.hidden = true;
+      shellEl.hidden = false;
+      demos = await (await fetch("/api/demos")).json();
+      renderNav();
+      // A hash means the user refreshed or shared a link to a specific demo;
+      // honor it so a demo view survives reload.
+      await selectDemo(location.hash.slice(1) || null);
+    }
+
+    function renderNav() {
+      navListEl.innerHTML = "";
+      for (const demo of demos) {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.demoId = demo.id;
+        button.innerHTML = `<span class="nav-title"></span><span class="nav-mechanism"></span>`;
+        button.querySelector(".nav-title").textContent = demo.title;
+        button.querySelector(".nav-mechanism").textContent = demo.mechanism;
+        button.addEventListener("click", () => selectDemo(demo.id));
+        li.appendChild(button);
+        navListEl.appendChild(li);
+      }
+    }
+
+    async function selectDemo(demoId) {
+      const demo = demos.find((d) => d.id === demoId);
+      for (const button of navListEl.querySelectorAll("button")) {
+        button.classList.toggle("active", button.dataset.demoId === demo?.id);
+      }
+
+      if (!demo) {
+        history.replaceState(null, "", location.pathname);
+        emptyStateEl.hidden = false;
+        demoRootEl.innerHTML = "";
+        return;
+      }
+
+      history.replaceState(null, "", `#${demo.id}`);
+      emptyStateEl.hidden = true;
+      demoRootEl.innerHTML = "";
+      renderDemoHeader(demoRootEl, demo);
+      panelEl.scrollTop = 0;
+
+      const mount = document.createElement("div");
+      demoRootEl.appendChild(mount);
+
+      let module = loadedModules.get(demo.id);
+      if (!module) {
+        module = await import(`/static/demos/${demo.id}.js`);
+        loadedModules.set(demo.id, module);
+      }
+      module.render(mount);
+    }
+
+    document.getElementById("signin-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.getElementById("signin-button");
+      button.disabled = true;
+      errorEl.hidden = true;
+      try {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        if (!response.ok) {
+          const { detail } = await response.json().catch(() => ({}));
+          throw new Error(detail || `Sign-in failed (HTTP ${response.status})`);
+        }
+        const { username } = await response.json();
+        await enterApp(username);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("signout-button").addEventListener("click", async () => {
+      await fetch("/api/logout", { method: "POST" });
+      location.hash = "";
+      location.reload();
+    });
+
+    boot();
+  </script>
+</body>
+</html>

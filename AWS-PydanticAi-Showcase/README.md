@@ -1,0 +1,405 @@
+# Contoso AI Showcase — Four Agent Patterns, One Pydantic AI Deployment
+
+![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)
+![Pydantic AI](https://img.shields.io/badge/Pydantic_AI-2.20%2B-E92063?logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-ECS_Fargate-FF9900?logo=amazon-aws&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+An umbrella application built with **[Pydantic AI](https://ai.pydantic.dev/)** — Pydantic's
+provider-agnostic agent framework — that runs four self-contained demos behind one Contoso-branded
+sign-in screen and one permanent left-hand nav. Each demo isn't a variation on the same chatbot; each
+one exists specifically to isolate a **different framework mechanism**, so the collection reads as a
+curriculum on agent architecture rather than four copies of the same app with different prompts.
+
+This is an original project built while learning Pydantic AI — not a fork of the framework. All
+credit for the underlying library goes to the [Pydantic AI team](https://github.com/pydantic/pydantic-ai).
+
+## Why This Isn't Just a Demo Repo
+
+- **Four demos, four distinct mechanisms** — a `pydantic_graph` pipeline, dependency-injected tools
+  with a discriminated-union output, agent-as-tool delegation under a usage budget, and streamed
+  structured output — chosen so each one teaches something the others don't
+- **A real corporate shell, honestly labelled** — a Contoso sign-in screen gates every demo endpoint
+  server-side (not just hidden client-side), because the ALB is public and every demo spends real
+  OpenAI tokens; the login page says outright that it's a static demo credential, not SSO
+- **Full type-safety, zero `Any` leaks in the public surface** — Pyright strict across `app`, `tests`,
+  and `evals`; discriminated unions round-trip through JSON as the correct branch, not a bag of
+  optional fields
+- **100% offline test suite** — 41 tests pass with **no** `OPENAI_API_KEY` set; every agent is
+  overridden with `TestModel`/`FunctionModel`, and `ALLOW_MODEL_REQUESTS=False` fails loudly if a test
+  ever tries a real request
+- **Deploy-on-demand infrastructure** — Terraform-managed AWS ECS Fargate behind an ALB, sized to the
+  cheapest viable SKU, spun up for a demo session and torn down after — no idle cloud bill
+- **A real DI seam for the one demo with a genuine outbound call** — Travel Planner's weather tool
+  takes an injected `httpx.AsyncClient`, so it's tested against `httpx.MockTransport` instead of the
+  real Open-Meteo API, with zero changes to the tool itself
+
+## The Four Demos
+
+| Demo | Framework mechanism | Why it's here |
+|---|---|---|
+| **Research Analyst** | `pydantic_graph` pipeline: parallel fan-out, an evaluate/revise loop, human-in-the-loop as an HTTP boundary | Explicit graph orchestration — the control flow is *yours*, not the model's |
+| **Support Triage Copilot** | `deps_type` dependency injection + tools reading `RunContext.deps` + a discriminated-union output type | Typed branching output; each outcome (`Resolve`/`Escalate`/`NeedsInfo`) carries exactly the fields it needs |
+| **Code Review Assistant** | Agent-as-tool delegation + `UsageLimits` | The deliberate counterpoint to the graph: the *same* fan-out shape, but which specialists run is the model's call, capped by a shared request budget |
+| **Travel Itinerary Planner** | Streaming structured output (`run_stream`, partial validation) + `message_history` | The only demo where a Pydantic model visibly fills in field-by-field in the browser, then gets refined across turns |
+
+The non-obvious thing worth taking away: **when do you reach for a graph versus agent delegation?**
+Research Analyst and Code Review Assistant solve structurally similar problems — plan, fan out to
+specialists, consolidate — but one expresses that as an explicit `pydantic_graph` and the other as
+tool calls a lead agent chooses to make. A graph is right when the control flow is fixed and you want
+it inspectable, diagrammable, and testable without a model in the loop. Delegation is right when
+*which* specialists to consult, and whether to consult any at all, is itself the judgment call you're
+paying the model to make — at the cost of a bounded-but-real request budget instead of a deterministic
+step count.
+
+## The Problem With a Single-Demo Portfolio Piece
+
+| Pain point | Impact |
+|---|---|
+| One demo shows one slice of the framework | A reviewer sees graph orchestration and nothing else — DI, delegation, and streaming are invisible |
+| Four separate deployments to show four ideas | 4x the AWS footprint, 4x the idle-cost risk, 4x the URLs to keep alive for a demo session |
+| No corporate "look and feel" | A raw dev UI doesn't read as production-shaped to a non-technical reviewer |
+| Public demo endpoints with no gate | Anyone who finds the ALB DNS name can spend real OpenAI tokens |
+
+### The Solution: One Shell, Four Mechanisms, Zero Extra Infrastructure
+
+- A **permanent left nav** (`GET /api/demos`) lists all four demos; the right panel starts blank with
+  *"Choose a project on the left panel to begin"* and swaps in the selected demo via a native
+  dynamic `import()` — no bundler, no build step
+- A **`Demo` registry** (`app/demos/base.py`) is the only thing `app/main.py` and the frontend nav
+  know about — adding a fifth demo means writing its package and appending it to `DEMOS`, with no
+  changes to the shell
+- **One container, one ECS service, one ALB** — all four demos share the same Fargate task; the AWS
+  footprint does not grow as demos are added
+- A **demo sign-in gate** (`app/auth.py`) — one static account, no user directory, no SSO — enforced
+  server-side via a signed session cookie on every `/api/*` route, not just hidden behind client-side
+  routing
+
+## Architecture
+
+Research Analyst's pipeline is a real `pydantic_graph` graph — this diagram is generated directly
+from the running graph (`print(research_pipeline)`), so it can't drift from the code:
+
+```mermaid
+stateDiagram-v2
+  start
+  PlanSubTopics
+  FanOutResearch
+  Synthesize
+  Evaluate
+  state decision <<choice>>
+  Revise
+
+  [*] --> start
+  start --> PlanSubTopics
+  PlanSubTopics --> FanOutResearch
+  FanOutResearch --> Synthesize
+  Synthesize --> Evaluate
+  Evaluate --> decision
+  decision --> Revise
+  decision --> [*]
+  Revise --> Evaluate
+```
+
+The umbrella app around it:
+
+```
+Browser
+   │
+   ▼  GET /            (shell HTML, Cache-Control: no-store)
+   ▼  GET /api/session  → { username | null }
+   │
+   ├─ not signed in ──► sign-in form ──► POST /api/login (static credential check)
+   │                                        └─► signed HMAC session cookie
+   │
+   └─ signed in ──► GET /api/demos  → [{ id, title, mechanism, blurb }, ...]
+                        │
+                        ▼  nav renders; user picks a demo
+                        ▼  dynamic import("/static/demos/{id}.js")
+                        │
+        ┌───────────────┼────────────────┬───────────────────┐
+        ▼               ▼                ▼                   ▼
+  /api/research/*  /api/triage/*   /api/review/*       /api/travel/*
+  (SSE progress)   (single call)   (single call)        (SSE partials)
+        │               │                │                   │
+        ▼               ▼                ▼                   ▼
+  pydantic_graph    deps_type DI    agent delegation    run_stream +
+  pipeline          + union output  + UsageLimits        message_history
+                                                              │
+                                                              ▼
+                                                     httpx.AsyncClient
+                                                     (injected) → Open-Meteo
+
+Every /api/* route sits behind `require_session` (app/auth.py) — the ALB is public,
+so the gate has to be server-side, not a client-side route guard.
+```
+
+## Four Demos, In Depth
+
+### Research Analyst — `pydantic_graph` pipeline
+
+An orchestrator plans 2–4 sub-topics, specialist workers research each one in parallel with a
+`WebSearch` capability, a synthesizer drafts the report, an evaluator gates a bounded revision loop,
+and a human compliance officer approves or annotates before anything is final.
+
+| Stage | What it is | Framework mechanism |
+|---|---|---|
+| **Orchestrator** (`PlanSubTopics`) | Plans 2–4 sub-topics from the question | `planner_agent`, structured output |
+| **Specialist workers** (`FanOutResearch`) | Research each sub-topic concurrently | `research_agent` + `WebSearch`, `asyncio.gather` |
+| **Synthesizer** (`Synthesize`) | Drafts the report from findings | `synthesizer_agent`, structured output |
+| **Evaluator** (`Evaluate`) | Checks the draft against its findings; loops back on failure | `evaluator_agent` |
+| **Revision** (`Revise`) | Re-synthesizes with the evaluator's feedback | same `synthesizer_agent`, called again |
+| **Compliance review** | A human approves the draft, or annotates it | `POST /api/research/reviews/{id}/decision` |
+
+Human sign-off is deliberately **not** a paused graph node — a real approval is an async boundary that
+can take minutes or days and arrives in a separate HTTP request, so it's handled as an explicit
+two-step API instead of faking an in-process pause. See `app/demos/research/pipeline.py`.
+
+### Support Triage Copilot — typed DI + union output
+
+One agent, three tools (`lookup_account`, `recent_tickets`, `check_entitlement`) that only ever touch
+`RunContext.deps` — never a module-level global — and a discriminated-union output type:
+
+```python
+class Resolve(BaseModel):
+    action: Literal["resolve"] = "resolve"
+    draft_reply: str
+    confidence: float
+
+
+class Escalate(BaseModel):
+    action: Literal["escalate"] = "escalate"
+    team: Literal["billing", "security", "infrastructure", "account-management"]
+    severity: Literal["low", "medium", "high", "critical"]
+    reason: str
+
+
+class NeedsInfo(BaseModel):
+    action: Literal["needs_info"] = "needs_info"
+    questions: list[str]
+```
+
+The agent's `output_type` passes these as a **sequence**, not `Resolve | Escalate | NeedsInfo` — a
+union isn't a valid `output_type` on its own, but a sequence of candidate types is, and Pydantic AI
+turns it into one output tool per member, so the model commits to a branch by *choosing a tool*. The
+`Annotated[..., Field(discriminator="action")]` form is used on the *return* leg instead, where the
+decision gets serialized to JSON and parsed back — that's where a discriminator earns its keep, so
+overlapping shapes can't be mis-parsed. The UI's "tools the agent called" trace replays
+`result.all_messages()` filtered to an explicit allowlist of real tool names, since a union output
+type generates multiple `final_result_*` tools that must not be mistaken for lookups the agent chose
+to make.
+
+### Code Review Assistant — agent delegation + usage limits
+
+A lead reviewer consults up to three specialist sub-agents (style, security, tests) as tools, deciding
+for itself which ones apply to a given diff:
+
+```python
+async def _delegate(ctx, agent) -> SpecialistFindings:
+    result = await agent.run(
+        f"Review this diff:\n\n{ctx.deps.diff}", deps=ctx.deps, usage=ctx.usage
+    )
+    return result.output
+```
+
+`usage=ctx.usage` is the load-bearing argument — without it, each delegated sub-agent run would keep
+its own tally, and the `UsageLimits(request_limit=12)` the caller sets on the outer run would only
+ever bound the lead reviewer's own turns. The UI surfaces the actual request/token count used, so the
+budget is a visible, demonstrable guardrail rather than an assertion in a docstring. A sample diff
+(a string-concatenated SQL query, a duplicated helper, and an untested error path) is one click away,
+so the demo reliably has all three severities to show.
+
+### Travel Itinerary Planner — streaming structured output
+
+```python
+async with agent.run_stream(prompt, deps=deps) as result:
+    async for partial in result.stream_output(debounce_by=0.1):
+        yield sse({"type": "partial", "itinerary": partial.model_dump(mode="json")})
+```
+
+Day cards materialize live in the browser as `Itinerary` is validated in
+[partial mode](https://docs.pydantic.dev/dev/concepts/experimental/#partial-validation) straight off
+the token stream — the only demo where a Pydantic model visibly fills in rather than arriving whole.
+`get_weather` is a genuinely real tool call: it hits Open-Meteo's free, keyless geocoding + forecast
+API through an `httpx.AsyncClient` **injected via `TravelDeps`**, which is also what makes it testable
+offline with `httpx.MockTransport`. `search_flights`/`search_hotels` read small in-repo fixtures —
+there's no equivalently free flight/hotel API — and both the tool docstrings and the UI label that
+inventory `[SIMULATED]` rather than passing it off as real. A "refine" box re-runs the agent with
+`message_history=result.all_messages()`, so "make it cheaper" edits the itinerary already on screen
+instead of starting a fresh conversation.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Agent framework** | [Pydantic AI](https://ai.pydantic.dev/) (`pydantic-ai-slim[openai,duckduckgo]`) |
+| **Graph orchestration** | `pydantic_graph` — Research Analyst's plan/fan-out/synthesize/evaluate loop |
+| **LLM provider** | OpenAI (`gpt-5.2` for Research Analyst's research/writing; `gpt-5-mini` everywhere else) |
+| **Backend** | FastAPI + Uvicorn, Server-Sent Events for streaming demos |
+| **Frontend** | Vanilla JS, native ES modules, no bundler — dynamic `import()` per demo |
+| **Auth** | A minimal HMAC-signed session cookie (`app/auth.py`) — explicitly not production SSO |
+| **Evals** | `pydantic_evals` — a structural-invariant suite for Research Analyst, a labelled-ground-truth suite for Triage |
+| **Testing** | `pytest` + `pytest-asyncio`, `TestModel`/`FunctionModel` everywhere, `httpx.MockTransport` for the one real outbound call |
+| **Typing** | Pyright strict (`app`, `tests`, `evals`) |
+| **Linting** | Ruff (`check` + `format`) |
+| **Package management** | `uv` |
+| **Container** | Docker, ARM64/Graviton base image |
+| **Infrastructure** | Terraform — ECS Fargate, ALB, ECR, Secrets Manager, IAM, default VPC (no NAT Gateway) |
+| **CI/CD** | GitHub Actions — `ci.yml` on every push (offline, no API key), `deploy.yml` manual `workflow_dispatch` |
+
+## AWS Services Used
+
+| Service | Purpose |
+|---|---|
+| **ECS Fargate** | Runs the single container hosting all four demos (0.25 vCPU / 0.5 GB, the smallest Fargate SKU) |
+| **Application Load Balancer** | Public HTTP entry point; the one cost that runs continuously while the stack exists |
+| **ECR** | Container image registry (ARM64) |
+| **Secrets Manager** | `OPENAI_API_KEY` and the demo sign-in password — never in the task definition or plaintext state output |
+| **CloudWatch Logs** | 7-day retention, keeping log storage cost near zero for a demo deployment |
+| **IAM** | Execution/task roles, plus a GitHub Actions OIDC role (no long-lived AWS keys as a repo secret) |
+| **Default VPC** | Reused instead of a dedicated VPC; tasks get a public IP directly, locked down by security group to accept traffic only from the ALB — no NAT Gateway (~$32/month avoided) |
+
+## Prerequisites
+
+- Python 3.13, [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- An OpenAI API key
+- Docker (for building the deploy image) — this repo builds locally via [colima](https://github.com/abiosoft/colima) since Docker Desktop isn't required
+- AWS CLI configured, if deploying
+
+## Setup
+
+```bash
+git clone <this-repo>
+cd AWS-PydanticAi-Showcase
+make install               # uv sync --group dev
+cp .env.example .env       # fill in OPENAI_API_KEY
+make run                   # uvicorn app.main:app --reload, http://localhost:8000
+```
+
+Sign in with the demo credential from `.env.example` (`SHOWCASE_DEMO_USER` /
+`SHOWCASE_DEMO_PASSWORD`, defaults `demo@contoso.com` / `contoso`).
+
+## Running the Project
+
+```bash
+make lint       # ruff check
+make format     # ruff format
+make typecheck  # pyright app tests evals
+make test       # pytest — passes with no API key set; every agent is overridden with
+                # TestModel/FunctionModel, and ALLOW_MODEL_REQUESTS=False fails loudly
+                # if a test ever tries a real request
+```
+
+`uv run python -m evals.dataset` and `uv run python -m evals.triage` run the `pydantic_evals` suites
+(also offline).
+
+### Docker
+
+```bash
+make docker-build
+make docker-run   # reads .env
+# or: docker compose up --build
+```
+
+## Deploying to AWS (ECS Fargate)
+
+This is a **deploy-on-demand** setup, not an always-on service — spin it up for a demo, tear it down
+after, so there's no idle cloud bill or standing LLM spend. Everything is sized for the lowest-cost
+viable SKU:
+
+- **Fargate**: 0.25 vCPU / 0.5 GB — the smallest task size AWS offers, shared by all four demos
+- **No NAT Gateway**: reuses the account's default VPC and gives the task a public IP directly (locked
+  down by security group to only accept traffic from the ALB)
+- **No ACM/Route 53**: HTTP-only ALB listener, so this doesn't require owning a domain
+- **7-day CloudWatch log retention**, **ECR lifecycle policy** capping untagged image storage
+- **GitHub Actions deploys via OIDC** — no long-lived AWS access keys stored as a repo secret
+
+The one cost that *does* run continuously while the stack exists is the ALB (a flat hourly charge
+regardless of traffic) — `terraform destroy` after each demo session avoids paying for it between uses.
+
+```bash
+cd terraform
+terraform init
+terraform plan  -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
+terraform apply -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
+
+# get the URL
+terraform output alb_dns_name
+
+# tear down when you're done demoing
+terraform destroy -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
+```
+
+After the first `apply`, set these as GitHub repo variables/secrets so `deploy.yml` can find the
+stack: `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE` (all from `terraform output`), and
+`AWS_DEPLOY_ROLE_ARN` (from `terraform output github_deploy_role_arn`). Then trigger the `Deploy`
+workflow manually from the Actions tab — it never runs on push.
+
+## Cost Estimate
+
+Running the full stack for a few hours of demoing (four short/cheap demos on `gpt-5-mini`, plus
+Research Analyst's heavier research/writing on `gpt-5.2`):
+
+| Resource | Estimated cost |
+|---|---|
+| ALB (flat hourly, regardless of traffic) | ~$0.02/hour |
+| Fargate task (0.25 vCPU / 0.5 GB, ARM64) | ~$0.01/hour |
+| OpenAI usage (a handful of runs across all four demos) | ~$0.50–2.00 |
+| CloudWatch Logs, Secrets Manager, ECR storage | ~$0.01 |
+| **Total for a demo session (a few hours)** | **~$1–3 USD** |
+
+Always tear down when done:
+
+```bash
+terraform destroy -var="openai_api_key=$OPENAI_API_KEY"
+```
+
+## Project Structure
+
+```
+app/
+  auth.py            # Minimal demo sign-in gate: static credential, HMAC session cookie
+  main.py             # Shell: GET /, GET /api/demos, login/logout, mounts every demo router
+  demos/
+    base.py           # The Demo descriptor every demo package exports
+    research/          # pydantic_graph pipeline demo
+      agents.py pipeline.py models.py router.py
+    triage/             # Typed DI + discriminated-union output demo
+      agents.py fixtures.py models.py router.py
+    review/             # Agent-delegation + UsageLimits demo
+      agents.py fixtures.py models.py router.py
+    travel/             # Streaming structured output demo
+      agents.py fixtures.py models.py router.py
+  shared/
+    config.py          # Shared model config (FAST_MODEL default for every demo)
+    sse.py             # SSE encoding + progress-queue draining, shared by streaming demos
+    cache.py            # Tiny exact-match result cache, shared by every demo
+  static/
+    index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav
+    demos/*.js               # One ES module per demo, loaded via dynamic import()
+tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
+evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
+terraform/            # AWS ECS Fargate deploy target
+.github/workflows/
+  ci.yml              # lint + typecheck + test on every push
+  deploy.yml          # workflow_dispatch: build, push to ECR, roll the ECS service
+```
+
+## Key Engineering Decisions
+
+| Challenge | Solution |
+|---|---|
+| A union isn't a valid `Agent(output_type=...)` on its own | Pass the members as a sequence (`[Resolve, Escalate, NeedsInfo]`); Pydantic AI generates one output tool per member, and the model commits to a branch by choosing a tool |
+| A discriminated union *is* needed for the return leg | `Annotated[Resolve \| Escalate \| NeedsInfo, Field(discriminator="action")]` on the API response model, not the agent's `output_type` |
+| A union output type generates multiple `final_result_*` tools | The "tools the agent called" trace filters against an explicit allowlist of real tool names, not an exclusion of one well-known name |
+| Delegated sub-agent usage wasn't billing to the caller's budget | Pass `usage=ctx.usage` on every delegated `agent.run()` call, so `UsageLimits` on the outer run actually bounds the whole tree |
+| A leftover `white-space: pre-wrap` rule broke button/description spacing | Found via `getBoundingClientRect()` numeric measurement, not visual inspection — `getComputedStyle()` showed the intended margins were correctly applied, but the rendered gap was still wrong, which pointed at inherited whitespace rendering rather than a margin bug |
+| Local UI-stub overrides silently reverted mid-session | Bare `agent.override(model=...).__enter__()` calls in a loop let the temporary context manager get garbage-collected once the loop's tuple went out of scope — CPython's generator cleanup runs the context manager's `finally` block (undoing the override) on GC. Fixed by holding every override on a `contextlib.ExitStack` kept alive for the process |
+| `TestModel` needed to satisfy a discriminated-union schema offline | `TestModel` deterministically returns the *first* candidate in a sequence `output_type`, which is honest but means an eval evaluator that checks label-correctness can't score 1.0 offline by design — documented in `evals/triage.py`, and the offline test asserts the dataset *runs*, not that the score is perfect |
+| No free, keyless flight/hotel search API exists | Simulated inventory, but honestly labelled everywhere it's surfaced (tool docstring, API response, and the UI) rather than passed off as real |
+
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)

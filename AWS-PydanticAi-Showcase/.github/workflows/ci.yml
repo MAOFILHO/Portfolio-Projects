@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy key so Agent construction succeeds at import time — every test
+      # overrides the model with TestModel/FunctionModel, so no real request
+      # is ever made (enforced by ALLOW_MODEL_REQUESTS=False in conftest.py).
+      OPENAI_API_KEY: sk-test-mock-key-for-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Typecheck
+        run: uv run pyright app tests evals
+
+      - name: Test
+        run: uv run pytest -v
