@@ -8,7 +8,7 @@ import { describeError, escapeHtml, fetchJson, streamSse } from "./shared.js";
 import { createProgressLog } from "./progress-log.js";
 
 const styles = `
-  .review-toolbar { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+  .review-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
   #diff { height: 16rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
   .review-result { margin-top: 1.5rem; }
   .review-verdict { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; }
@@ -31,6 +31,16 @@ const styles = `
 
 const SEVERITY_RANK = { critical: 0, major: 1, minor: 2, info: 3 };
 
+// One sample per language, so a viewer can compare specialist behavior across
+// languages instead of taking "it's language-agnostic" on faith.
+const SAMPLE_BUTTONS = [
+  { key: "sample1", label: "Sample 1" },
+  { key: "python", label: "Python Sample" },
+  { key: "csharp", label: "C# / .NET Sample" },
+  { key: "java", label: "Java Sample" },
+  { key: "typescript", label: "TypeScript Sample" },
+];
+
 export async function render(root) {
   root.innerHTML = `
     <style>${styles}</style>
@@ -38,8 +48,11 @@ export async function render(root) {
       <label for="diff">Unified diff</label>
       <textarea id="diff" required placeholder="Paste a unified diff (git diff output)..."></textarea>
       <div class="review-toolbar">
-        <button type="submit" id="review-button">Review diff</button>
-        <button type="button" class="secondary" id="sample-button">Load sample diff</button>
+        <button type="submit" id="review-button">Review Code</button>
+        ${SAMPLE_BUTTONS.map(
+          (s) =>
+            `<button type="button" class="secondary" data-sample="${s.key}">${escapeHtml(s.label)}</button>`
+        ).join("")}
       </div>
       <p class="muted" style="margin:0.4rem 0 0;font-size:0.78rem">
         The lead reviewer chooses which specialists to consult. Every delegated call bills to one
@@ -53,15 +66,21 @@ export async function render(root) {
   const resultEl = root.querySelector("#review-result");
   const button = root.querySelector("#review-button");
 
-  root.querySelector("#sample-button").addEventListener("click", async () => {
+  // Fetched once and reused — every sample button picks from the same
+  // in-memory map rather than firing its own request.
+  let samples = null;
+  async function loadSample(key) {
     try {
-      const { diff } = await fetchJson("/api/review/sample-diff");
-      diffEl.value = diff;
+      samples ??= await fetchJson("/api/review/sample-diffs");
+      diffEl.value = samples[key];
       resultEl.innerHTML = "";
     } catch (err) {
       resultEl.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
     }
-  });
+  }
+  for (const btn of root.querySelectorAll("[data-sample]")) {
+    btn.addEventListener("click", () => loadSample(btn.dataset.sample));
+  }
 
   function renderComments(comments) {
     if (!comments.length) {

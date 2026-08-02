@@ -203,12 +203,15 @@ async def test_oversized_diff_is_rejected(client):  # noqa: F811
     assert response.status_code == 413
 
 
-async def test_sample_diff_is_served_and_plants_all_three_findings(client):  # noqa: F811
-    diff = client.get("/api/review/sample-diff").json()["diff"]
-    assert "customer_email" in diff  # the string-concatenated SQL (security)
-    assert "find_orders" in diff  # the duplicated helper (style)
-    assert "cancel_order" in diff  # new behavior whose error path is untested
-    assert len(diff) < MAX_DIFF_CHARS
+async def test_sample_diffs_are_served_one_per_language(client):  # noqa: F811
+    diffs = client.get("/api/review/sample-diffs").json()
+    assert set(diffs) == {"sample1", "python", "csharp", "java", "typescript"}
+    for diff in diffs.values():
+        assert len(diff) < MAX_DIFF_CHARS
+
+    assert "customer_email" in diffs["sample1"]  # the string-concatenated SQL (security)
+    assert "find_orders" in diffs["sample1"]  # the duplicated helper (style)
+    assert "cancel_order" in diffs["sample1"]  # new behavior whose error path is untested
 
 
 async def test_identical_diff_hits_the_cache(client):  # noqa: F811

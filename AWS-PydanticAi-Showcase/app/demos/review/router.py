@@ -23,7 +23,7 @@ from app.shared.cache import DemoCache
 from app.shared.sse import drain_progress, sse, sse_response
 
 from .agents import REQUEST_LIMIT, lead_reviewer_agent
-from .fixtures import SAMPLE_DIFF
+from .fixtures import SAMPLE_DIFFS
 from .models import ReviewDeps, ReviewResponse, UsageReport
 
 router = APIRouter()
@@ -39,9 +39,10 @@ class ReviewRequest(BaseModel):
     diff: str
 
 
-@router.get("/sample-diff")
-async def sample_diff() -> dict[str, str]:
-    return {"diff": SAMPLE_DIFF}
+@router.get("/sample-diffs")
+async def sample_diffs() -> dict[str, str]:
+    """One diff per language, keyed for the UI's sample buttons."""
+    return SAMPLE_DIFFS
 
 
 @router.post("/analyze")
