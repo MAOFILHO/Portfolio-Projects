@@ -308,6 +308,61 @@ GitHub Actions only discovers workflow files there, which matters in a monorepo 
 is scoped to this project with a `paths: ["AWS-PydanticAi-Showcase/**"]` trigger filter and a
 `working-directory` default, the same pattern the repo's other projects use.
 
+## GitHub Actions CI/CD
+
+Two separate workflows, deliberately not one: **CI** is a free, automatic quality gate that runs on
+every push and never touches AWS; **CD** is a manual, deploy-on-demand action that costs real money
+(a new Fargate task, ECR storage) and is never triggered by a push, a merge, or by using the demos in
+the browser — clicking around the live site talks to the already-running ECS task over the ALB and
+has nothing to do with either workflow.
+
+### CI — `aws-pydanticai-showcase-ci.yml`
+
+| | |
+|---|---|
+| **Triggers on** | Every push or pull request to `main` that touches a file under `AWS-PydanticAi-Showcase/**`, plus manual `workflow_dispatch` |
+| **Touches AWS?** | No — offline only, `OPENAI_API_KEY` is a dummy value, every agent is overridden with `TestModel`/`FunctionModel` |
+| **Runtime** | ~35–40s on `ubuntu-latest` |
+
+| Step | What it does |
+|---|---|
+| Checkout | Clones the repo at the triggering commit |
+| Install `uv` | Sets up the `uv` package manager with dependency caching enabled |
+| Install dependencies | `uv sync --group dev` |
+| Lint | `ruff check .` — catches style violations and common bugs |
+| Format check | `ruff format --check .` — fails if any file isn't already formatted (including Python code blocks embedded in this README) |
+| Typecheck | `pyright app tests evals` — Pyright strict, zero `Any` leaks in the public surface |
+| Test | `pytest -v` — the full 41-test offline suite; `ALLOW_MODEL_REQUESTS=False` in `conftest.py` fails loudly if any test ever attempts a real model call |
+
+A green CI run is the "is this code correct enough to consider deploying" signal — it says nothing
+about whether anyone has actually deployed it.
+
+### CD — `aws-pydanticai-showcase-deploy.yml`
+
+| | |
+|---|---|
+| **Triggers on** | Nothing automatic — `workflow_dispatch` only, run manually from the Actions tab or `gh workflow run` |
+| **Touches AWS?** | Yes — builds and pushes a real image to ECR, rolls the live ECS service |
+| **Runtime** | ~5–6 minutes (the ARM64 cross-build below is the slow part) |
+
+| Step | What it does |
+|---|---|
+| Checkout | Clones the repo at the triggering commit |
+| Configure AWS credentials | Assumes `SHOWCASE_AWS_DEPLOY_ROLE_ARN` via GitHub's OIDC identity — no long-lived AWS access keys stored as a repo secret |
+| Login to ECR | Authenticates the Docker client against the account's ECR registry |
+| Set up QEMU + Docker Buildx | Required to cross-build for ARM64 — see below |
+| Build and push image (ARM64) | `docker buildx build --platform linux/arm64 --push`, tagged both `:latest` and `:<commit-sha>` |
+| Roll the ECS service | `aws ecs update-service --force-new-deployment` |
+| Wait for service to stabilize | `aws ecs wait services-stable` — blocks until the new task is healthy and the old one has fully drained |
+
+**Why QEMU/Buildx, not a plain `docker build`:** the ECS task runs on ARM64/Graviton
+(`terraform/ecs.tf`'s `runtime_platform`, chosen for ~20% cheaper Fargate pricing), but
+`ubuntu-latest` GitHub runners are x86_64. A plain `docker build` there silently produces an amd64
+image that crashes on the task with `exec format error` — this bit the very first real run of this
+workflow (see [Key Engineering Decisions](#key-engineering-decisions)), and the already-running task
+kept serving traffic the whole time it was broken, since ECS never routes to a task that fails to
+start.
+
 ## Cost Estimate
 
 Running the full stack for a few hours of demoing (four short/cheap demos on `gpt-5-mini`, plus
