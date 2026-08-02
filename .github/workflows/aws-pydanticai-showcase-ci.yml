@@ -1,14 +1,27 @@
-name: CI
+name: AWS-PydanticAi-Showcase CI
 
+# Runs on every push/PR that touches this project's folder. Offline only —
+# every agent is overridden with TestModel/FunctionModel and
+# ALLOW_MODEL_REQUESTS=False fails loudly if a test ever tries a real
+# request, so this never spends real OpenAI credit. See
+# aws-pydanticai-showcase-deploy.yml for the AWS-touching workflow.
 on:
   push:
     branches: [main]
+    paths:
+      - "AWS-PydanticAi-Showcase/**"
   pull_request:
     branches: [main]
+    paths:
+      - "AWS-PydanticAi-Showcase/**"
+  workflow_dispatch: {}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-PydanticAi-Showcase
     env:
       # Dummy key so Agent construction succeeds at import time — every test
       # overrides the model with TestModel/FunctionModel, so no real request

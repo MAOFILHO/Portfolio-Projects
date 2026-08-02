@@ -262,7 +262,7 @@ instead of starting a fresh conversation.
 | **Package management** | `uv` |
 | **Container** | Docker, ARM64/Graviton base image |
 | **Infrastructure** | Terraform — ECS Fargate, ALB, ECR, Secrets Manager, IAM, default VPC (no NAT Gateway) |
-| **CI/CD** | GitHub Actions — `ci.yml` on every push (offline, no API key), `deploy.yml` manual `workflow_dispatch` |
+| **CI/CD** | GitHub Actions (repo-root `.github/workflows/`) — CI on every push touching this folder (offline, no API key), Deploy manual `workflow_dispatch` |
 
 ## AWS Services Used
 
@@ -347,10 +347,17 @@ terraform output alb_dns_name
 terraform destroy -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
 ```
 
-After the first `apply`, set these as GitHub repo variables/secrets so `deploy.yml` can find the
-stack: `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE` (all from `terraform output`), and
-`AWS_DEPLOY_ROLE_ARN` (from `terraform output github_deploy_role_arn`). Then trigger the `Deploy`
-workflow manually from the Actions tab — it never runs on push.
+After the first `apply`, set these as GitHub repo variables/secrets (prefixed `SHOWCASE_` since this
+repo hosts multiple projects' deploy workflows) so `aws-pydanticai-showcase-deploy.yml` can find the
+stack: `SHOWCASE_AWS_REGION`, `SHOWCASE_ECR_REPOSITORY`, `SHOWCASE_ECS_CLUSTER`, `SHOWCASE_ECS_SERVICE`
+(all from `terraform output`), and `SHOWCASE_AWS_DEPLOY_ROLE_ARN` (from
+`terraform output github_deploy_role_arn`). Then trigger the `AWS-PydanticAi-Showcase Deploy` workflow
+manually from the Actions tab — it never runs on push.
+
+Both workflows live at the **repo root's** `.github/workflows/` (not inside this project folder) —
+GitHub Actions only discovers workflow files there, which matters in a monorepo like this one. Each
+is scoped to this project with a `paths: ["AWS-PydanticAi-Showcase/**"]` trigger filter and a
+`working-directory` default, the same pattern the repo's other projects use.
 
 ## Cost Estimate
 
@@ -404,9 +411,15 @@ app/
 tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
 evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
 terraform/            # AWS ECS Fargate deploy target
-.github/workflows/
-  ci.yml              # lint + typecheck + test on every push
-  deploy.yml          # workflow_dispatch: build, push to ECR, roll the ECS service
+```
+
+This project's GitHub Actions workflows live outside this folder, at the repo root's
+`.github/workflows/` — see [Deploying to AWS](#deploying-to-aws-ecs-fargate) above:
+
+```
+../.github/workflows/
+  aws-pydanticai-showcase-ci.yml      # lint + typecheck + test on every push touching this folder
+  aws-pydanticai-showcase-deploy.yml  # workflow_dispatch: build, push to ECR, roll the ECS service
 ```
 
 ## Key Engineering Decisions

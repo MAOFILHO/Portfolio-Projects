@@ -1,16 +1,19 @@
-name: Deploy
+name: AWS-PydanticAi-Showcase Deploy
 
 # Deploy-on-demand: this workflow is never triggered by a push. Run it
 # manually to build+push a new image and roll the ECS Fargate service —
 # there's no idle cloud bill or standing LLM spend between deploys.
+#
+# Secrets/variables are prefixed SHOWCASE_ because this repo hosts multiple
+# projects' deploy workflows sharing one secrets namespace.
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
-  ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+  AWS_REGION: ${{ vars.SHOWCASE_AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.SHOWCASE_ECR_REPOSITORY }}
+  ECS_CLUSTER: ${{ vars.SHOWCASE_ECS_CLUSTER }}
+  ECS_SERVICE: ${{ vars.SHOWCASE_ECS_SERVICE }}
 
 permissions:
   id-token: write # OIDC — no long-lived AWS keys stored in the repo
@@ -19,13 +22,16 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-PydanticAi-Showcase
     steps:
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.SHOWCASE_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
