@@ -353,6 +353,21 @@ Human sign-off is deliberately **not** a paused graph node — a real approval i
 can take minutes or days and arrives in a separate HTTP request, so it's handled as an explicit
 two-step API instead of faking an in-process pause. See `app/demos/research/pipeline.py`.
 
+```mermaid
+flowchart LR
+    Q[Research question] --> P[planner_agent]
+    P --> R1[research_agent<br/>sub-topic 1]
+    P --> R2[research_agent<br/>sub-topic 2]
+    P --> R3[research_agent<br/>sub-topic 3]
+    R1 --> S[synthesizer_agent]
+    R2 --> S
+    R3 --> S
+    S --> E{evaluator_agent}
+    E -->|fail: feedback| S
+    E -->|pass| H[Human compliance review]
+    H --> F[Final report]
+```
+
 ### Support Triage Copilot — typed DI + union output
 
 One agent, three tools (`lookup_account`, `recent_tickets`, `check_entitlement`) that only ever touch
@@ -387,6 +402,21 @@ overlapping shapes can't be mis-parsed. The UI's "tools the agent called" trace 
 type generates multiple `final_result_*` tools that must not be mistaken for lookups the agent chose
 to make.
 
+```mermaid
+flowchart LR
+    T[Support ticket] --> A[triage_agent]
+    A -->|RunContext.deps| L[lookup_account]
+    A -->|RunContext.deps| R[recent_tickets]
+    A -->|RunContext.deps| C[check_entitlement]
+    L --> A
+    R --> A
+    C --> A
+    A --> O{"output_type sequence<br/>one output tool per member"}
+    O --> RES["Resolve<br/>draft_reply, confidence"]
+    O --> ESC["Escalate<br/>team, severity, reason"]
+    O --> NI["NeedsInfo<br/>questions"]
+```
+
 ### Code Review Assistant — agent delegation + usage limits
 
 A lead reviewer consults up to three specialist sub-agents (style, security, tests) as tools, deciding
@@ -407,6 +437,19 @@ budget is a visible, demonstrable guardrail rather than an assertion in a docstr
 (a string-concatenated SQL query, a duplicated helper, and an untested error path) is one click away,
 so the demo reliably has all three severities to show.
 
+```mermaid
+flowchart LR
+    D[Diff] --> LR[lead_reviewer_agent]
+    UL["UsageLimits<br/>request_limit=12<br/>bounds the whole tree"] -.-> LR
+    LR -->|model decides which apply| STY[style_agent]
+    LR -->|model decides which apply| SEC[security_agent]
+    LR -->|model decides which apply| TST[tests_agent]
+    STY -->|usage=ctx.usage| LR
+    SEC -->|usage=ctx.usage| LR
+    TST -->|usage=ctx.usage| LR
+    LR --> CF[Consolidated findings]
+```
+
 ### Travel Itinerary Planner — streaming structured output
 
 ```python
@@ -426,6 +469,18 @@ inventory `[SIMULATED]` rather than passing it off as real. A "refine" box re-ru
 `message_history=result.all_messages()`, so "make it cheaper" edits the itinerary already on screen
 instead of starting a fresh conversation.
 
+```mermaid
+flowchart LR
+    TP[Trip prompt] --> TA[travel_agent]
+    TA --> GW["get_weather<br/>injected httpx.AsyncClient"]
+    TA --> SF["search_flights /<br/>search_hotels"]
+    TA --> RS["run_stream + partial<br/>validation"]
+    GW --> OM[("Open-Meteo — real")]
+    SF --> FIX[("In-repo fixtures —<br/>SIMULATED")]
+    RS -->|debounce 0.1s| DC[Day cards fill in live]
+    DC --> RB[Refine box]
+    RB -->|message_history| TA
+```
 
 ## Key Engineering Decisions
 
