@@ -1,4 +1,4 @@
-# Contoso AI Showcase — Four Agent Patterns, One Pydantic AI Deployment
+# Pydantic AI on AWS — Four Agent Patterns, One Fargate Deployment
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)
 ![Pydantic AI](https://img.shields.io/badge/Pydantic_AI-2.20%2B-E92063?logoColor=white)
