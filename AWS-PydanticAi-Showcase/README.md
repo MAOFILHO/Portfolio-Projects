@@ -127,7 +127,7 @@ Browser
   /api/research/*  /api/triage/*   /api/review/*       /api/travel/*
   (SSE progress)   (SSE progress)  (SSE progress)       (SSE progress
         │               │                │               + partials)
-        ▼               ▼                ▼                   │
+        ▼               ▼                ▼                    │
   pydantic_graph    deps_type DI    agent delegation          ▼
   pipeline          + union output  + UsageLimits        run_stream +
                                                            message_history
