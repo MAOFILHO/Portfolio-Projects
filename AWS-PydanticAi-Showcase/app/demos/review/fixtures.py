@@ -1,63 +1,40 @@
 """Sample diffs, so the demo has something to say without the viewer writing code.
 
-Five languages, so a viewer can compare how the specialists behave across
-Python, C#/.NET, Java, and TypeScript rather than taking "it's language-agnostic"
-on faith. Each one deliberately plants one finding per specialist: a security
-defect (SQL injection, a hardcoded credential, path traversal / insecure
-deserialization, or reflected XSS), a style issue, and new behavior with no
-test covering it.
+Five languages — Go, Python, C#/.NET, Java, and TypeScript — so a viewer can compare
+how the specialists behave across languages rather than taking "it's language-agnostic"
+on faith. Each one deliberately plants one finding per specialist: a security defect
+(path traversal, SQL injection, a hardcoded credential, or insecure deserialization),
+a style issue, and new behavior with no test covering it.
 """
 
 from __future__ import annotations
 
-SAMPLE_DIFF = '''\
-diff --git a/api/orders.py b/api/orders.py
---- a/api/orders.py
-+++ b/api/orders.py
-@@ -12,9 +12,26 @@ from .db import connection
- def get_order(order_id: str):
-     with connection() as conn:
-         return conn.execute(
-             "SELECT * FROM orders WHERE id = ?", (order_id,)
-         ).fetchone()
+GO_SAMPLE_DIFF = """\
+diff --git a/handlers/files.go b/handlers/files.go
+--- a/handlers/files.go
++++ b/handlers/files.go
+@@ -1,3 +1,20 @@
++package handlers
 +
++import (
++	"io/ioutil"
++	"net/http"
++)
 +
-+def search_orders(customer_email: str, status: str):
-+    """Look up orders. Fast path: skips the ORM."""
-+    with connection() as conn:
-+        query = (
-+            "SELECT * FROM orders WHERE customer_email = '"
-+            + customer_email
-+            + "' AND status = '"
-+            + status
-+            + "'"
-+        )
-+        return conn.execute(query).fetchall()
++func DownloadFile(w http.ResponseWriter, r *http.Request) {
++	name := r.URL.Query().Get("file")
++	path := "/var/data/uploads/" + name
++	data, _ := ioutil.ReadFile(path)
++	w.Write(data)
++}
 +
-+
-+def find_orders(customer_email: str, status: str):
-+    """Look up orders. Fast path: skips the ORM."""
-+    return search_orders(customer_email, status)
-+
-+
-+def cancel_order(order_id: str, requested_by: str):
-+    order = get_order(order_id)
-+    if order is None:
-+        raise ValueError(f"No order {order_id}")
-+    with connection() as conn:
-+        conn.execute("UPDATE orders SET status = 'cancelled' WHERE id = ?", (order_id,))
-+    return {"cancelled": order_id, "by": requested_by}
-diff --git a/tests/test_orders.py b/tests/test_orders.py
---- a/tests/test_orders.py
-+++ b/tests/test_orders.py
-@@ -4,3 +4,7 @@ from api.orders import get_order
- def test_get_order_returns_none_for_missing_id():
-     assert get_order("nope") is None
-+
-+
-+def test_cancel_order_marks_it_cancelled():
-+    assert cancel_order("ord-1", "admin") == {"cancelled": "ord-1", "by": "admin"}
-'''
++func DownloadReport(w http.ResponseWriter, r *http.Request) {
++	name := r.URL.Query().Get("file")
++	path := "/var/data/uploads/" + name
++	data, _ := ioutil.ReadFile(path)
++	w.Write(data)
++}
+"""
 
 PYTHON_SAMPLE_DIFF = """\
 diff --git a/api/users.py b/api/users.py
@@ -157,7 +134,7 @@ diff --git a/src/routes/search.ts b/src/routes/search.ts
 """
 
 SAMPLE_DIFFS: dict[str, str] = {
-    "sample1": SAMPLE_DIFF,
+    "go": GO_SAMPLE_DIFF,
     "python": PYTHON_SAMPLE_DIFF,
     "csharp": CSHARP_SAMPLE_DIFF,
     "java": JAVA_SAMPLE_DIFF,

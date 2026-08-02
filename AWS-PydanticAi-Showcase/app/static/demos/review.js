@@ -34,7 +34,7 @@ const SEVERITY_RANK = { critical: 0, major: 1, minor: 2, info: 3 };
 // One sample per language, so a viewer can compare specialist behavior across
 // languages instead of taking "it's language-agnostic" on faith.
 const SAMPLE_BUTTONS = [
-  { key: "sample1", label: "Sample 1" },
+  { key: "go", label: "Go Sample" },
   { key: "python", label: "Python Sample" },
   { key: "csharp", label: "C# / .NET Sample" },
   { key: "java", label: "Java Sample" },
