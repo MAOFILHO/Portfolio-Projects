@@ -130,6 +130,11 @@ a { color: var(--brand-dark); }
   flex-direction: column;
 }
 
+.nav-home {
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+}
+
 .nav-heading {
   margin: 0 0 0.75rem 0.5rem;
   font-size: 0.72rem;

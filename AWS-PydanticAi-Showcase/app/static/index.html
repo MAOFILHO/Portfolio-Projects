@@ -60,6 +60,7 @@
 
     <div class="body">
       <nav class="sidenav" id="sidenav" aria-label="Demos">
+        <button type="button" class="nav-home" id="home-link">Home</button>
         <p class="nav-heading">AI Showcase</p>
         <ul id="nav-list"></ul>
         <p class="nav-footer">
@@ -134,6 +135,7 @@
       for (const button of navListEl.querySelectorAll("button")) {
         button.classList.toggle("active", button.dataset.demoId === demo?.id);
       }
+      document.getElementById("home-link").classList.toggle("active", !demo);
 
       if (!demo) {
         history.replaceState(null, "", location.pathname);
@@ -186,6 +188,8 @@
         button.disabled = false;
       }
     });
+
+    document.getElementById("home-link").addEventListener("click", () => selectDemo(null));
 
     document.getElementById("signout-button").addEventListener("click", async () => {
       await fetch("/api/logout", { method: "POST" });
