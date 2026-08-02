@@ -1,6 +1,10 @@
 resource "aws_ecr_repository" "this" {
   name                 = var.project_name
   image_tag_mutability = "MUTABLE" # simplicity for a demo; use IMMUTABLE + per-commit tags in prod
+  # Without this, `terraform destroy` fails with "RepositoryNotEmptyException"
+  # the moment there's more than one pushed image (every deploy pushes both
+  # `:latest` and a `:<sha>` tag) — hit twice this project, fixed once here.
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true
