@@ -1,4 +1,6 @@
-# Pydantic AI on AWS — Four Agent Patterns, One Fargate Deployment
+# Pydantic AI Agent Framework on AWS
+
+**Four Agent Patterns, One Fargate Deployment**
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)
 ![Pydantic AI](https://img.shields.io/badge/Pydantic_AI-2.20%2B-E92063?logoColor=white)
@@ -15,6 +17,31 @@ curriculum on agent architecture rather than four copies of the same app with di
 
 This is an original project built while learning Pydantic AI — not a fork of the framework. All
 credit for the underlying library goes to the [Pydantic AI team](https://github.com/pydantic/pydantic-ai).
+
+## The Problem: A Single-Demo Portfolio Piece
+
+| Pain point | Impact |
+|---|---|
+| One demo shows one slice of the framework | A reviewer sees graph orchestration and nothing else — DI, delegation, and streaming are invisible |
+| Four separate deployments to show four ideas | 4x the AWS footprint, 4x the idle-cost risk, 4x the URLs to keep alive for a demo session |
+| No corporate "look and feel" | A raw dev UI doesn't read as production-shaped to a non-technical reviewer |
+| Public demo endpoints with no gate | Anyone who finds the ALB DNS name can spend real OpenAI tokens |
+
+## The Solution: One Shell, Four Mechanisms, Zero Extra Infrastructure
+
+- A **permanent left nav** (`GET /api/demos`) lists all four demos above a **Home** link back to the
+  blank landing state (*"Choose a project on the left panel to begin"*); selecting a demo swaps it in
+  via a native dynamic `import()` — no bundler, no build step
+- A **`Demo` registry** (`app/demos/base.py`) is the only thing `app/main.py` and the frontend nav
+  know about — adding a fifth demo means writing its package and appending it to `DEMOS`, with no
+  changes to the shell
+- **One container, one ECS service, one ALB** — all four demos share the same Fargate task; the AWS
+  footprint does not grow as demos are added
+- A **demo sign-in gate** (`app/auth.py`) — one static account, no user directory, no SSO — enforced
+  server-side via a signed session cookie on every `/api/*` route, not just hidden behind client-side
+  routing
+
+
 
 ## Why This Isn't Just a Demo Repo
 
@@ -56,29 +83,6 @@ it inspectable, diagrammable, and testable without a model in the loop. Delegati
 *which* specialists to consult, and whether to consult any at all, is itself the judgment call you're
 paying the model to make — at the cost of a bounded-but-real request budget instead of a deterministic
 step count.
-
-## The Problem With a Single-Demo Portfolio Piece
-
-| Pain point | Impact |
-|---|---|
-| One demo shows one slice of the framework | A reviewer sees graph orchestration and nothing else — DI, delegation, and streaming are invisible |
-| Four separate deployments to show four ideas | 4x the AWS footprint, 4x the idle-cost risk, 4x the URLs to keep alive for a demo session |
-| No corporate "look and feel" | A raw dev UI doesn't read as production-shaped to a non-technical reviewer |
-| Public demo endpoints with no gate | Anyone who finds the ALB DNS name can spend real OpenAI tokens |
-
-### The Solution: One Shell, Four Mechanisms, Zero Extra Infrastructure
-
-- A **permanent left nav** (`GET /api/demos`) lists all four demos above a **Home** link back to the
-  blank landing state (*"Choose a project on the left panel to begin"*); selecting a demo swaps it in
-  via a native dynamic `import()` — no bundler, no build step
-- A **`Demo` registry** (`app/demos/base.py`) is the only thing `app/main.py` and the frontend nav
-  know about — adding a fifth demo means writing its package and appending it to `DEMOS`, with no
-  changes to the shell
-- **One container, one ECS service, one ALB** — all four demos share the same Fargate task; the AWS
-  footprint does not grow as demos are added
-- A **demo sign-in gate** (`app/auth.py`) — one static account, no user directory, no SSO — enforced
-  server-side via a signed session cookie on every `/api/*` route, not just hidden behind client-side
-  routing
 
 ## Architecture
 
@@ -146,104 +150,51 @@ Every /api/* route sits behind `require_session` (app/auth.py) — the ALB is pu
 so the gate has to be server-side, not a client-side route guard.
 ```
 
+## Project Structure
+
+```
+app/
+  auth.py            # Minimal demo sign-in gate: static credential, HMAC session cookie
+  main.py             # Shell: GET /, GET /api/demos, login/logout, mounts every demo router
+  demos/
+    base.py           # The Demo descriptor every demo package exports
+    research/          # pydantic_graph pipeline demo
+      agents.py pipeline.py models.py router.py
+    triage/             # Typed DI + discriminated-union output demo
+      agents.py fixtures.py models.py router.py
+    review/             # Agent-delegation + UsageLimits demo
+      agents.py fixtures.py models.py router.py
+    travel/             # Streaming structured output demo
+      agents.py fixtures.py models.py router.py
+  shared/
+    config.py          # Shared model config (FAST_MODEL default for every demo)
+    sse.py             # SSE encoding + progress-queue draining, shared by streaming demos
+    cache.py            # Tiny exact-match result cache, shared by every demo
+  static/
+    index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav + Home link
+    demos/*.js               # One ES module per demo, loaded via dynamic import()
+    demos/progress-log.js    # Shared progress-trail widget every demo module renders
+tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
+evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
+terraform/            # AWS ECS Fargate deploy target
+```
+
+This project's GitHub Actions workflows live outside this folder, at the repo root's
+`.github/workflows/` — see [Deploying to AWS](#deploying-to-aws-ecs-fargate) above:
+
+```
+../.github/workflows/
+  aws-pydanticai-showcase-ci.yml      # lint + typecheck + test on every push touching this folder
+  aws-pydanticai-showcase-deploy.yml  # workflow_dispatch: build, push to ECR, roll the ECS service
+```
+
+
 ## Four Demos, In Depth
 
 Every demo below renders the same progress-log widget (`app/static/demos/progress-log.js`) at the
 very end of its panel: a live trail of "agent did X" lines, each showing that step's own duration
 (written in once the *next* step starts, not a running total), ending in a `Total time` line that's
 the sum of everything above it — real evidence of where the latency goes, not a spinner.
-
-### Research Analyst — `pydantic_graph` pipeline
-
-An orchestrator plans 2–4 sub-topics, specialist workers research each one in parallel with a
-`WebSearch` capability, a synthesizer drafts the report, an evaluator gates a bounded revision loop,
-and a human compliance officer approves or annotates before anything is final.
-
-| Stage | What it is | Framework mechanism |
-|---|---|---|
-| **Orchestrator** (`PlanSubTopics`) | Plans 2–4 sub-topics from the question | `planner_agent`, structured output |
-| **Specialist workers** (`FanOutResearch`) | Research each sub-topic concurrently | `research_agent` + `WebSearch`, `asyncio.gather` |
-| **Synthesizer** (`Synthesize`) | Drafts the report from findings | `synthesizer_agent`, structured output |
-| **Evaluator** (`Evaluate`) | Checks the draft against its findings; loops back on failure | `evaluator_agent` |
-| **Revision** (`Revise`) | Re-synthesizes with the evaluator's feedback | same `synthesizer_agent`, called again |
-| **Compliance review** | A human approves the draft, or annotates it | `POST /api/research/reviews/{id}/decision` |
-
-Human sign-off is deliberately **not** a paused graph node — a real approval is an async boundary that
-can take minutes or days and arrives in a separate HTTP request, so it's handled as an explicit
-two-step API instead of faking an in-process pause. See `app/demos/research/pipeline.py`.
-
-### Support Triage Copilot — typed DI + union output
-
-One agent, three tools (`lookup_account`, `recent_tickets`, `check_entitlement`) that only ever touch
-`RunContext.deps` — never a module-level global — and a discriminated-union output type:
-
-```python
-class Resolve(BaseModel):
-    action: Literal["resolve"] = "resolve"
-    draft_reply: str
-    confidence: float
-
-
-class Escalate(BaseModel):
-    action: Literal["escalate"] = "escalate"
-    team: Literal["billing", "security", "infrastructure", "account-management"]
-    severity: Literal["low", "medium", "high", "critical"]
-    reason: str
-
-
-class NeedsInfo(BaseModel):
-    action: Literal["needs_info"] = "needs_info"
-    questions: list[str]
-```
-
-The agent's `output_type` passes these as a **sequence**, not `Resolve | Escalate | NeedsInfo` — a
-union isn't a valid `output_type` on its own, but a sequence of candidate types is, and Pydantic AI
-turns it into one output tool per member, so the model commits to a branch by *choosing a tool*. The
-`Annotated[..., Field(discriminator="action")]` form is used on the *return* leg instead, where the
-decision gets serialized to JSON and parsed back — that's where a discriminator earns its keep, so
-overlapping shapes can't be mis-parsed. The UI's "tools the agent called" trace replays
-`result.all_messages()` filtered to an explicit allowlist of real tool names, since a union output
-type generates multiple `final_result_*` tools that must not be mistaken for lookups the agent chose
-to make.
-
-### Code Review Assistant — agent delegation + usage limits
-
-A lead reviewer consults up to three specialist sub-agents (style, security, tests) as tools, deciding
-for itself which ones apply to a given diff:
-
-```python
-async def _delegate(ctx, agent) -> SpecialistFindings:
-    result = await agent.run(
-        f"Review this diff:\n\n{ctx.deps.diff}", deps=ctx.deps, usage=ctx.usage
-    )
-    return result.output
-```
-
-`usage=ctx.usage` is the load-bearing argument — without it, each delegated sub-agent run would keep
-its own tally, and the `UsageLimits(request_limit=12)` the caller sets on the outer run would only
-ever bound the lead reviewer's own turns. The UI surfaces the actual request/token count used, so the
-budget is a visible, demonstrable guardrail rather than an assertion in a docstring. A sample diff
-(a string-concatenated SQL query, a duplicated helper, and an untested error path) is one click away,
-so the demo reliably has all three severities to show.
-
-### Travel Itinerary Planner — streaming structured output
-
-```python
-async with agent.run_stream(prompt, deps=deps) as result:
-    async for partial in result.stream_output(debounce_by=0.1):
-        yield sse({"type": "partial", "itinerary": partial.model_dump(mode="json")})
-```
-
-Day cards materialize live in the browser as `Itinerary` is validated in
-[partial mode](https://docs.pydantic.dev/dev/concepts/experimental/#partial-validation) straight off
-the token stream — the only demo where a Pydantic model visibly fills in rather than arriving whole.
-`get_weather` is a genuinely real tool call: it hits Open-Meteo's free, keyless geocoding + forecast
-API through an `httpx.AsyncClient` **injected via `TravelDeps`**, which is also what makes it testable
-offline with `httpx.MockTransport`. `search_flights`/`search_hotels` read small in-repo fixtures —
-there's no equivalently free flight/hotel API — and both the tool docstrings and the UI label that
-inventory `[SIMULATED]` rather than passing it off as real. A "refine" box re-runs the agent with
-`message_history=result.all_messages()`, so "make it cheaper" edits the itinerary already on screen
-instead of starting a fresh conversation.
 
 ## Tech Stack
 
@@ -263,8 +214,6 @@ instead of starting a fresh conversation.
 | **Container** | Docker, ARM64/Graviton base image |
 | **Infrastructure** | Terraform — ECS Fargate, ALB, ECR, Secrets Manager, IAM, default VPC (no NAT Gateway) |
 | **CI/CD** | GitHub Actions (repo-root `.github/workflows/`) — CI on every push touching this folder (offline, no API key), Deploy manual `workflow_dispatch` |
-
-## AWS Services Used
 
 | Service | Purpose |
 |---|---|
@@ -384,43 +333,99 @@ Always tear down when done:
 terraform destroy -var="openai_api_key=$OPENAI_API_KEY"
 ```
 
-## Project Structure
 
-```
-app/
-  auth.py            # Minimal demo sign-in gate: static credential, HMAC session cookie
-  main.py             # Shell: GET /, GET /api/demos, login/logout, mounts every demo router
-  demos/
-    base.py           # The Demo descriptor every demo package exports
-    research/          # pydantic_graph pipeline demo
-      agents.py pipeline.py models.py router.py
-    triage/             # Typed DI + discriminated-union output demo
-      agents.py fixtures.py models.py router.py
-    review/             # Agent-delegation + UsageLimits demo
-      agents.py fixtures.py models.py router.py
-    travel/             # Streaming structured output demo
-      agents.py fixtures.py models.py router.py
-  shared/
-    config.py          # Shared model config (FAST_MODEL default for every demo)
-    sse.py             # SSE encoding + progress-queue draining, shared by streaming demos
-    cache.py            # Tiny exact-match result cache, shared by every demo
-  static/
-    index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav + Home link
-    demos/*.js               # One ES module per demo, loaded via dynamic import()
-    demos/progress-log.js    # Shared progress-trail widget every demo module renders
-tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
-evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
-terraform/            # AWS ECS Fargate deploy target
+### Research Analyst — `pydantic_graph` pipeline
+
+An orchestrator plans 2–4 sub-topics, specialist workers research each one in parallel with a
+`WebSearch` capability, a synthesizer drafts the report, an evaluator gates a bounded revision loop,
+and a human compliance officer approves or annotates before anything is final.
+
+| Stage | What it is | Framework mechanism |
+|---|---|---|
+| **Orchestrator** (`PlanSubTopics`) | Plans 2–4 sub-topics from the question | `planner_agent`, structured output |
+| **Specialist workers** (`FanOutResearch`) | Research each sub-topic concurrently | `research_agent` + `WebSearch`, `asyncio.gather` |
+| **Synthesizer** (`Synthesize`) | Drafts the report from findings | `synthesizer_agent`, structured output |
+| **Evaluator** (`Evaluate`) | Checks the draft against its findings; loops back on failure | `evaluator_agent` |
+| **Revision** (`Revise`) | Re-synthesizes with the evaluator's feedback | same `synthesizer_agent`, called again |
+| **Compliance review** | A human approves the draft, or annotates it | `POST /api/research/reviews/{id}/decision` |
+
+Human sign-off is deliberately **not** a paused graph node — a real approval is an async boundary that
+can take minutes or days and arrives in a separate HTTP request, so it's handled as an explicit
+two-step API instead of faking an in-process pause. See `app/demos/research/pipeline.py`.
+
+### Support Triage Copilot — typed DI + union output
+
+One agent, three tools (`lookup_account`, `recent_tickets`, `check_entitlement`) that only ever touch
+`RunContext.deps` — never a module-level global — and a discriminated-union output type:
+
+```python
+class Resolve(BaseModel):
+    action: Literal["resolve"] = "resolve"
+    draft_reply: str
+    confidence: float
+
+
+class Escalate(BaseModel):
+    action: Literal["escalate"] = "escalate"
+    team: Literal["billing", "security", "infrastructure", "account-management"]
+    severity: Literal["low", "medium", "high", "critical"]
+    reason: str
+
+
+class NeedsInfo(BaseModel):
+    action: Literal["needs_info"] = "needs_info"
+    questions: list[str]
 ```
 
-This project's GitHub Actions workflows live outside this folder, at the repo root's
-`.github/workflows/` — see [Deploying to AWS](#deploying-to-aws-ecs-fargate) above:
+The agent's `output_type` passes these as a **sequence**, not `Resolve | Escalate | NeedsInfo` — a
+union isn't a valid `output_type` on its own, but a sequence of candidate types is, and Pydantic AI
+turns it into one output tool per member, so the model commits to a branch by *choosing a tool*. The
+`Annotated[..., Field(discriminator="action")]` form is used on the *return* leg instead, where the
+decision gets serialized to JSON and parsed back — that's where a discriminator earns its keep, so
+overlapping shapes can't be mis-parsed. The UI's "tools the agent called" trace replays
+`result.all_messages()` filtered to an explicit allowlist of real tool names, since a union output
+type generates multiple `final_result_*` tools that must not be mistaken for lookups the agent chose
+to make.
 
+### Code Review Assistant — agent delegation + usage limits
+
+A lead reviewer consults up to three specialist sub-agents (style, security, tests) as tools, deciding
+for itself which ones apply to a given diff:
+
+```python
+async def _delegate(ctx, agent) -> SpecialistFindings:
+    result = await agent.run(
+        f"Review this diff:\n\n{ctx.deps.diff}", deps=ctx.deps, usage=ctx.usage
+    )
+    return result.output
 ```
-../.github/workflows/
-  aws-pydanticai-showcase-ci.yml      # lint + typecheck + test on every push touching this folder
-  aws-pydanticai-showcase-deploy.yml  # workflow_dispatch: build, push to ECR, roll the ECS service
+
+`usage=ctx.usage` is the load-bearing argument — without it, each delegated sub-agent run would keep
+its own tally, and the `UsageLimits(request_limit=12)` the caller sets on the outer run would only
+ever bound the lead reviewer's own turns. The UI surfaces the actual request/token count used, so the
+budget is a visible, demonstrable guardrail rather than an assertion in a docstring. A sample diff
+(a string-concatenated SQL query, a duplicated helper, and an untested error path) is one click away,
+so the demo reliably has all three severities to show.
+
+### Travel Itinerary Planner — streaming structured output
+
+```python
+async with agent.run_stream(prompt, deps=deps) as result:
+    async for partial in result.stream_output(debounce_by=0.1):
+        yield sse({"type": "partial", "itinerary": partial.model_dump(mode="json")})
 ```
+
+Day cards materialize live in the browser as `Itinerary` is validated in
+[partial mode](https://docs.pydantic.dev/dev/concepts/experimental/#partial-validation) straight off
+the token stream — the only demo where a Pydantic model visibly fills in rather than arriving whole.
+`get_weather` is a genuinely real tool call: it hits Open-Meteo's free, keyless geocoding + forecast
+API through an `httpx.AsyncClient` **injected via `TravelDeps`**, which is also what makes it testable
+offline with `httpx.MockTransport`. `search_flights`/`search_hotels` read small in-repo fixtures —
+there's no equivalently free flight/hotel API — and both the tool docstrings and the UI label that
+inventory `[SIMULATED]` rather than passing it off as real. A "refine" box re-runs the agent with
+`message_history=result.all_messages()`, so "make it cheaper" edits the itinerary already on screen
+instead of starting a fresh conversation.
+
 
 ## Key Engineering Decisions
 
