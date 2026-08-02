@@ -35,6 +35,9 @@ credit for the underlying library goes to the [Pydantic AI team](https://github.
 - **A real DI seam for the one demo with a genuine outbound call** — Travel Planner's weather tool
   takes an injected `httpx.AsyncClient`, so it's tested against `httpx.MockTransport` instead of the
   real Open-Meteo API, with zero changes to the tool itself
+- **A live progress trail on every demo, not just a spinner** — each demo streams "agent did X" lines
+  with that step's own real duration, ending in a `Total time` line, so a viewer sees the actual
+  model/tool calls (and where the latency goes) instead of a canned "processing..." message
 
 ## The Four Demos
 
@@ -65,9 +68,9 @@ step count.
 
 ### The Solution: One Shell, Four Mechanisms, Zero Extra Infrastructure
 
-- A **permanent left nav** (`GET /api/demos`) lists all four demos; the right panel starts blank with
-  *"Choose a project on the left panel to begin"* and swaps in the selected demo via a native
-  dynamic `import()` — no bundler, no build step
+- A **permanent left nav** (`GET /api/demos`) lists all four demos above a **Home** link back to the
+  blank landing state (*"Choose a project on the left panel to begin"*); selecting a demo swaps it in
+  via a native dynamic `import()` — no bundler, no build step
 - A **`Demo` registry** (`app/demos/base.py`) is the only thing `app/main.py` and the frontend nav
   know about — adding a fifth demo means writing its package and appending it to `DEMOS`, with no
   changes to the shell
@@ -122,21 +125,33 @@ Browser
         ┌───────────────┼────────────────┬───────────────────┐
         ▼               ▼                ▼                   ▼
   /api/research/*  /api/triage/*   /api/review/*       /api/travel/*
-  (SSE progress)   (single call)   (single call)        (SSE partials)
-        │               │                │                   │
-        ▼               ▼                ▼                   ▼
-  pydantic_graph    deps_type DI    agent delegation    run_stream +
-  pipeline          + union output  + UsageLimits        message_history
+  (SSE progress)   (SSE progress)  (SSE progress)       (SSE progress
+        │               │                │               + partials)
+        ▼               ▼                ▼                   │
+  pydantic_graph    deps_type DI    agent delegation          ▼
+  pipeline          + union output  + UsageLimits        run_stream +
+                                                           message_history
                                                               │
                                                               ▼
                                                      httpx.AsyncClient
                                                      (injected) → Open-Meteo
+
+Every demo streams the same progress-log wire format (app/shared/sse.py, app/static/demos/
+progress-log.js): each line is a real model/tool call with that step's own duration, ending
+in a Total time line — Research's pipeline reports it directly; Triage and Review report it
+via a `progress` callback on their deps, drained alongside `.run()` with `drain_progress`;
+Travel reports it via `event_stream_handler` running concurrently with its partial-output stream.
 
 Every /api/* route sits behind `require_session` (app/auth.py) — the ALB is public,
 so the gate has to be server-side, not a client-side route guard.
 ```
 
 ## Four Demos, In Depth
+
+Every demo below renders the same progress-log widget (`app/static/demos/progress-log.js`) at the
+very end of its panel: a live trail of "agent did X" lines, each showing that step's own duration
+(written in once the *next* step starts, not a running total), ending in a `Total time` line that's
+the sum of everything above it — real evidence of where the latency goes, not a spinner.
 
 ### Research Analyst — `pydantic_graph` pipeline
 
@@ -236,7 +251,7 @@ instead of starting a fresh conversation.
 |---|---|
 | **Agent framework** | [Pydantic AI](https://ai.pydantic.dev/) (`pydantic-ai-slim[openai,duckduckgo]`) |
 | **Graph orchestration** | `pydantic_graph` — Research Analyst's plan/fan-out/synthesize/evaluate loop |
-| **LLM provider** | OpenAI (`gpt-5.2` for Research Analyst's research/writing; `gpt-5-mini` everywhere else) |
+| **LLM provider** | OpenAI (`gpt-5.2` for Research Analyst's research/writing at `reasoning_effort="low"`; `gpt-5-mini` at `"minimal"` everywhere else) |
 | **Backend** | FastAPI + Uvicorn, Server-Sent Events for streaming demos |
 | **Frontend** | Vanilla JS, native ES modules, no bundler — dynamic `import()` per demo |
 | **Auth** | A minimal HMAC-signed session cookie (`app/auth.py`) — explicitly not production SSO |
@@ -350,6 +365,12 @@ Research Analyst's heavier research/writing on `gpt-5.2`):
 | CloudWatch Logs, Secrets Manager, ECR storage | ~$0.01 |
 | **Total for a demo session (a few hours)** | **~$1–3 USD** |
 
+Every agent's `model_settings` caps `openai_reasoning_effort` explicitly (`"minimal"` on the
+`gpt-5-mini` agents, `"low"` on Research Analyst's `gpt-5.2` agents) — GPT-5-family models spend
+variable, billed "thinking" time before producing output, and left unset it defaults higher than a
+short, structured demo task needs. This was the single biggest lever on real spend: four one-off runs
+(one per demo) cost about $2 in OpenAI credit before these were set, and noticeably less after.
+
 Always tear down when done:
 
 ```bash
@@ -377,8 +398,9 @@ app/
     sse.py             # SSE encoding + progress-queue draining, shared by streaming demos
     cache.py            # Tiny exact-match result cache, shared by every demo
   static/
-    index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav
+    index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav + Home link
     demos/*.js               # One ES module per demo, loaded via dynamic import()
+    demos/progress-log.js    # Shared progress-trail widget every demo module renders
 tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
 evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
 terraform/            # AWS ECS Fargate deploy target
@@ -399,6 +421,11 @@ terraform/            # AWS ECS Fargate deploy target
 | Local UI-stub overrides silently reverted mid-session | Bare `agent.override(model=...).__enter__()` calls in a loop let the temporary context manager get garbage-collected once the loop's tuple went out of scope — CPython's generator cleanup runs the context manager's `finally` block (undoing the override) on GC. Fixed by holding every override on a `contextlib.ExitStack` kept alive for the process |
 | `TestModel` needed to satisfy a discriminated-union schema offline | `TestModel` deterministically returns the *first* candidate in a sequence `output_type`, which is honest but means an eval evaluator that checks label-correctness can't score 1.0 offline by design — documented in `evals/triage.py`, and the offline test asserts the dataset *runs*, not that the score is perfect |
 | No free, keyless flight/hotel search API exists | Simulated inventory, but honestly labelled everywhere it's surfaced (tool docstring, API response, and the UI) rather than passed off as real |
+| The sign-in screen stayed visible after a successful login | `.signin`/`.shell` each set their own `display`, which beats the browser's default `[hidden] { display: none }` rule in the cascade — the session/DOM state was correct the whole time, but nothing visually reflected it. Fixed with an explicit `[hidden] { display: none !important; }` rule |
+| A redeploy could silently keep serving old JS/CSS | `StaticFiles` sends no `Cache-Control` of its own, so browsers apply heuristic caching to `/static/*`. Given `Cache-Control: no-store` on those responses too, matching the shell HTML, which already had it for the same reason |
+| `run_stream_events()` requires the model to support streaming | Converting Triage/Review's progress log to it broke their `FunctionModel(function=...)` test doubles (no `stream_function`). Reused Research's own pattern instead — a `progress` callback on `TriageDeps`/`ReviewDeps` that the tools call as they run, drained alongside the agent's plain `.run()` with a generalized `drain_progress` — so the tests never had to change how they mock the model |
+| Progress-log timing looked cumulative, not per-step | Each line's elapsed time was time-since-run-start; now it's written in when the line is *finalized* (the next step starts, or the run ends), so it's that step's own duration, and `Total time` is a real sum of the lines above it |
+| Two `gpt-5.2` agents ran at OpenAI's default reasoning effort | `research_agent` and `synthesizer_agent` had no `model_settings` at all — the most expensive model in the app, run 3× in parallel plus again on every revision, with no cap on hidden reasoning-token spend. Capped to `reasoning_effort="low"`, which cut real per-run OpenAI cost noticeably without downgrading the model |
 
 ## Author
 
