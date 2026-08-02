@@ -308,13 +308,23 @@ GitHub Actions only discovers workflow files there, which matters in a monorepo 
 is scoped to this project with a `paths: ["AWS-PydanticAi-Showcase/**"]` trigger filter and a
 `working-directory` default, the same pattern the repo's other projects use.
 
-## GitHub Actions CI/CD
+## GitHub Actions CI/CD (Deploy-on-Demand)
 
 Two separate workflows, deliberately not one: **CI** is a free, automatic quality gate that runs on
-every push and never touches AWS; **CD** is a manual, deploy-on-demand action that costs real money
+every push and never touches AWS; **Deploy** is a manual, on-demand action that costs real money
 (a new Fargate task, ECR storage) and is never triggered by a push, a merge, or by using the demos in
 the browser — clicking around the live site talks to the already-running ECS task over the ALB and
 has nothing to do with either workflow.
+
+**A note on the "CD" in CI/CD, since it's a genuinely overloaded term:** the CI half here is textbook
+Continuous Integration — it runs automatically on every push. The deploy half is **not** textbook
+Continuous Deployment (which releases every change that passes CI straight to production, with no
+human step) or even strict Continuous Delivery (which keeps a release artifact continuously
+build-and-ready between manual approvals — our Docker image isn't built at all until Deploy is
+triggered). What's actually here is closer to **on-demand deployment automation**: a human decides
+when to ship, and the workflow does the mechanical part reliably. That's the correct shape for a
+deploy-on-demand demo — auto-deploying on every push would spin up and tear down real AWS
+infrastructure constantly, which is exactly the standing cost this whole project is designed to avoid.
 
 ### CI — `aws-pydanticai-showcase-ci.yml`
 
@@ -337,7 +347,7 @@ has nothing to do with either workflow.
 A green CI run is the "is this code correct enough to consider deploying" signal — it says nothing
 about whether anyone has actually deployed it.
 
-### CD — `aws-pydanticai-showcase-deploy.yml`
+### Deploy — `aws-pydanticai-showcase-deploy.yml`
 
 | | |
 |---|---|
