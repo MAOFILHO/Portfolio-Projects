@@ -17,7 +17,7 @@ load_dotenv()  # must run before importing app.demos, which constructs agents ea
 
 from pathlib import Path  # noqa: E402
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response  # noqa: E402
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -36,6 +36,20 @@ app = FastAPI(title="Contoso AI Showcase")
 STATIC_DIR = Path(__file__).parent / "static"
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def no_static_cache(request: Request, call_next):
+    """This app is under active iteration; a redeploy should be visible on
+    the next page load, not after everyone's browser cache happens to expire.
+    `StaticFiles` sends no `Cache-Control` of its own, so absent this,
+    browsers apply heuristic caching and can silently keep serving JS/CSS
+    from before the last deploy."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 for demo in DEMOS:
     app.include_router(

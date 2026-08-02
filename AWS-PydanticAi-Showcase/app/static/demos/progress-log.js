@@ -1,8 +1,10 @@
-// Shared progress-log widget: a running trail of "Agent: doing X +N.Ns"
-// lines with a spinner on the currently active line, used by every demo that
-// streams step-by-step agent progress. Ends with a bold "Total time" summary
-// line once the run completes — the whole point being that every line's
-// timing, and the total, reflects a real model/tool call, not a canned status.
+// Shared progress-log widget: a running trail of "Agent: doing X N.Ns" lines
+// with a spinner on the currently active line, used by every demo that
+// streams step-by-step agent progress. Each line's time is *that step's own
+// duration* (set when the line is finalized, not when it's created), and the
+// trail ends with a bold "Total time" line — the sum of every step above it,
+// since every line's timing reflects a real model/tool call, not a canned
+// status.
 
 const STYLES = `
   .progress-log { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
@@ -30,17 +32,18 @@ function ensureStyles() {
  * Attaches a progress trail to `listEl` (an empty <ul>, typically rendered at
  * the bottom of a demo's result area). Returns:
  *   - append(message): adds a new active (spinning) line, finalizing the
- *     previous one first.
+ *     previous one first — which is when the previous line's own elapsed
+ *     time (how long that step actually took) gets written in.
  *   - stop(): finalizes the active line without adding a total — for runs
  *     that ended in an error, where "total time" isn't a meaningful claim.
- *   - finish(): finalizes the active line and appends a bold
- *     "Total time: N.Ns" line — call this once, when the run succeeds.
+ *   - finish(): finalizes the active line and appends a bold "Total time:
+ *     N.Ns" line (the sum of every step's duration) — call this once, when
+ *     the run succeeds.
  */
 export function createProgressLog(listEl) {
   ensureStyles();
   const startTime = Date.now();
-  const elapsedSeconds = () => (Date.now() - startTime) / 1000;
-  const formatElapsed = () => `+${elapsedSeconds().toFixed(1)}s`;
+  let stepStartTime = startTime;
 
   function finalizeActive() {
     const prevActive = listEl.querySelector("li.active");
@@ -48,22 +51,25 @@ export function createProgressLog(listEl) {
     prevActive.classList.remove("active");
     prevActive.querySelector(".spinner")?.remove();
     const waiting = prevActive.querySelector(".waiting-note");
-    if (waiting) waiting.textContent = "";
+    waiting?.remove();
+
+    const stepSeconds = (Date.now() - stepStartTime) / 1000;
+    const elapsed = document.createElement("span");
+    elapsed.className = "elapsed";
+    elapsed.textContent = `${stepSeconds.toFixed(1)}s`;
+    prevActive.appendChild(elapsed);
   }
 
   function append(message) {
     finalizeActive();
+    stepStartTime = Date.now();
+
     const item = document.createElement("li");
     item.className = "active";
 
     const text = document.createElement("span");
     text.textContent = message;
     item.appendChild(text);
-
-    const elapsed = document.createElement("span");
-    elapsed.className = "elapsed";
-    elapsed.textContent = formatElapsed();
-    item.appendChild(elapsed);
 
     const spinner = document.createElement("span");
     spinner.className = "spinner";
@@ -83,9 +89,10 @@ export function createProgressLog(listEl) {
 
   function finish() {
     finalizeActive();
+    const totalSeconds = (Date.now() - startTime) / 1000;
     const item = document.createElement("li");
     item.className = "total";
-    item.textContent = `Total time: ${elapsedSeconds().toFixed(1)}s`;
+    item.textContent = `Total time: ${totalSeconds.toFixed(1)}s`;
     listEl.appendChild(item);
   }
 
