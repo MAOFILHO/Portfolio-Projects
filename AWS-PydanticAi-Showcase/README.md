@@ -154,29 +154,29 @@ so the gate has to be server-side, not a client-side route guard.
 
 ```
 app/
-  auth.py            # Minimal demo sign-in gate: static credential, HMAC session cookie
-  main.py             # Shell: GET /, GET /api/demos, login/logout, mounts every demo router
+  auth.py                    # Minimal demo sign-in gate: static credential, HMAC session cookie
+  main.py                    # Shell: GET /, GET /api/demos, login/logout, mounts every demo router
   demos/
-    base.py           # The Demo descriptor every demo package exports
-    research/          # pydantic_graph pipeline demo
+    base.py                  # The Demo descriptor every demo package exports
+    research/                # pydantic_graph pipeline demo
       agents.py pipeline.py models.py router.py
-    triage/             # Typed DI + discriminated-union output demo
+    triage/                  # Typed DI + discriminated-union output demo
       agents.py fixtures.py models.py router.py
-    review/             # Agent-delegation + UsageLimits demo
+    review/                  # Agent-delegation + UsageLimits demo
       agents.py fixtures.py models.py router.py
-    travel/             # Streaming structured output demo
+    travel/                  # Streaming structured output demo
       agents.py fixtures.py models.py router.py
   shared/
-    config.py          # Shared model config (FAST_MODEL default for every demo)
-    sse.py             # SSE encoding + progress-queue draining, shared by streaming demos
-    cache.py            # Tiny exact-match result cache, shared by every demo
+    config.py                # Shared model config (FAST_MODEL default for every demo)
+    sse.py                   # SSE encoding + progress-queue draining, shared by streaming demos
+    cache.py                 # Tiny exact-match result cache, shared by every demo
   static/
     index.html theme.css     # The Contoso shell: sign-in, top bar, permanent left nav + Home link
     demos/*.js               # One ES module per demo, loaded via dynamic import()
     demos/progress-log.js    # Shared progress-trail widget every demo module renders
-tests/                # TestModel/FunctionModel + httpx.MockTransport — green with no API key
-evals/                # pydantic_evals: structural suite (research) + labelled suite (triage)
-terraform/            # AWS ECS Fargate deploy target
+tests/                       # TestModel/FunctionModel + httpx.MockTransport — green with no API key
+evals/                       # pydantic_evals: structural suite (research) + labelled suite (triage)
+terraform/                   # AWS ECS Fargate deploy target
 ```
 
 This project's GitHub Actions workflows live outside this folder, at the repo root's
