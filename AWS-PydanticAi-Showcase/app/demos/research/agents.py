@@ -16,6 +16,7 @@ from textwrap import dedent
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
+from pydantic_ai.models.openai import OpenAIChatModelSettings
 
 from app.shared.config import FAST_MODEL, FAST_SETTINGS
 
@@ -28,6 +29,13 @@ from .models import EvaluationResult, ResearchDeps, ResearchReport, SubTopicFind
 # touching the quality of the research or the report itself. (gpt-5.2 has no
 # "-mini" sibling, hence FAST_MODEL dropping a generation to gpt-5-mini.)
 MODEL = os.environ.get("SHOWCASE_RESEARCH_MODEL", "openai:gpt-5.2")
+
+# Unlike FAST_SETTINGS' "minimal", these two agents are doing real synthesis
+# work (reading search results, writing a report) where some reasoning earns
+# its keep — but left unset, a GPT-5-family model defaults to noticeably more
+# hidden reasoning-token spend than "low" buys back in quality here, and this
+# is the model that's actually expensive per token.
+RESEARCH_SETTINGS = OpenAIChatModelSettings(openai_reasoning_effort="low")
 
 planner_agent = Agent(
     FAST_MODEL,
@@ -50,6 +58,7 @@ research_agent = Agent(
     deps_type=ResearchDeps,
     output_type=SubTopicFindings,
     capabilities=[WebSearch(local="duckduckgo", search_context_size="low")],
+    model_settings=RESEARCH_SETTINGS,
     instructions=dedent(
         """
         You are a research analyst investigating one sub-topic at a time.
@@ -65,6 +74,7 @@ synthesizer_agent = Agent(
     name="synthesizer_agent",
     deps_type=ResearchDeps,
     output_type=ResearchReport,
+    model_settings=RESEARCH_SETTINGS,
     instructions=dedent(
         """
         You are the lead research analyst synthesizing findings gathered by
