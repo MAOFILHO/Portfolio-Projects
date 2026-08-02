@@ -115,7 +115,7 @@ The umbrella app around it:
 ```
 Browser
    │
-   ▼  GET /            (shell HTML, Cache-Control: no-store)
+   ▼  GET /             → (shell HTML, Cache-Control: no-store)
    ▼  GET /api/session  → { username | null }
    │
    ├─ not signed in ──► sign-in form ──► POST /api/login (static credential check)
@@ -310,68 +310,64 @@ is scoped to this project with a `paths: ["AWS-PydanticAi-Showcase/**"]` trigger
 
 ## GitHub Actions CI/CD (Deploy-on-Demand)
 
-Two separate workflows, deliberately not one: **CI** is a free, automatic quality gate that runs on
-every push and never touches AWS; **Deploy** is a manual, on-demand action that costs real money
-(a new Fargate task, ECR storage) and is never triggered by a push, a merge, or by using the demos in
-the browser — clicking around the live site talks to the already-running ECS task over the ALB and
-has nothing to do with either workflow.
+Continuous Integration (CI) and Continuous Deployment (CD) are deliberately separated into two distinct workflows: an automatic, offline **CI** pipeline for rapid quality control, and a manual, on-demand **Deploy** pipeline for AWS infrastructure.
 
-**A note on the "CD" in CI/CD, since it's a genuinely overloaded term:** the CI half here is textbook
-Continuous Integration — it runs automatically on every push. The deploy half is **not** textbook
-Continuous Deployment (which releases every change that passes CI straight to production, with no
-human step) or even strict Continuous Delivery (which keeps a release artifact continuously
-build-and-ready between manual approvals — our Docker image isn't built at all until Deploy is
-triggered). What's actually here is closer to **on-demand deployment automation**: a human decides
-when to ship, and the workflow does the mechanical part reliably. That's the correct shape for a
-deploy-on-demand demo — auto-deploying on every push would spin up and tear down real AWS
-infrastructure constantly, which is exactly the standing cost this whole project is designed to avoid.
+> **Architectural Note on "CD":** Rather than textbook Continuous Deployment (auto-releasing every commit) or strict Continuous Delivery (building image artifacts continuously), this project implements **on-demand deployment automation**. Deployments require an explicit human trigger (`workflow_dispatch`), ensuring real AWS resources (Fargate, ECR) are provisioned only when needed—eliminating standing cloud charges.
 
-### CI — `aws-pydanticai-showcase-ci.yml`
 
-| | |
-|---|---|
-| **Triggers on** | Every push or pull request to `main` that touches a file under `AWS-PydanticAi-Showcase/**`, plus manual `workflow_dispatch` |
-| **Touches AWS?** | No — offline only, `OPENAI_API_KEY` is a dummy value, every agent is overridden with `TestModel`/`FunctionModel` |
-| **Runtime** | ~35–40s on `ubuntu-latest` |
+### CI Workflow — `aws-pydanticai-showcase-ci.yml`
 
-| Step | What it does |
-|---|---|
-| Checkout | Clones the repo at the triggering commit |
-| Install `uv` | Sets up the `uv` package manager with dependency caching enabled |
-| Install dependencies | `uv sync --group dev` |
-| Lint | `ruff check .` — catches style violations and common bugs |
-| Format check | `ruff format --check .` — fails if any file isn't already formatted (including Python code blocks embedded in this README) |
-| Typecheck | `pyright app tests evals` — Pyright strict, zero `Any` leaks in the public surface |
-| Test | `pytest -v` — the full 41-test offline suite; `ALLOW_MODEL_REQUESTS=False` in `conftest.py` fails loudly if any test ever attempts a real model call |
+A green CI run signals that code is structurally and logically sound for deployment, without touching live cloud resources.
 
-A green CI run is the "is this code correct enough to consider deploying" signal — it says nothing
-about whether anyone has actually deployed it.
+* **Trigger:** Pushes or Pull Requests to `main` touching `AWS-PydanticAi-Showcase/**`, or manual `workflow_dispatch`.
+* **AWS Impact:** **None** (100% offline; uses dummy `OPENAI_API_KEY` and test stubs).
+* **Runtime:** ~35–40s on `ubuntu-latest`.
 
-### Deploy — `aws-pydanticai-showcase-deploy.yml`
+| Step | Action / Command | Purpose |
+| :--- | :--- | :--- |
+| **Checkout** | `actions/checkout` | Clones repository at triggering commit. |
+| **Setup `uv`** | `astral-sh/setup-uv` | Configures `uv` package manager with dependency caching. |
+| **Install** | `uv sync --group dev` | Installs development dependencies. |
+| **Lint** | `ruff check .` | Checks for code style violations and common bugs. |
+| **Format** | `ruff format --check .` | Ensures formatting compliance (including README Python blocks). |
+| **Typecheck** | `pyright app tests evals` | Enforces Pyright strict typing (zero `Any` leaks in public surface). |
+| **Test** | `pytest -v` | Runs 41-test offline suite (`ALLOW_MODEL_REQUESTS=False` blocks real API calls). |
 
-| | |
-|---|---|
-| **Triggers on** | Nothing automatic — `workflow_dispatch` only, run manually from the Actions tab or `gh workflow run` |
-| **Touches AWS?** | Yes — builds and pushes a real image to ECR, rolls the live ECS service |
-| **Runtime** | ~5–6 minutes (the ARM64 cross-build below is the slow part) |
 
-| Step | What it does |
-|---|---|
-| Checkout | Clones the repo at the triggering commit |
-| Configure AWS credentials | Assumes `SHOWCASE_AWS_DEPLOY_ROLE_ARN` via GitHub's OIDC identity — no long-lived AWS access keys stored as a repo secret |
-| Login to ECR | Authenticates the Docker client against the account's ECR registry |
-| Set up QEMU + Docker Buildx | Required to cross-build for ARM64 — see below |
-| Build and push image (ARM64) | `docker buildx build --platform linux/arm64 --push`, tagged both `:latest` and `:<commit-sha>` |
-| Roll the ECS service | `aws ecs update-service --force-new-deployment` |
-| Wait for service to stabilize | `aws ecs wait services-stable` — blocks until the new task is healthy and the old one has fully drained |
 
-**Why QEMU/Buildx, not a plain `docker build`:** the ECS task runs on ARM64/Graviton
-(`terraform/ecs.tf`'s `runtime_platform`, chosen for ~20% cheaper Fargate pricing), but
-`ubuntu-latest` GitHub runners are x86_64. A plain `docker build` there silently produces an amd64
-image that crashes on the task with `exec format error` — this bit the very first real run of this
-workflow (see [Key Engineering Decisions](#key-engineering-decisions)), and the already-running task
-kept serving traffic the whole time it was broken, since ECS never routes to a task that fails to
-start.
+### Deploy Workflow — `aws-pydanticai-showcase-deploy.yml`
+
+Builds the production container image, pushes it to ECR, and executes a zero-downtime rolling update on AWS ECS Fargate.
+
+* **Trigger:** Manual execution only (`workflow_dispatch` via GitHub Actions tab or `gh workflow run`).
+* **AWS Impact:** **Active** (Builds/pushes ARM64 ECR image and updates live ECS service).
+* **Runtime:** ~5–6 minutes (includes ARM64 cross-compilation).
+
+| Step | Action / Command | Purpose |
+| :--- | :--- | :--- |
+| **Checkout** | `actions/checkout` | Clones repository at triggering commit. |
+| **AWS Auth** | OIDC Role Assumption | Assumes `SHOWCASE_AWS_DEPLOY_ROLE_ARN` (no long-lived AWS keys stored in secrets). |
+| **ECR Login** | `amazon-ecr-login` | Authenticates Docker client against ECR registry. |
+| **Buildx Setup** | QEMU + Docker Buildx | Prepares cross-compilation environment for ARM64 architecture. |
+| **Build & Push** | `docker buildx build` | Compiles for `linux/arm64`; tags as `:latest` and `:<commit-sha>`. |
+| **Roll Service** | `aws ecs update-service` | Triggers `--force-new-deployment` on the target ECS service. |
+| **Stabilize** | `aws ecs wait services-stable` | Blocks until new Fargate task passes health checks and old task drains. |
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
+<img width="1418" height="672" alt="Screenshot 2026-08-02 at 10 04 01 AM" src="https://github.com/user-attachments/assets/ac4a43d6-10b6-4ecf-9779-f56c38afd573" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1401" height="699" alt="Screenshot 2026-08-02 at 10 04 27 AM" src="https://github.com/user-attachments/assets/962e0baf-28d0-4299-a14a-1aa4ef385e3e" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+
+> **Technical Insight — ARM64 Cross-Compilation:**
+> The ECS task runs on ARM64/Graviton for ~20% lower Fargate compute costs, but default GitHub runners are x86_64. Standard `docker build` commands produce an amd64 image that crashes on startup (`exec format error`). Configuring QEMU and Buildx guarantees cross-architecture compatibility, while ECS rolling updates preserve live traffic on the healthy task until the new container stabilizes.
+
 
 ## Cost Estimate
 
@@ -399,7 +395,7 @@ terraform destroy -var="openai_api_key=$OPENAI_API_KEY"
 ```
 
 
-### Research Analyst — `pydantic_graph` pipeline
+## Research Analyst — `pydantic_graph` pipeline
 
 An orchestrator plans 2–4 sub-topics, specialist workers research each one in parallel with a
 `WebSearch` capability, a synthesizer drafts the report, an evaluator gates a bounded revision loop,
@@ -433,7 +429,7 @@ flowchart LR
     H --> F[Final report]
 ```
 
-### Support Triage Copilot — typed DI + union output
+## Support Triage Copilot — typed DI + union output
 
 One agent, three tools (`lookup_account`, `recent_tickets`, `check_entitlement`) that only ever touch
 `RunContext.deps` — never a module-level global — and a discriminated-union output type:
@@ -482,7 +478,7 @@ flowchart LR
     O --> NI["NeedsInfo<br/>questions"]
 ```
 
-### Code Review Assistant — agent delegation + usage limits
+## Code Review Assistant — agent delegation + usage limits
 
 A lead reviewer consults up to three specialist sub-agents (style, security, tests) as tools, deciding
 for itself which ones apply to a given diff:
@@ -515,7 +511,7 @@ flowchart LR
     LR --> CF[Consolidated findings]
 ```
 
-### Travel Itinerary Planner — streaming structured output
+## Travel Itinerary Planner — streaming structured output
 
 ```python
 async with agent.run_stream(prompt, deps=deps) as result:
@@ -546,6 +542,55 @@ flowchart LR
     DC --> RB[Refine box]
     RB -->|message_history| TA
 ```
+
+## Web App screenshots
+
+<img width="1189" height="691" alt="Screenshot 2026-08-02 at 3 43 31 AM" src="https://github.com/user-attachments/assets/7183419e-20c5-43fc-bba3-1ec94686738c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1417" height="684" alt="Screenshot 2026-08-02 at 1 20 43 AM" src="https://github.com/user-attachments/assets/32cdb963-e279-41ce-8bae-3da0fe39135f" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1403" height="658" alt="Screenshot 2026-08-02 at 1 20 17 AM" src="https://github.com/user-attachments/assets/baaff3d7-4b35-4d84-b67f-89851f580e95" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1167" height="588" alt="Screenshot 2026-08-02 at 1 19 39 AM" src="https://github.com/user-attachments/assets/1e1befea-5a1f-42cb-b97d-a0d49540c111" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1163" height="512" alt="Screenshot 2026-08-02 at 1 19 51 AM" src="https://github.com/user-attachments/assets/40281154-522c-44dc-b039-800a27bb897f" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1403" height="699" alt="Screenshot 2026-08-02 at 1 21 14 AM" src="https://github.com/user-attachments/assets/12c608e7-300d-46a5-91f6-26c1f80b2e8c" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1174" height="471" alt="Screenshot 2026-08-02 at 1 21 36 AM" src="https://github.com/user-attachments/assets/56ba05b6-8d2e-438b-829a-d2327b226ed3" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1416" height="691" alt="Screenshot 2026-08-02 at 3 37 03 AM" src="https://github.com/user-attachments/assets/761eb783-04d5-4665-85f0-2169b6a9b8ed" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1181" height="695" alt="Screenshot 2026-08-02 at 3 38 19 AM" src="https://github.com/user-attachments/assets/3d26793c-c893-4c3c-83b0-6e9a52c3cbdb" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1400" height="692" alt="Screenshot 2026-08-02 at 4 00 34 AM" src="https://github.com/user-attachments/assets/1f19f97f-0621-4470-881a-89c00222b005" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br>
+<img width="1176" height="678" alt="Screenshot 2026-08-02 at 4 01 01 AM" src="https://github.com/user-attachments/assets/d2189387-575b-4cf2-a25c-daf7ac8bfe81" />
+
+
+
+
+
 
 ## Key Engineering Decisions
 
