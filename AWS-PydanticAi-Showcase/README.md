@@ -15,8 +15,6 @@ sign-in screen and one permanent left-hand nav. Each demo isn't a variation on t
 one exists specifically to isolate a **different framework mechanism**, so the collection reads as a
 curriculum on agent architecture rather than four copies of the same app with different prompts.
 
-This is an original project built while learning Pydantic AI — not a fork of the framework. All
-credit for the underlying library goes to the [Pydantic AI team](https://github.com/pydantic/pydantic-ai).
 
 ## The Problem: A Single-Demo Portfolio Piece
 
