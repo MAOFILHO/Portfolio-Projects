@@ -49,6 +49,8 @@ triage_agent = Agent(
 @triage_agent.tool
 async def lookup_account(ctx: RunContext[TriageDeps]) -> Account | str:
     """Fetch the plan, seat count, spend, SLA, and open-incident count for this ticket's account."""
+    if ctx.deps.progress:
+        await ctx.deps.progress("Triage agent: looking up account")
     account = ctx.deps.accounts.get(ctx.deps.account_id)
     return account if account is not None else f"No account found for {ctx.deps.account_id}"
 
@@ -56,6 +58,8 @@ async def lookup_account(ctx: RunContext[TriageDeps]) -> Account | str:
 @triage_agent.tool
 async def recent_tickets(ctx: RunContext[TriageDeps]) -> list[PastTicket]:
     """List this account's recent support tickets, to spot recurrences."""
+    if ctx.deps.progress:
+        await ctx.deps.progress("Triage agent: pulling recent tickets")
     return ctx.deps.tickets.get(ctx.deps.account_id, [])
 
 
@@ -66,6 +70,8 @@ async def check_entitlement(ctx: RunContext[TriageDeps], feature: str) -> str:
     Args:
         feature: The feature the customer is asking about, e.g. "sso" or "audit-log".
     """
+    if ctx.deps.progress:
+        await ctx.deps.progress("Triage agent: checking entitlement")
     account = ctx.deps.accounts.get(ctx.deps.account_id)
     if account is None:
         return f"No account found for {ctx.deps.account_id}"

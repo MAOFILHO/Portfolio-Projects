@@ -20,9 +20,16 @@ from app.demos.review.agents import (
 )
 from app.demos.review.models import SpecialistFindings
 from app.demos.review.router import MAX_DIFF_CHARS, RESPONSE_CACHE
-from tests.test_main import client  # noqa: F401 - fixture
+from tests.test_main import client, parse_sse_events  # noqa: F401 - fixture
 
 DIFF = "diff --git a/api/orders.py b/api/orders.py\n+query = 'SELECT * FROM t WHERE x = ' + arg\n"
+
+
+def analyze(test_client, diff: str) -> dict:
+    """POSTs a diff and returns the streamed `done` event's `response` payload."""
+    response = test_client.post("/api/review/analyze", json={"diff": diff})
+    assert response.status_code == 200
+    return next(e for e in parse_sse_events(response) if e["type"] == "done")["response"]
 
 
 @pytest.fixture(autouse=True)
@@ -122,10 +129,8 @@ async def test_lead_reviewer_delegates_to_every_specialist(client):  # noqa: F81
         security_agent.override(model=SECURITY),
         tests_agent.override(model=TESTS),
     ):
-        response = client.post("/api/review/analyze", json={"diff": DIFF})
+        body = analyze(client, DIFF)
 
-    assert response.status_code == 200
-    body = response.json()
     assert body["verdict"]["verdict"] == "request_changes"
     categories = {c["category"] for c in body["verdict"]["comments"]}
     assert categories == {"style", "security", "tests"}
@@ -142,7 +147,7 @@ async def test_delegated_usage_bills_to_the_callers_budget(client):  # noqa: F81
         security_agent.override(model=SECURITY),
         tests_agent.override(model=TESTS),
     ):
-        body = client.post("/api/review/analyze", json={"diff": DIFF}).json()
+        body = analyze(client, DIFF)
 
     usage = body["usage"]
     # Two lead turns plus one per delegated specialist.
@@ -161,14 +166,19 @@ async def test_the_lead_may_skip_specialists_it_judges_irrelevant(client):  # no
         security_agent.override(model=SECURITY),
         tests_agent.override(model=TESTS),
     ):
-        body = client.post("/api/review/analyze", json={"diff": DIFF}).json()
+        body = analyze(client, DIFF)
 
     assert {c["category"] for c in body["verdict"]["comments"]} == {"security"}
     assert body["usage"]["requests"] == 3
 
 
-async def test_exceeding_the_request_budget_is_a_clean_422_not_a_500(client):  # noqa: F811
-    """A lead reviewer that never stops consulting must hit the ceiling."""
+async def test_exceeding_the_request_budget_is_a_clean_error_not_a_500(client):  # noqa: F811
+    """A lead reviewer that never stops consulting must hit the ceiling.
+
+    The guardrail firing mid-stream can't become an HTTP status code (the 200
+    and SSE headers are already on the wire), so it surfaces as an `error`
+    event instead — the same convention the other three demos use.
+    """
 
     def never_finishes(messages: list, info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[ToolCallPart(tool_name="review_style", args={})])
@@ -179,8 +189,9 @@ async def test_exceeding_the_request_budget_is_a_clean_422_not_a_500(client):  #
     ):
         response = client.post("/api/review/analyze", json={"diff": DIFF})
 
-    assert response.status_code == 422
-    assert str(REQUEST_LIMIT) in response.json()["detail"]
+    assert response.status_code == 200
+    error = next(e for e in parse_sse_events(response) if e["type"] == "error")
+    assert str(REQUEST_LIMIT) in error["message"]
 
 
 async def test_empty_diff_is_rejected(client):  # noqa: F811
@@ -205,9 +216,9 @@ async def test_identical_diff_hits_the_cache(client):  # noqa: F811
         lead_reviewer_agent.override(model=lead_model(consult=["review_security"])),
         security_agent.override(model=SECURITY),
     ):
-        first = client.post("/api/review/analyze", json={"diff": DIFF}).json()
+        first = analyze(client, DIFF)
 
     # No override: a cache miss would attempt a real request, which
     # ALLOW_MODEL_REQUESTS=False turns into a loud failure.
-    second = client.post("/api/review/analyze", json={"diff": DIFF}).json()
+    second = analyze(client, DIFF)
     assert second == first

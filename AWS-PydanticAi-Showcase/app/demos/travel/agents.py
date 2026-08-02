@@ -104,3 +104,12 @@ async def search_hotels(ctx: RunContext[TravelDeps], destination: str) -> str:
         for h in options
     )
     return f"[SIMULATED inventory] Hotel options in {destination}: {listed}"
+
+
+# Human-readable labels for the progress log the UI streams alongside the
+# partial itinerary, keyed by tool name.
+TOOL_LABELS = {
+    "get_weather": "Fetching live weather forecast",
+    "search_flights": "Searching flight inventory",
+    "search_hotels": "Searching hotel inventory",
+}

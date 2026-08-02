@@ -105,33 +105,39 @@ lead_reviewer_agent = Agent(
 
 
 async def _delegate(
-    ctx: RunContext[ReviewDeps], agent: Agent[ReviewDeps, SpecialistFindings]
+    ctx: RunContext[ReviewDeps], agent: Agent[ReviewDeps, SpecialistFindings], label: str
 ) -> SpecialistFindings:
     """Run a specialist against the injected diff, billing it to the caller's budget.
 
     `usage=ctx.usage` is the load-bearing argument: without it each sub-agent run
     would keep its own tally and the `UsageLimits` the caller set on the outer run
-    would only ever bound the lead reviewer's own turns.
+    would only ever bound the lead reviewer's own turns. `label` drives the
+    progress log the UI streams — reported around the call so the specialists'
+    parallel start and (genuinely different) finish times both show up.
     """
+    if ctx.deps.progress:
+        await ctx.deps.progress(f"{label}: analyzing diff")
     result = await agent.run(
         f"Review this diff:\n\n{ctx.deps.diff}", deps=ctx.deps, usage=ctx.usage
     )
+    if ctx.deps.progress:
+        await ctx.deps.progress(f"{label}: done")
     return result.output
 
 
 @lead_reviewer_agent.tool
 async def review_style(ctx: RunContext[ReviewDeps]) -> SpecialistFindings:
     """Ask the style reviewer about readability and maintainability."""
-    return await _delegate(ctx, style_agent)
+    return await _delegate(ctx, style_agent, "Style reviewer")
 
 
 @lead_reviewer_agent.tool
 async def review_security(ctx: RunContext[ReviewDeps]) -> SpecialistFindings:
     """Ask the security reviewer about injection, authz, secrets, and data leaks."""
-    return await _delegate(ctx, security_agent)
+    return await _delegate(ctx, security_agent, "Security reviewer")
 
 
 @lead_reviewer_agent.tool
 async def review_tests(ctx: RunContext[ReviewDeps]) -> SpecialistFindings:
     """Ask the test reviewer about coverage gaps in the changed behavior."""
-    return await _delegate(ctx, tests_agent)
+    return await _delegate(ctx, tests_agent, "Tests reviewer")

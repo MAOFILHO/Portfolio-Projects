@@ -1,10 +1,10 @@
 """Server-Sent Events helpers shared by the streaming demos.
 
-Two demos stream for different reasons — Research Analyst pushes discrete
-progress messages from a `pydantic_graph` run, Travel Planner pushes partially
-validated Pydantic models from `run_stream` — but both need the same wire
-format and the same "keep the ALB's idle timeout from firing" property, so the
-encoding lives here rather than being reimplemented per demo.
+Every demo streams the same two kinds of thing over this wire format: a
+running trail of "agent did X" progress lines (with a timing/log UI in
+common — see `demos/progress-log.js`) and, for Research and Travel, partially
+validated Pydantic output pushed as it's produced. `drain_progress` is generic
+over the queued item type so both fit through one implementation.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 from fastapi.responses import StreamingResponse
 
 T = TypeVar("T")
+QueueItemT = TypeVar("QueueItemT")
 
 # Nginx/ALB-style buffering would defeat the point of streaming: events must
 # reach the browser as they happen, not batched at the end.
@@ -34,14 +35,15 @@ def sse_response(stream: AsyncIterator[str]) -> StreamingResponse:
 
 async def drain_progress(
     task: Awaitable[T],
-    queue: asyncio.Queue[str],
-) -> AsyncIterator[str | T]:
-    """Interleave a long-running task with the progress messages it queues.
+    queue: asyncio.Queue[QueueItemT],
+) -> AsyncIterator[QueueItemT | T]:
+    """Interleave a long-running task with the items it queues as it runs.
 
-    Yields each queued message as a `str` while `task` is still running, then
-    yields the task's result as the final item. Callers distinguish the two by
-    type. Progress messages emitted in the final moments before the task
-    finishes are drained afterwards, so none are lost to the race.
+    Yields each queued item while `task` is still running, then yields the
+    task's result as the final item. Callers distinguish the two by type (a
+    `str`/`dict` progress item vs. the task's own result type). Items queued
+    in the final moments before the task finishes are drained afterwards, so
+    none are lost to the race.
 
     Exceptions from `task` propagate to the caller unchanged — a failing
     pipeline should surface as an error event, not a silently truncated stream.

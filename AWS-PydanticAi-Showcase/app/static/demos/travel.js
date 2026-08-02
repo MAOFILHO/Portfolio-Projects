@@ -5,6 +5,7 @@
 // appearing all at once at the end.
 
 import { describeError, escapeHtml, streamSse } from "./shared.js";
+import { createProgressLog } from "./progress-log.js";
 
 const styles = `
   .travel-form-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; align-items: end; }
@@ -52,6 +53,22 @@ export function render(root) {
   const button = root.querySelector("#plan-button");
   const resultEl = root.querySelector("#travel-result");
   let sessionId = null;
+  let progressLog = null;
+
+  // The itinerary re-renders on every partial event, so it lives in its own
+  // child element; the progress log is a sibling that's never touched by
+  // renderItinerary, and stays put — as the very last thing in the panel —
+  // across every partial re-render of the itinerary above it.
+  function startNewTrail() {
+    resultEl.innerHTML = `
+      <div id="travel-itinerary"></div>
+      <p class="muted">Waiting on OpenAI API responses — each line below is a real model/tool call, not a canned status:</p>
+      <ul id="progress-log" class="progress-log"></ul>
+    `;
+    progressLog = createProgressLog(resultEl.querySelector("#progress-log"));
+  }
+
+  const itineraryEl = () => resultEl.querySelector("#travel-itinerary");
 
   function renderItinerary(itinerary, { pending } = {}) {
     const days = (itinerary.days || [])
@@ -69,7 +86,7 @@ export function render(root) {
       ? `<div class="travel-packing"><strong>Packing:</strong> ${itinerary.packing_notes.map(escapeHtml).join(", ")}</div>`
       : "";
 
-    resultEl.innerHTML = `
+    itineraryEl().innerHTML = `
       <div class="travel-meta">
         <h2>${escapeHtml(itinerary.destination || "")}</h2>
         ${itinerary.estimated_cost_usd ? `<span class="travel-cost">~$${itinerary.estimated_cost_usd.toLocaleString()} estimated</span>` : ""}
@@ -97,32 +114,37 @@ export function render(root) {
     `;
 
     if (!pending) {
-      resultEl.querySelector("#refine-button").addEventListener("click", submitRefine);
+      itineraryEl().querySelector("#refine-button").addEventListener("click", submitRefine);
     }
   }
 
   async function submitRefine() {
-    const instruction = resultEl.querySelector("#refine-instruction").value.trim();
+    const instruction = itineraryEl().querySelector("#refine-instruction").value.trim();
     if (!instruction || !sessionId) return;
-    const refineButton = resultEl.querySelector("#refine-button");
+    const refineButton = itineraryEl().querySelector("#refine-button");
     refineButton.disabled = true;
+    startNewTrail();
     try {
       await streamSse("/api/travel/refine", { session_id: sessionId, instruction }, (event) => {
-        if (event.type === "partial") renderItinerary(event.itinerary, { pending: true });
+        if (event.type === "progress") progressLog.append(event.message);
+        else if (event.type === "partial") renderItinerary(event.itinerary, { pending: true });
         else if (event.type === "done") {
           sessionId = event.session_id;
+          progressLog.finish();
           renderItinerary(event.itinerary);
         } else if (event.type === "error") throw new Error(event.message);
       });
     } catch (err) {
-      resultEl.innerHTML += `<p class="error">${escapeHtml(describeError(err))}</p>`;
+      progressLog.stop();
+      itineraryEl().innerHTML += `<p class="error">${escapeHtml(describeError(err))}</p>`;
     }
   }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     button.disabled = true;
-    resultEl.innerHTML = `<p class="muted">Looking up weather and building the plan...</p>`;
+    startNewTrail();
+    itineraryEl().innerHTML = `<p class="muted">Looking up weather and building the plan...</p>`;
     const days = Math.min(14, Math.max(1, parseInt(root.querySelector("#trip-days").value, 10) || 3));
 
     try {
@@ -134,15 +156,18 @@ export function render(root) {
           interests: root.querySelector("#interests").value,
         },
         (event) => {
-          if (event.type === "partial") renderItinerary(event.itinerary, { pending: true });
+          if (event.type === "progress") progressLog.append(event.message);
+          else if (event.type === "partial") renderItinerary(event.itinerary, { pending: true });
           else if (event.type === "done") {
             sessionId = event.session_id;
+            progressLog.finish();
             renderItinerary(event.itinerary);
           } else if (event.type === "error") throw new Error(event.message);
         }
       );
     } catch (err) {
-      resultEl.innerHTML = `<p class="error">${escapeHtml(describeError(err))}</p>`;
+      progressLog.stop();
+      itineraryEl().innerHTML = `<p class="error">${escapeHtml(describeError(err))}</p>`;
     } finally {
       button.disabled = false;
     }

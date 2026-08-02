@@ -4,21 +4,13 @@
 // a human compliance officer to approve or annotate.
 
 import { describeError, escapeHtml, postJson, streamSse } from "./shared.js";
+import { createProgressLog } from "./progress-log.js";
 
 const styles = `
   .research-report { margin-top: 0.75rem; }
   .research-finding { border-left: 3px solid var(--brand); padding-left: 0.75rem; margin: 0.6rem 0; }
   .review-actions { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
   .review-actions textarea { height: 3rem; margin-bottom: 0.6rem; }
-  #progress-log { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
-  #progress-log li { padding: 0.35rem 0; color: var(--muted); border-bottom: 1px dotted var(--line); }
-  #progress-log li.active { color: var(--ink); font-weight: 500; }
-  #progress-log li.active::before { content: "→ "; color: var(--brand); }
-  #progress-log .elapsed { color: #999; font-size: 0.8em; margin-left: 0.4em; }
-  .spinner { display: inline-block; width: 0.8em; height: 0.8em; margin-left: 0.4em;
-    border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%;
-    animation: research-spin 0.8s linear infinite; vertical-align: middle; }
-  @keyframes research-spin { to { transform: rotate(360deg); } }
 `;
 
 export function render(root) {
@@ -38,23 +30,23 @@ export function render(root) {
   const askButton = root.querySelector("#ask-button");
   const reportEl = root.querySelector("#report");
   let currentReviewId = null;
-  let researchStartTime = null;
+  let progressLog = null;
 
-  // The log is a permanent trail once a run starts: appendProgress() only ever
-  // adds to it, and finishing the run never clears it. It renders below
+  // The log is a permanent trail once a run starts: progressLog.append() only
+  // ever adds to it, and finishing the run never clears it. It renders below
   // #report-result, which holds the report itself — right under the Submit
-  // button, so the log stays a scrollable audit trail at the bottom.
+  // button, so the log stays a scrollable audit trail at the very end of the
+  // panel, ending with a "Total time" line once the run completes.
   function startNewTrail() {
-    researchStartTime = Date.now();
     reportEl.innerHTML = `
       <div id="report-result"></div>
       <p class="muted">Waiting on OpenAI API responses — each line below is a real model/search call, not a canned status:</p>
-      <ul id="progress-log"></ul>
+      <ul id="progress-log" class="progress-log"></ul>
     `;
+    progressLog = createProgressLog(reportEl.querySelector("#progress-log"));
   }
 
   const resultEl = () => reportEl.querySelector("#report-result");
-  const formatElapsed = () => `+${((Date.now() - researchStartTime) / 1000).toFixed(1)}s`;
 
   function renderReportBody(report) {
     const findings = (report.key_findings || [])
@@ -77,7 +69,7 @@ export function render(root) {
   }
 
   function renderPendingReview(record) {
-    finalizeActiveLogLine();
+    progressLog?.finish();
     currentReviewId = record.review_id;
     resultEl().innerHTML = `
       <span class="badge pending">pending compliance review</span>
@@ -120,7 +112,7 @@ export function render(root) {
   }
 
   function renderError(message, { retryLabel, onRetry } = {}) {
-    finalizeActiveLogLine();
+    progressLog?.stop();
     resultEl().innerHTML = `
       <p class="error">${escapeHtml(message)}</p>
       ${retryLabel ? `<button id="retry-button">${escapeHtml(retryLabel)}</button>` : ""}
@@ -143,41 +135,6 @@ export function render(root) {
     }
   }
 
-  function finalizeActiveLogLine() {
-    const prevActive = reportEl.querySelector("#progress-log li.active");
-    if (!prevActive) return;
-    prevActive.classList.remove("active");
-    prevActive.querySelector(".spinner")?.remove();
-    const waiting = prevActive.querySelector(".waiting-note");
-    if (waiting) waiting.textContent = "";
-  }
-
-  function appendProgress(message) {
-    finalizeActiveLogLine();
-    const item = document.createElement("li");
-    item.className = "active";
-
-    const text = document.createElement("span");
-    text.textContent = message;
-    item.appendChild(text);
-
-    const elapsed = document.createElement("span");
-    elapsed.className = "elapsed";
-    elapsed.textContent = formatElapsed();
-    item.appendChild(elapsed);
-
-    const spinner = document.createElement("span");
-    spinner.className = "spinner";
-    item.appendChild(spinner);
-
-    const waiting = document.createElement("span");
-    waiting.className = "muted waiting-note";
-    waiting.textContent = " (waiting on OpenAI API response...)";
-    item.appendChild(waiting);
-
-    reportEl.querySelector("#progress-log").appendChild(item);
-  }
-
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = root.querySelector("#question").value;
@@ -186,7 +143,7 @@ export function render(root) {
 
     try {
       await streamSse("/api/research/research", { question }, (event) => {
-        if (event.type === "progress") appendProgress(event.message);
+        if (event.type === "progress") progressLog.append(event.message);
         else if (event.type === "done") renderPendingReview(event.record);
         else if (event.type === "error") throw new Error(event.message);
       });

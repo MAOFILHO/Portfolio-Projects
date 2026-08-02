@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -21,6 +22,10 @@ class ReviewDeps:
     """
 
     diff: str
+    # Optional: lets a delegation tool report a progress-log line as each
+    # specialist starts and finishes. None in every test and in any other
+    # caller that doesn't want a progress trail.
+    progress: Callable[[str], Awaitable[None]] | None = None
 
 
 class ReviewComment(BaseModel):

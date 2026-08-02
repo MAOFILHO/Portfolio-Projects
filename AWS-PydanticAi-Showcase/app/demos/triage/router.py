@@ -1,18 +1,24 @@
 """HTTP surface for the Support Triage Copilot.
 
-A single non-streaming call: triage is a sub-10s decision, so streaming would
-add machinery without adding anything a viewer can see. What *is* worth
-surfacing is which tools the agent chose to call — that's the visible evidence
-that dependency injection is doing something, rather than a claim in a README.
+`POST /classify` streams over SSE: the same "each line is a real model/tool
+call" progress trail as the other three demos, built by giving `TriageDeps` a
+`progress` callback that the tools call as they run (see `agents.py`) and
+draining it alongside the agent's `.run()` with `drain_progress` — the same
+mechanism Research Analyst uses for its own pipeline.
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic_ai.messages import ToolCallPart
 
 from app.shared.cache import DemoCache
+from app.shared.sse import drain_progress, sse, sse_response
 
 from .agents import TOOL_NAMES, triage_agent
 from .fixtures import ACCOUNTS, SAMPLE_TICKETS, TICKETS
@@ -43,27 +49,54 @@ async def accounts() -> list[SeedAccount]:
     ]
 
 
-@router.post("/classify", response_model=TriageResult)
-async def classify(request: TriageRequest) -> TriageResult:
-    cache_key = f"{request.account_id}|{request.ticket}"
-    cached = RESULT_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+@router.post("/classify")
+async def classify(request: TriageRequest) -> StreamingResponse:
+    async def event_stream() -> AsyncIterator[str]:
+        cache_key = f"{request.account_id}|{request.ticket}"
+        cached = RESULT_CACHE.get(cache_key)
+        if cached is not None:
+            yield sse({"type": "progress", "message": "Using cached result"})
+            yield sse({"type": "done", "result": cached.model_dump(mode="json")})
+            return
 
-    deps = TriageDeps(account_id=request.account_id, accounts=ACCOUNTS, tickets=TICKETS)
-    result = await triage_agent.run(request.ticket, deps=deps)
+        queue: asyncio.Queue[str] = asyncio.Queue()
 
-    # The agent's own reasoning is opaque, but the tools it reached for are not:
-    # replaying the message history shows exactly what it looked up before
-    # deciding. Filtered against TOOL_NAMES so the generated output tools don't
-    # masquerade as lookups the agent chose to make.
-    tool_calls = [
-        ToolCall(tool_name=part.tool_name, args=part.args_as_dict())
-        for message in result.all_messages()
-        for part in message.parts
-        if isinstance(part, ToolCallPart) and part.tool_name in TOOL_NAMES
-    ]
+        async def report_progress(message: str) -> None:
+            await queue.put(message)
 
-    triage_result = TriageResult(decision=result.output, tool_calls=tool_calls)
-    RESULT_CACHE.set(cache_key, triage_result)
-    return triage_result
+        deps = TriageDeps(
+            account_id=request.account_id,
+            accounts=ACCOUNTS,
+            tickets=TICKETS,
+            progress=report_progress,
+        )
+
+        try:
+            result = None
+            async for item in drain_progress(triage_agent.run(request.ticket, deps=deps), queue):
+                if isinstance(item, str):
+                    yield sse({"type": "progress", "message": item})
+                else:
+                    result = item
+        except Exception as e:  # noqa: BLE001 - surface any agent failure to the client
+            yield sse({"type": "error", "message": str(e)})
+            return
+
+        assert result is not None
+        # The agent's own reasoning is opaque, but the tools it reached for are
+        # not: replaying the message history shows exactly what it looked up
+        # before deciding. Filtered against TOOL_NAMES so the generated output
+        # tools don't masquerade as lookups the agent chose to make.
+        tool_calls = [
+            ToolCall(tool_name=part.tool_name, args=part.args_as_dict())
+            for message in result.all_messages()
+            for part in message.parts
+            if isinstance(part, ToolCallPart) and part.tool_name in TOOL_NAMES
+        ]
+
+        yield sse({"type": "progress", "message": "Triage agent: finalizing decision"})
+        triage_result = TriageResult(decision=result.output, tool_calls=tool_calls)
+        RESULT_CACHE.set(cache_key, triage_result)
+        yield sse({"type": "done", "result": triage_result.model_dump(mode="json")})
+
+    return sse_response(event_stream())

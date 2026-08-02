@@ -4,7 +4,8 @@
 // this demo exists next to the graph-based one is that delegation hands control
 // of the call count to the model, so the budget has to be visible.
 
-import { escapeHtml, fetchJson, postJson } from "./shared.js";
+import { describeError, escapeHtml, fetchJson, streamSse } from "./shared.js";
+import { createProgressLog } from "./progress-log.js";
 
 const styles = `
   .review-toolbar { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
@@ -83,7 +84,7 @@ export async function render(root) {
   }
 
   function renderResult({ verdict, usage }) {
-    resultEl.innerHTML = `
+    resultEl.querySelector("#review-verdict-wrap").innerHTML = `
       <div class="review-verdict">
         <span class="badge ${escapeHtml(verdict.verdict)}">${escapeHtml(verdict.verdict.replace("_", " "))}</span>
         <p style="margin:0.6rem 0 0">${escapeHtml(verdict.summary)}</p>
@@ -99,14 +100,36 @@ export async function render(root) {
     `;
   }
 
+  // Mirrors Research Analyst's progress trail: a live log of each real model
+  // call — including the specialists' delegated calls, which run in parallel
+  // and finish at genuinely different times — ending with a "Total time" line.
+  // Renders at the very end of the panel, below the verdict and comments.
+  function startNewTrail() {
+    resultEl.innerHTML = `
+      <div id="review-verdict-wrap"></div>
+      <p class="muted">Waiting on OpenAI API responses — each line below is a real model call, not a canned status:</p>
+      <ul id="progress-log" class="progress-log"></ul>
+    `;
+    return createProgressLog(resultEl.querySelector("#progress-log"));
+  }
+
   root.querySelector("#review-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     button.disabled = true;
-    resultEl.innerHTML = `<p class="muted">Lead reviewer is consulting specialists — this fans out to several model calls...</p>`;
+    const progressLog = startNewTrail();
+
     try {
-      renderResult(await postJson("/api/review/analyze", { diff: diffEl.value }));
+      await streamSse("/api/review/analyze", { diff: diffEl.value }, (event) => {
+        if (event.type === "progress") progressLog.append(event.message);
+        else if (event.type === "done") {
+          progressLog.finish();
+          renderResult(event.response);
+        } else if (event.type === "error") throw new Error(event.message);
+      });
     } catch (err) {
-      resultEl.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+      progressLog.stop();
+      resultEl.querySelector("#review-verdict-wrap").innerHTML =
+        `<p class="error">${escapeHtml(describeError(err))}</p>`;
     } finally {
       button.disabled = false;
     }

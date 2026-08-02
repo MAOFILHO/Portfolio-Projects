@@ -1,12 +1,26 @@
-"""HTTP surface for the Code Review Assistant."""
+"""HTTP surface for the Code Review Assistant.
+
+`POST /analyze` streams over SSE — the same progress-trail UX as the other
+three demos, built by giving `ReviewDeps` a `progress` callback that the
+delegation tools call as each specialist starts and finishes (see
+`agents.py`), drained alongside the lead reviewer's `.run()` with
+`drain_progress`. Because the three specialists run as parallel tool calls,
+their start/finish lines land at genuinely different times, so the log
+doubles as a real trace of which specialist was the long pole.
+"""
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic_ai import UsageLimitExceeded, UsageLimits
 
 from app.shared.cache import DemoCache
+from app.shared.sse import drain_progress, sse, sse_response
 
 from .agents import REQUEST_LIMIT, lead_reviewer_agent
 from .fixtures import SAMPLE_DIFF
@@ -30,8 +44,8 @@ async def sample_diff() -> dict[str, str]:
     return {"diff": SAMPLE_DIFF}
 
 
-@router.post("/analyze", response_model=ReviewResponse)
-async def analyze(request: ReviewRequest) -> ReviewResponse:
+@router.post("/analyze")
+async def analyze(request: ReviewRequest) -> StreamingResponse:
     diff = request.diff.strip()
     if not diff:
         raise HTTPException(status_code=400, detail="Paste a diff to review")
@@ -41,37 +55,65 @@ async def analyze(request: ReviewRequest) -> ReviewResponse:
             detail=f"Diff is {len(diff):,} characters; this demo reviews up to {MAX_DIFF_CHARS:,}",
         )
 
-    cached = RESPONSE_CACHE.get(diff)
-    if cached is not None:
-        return cached
+    async def event_stream() -> AsyncIterator[str]:
+        cached = RESPONSE_CACHE.get(diff)
+        if cached is not None:
+            yield sse({"type": "progress", "message": "Using cached result"})
+            yield sse({"type": "done", "response": cached.model_dump(mode="json")})
+            return
 
-    try:
-        result = await lead_reviewer_agent.run(
-            "Review the diff in your dependencies and give a consolidated verdict.",
-            deps=ReviewDeps(diff=diff),
-            usage_limits=UsageLimits(request_limit=REQUEST_LIMIT),
-        )
-    except UsageLimitExceeded as e:
-        # The guardrail firing is a real outcome, not a server fault: the review
-        # ran away, we stopped paying for it, and the caller deserves to be told
-        # that in as many words rather than getting an opaque 500.
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Review stopped at the {REQUEST_LIMIT}-request budget before reaching a "
-                f"verdict ({e}). Try a smaller diff."
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        async def report_progress(message: str) -> None:
+            await queue.put(message)
+
+        deps = ReviewDeps(diff=diff, progress=report_progress)
+        run_result = None
+        try:
+            async for item in drain_progress(
+                lead_reviewer_agent.run(
+                    "Review the diff in your dependencies and give a consolidated verdict.",
+                    deps=deps,
+                    usage_limits=UsageLimits(request_limit=REQUEST_LIMIT),
+                ),
+                queue,
+            ):
+                if isinstance(item, str):
+                    yield sse({"type": "progress", "message": item})
+                else:
+                    run_result = item
+        except UsageLimitExceeded as e:
+            # The guardrail firing is a real outcome, not a server fault: the
+            # review ran away, we stopped paying for it, and the caller deserves
+            # to be told that in as many words rather than getting a silent cutoff.
+            yield sse(
+                {
+                    "type": "error",
+                    "message": (
+                        f"Review stopped at the {REQUEST_LIMIT}-request budget before reaching "
+                        f"a verdict ({e}). Try a smaller diff."
+                    ),
+                }
+            )
+            return
+        except Exception as e:  # noqa: BLE001 - surface any agent failure to the client
+            yield sse({"type": "error", "message": str(e)})
+            return
+
+        assert run_result is not None
+        yield sse({"type": "progress", "message": "Lead reviewer: consolidating verdict"})
+
+        usage = run_result.usage
+        response = ReviewResponse(
+            verdict=run_result.output,
+            usage=UsageReport(
+                requests=usage.requests,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                request_limit=REQUEST_LIMIT,
             ),
-        ) from e
+        )
+        RESPONSE_CACHE.set(diff, response)
+        yield sse({"type": "done", "response": response.model_dump(mode="json")})
 
-    usage = result.usage
-    response = ReviewResponse(
-        verdict=result.output,
-        usage=UsageReport(
-            requests=usage.requests,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            request_limit=REQUEST_LIMIT,
-        ),
-    )
-    RESPONSE_CACHE.set(diff, response)
-    return response
+    return sse_response(event_stream())

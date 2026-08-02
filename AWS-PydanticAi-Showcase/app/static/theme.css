@@ -21,6 +21,10 @@
 
 * { box-sizing: border-box; }
 
+/* .signin/.shell set their own `display`, which otherwise beats the
+   browser's default `[hidden] { display: none }` rule in the cascade. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;

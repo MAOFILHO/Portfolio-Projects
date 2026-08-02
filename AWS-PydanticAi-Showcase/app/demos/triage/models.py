@@ -11,6 +11,7 @@ is not None` defensive checks anywhere.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
@@ -52,6 +53,10 @@ class TriageDeps:
     account_id: str
     accounts: dict[str, Account] = field(default_factory=dict)
     tickets: dict[str, list[PastTicket]] = field(default_factory=dict)
+    # Optional: lets a tool report a progress-log line as it runs, without the
+    # agent or its tools knowing anything about SSE. None in every test and in
+    # any other caller that doesn't want a progress trail.
+    progress: Callable[[str], Awaitable[None]] | None = None
 
 
 class Resolve(BaseModel):

@@ -24,7 +24,7 @@ from app.demos.triage.models import (
     TriageDeps,
 )
 from app.demos.triage.router import RESULT_CACHE
-from tests.test_main import client  # noqa: F401 - fixture
+from tests.test_main import client, parse_sse_events  # noqa: F401 - fixture
 
 
 @pytest.fixture(autouse=True)
@@ -175,7 +175,10 @@ async def test_classify_endpoint_returns_the_decision_and_the_tool_trace(client)
         )
 
     assert response.status_code == 200
-    body = response.json()
+    events = parse_sse_events(response)
+    assert any(e["type"] == "progress" for e in events), "expected at least one progress event"
+    done = next(e for e in events if e["type"] == "done")
+    body = done["result"]
     assert body["decision"]["action"] == "escalate"
     assert body["decision"]["team"] == "infrastructure"
     called = [call["tool_name"] for call in body["tool_calls"]]
@@ -196,12 +199,15 @@ async def test_identical_ticket_hits_the_cache(client):  # noqa: F811
     payload = {"action": "resolve", "draft_reply": "Settings > Profile.", "confidence": 0.8}
     request = {"account_id": "ACC-1002", "ticket": "Where do I change my email?"}
 
+    def done_result(response):
+        return next(e for e in parse_sse_events(response) if e["type"] == "done")["result"]
+
     with triage_agent.override(model=decision_model(payload)):
-        first = client.post("/api/triage/classify", json=request).json()
+        first = done_result(client.post("/api/triage/classify", json=request))
 
     # No override the second time: a cache miss would try a real model request,
     # which conftest's ALLOW_MODEL_REQUESTS=False turns into a loud failure.
-    second = client.post("/api/triage/classify", json=request).json()
+    second = done_result(client.post("/api/triage/classify", json=request))
     assert second == first
 
 

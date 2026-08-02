@@ -4,7 +4,8 @@
 // which is the point: the frontend switches on `decision.action` and never
 // checks whether an optional field happens to be present.
 
-import { escapeHtml, fetchJson, postJson } from "./shared.js";
+import { describeError, escapeHtml, fetchJson, streamSse } from "./shared.js";
+import { createProgressLog } from "./progress-log.js";
 
 const styles = `
   .triage-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 1rem; align-items: start; }
@@ -150,18 +151,40 @@ export async function render(root) {
       </details>`;
   }
 
+  // Mirrors Research Analyst's progress trail: a live log of each real
+  // model/tool call, ending with a "Total time" line once the run completes.
+  // It renders at the very end of the panel, below the decision and trace.
+  function startNewTrail() {
+    resultEl.innerHTML = `
+      <div id="triage-decision"></div>
+      <p class="muted">Waiting on OpenAI API responses — each line below is a real model call, not a canned status:</p>
+      <ul id="progress-log" class="progress-log"></ul>
+    `;
+    return createProgressLog(resultEl.querySelector("#progress-log"));
+  }
+
   root.querySelector("#triage-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     button.disabled = true;
-    resultEl.innerHTML = `<p class="muted">Triaging — waiting on the model...</p>`;
+    const progressLog = startNewTrail();
+    const decisionEl = resultEl.querySelector("#triage-decision");
+
     try {
-      const result = await postJson("/api/triage/classify", {
-        account_id: accountSelect.value,
-        ticket: ticketEl.value,
-      });
-      resultEl.innerHTML = renderDecision(result.decision) + renderTrace(result.tool_calls);
+      await streamSse(
+        "/api/triage/classify",
+        { account_id: accountSelect.value, ticket: ticketEl.value },
+        (event) => {
+          if (event.type === "progress") progressLog.append(event.message);
+          else if (event.type === "done") {
+            progressLog.finish();
+            decisionEl.innerHTML =
+              renderDecision(event.result.decision) + renderTrace(event.result.tool_calls);
+          } else if (event.type === "error") throw new Error(event.message);
+        }
+      );
     } catch (err) {
-      resultEl.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+      progressLog.stop();
+      decisionEl.innerHTML = `<p class="error">${escapeHtml(describeError(err))}</p>`;
     } finally {
       button.disabled = false;
     }
