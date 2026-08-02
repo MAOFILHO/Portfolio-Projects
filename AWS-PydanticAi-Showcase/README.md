@@ -180,7 +180,7 @@ terraform/                           # AWS ECS Fargate deploy target
 ```
 
 This project's GitHub Actions workflows live outside this folder, at the repo root's
-`.github/workflows/` — see [Deploying to AWS](#deploying-to-aws-ecs-fargate) above:
+`.github/workflows/` — see [Infrastructure (Terraform)](#infrastructure-terraform) below:
 
 ```
 ../.github/workflows/
@@ -215,15 +215,8 @@ the sum of everything above it — real evidence of where the latency goes, not 
 | **Infrastructure** | Terraform — ECS Fargate, ALB, ECR, Secrets Manager, IAM, default VPC (no NAT Gateway) |
 | **CI/CD** | GitHub Actions (repo-root `.github/workflows/`) — CI on every push touching this folder (offline, no API key), Deploy manual `workflow_dispatch` |
 
-| Service | Purpose |
-|---|---|
-| **ECS Fargate** | Runs the single container hosting all four demos (0.25 vCPU / 0.5 GB, the smallest Fargate SKU) |
-| **Application Load Balancer** | Public HTTP entry point; the one cost that runs continuously while the stack exists |
-| **ECR** | Container image registry (ARM64) |
-| **Secrets Manager** | `OPENAI_API_KEY` and the demo sign-in password — never in the task definition or plaintext state output |
-| **CloudWatch Logs** | 7-day retention, keeping log storage cost near zero for a demo deployment |
-| **IAM** | Execution/task roles, plus a GitHub Actions OIDC role (no long-lived AWS keys as a repo secret) |
-| **Default VPC** | Reused instead of a dedicated VPC; tasks get a public IP directly, locked down by security group to accept traffic only from the ALB — no NAT Gateway (~$32/month avoided) |
+See [Infrastructure (Terraform)](#infrastructure-terraform) below for what each AWS service does and
+how to provision/tear down the stack.
 
 ## Prerequisites
 
@@ -267,21 +260,61 @@ make docker-run   # reads .env
 # or: docker compose up --build
 ```
 
-## Deploying to AWS (ECS Fargate)
+## Infrastructure (Terraform)
 
-This is a **deploy-on-demand** setup, not an always-on service — spin it up for a demo, tear it down
-after, so there's no idle cloud bill or standing LLM spend. Everything is sized for the lowest-cost
-viable SKU:
+Everything in `terraform/` provisions a **deploy-on-demand** AWS stack from a clean account: one
+`terraform apply` stands up the whole thing, one `terraform destroy` removes it completely, and
+nothing is meant to sit running between demo sessions. Every choice in the config is the lowest-cost
+option that still behaves like a real deployment:
 
 - **Fargate**: 0.25 vCPU / 0.5 GB — the smallest task size AWS offers, shared by all four demos
 - **No NAT Gateway**: reuses the account's default VPC and gives the task a public IP directly (locked
-  down by security group to only accept traffic from the ALB)
+  down by security group to only accept traffic from the ALB) — avoids ~$32/month
 - **No ACM/Route 53**: HTTP-only ALB listener, so this doesn't require owning a domain
-- **7-day CloudWatch log retention**, **ECR lifecycle policy** capping untagged image storage
+- **7-day CloudWatch log retention**, **ECR lifecycle policy** capping untagged image storage,
+  **`recovery_window_in_days = 0`** on both Secrets Manager secrets so `destroy` deletes them
+  immediately instead of holding them (and their cost) for 7–30 days
+- **`force_delete = true`** on the ECR repository, so `destroy` doesn't fail with
+  `RepositoryNotEmptyException` once more than one image tag has been pushed (every deploy pushes
+  both `:latest` and a `:<sha>` tag)
 - **GitHub Actions deploys via OIDC** — no long-lived AWS access keys stored as a repo secret
 
 The one cost that *does* run continuously while the stack exists is the ALB (a flat hourly charge
-regardless of traffic) — `terraform destroy` after each demo session avoids paying for it between uses.
+regardless of traffic) — that's why `terraform destroy` between sessions is the default recommendation
+rather than leaving the stack up.
+
+### What it provisions
+
+| Service | Purpose |
+|---|---|
+| **ECS Fargate** | Runs the single container hosting all four demos (0.25 vCPU / 0.5 GB, the smallest Fargate SKU) |
+| **Application Load Balancer** | Public HTTP entry point; the one cost that runs continuously while the stack exists |
+| **ECR** | Container image registry (ARM64) |
+| **Secrets Manager** | `OPENAI_API_KEY` and the demo sign-in password — never in the task definition or plaintext state output |
+| **CloudWatch Logs** | 7-day retention, keeping log storage cost near zero for a demo deployment |
+| **IAM** | Execution/task roles, plus a GitHub Actions OIDC role (no long-lived AWS keys as a repo secret) |
+| **Default VPC** | Reused instead of a dedicated VPC; tasks get a public IP directly, locked down by security group to accept traffic only from the ALB — no NAT Gateway |
+
+### Configuration
+
+All variables live in `terraform/variables.tf`. Only `openai_api_key` is required; everything else
+has a sensible default:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `openai_api_key` | *(required, sensitive)* | Stored in Secrets Manager, never in the task definition or state-visible plaintext output |
+| `github_repository` | `""` | `"owner/repo"`, scopes the GitHub Actions OIDC trust policy. Leave blank to skip creating the OIDC role entirely |
+| `aws_region` | `us-east-1` | Typically the cheapest region for Fargate on-demand pricing |
+| `project_name` | `pydantic-ai-showcase` | Used to name/tag every resource |
+| `fargate_cpu` / `fargate_memory` | `256` / `512` | Smallest Fargate task size (0.25 vCPU / 0.5 GB); bump only if the shared task OOMs |
+| `desired_count` | `1` | Number of running tasks — set to `0` to stop compute billing without destroying the stack |
+| `research_model` | `openai:gpt-5.2` | Used only by Research Analyst's web-research/report-writing steps |
+| `fast_model` | `openai:gpt-5-mini` | Default model for every other demo, and Research Analyst's own planning/evaluation |
+| `max_revisions` | `1` | Caps Research Analyst's evaluate/revise loop |
+| `log_retention_days` | `7` | Keeps CloudWatch Logs cost near zero |
+| `demo_username` / `demo_password` | `demo@contoso.com` / `contoso` | The single demo sign-in account (see `app/auth.py`) — not real authentication |
+
+### Setup and key commands
 
 ```bash
 cd terraform
@@ -289,11 +322,11 @@ terraform init
 terraform plan  -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
 terraform apply -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
 
-# get the URL
+# get the public URL
 terraform output alb_dns_name
 
-# tear down when you're done demoing
-terraform destroy -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
+# see every output (ECR repo, cluster/service names, GitHub OIDC role ARN)
+terraform output
 ```
 
 After the first `apply`, set these as GitHub repo variables/secrets (prefixed `SHOWCASE_` since this
@@ -307,6 +340,23 @@ Both workflows live at the **repo root's** `.github/workflows/` (not inside this
 GitHub Actions only discovers workflow files there, which matters in a monorepo like this one. Each
 is scoped to this project with a `paths: ["AWS-PydanticAi-Showcase/**"]` trigger filter and a
 `working-directory` default, the same pattern the repo's other projects use.
+
+### Pausing vs. tearing down
+
+```bash
+# pause: stop the Fargate task without deleting anything else (ALB keeps billing)
+terraform apply -var="desired_count=0" -var="openai_api_key=$OPENAI_API_KEY"
+
+# resume
+terraform apply -var="desired_count=1" -var="openai_api_key=$OPENAI_API_KEY"
+
+# full teardown — this is what actually stops the ALB's hourly charge
+terraform destroy -var="openai_api_key=$OPENAI_API_KEY" -var="github_repository=<you>/<repo>"
+```
+
+`desired_count=0` is useful mid-session (stop paying for compute without losing the ALB/ECR/IAM setup
+and having to re-provision), but only `terraform destroy` stops the ALB charge — see
+[Cost Estimate](#cost-estimate) below.
 
 ## GitHub Actions CI/CD (Deploy-on-Demand)
 
@@ -388,12 +438,7 @@ variable, billed "thinking" time before producing output, and left unset it defa
 short, structured demo task needs. This was the single biggest lever on real spend: four one-off runs
 (one per demo) cost about $2 in OpenAI credit before these were set, and noticeably less after.
 
-Always tear down when done:
-
-```bash
-terraform destroy -var="openai_api_key=$OPENAI_API_KEY"
-```
-
+Always tear down when done — see [Pausing vs. tearing down](#pausing-vs-tearing-down) above.
 
 ## Research Analyst — `pydantic_graph` pipeline
 
