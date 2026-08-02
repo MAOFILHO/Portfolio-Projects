@@ -38,13 +38,25 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image
+      # The ECS task runs on ARM64/Graviton (terraform/ecs.tf's runtime_platform,
+      # picked for the ~20% cheaper Fargate pricing) — but ubuntu-latest runners
+      # are x86_64, so a plain `docker build` here produces an amd64 image that
+      # crashes on the task with "exec format error". QEMU + buildx cross-builds
+      # for ARM64 instead.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image (ARM64)
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build -t "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
-          docker push "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
-          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          docker buildx build --platform linux/arm64 \
+            -t "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" \
+            -t "$REGISTRY/$ECR_REPOSITORY:latest" \
+            --push .
 
       - name: Roll the ECS service
         run: |
