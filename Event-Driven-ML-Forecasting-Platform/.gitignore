@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Environment files (never commit real secrets/config)
+.env
+backend/.env
+frontend/.env
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# Kafka streaming layer output (windowed-features Parquet snapshot + streaming
+# checkpoint) -- regenerable, same category as backend/outputs/ in general.
+backend/outputs/streaming/
+
+# OS
+.DS_Store

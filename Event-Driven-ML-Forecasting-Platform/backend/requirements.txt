@@ -1,0 +1,25 @@
+setuptools==69.5.1
+# PySpark is the sole ingest/ETL engine (see src/spark_session.py). Requires a
+# JDK 17 runtime on PATH. Pinned to 3.5.x deliberately: its [sql] extra requires
+# numpy<2, matching the numpy pin below, and its Kafka connector artifacts are
+# published for Scala 2.12 (PySpark 4.x moves to 2.13).
+pyspark[sql]==3.5.9
+# Kafka producer client for src/kafka_producer.py. Ships prebuilt librdkafka
+# binaries in its wheel (confirmed available for macOS arm64 / cp312), so no
+# separate system librdkafka install is needed.
+confluent-kafka==2.15.0
+tensorflow==2.16.1
+torch==2.3.1
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+pmdarima==2.0.4
+statsmodels==0.14.2
+scikit-learn==1.5.1
+seaborn==0.13.2
+matplotlib==3.11.0
+fastapi==0.111.1
+uvicorn[standard]==0.30.3
+pydantic==2.8.2
+python-dotenv==1.0.1
+pytest==8.3.2

@@ -1,0 +1,73 @@
+name: Event-Driven-ML-Forecasting-Platform CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Event-Driven-ML-Forecasting-Platform/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Event-Driven-ML-Forecasting-Platform/**"
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Event-Driven-ML-Forecasting-Platform/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: Event-Driven-ML-Forecasting-Platform/backend/requirements.txt
+
+      # PySpark is the project's ingest/ETL engine and needs a JVM. Spark 3.5.x
+      # runs on Java 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Spark ETL parity tests
+        run: pytest tests/test_spark_etl.py -v
+
+      - name: Run smoke tests
+        run: pytest tests/test_smoke.py -v
+
+      # Kafka producer/consumer transform logic is unit-tested against pure
+      # functions and static batch DataFrames -- no live broker needed, so
+      # these run in CI same as everything else. Full producer -> broker ->
+      # consumer integration is a local-only manual verification step (see
+      # README), not part of CI, consistent with the project's $0-cost /
+      # no-external-services CI philosophy.
+      - name: Run Kafka layer unit tests
+        run: pytest tests/test_kafka_producer.py tests/test_kafka_consumer.py tests/test_streaming_endpoint.py -v
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Event-Driven-ML-Forecasting-Platform/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: Event-Driven-ML-Forecasting-Platform/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build

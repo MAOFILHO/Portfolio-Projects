@@ -1,0 +1,27 @@
+# Dependencies for dags/forecasting_pipeline_dag.py's tasks -- a deliberate
+# SUBSET of backend/requirements.txt, not a verbatim reuse.
+#
+# fastapi, uvicorn, pydantic, confluent-kafka, and pytest are excluded on
+# purpose: the DAG never imports backend/api/ or the Kafka modules, and
+# installing fastapi/pydantic into this image would collide with Airflow's
+# OWN bundled FastAPI/Pydantic (Airflow's webserver and REST API are
+# themselves FastAPI-based) -- the same class of collision Phase 1 avoided by
+# NOT installing Airflow into backend/requirements.txt, in the other
+# direction.
+#
+# torch is installed separately in the Dockerfile from the CPU-only PyTorch
+# wheel index, not listed here -- see the Dockerfile's comment for why.
+#
+# Versions match backend/requirements.txt's existing pins (single source of
+# truth for what "the same dependency version" means in this project).
+pyspark[sql]==3.5.9
+tensorflow==2.16.1
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+pmdarima==2.0.4
+statsmodels==0.14.2
+scikit-learn==1.5.1
+seaborn==0.13.2
+matplotlib==3.11.0
+python-dotenv==1.0.1

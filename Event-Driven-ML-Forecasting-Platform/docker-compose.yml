@@ -1,0 +1,40 @@
+# Local, single-node Kafka broker for the streaming ingestion layer
+# (backend/src/kafka_producer.py -> topic -> backend/src/kafka_consumer.py).
+#
+# Runs entirely on this machine, $0 cost -- no cloud broker, no managed Kafka.
+#
+# Official apache/kafka image, not bitnami/kafka: Bitnami deprecated most of
+# its free-tier catalog in 2025 (Broadcom's licensing change), and the
+# official image has been KRaft-native (no Zookeeper) since 3.7, which is
+# simpler for a single-node local setup anyway.
+#
+# KRaft "combined mode": one process is both broker and controller, which is
+# the standard shape for a single-node dev broker (a real cluster would split
+# these roles across nodes). Data is ephemeral (no volume) -- this is a
+# replay/demo topic, not a system of record; `docker compose down` clears it,
+# which is the expected reset between demo runs.
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: forecasting-dashboard-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      # Advertised as localhost:9092 because the producer/consumer run natively
+      # on the host (in the backend venv), not inside this container.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
