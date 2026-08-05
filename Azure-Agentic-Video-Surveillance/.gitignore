@@ -50,3 +50,7 @@ tests/fixtures/*.jpeg
 .vscode/
 .idea/
 ingestors/nest/received_frames/
+
+# Claude Code local config, Playwright MCP run output (snapshots/console logs)
+.claude/
+.playwright-mcp/
