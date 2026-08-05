@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import threading
 
@@ -34,7 +35,7 @@ def _running_under_pytest() -> bool:
 
 
 def _ensure_java_home() -> None:
-    """Set JAVA_HOME if it's unset or points nowhere, by resolving `java` on PATH.
+    """Set JAVA_HOME if it's unset or points nowhere.
 
     Every entry point in this project (the API, run_pipeline.py, pytest, and
     the Airflow DAG's container) needs a JVM for PySpark, but "the right
@@ -42,16 +43,42 @@ def _ensure_java_home() -> None:
     container's, etc. -- and there is no single conventional symlink reliably
     present everywhere (e.g. Debian's /usr/lib/jvm/default-java only exists
     if the default-jdk metapackage was installed, not a specific
-    openjdk-*-jdk package, which is what the Airflow image installs). Rather
-    than hardcode a path per environment, resolve it the same way a shell
-    would: find `java` on PATH, follow symlinks, and derive JAVA_HOME from
-    its real location (a JDK's `java` binary always lives at
-    $JAVA_HOME/bin/java). This only acts if JAVA_HOME is missing or already
-    broken -- an operator's own correct JAVA_HOME is never overridden.
+    openjdk-*-jdk package, which is what the Airflow image installs). This
+    only acts if JAVA_HOME is missing or already broken -- an operator's own
+    correct JAVA_HOME is never overridden.
+
+    macOS gets special handling: `/usr/bin/java` is Apple's own launcher
+    stub, not a JDK, and it is *not* a symlink (`os.path.realpath` on it
+    returns itself unchanged) -- so naively resolving `java` on PATH and
+    stripping `/bin/java` computes JAVA_HOME=/usr, which spark-class then
+    re-expands right back into `/usr/bin/java`, the same stub, disguised as
+    a fix. That stub has been observed to hang indefinitely (JVM launched,
+    but the process never proceeds) rather than erroring, which silently
+    defeats the whole point of this function. `/usr/libexec/java_home` is
+    macOS's own authoritative JDK resolver -- it inspects registered JVMs
+    directly and is what a shell prompt would use -- so it wins over PATH
+    resolution here.
     """
     current = os.environ.get("JAVA_HOME")
     if current and os.path.exists(os.path.join(current, "bin", "java")):
         return
+
+    if sys.platform == "darwin":
+        java_home_tool = "/usr/libexec/java_home"
+        if os.path.exists(java_home_tool):
+            try:
+                result = subprocess.run(
+                    [java_home_tool], capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    os.environ["JAVA_HOME"] = result.stdout.strip()
+                    logger.info(
+                        "JAVA_HOME auto-detected as %s (via /usr/libexec/java_home)",
+                        os.environ["JAVA_HOME"],
+                    )
+                    return
+            except (subprocess.SubprocessError, OSError):
+                pass  # fall through to the PATH-based resolution below
 
     java_binary = shutil.which("java")
     if not java_binary:
