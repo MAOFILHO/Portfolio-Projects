@@ -140,14 +140,19 @@ half runs alongside it, on the same underlying code:
 backend/    Python pipeline (converted from the notebook) + FastAPI service
             with an on-demand job runner for live model execution, PySpark
             ETL, and the Kafka producer/consumer streaming scripts
+
 frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
             Contoso theme) — sidebar model picker, run/compare/EDA/learn pages
+
 dags/       Airflow DAG (validate -> Spark ETL -> train 5 models -> export),
             reusing backend/'s pipeline code, not reimplementing it
+
 airflow/    Local Airflow stack (custom Docker image + docker-compose.yml)
+
 cloud/      Optional Azure deploy tooling (Bicep + a resumable CLI) for
             standing the whole stack up on a single VM for a demo, then
-            tearing it down -- see "Cloud Deploy (Azure)" below
+            tearing it down -- see "Azure Deployment (Cloud)" below
+
 docker-compose.yml   Local Kafka broker (KRaft mode), for the streaming layer
 ```
 
