@@ -62,6 +62,16 @@ rm -rf "$APP_DIR/Portfolio-Projects"
 git clone --depth 1 "$REPO_URL" "$APP_DIR/Portfolio-Projects" \
     || fail "git clone failed"
 
+# git clone runs as root, so the checked-in output PNGs/JSONs under
+# backend/outputs/ come out root-owned -- fine for the backend/kafka
+# containers (they run as root), but Airflow's containers run as a
+# non-root UID (AIRFLOW_UID, default 50000, see docker-compose.cloud.yml's
+# airflow-common anchor) and can't overwrite existing root-owned files
+# there, failing with PermissionError partway through run_pyspark_etl
+# (observed firsthand: writing observed_temperature.png). World-writable
+# is fine here -- single-tenant demo VM, not a shared multi-user box.
+chmod -R a+rwX "$PROJECT_DIR/backend/outputs"
+
 cd "$COMPOSE_DIR" || fail "compose dir $COMPOSE_DIR not found after clone"
 
 # Explicit, not relying on Docker Compose's default file-discovery: our
