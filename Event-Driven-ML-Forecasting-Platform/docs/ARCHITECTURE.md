@@ -25,59 +25,59 @@ its own API endpoint.
             │  MajorCity.csv (raw dataset) │
             └───────────────┬──────────────┘
                             │
-              ┌─────────────┴──────────────┐
-              ▼                             ▼
-┌───────────────────────────────┐  ┌──────────────────────────────────┐
-│  BATCH ETL (backend/src/)     │  │  STREAMING (backend/src/)        │
-│  Spark, in-process             │  │  Kafka + Spark Structured        │
-│                                 │  │  Streaming                       │
+               ┌────────────┴──────────────────────────┐
+               ▼                                       ▼
+┌────────────────────────────────┐  ┌───────────────────────────────────┐
+│  BATCH ETL (backend/src/)      │  │  STREAMING (backend/src/)         │
+│  Spark, in-process             │  │  Kafka + Spark Structured         │
+│                                │  │  Streaming                        │
 │  data_loading.py → validation  │  │                                   │
-│  .py → preprocessing.py        │  │  kafka_producer.py -> Kafka topic│
+│  .py → preprocessing.py        │  │  kafka_producer.py -> Kafka topic │
 │  → eda.py                      │  │  'temperature-telemetry' (all     │
 │  (Spark ingest/clean/trim,     │  │  cities) -> kafka_consumer.py     │
 │   ONE .toPandas() handoff      │  │  (tumbling windows, per-city      │
 │   at the end)                  │  │  avg/min/max/count) -> Parquet    │
-└───────────────┬─────────────────┘  └──────────────┬────────────────────┘
-                │  preprocessed DataFrame              │  windowed features
-                │  (recomputed per entry point)         │  (Parquet snapshot)
-                ▼                                        ▼
+└───────────────┬────────────────┘  └───────────────────────┬───────────┘
+                │  preprocessed DataFrame                   │        windowed features
+                │  (recomputed per entry point)             │       (Parquet snapshot)
+                ▼                                           ▼
 ┌──────────────────────────────────────────────────┐   ┌─────────────────────┐
-│  MODEL LAYER — model_registry.py (dispatch table) │   │  api/main.py:       │
-│                                                    │   │  GET /api/streaming/│
-│  ARIMA · SARIMAX #1 · SARIMAX #2 ·                │   │  windowed-features   │
-│  LSTM (TensorFlow) · LSTM (PyTorch)                │   │  (reads Parquet     │
-└───────────────┬────────────────────────────────────┘   │  with pandas)       │
-                │  RunContext in / ModelResult out         └──────────┬──────────┘
+│  MODEL LAYER — model_registry.py (dispatch table)│   │  api/main.py:       │
+│                                                  │   │  GET /api/streaming/│
+│  ARIMA · SARIMAX #1 · SARIMAX #2 ·               │   │  windowed-features  │
+│  LSTM (TensorFlow) · LSTM (PyTorch)              │   │  (reads Parquet     │
+└───────────────┬──────────────────────────────────┘   │  with pandas)       │
+                │  RunContext in / ModelResult out     └──────────────┬──────┘
                 ▼                                                     │
-┌───────────────────────────────────────────────────────────────┐    │
+┌────────────────────────────────────────────────────────────────┐    │
 │  EXECUTION + PERSISTENCE (backend/api/)                        │    │
-│                                                                 │    │
-│  jobs.py — ThreadPoolExecutor job runner (async, non-blocking)│    │
+│                                                                │    │
+│  jobs.py — ThreadPoolExecutor job runner (async, non-blocking) │    │
 │  results_store.py — outputs/results/{model_key}.json           │    │
 │  main.py — FastAPI: /api/models, /api/models/{k}/run,          │    │
 │            /api/jobs/{id}, /api/comparison, /api/eda/*         │    │
-│                                                                 │    │
+│                                                                │    │
 │  ▲ also written to directly by dags/forecasting_pipeline_dag.py│    │
-│    (Airflow) via a bind-mounted outputs/ directory              │    │
+│    (Airflow) via a bind-mounted outputs/ directory             │    │
 └───────────────────────────┬────────────────────────────────────┘    │
-                            │ REST/JSON                                │
-                            ▼                                          ▼
+                            │ REST/JSON                               │
+                            ▼                                         ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │  FRONTEND (frontend/src/) — React + TypeScript + Vite                  │
 │                                                                        │
 │  Sidebar (model picker, live status) → ModelPage (run + view)          │
-│  ComparePage · EdaPage · LearnPage · StreamingPage (Live Telemetry)     │
+│  ComparePage · EdaPage · LearnPage · StreamingPage (Live Telemetry)    │
 └────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
-│  ORCHESTRATION (dags/, airflow/) — Airflow, LocalExecutor         │
-│                                                                    │
-│  forecasting_pipeline DAG: validate_raw_data → run_pyspark_etl →  │
-│  train_forecasting_models (5 parallel tasks, one per registry     │
-│  entry) → export_dashboard_results                                │
-│                                                                    │
-│  Every task wraps the SAME functions the batch path above calls   │
-│  directly -- no model/ETL logic is reimplemented for Airflow.     │
+│  ORCHESTRATION (dags/, airflow/) — Airflow, LocalExecutor        │
+│                                                                  │
+│  forecasting_pipeline DAG: validate_raw_data → run_pyspark_etl → │
+│  train_forecasting_models (5 parallel tasks, one per registry    │
+│  entry) → export_dashboard_results                               │
+│                                                                  │
+│  Every task wraps the SAME functions the batch path above calls  │
+│  directly -- no model/ETL logic is reimplemented for Airflow.    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -201,7 +201,7 @@ kafka_producer.py --------> Kafka topic ----------> kafka_consumer.py
 (replays CSV rows as        'temperature-           (Spark Structured
  JSON, confluent_kafka       telemetry'               Streaming, own
  Producer, configurable                                SparkSession)
- rate)                                                      |
+ rate)                                                        |
                                                               v
                                               tumbling window (10s) x City
                                               avg / min / max / count
