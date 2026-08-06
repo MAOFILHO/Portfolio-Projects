@@ -3,6 +3,18 @@
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml)
 
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
+![PySpark](https://img.shields.io/badge/PySpark-3.5-E25A1C?style=flat&logo=apachespark&logoColor=white&labelColor=1a1a2e)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-2.16-FF6F00?style=flat&logo=tensorflow&logoColor=white&labelColor=1a1a2e)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.3-EE4C2C?style=flat&logo=pytorch&logoColor=white&labelColor=1a1a2e)
+![Apache Kafka](https://img.shields.io/badge/Kafka-3.9-000000?style=flat&logo=apachekafka&logoColor=white&labelColor=1a1a2e)
+![Apache Airflow](https://img.shields.io/badge/Airflow-2.11-017CEE?style=flat&logo=apacheairflow&logoColor=white&labelColor=1a1a2e)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat&logo=fastapi&logoColor=white&labelColor=1a1a2e)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=white&labelColor=1a1a2e)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white&labelColor=1a1a2e)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white&labelColor=1a1a2e)
+![Azure](https://img.shields.io/badge/Azure-optional_deploy-0078D4?style=flat&logo=microsoftazure&logoColor=white&labelColor=1a1a2e)
+
 An interactive full-stack showcase of time-series forecasting with
 **statistical models (ARIMA/SARIMAX)** and **LSTM neural networks in both
 TensorFlow/Keras and PyTorch**, converted from a notebook into a
@@ -579,7 +591,80 @@ babysits it" benefit you'd be paying for in the first place.
 Neither architecture charges only for use — even the lean VM bills 24/7
 whether the pipeline is running or not, which doesn't match this project's
 actual usage pattern (manually triggered, occasional). That mismatch,
-more than the raw dollar figures, is why this stays local.
+more than the raw dollar figures, is why this stays local by default.
+
+## Cloud Deploy (Azure)
+
+The lean single-VM architecture above isn't just theoretical — `cloud/`
+contains a working, resumable deploy CLI (`forecast-deploy`) that stands the
+*entire* stack (backend, frontend, Kafka, Airflow, all via one unified
+`docker compose` stack) up on a single Azure VM, verified end-to-end against
+a real subscription. Meant for exactly the use case the cost section above
+describes: a short (1–2 day) demo/screenshot session, then torn down
+completely.
+
+```bash
+cd cloud/deploy
+pip install -e .
+
+forecast-deploy smoke-test --stage pre   # local tool checks (az CLI, ssh-keygen)
+forecast-deploy deploy                   # resumable; prints the dashboard/Airflow
+                                          # URLs and a freshly-generated Airflow
+                                          # admin password when done
+forecast-deploy smoke-test --stage post  # re-validates the live URLs any time
+
+# ...take your screenshots, trigger a DAG run, poke around...
+
+forecast-deploy teardown -y
+forecast-deploy smoke-test --stage teardown   # confirms nothing billable is left
+```
+
+**What it provisions**: a VNet/NSG/Public IP, one VM (`Standard_D4s_v3` by
+default — see `cloud/deploy/src/forecast_deploy/config.py` for why v3, not
+v5), and a Log Analytics workspace, via Bicep (`cloud/infra/`). The VM
+builds and starts the whole stack itself on first boot (`cloud/cloud-init/
+bootstrap.sh`) — no container registry, no pre-built images to push.
+
+**Handles re-deploys without failing on name collisions**: if a prior
+deploy is still live under the default resource group name, `deploy`
+doesn't stop — it tries the next name (`rg-forecasting-platform-2`, `-3`,
+...) instead. `teardown` also proactively recovers/frees up any
+soft-deleted Log Analytics workspace name from a previous run, so a normal
+deploy → teardown → deploy cycle reuses the same base name rather than
+accumulating suffixes forever. See `cloud/deploy/src/forecast_deploy/
+naming.py`.
+
+**Security, given the VM is open to the internet**: Airflow's admin
+password and webserver secret key are randomly generated at boot, never the
+repo's local-dev `admin/admin` placeholder — printed once at the end of
+`deploy`, never committed anywhere. Kafka stays unpublished regardless
+(nothing outside the VM's own Docker network needs to reach it directly).
+
+**GitHub Actions**: `.github/workflows/event-driven-ml-forecasting-platform-
+{deploy,teardown}.yml` run the same CLI via `workflow_dispatch`, using OIDC
+against a dedicated, narrowly-scoped Azure AD app/custom role (VM/network/
+Log Analytics/deployments only — no Storage, Key Vault, or role-assignment
+access, so a compromised or misused run here can't reach anything outside
+this project even within the same subscription).
+
+<img width="100%" alt="Dashboard served from the live Azure deployment" src="PASTE_URL_HERE" />
+<p><em>The dashboard, served from a single Azure VM at its public IP —
+same app, same code, no changes needed to run in the cloud vs. locally.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Airflow DAG run completing successfully on the cloud VM" src="PASTE_URL_HERE" />
+<p><em>A full <code>forecasting_pipeline</code> DAG run, triggered and
+completed on the live cloud deployment — same DAG, same 5-parallel-task
+shape, as the local runs earlier in this README.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Live Telemetry page showing windowed Kafka data from the cloud deployment" src="PASTE_URL_HERE" />
+<p><em>Live Telemetry, populated by the same Kafka producer/consumer code
+running as containers on the VM instead of bare host processes.</em></p>
 
 ## Web App Screenshots
 
