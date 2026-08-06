@@ -655,7 +655,7 @@ same app, same code, no changes needed to run in the cloud vs. locally.</em></p>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
-<img width="100%" alt="Airflow DAG run completing successfully on the cloud VM" src="PASTE_URL_HERE" />
+<img width="100%" alt="Airflow DAG run completing successfully on the cloud VM" src="docs/file2.png" />
 <p><em>A full <code>forecasting_pipeline</code> DAG run, triggered and
 completed on the live cloud deployment — same DAG, same 5-parallel-task
 shape, as the local runs earlier in this README.</em></p>
@@ -663,7 +663,7 @@ shape, as the local runs earlier in this README.</em></p>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
-<img width="100%" alt="Live Telemetry page showing windowed Kafka data from the cloud deployment" src="PASTE_URL_HERE" />
+<img width="100%" alt="Live Telemetry page showing windowed Kafka data from the cloud deployment" src="docs/file3.png" />
 <p><em>Live Telemetry, populated by the same Kafka producer/consumer code
 running as containers on the VM instead of bare host processes.</em></p>
 
