@@ -64,7 +64,16 @@ git clone --depth 1 "$REPO_URL" "$APP_DIR/Portfolio-Projects" \
 
 cd "$COMPOSE_DIR" || fail "compose dir $COMPOSE_DIR not found after clone"
 
-[ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "__PUBLIC_IP__" ] || fail "PUBLIC_IP placeholder was not substituted -- check infra/main.bicep's replace() call"
+# Deliberately not comparing against the literal placeholder string here:
+# Bicep's replace() (and any equivalent blind string substitution) replaces
+# EVERY occurrence of __PUBLIC_IP__ in the file, including one written into
+# a string-literal comparison -- neutralizing that comparison the same way
+# it (correctly) neutralizes the real placeholder at the top of this file.
+# A dotted-decimal IPv4 address never contains an underscore, so that's the
+# distinguishing check instead.
+case "$PUBLIC_IP" in
+    ""|*_*) fail "PUBLIC_IP was not substituted (got: '$PUBLIC_IP') -- check infra/main.bicep's replace() call" ;;
+esac
 echo "public IP (baked in by Bicep at deploy time): $PUBLIC_IP"
 
 echo "--- generating secrets (never committed, never hardcoded) ---"
