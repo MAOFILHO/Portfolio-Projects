@@ -5,10 +5,19 @@
 # user-data script and runs it once during the cloud-final boot stage, no
 # cloud-config YAML wrapper needed.
 #
-# Nothing here is templated: everything that would otherwise need to be
-# baked in ahead of time (the VM's own public IP) is instead self-discovered
-# at boot via Azure's Instance Metadata Service, so this file is the same
-# for every deploy regardless of the resolved resource-name suffix.
+# One placeholder: __PUBLIC_IP__, substituted by infra/main.bicep's
+# replace() call before this is base64-encoded into the VM's customData.
+# An earlier version of this script self-discovered its own public IP at
+# boot via Azure's Instance Metadata Service instead -- dropped because
+# IMDS's network metadata (specifically ipv4/ipAddress/0/publicIpAddress)
+# is not guaranteed to be populated immediately after VM creation (observed
+# empty firsthand, "" rather than the real address, moments after a
+# successful deployment) even though the NIC/Public IP resources themselves
+# are already correctly associated. Bicep already knows the address at
+# deploy time (the network module completes, including Azure assigning the
+# Standard static Public IP's address, before the VM module runs) --
+# passing it straight through is more reliable than querying the VM to ask
+# Azure about itself.
 #
 # Progress/failure is signaled via marker files under $APP_DIR that the
 # deploy CLI's s04_bootstrap_stack step polls for over SSH/run-command:
@@ -21,6 +30,7 @@ APP_DIR="/opt/app"
 PROJECT_DIR="$APP_DIR/Portfolio-Projects/Event-Driven-ML-Forecasting-Platform"
 COMPOSE_DIR="$PROJECT_DIR/cloud/docker"
 LOG="/var/log/forecasting-bootstrap.log"
+PUBLIC_IP="__PUBLIC_IP__"
 
 exec > >(tee -a "$LOG") 2>&1
 
@@ -54,11 +64,8 @@ git clone --depth 1 "$REPO_URL" "$APP_DIR/Portfolio-Projects" \
 
 cd "$COMPOSE_DIR" || fail "compose dir $COMPOSE_DIR not found after clone"
 
-echo "--- resolving own public IP via Azure Instance Metadata Service ---"
-PUBLIC_IP=$(curl -s -H "Metadata:true" --noproxy "*" \
-    "http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?api-version=2021-02-01&format=text")
-[ -n "$PUBLIC_IP" ] || fail "could not resolve public IP from IMDS"
-echo "resolved public IP: $PUBLIC_IP"
+[ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "__PUBLIC_IP__" ] || fail "PUBLIC_IP placeholder was not substituted -- check infra/main.bicep's replace() call"
+echo "public IP (baked in by Bicep at deploy time): $PUBLIC_IP"
 
 echo "--- generating secrets (never committed, never hardcoded) ---"
 AIRFLOW_ADMIN_PASSWORD=$(openssl rand -base64 12)

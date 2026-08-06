@@ -89,10 +89,11 @@ module vm 'modules/vm.bicep' = {
     vmSize: vmSize
     vmPriority: vmPriority
     osDiskSizeGb: osDiskSizeGb
-    // Bicep loads and inlines the script content at compile time -- no
-    // templating step needed, see cloud-init/bootstrap.sh's own header
-    // comment for why it needs no placeholders.
-    customData: base64(loadTextContent('../cloud-init/bootstrap.sh'))
+    // Bicep loads the script at compile time and substitutes the one
+    // placeholder it has (__PUBLIC_IP__) with the address the network
+    // module already resolved -- see bootstrap.sh's header comment for why
+    // this replaced an earlier IMDS self-discovery approach.
+    customData: base64(replace(loadTextContent('../cloud-init/bootstrap.sh'), '__PUBLIC_IP__', network.outputs.publicIpAddress))
   }
 }
 
