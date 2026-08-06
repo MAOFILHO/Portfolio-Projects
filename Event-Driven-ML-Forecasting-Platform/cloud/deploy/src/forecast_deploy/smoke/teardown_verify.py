@@ -33,7 +33,17 @@ def run(config: DeployConfig) -> bool:
     else:
         rows.append(HealthRow("No leftover resource groups", HealthStatus.PASS, f"none matching '{config.resource_group_base}*'"))
 
-    tagged = run_json(["az", "resource", "list", "--tag", PROJECT_TAG, "-o", "json"], timeout=60)
+    # Filtered client-side, not via `az resource list --tag ...`: that flag
+    # combination errors out ("cannot use '--tag' with '--location'") on any
+    # machine with a default location configured via `az configure`
+    # (observed firsthand) -- not an Azure API limitation, just an az CLI
+    # arg-validation quirk, and not worth mutating the operator's global az
+    # CLI defaults to work around from inside this tool.
+    all_resources = run_json(["az", "resource", "list", "-o", "json"], timeout=60)
+    # `.get("tags", {})` alone isn't enough: many resources have an
+    # explicit "tags": null rather than omitting the key entirely, so the
+    # default only kicks in for a *missing* key, not a present-but-null one.
+    tagged = [r for r in all_resources if (r.get("tags") or {}).get("project") == "forecasting-platform"]
     if tagged:
         names = ", ".join(r["name"] for r in tagged)
         rows.append(HealthRow(
