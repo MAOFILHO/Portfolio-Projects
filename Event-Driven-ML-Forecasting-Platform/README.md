@@ -535,6 +535,52 @@ remains unchanged, in place, alongside this one. Everything from here on —
 the Spark migration, the streaming layer, the orchestration DAG — is new work
 on top of that starting point.
 
+## Cloud Estimated Cost
+
+Everything above runs entirely locally at **$0 cost**. Moving it to AWS or
+Azure was scoped and deliberately parked — not because it's technically
+hard, but because of what it actually costs to keep standing, priced out
+across two architectures:
+
+### 1. Lean self-hosted (single VM running the whole stack, always on)
+
+Same architecture as this README describes, just moved onto a rented VM
+instead of your own machine (one box running the whole `docker compose`
+stack, 24/7).
+
+| Resource | AWS (us-east-1) | Azure (East US) | Purpose |
+|---|---|---|---|
+| Compute (4 vCPU / 16GB, needed for Spark+TF+PyTorch+Kafka+Airflow together) | EC2 `t3.xlarge` — **~$122/mo** on-demand | VM `Standard_B4ms` — **~$121/mo** pay-as-you-go | Runs the whole `docker compose` stack, same as local |
+| Compute, Spot/discounted | EC2 Spot — **~$40–55/mo** (reclaimable anytime) | Azure Spot VM — **~$25–45/mo** (reclaimable anytime) | Same, cheaper but can be evicted |
+| Disk (30GB, for data/models/Kafka logs/Postgres) | EBS gp3 — **~$2.40/mo** | Managed Disk (Standard SSD) — **~$2.40/mo** | Data, model checkpoints, Airflow/Postgres storage |
+| Static/public IP | Elastic IP — **~$3.60/mo** if idle, free while attached | Static Public IP — **~$3/mo** | So the dashboard/Airflow UI have a stable address |
+| Egress bandwidth (demo-scale traffic) | **~$1–5/mo** | **~$1–5/mo** | Dashboard API calls, asset loads |
+| **Total, on-demand** | **~$125–130/mo** | **~$125–130/mo** | |
+| **Total, Spot/discounted** | **~$45–65/mo** | **~$30–55/mo** | |
+
+### 2. Fully-managed services (the "do it right" architecture)
+
+| Resource | AWS | Azure | Purpose |
+|---|---|---|---|
+| Backend/frontend hosting | ECS Fargate (small, always-on tasks) — **~$30–50/mo** | Container Apps (consumption) — **~$10–30/mo** | API + dashboard, scales somewhat with use |
+| Managed Kafka | **MSK**, smallest 2-broker cluster — **~$130–150/mo minimum**, even at zero traffic | **Event Hubs** (Kafka-compatible), Basic tier — **~$11–25/mo** | Streaming layer |
+| Managed Airflow | **MWAA**, smallest environment — **~$350–400/mo minimum**, even fully idle | *(no direct equivalent)* — self-host on AKS: **~$70–150/mo** for node pool (control plane is free) | Orchestration |
+| Metadata DB (Postgres) | RDS `db.t3.micro` — **~$12–15/mo** | Azure DB for PostgreSQL Flexible, B1ms — **~$12–15/mo** | Airflow's backing store |
+| **Total** | **~$520–615/mo** | **~$100–220/mo** | |
+
+**The AWS number is dominated by one line: MWAA's ~$350–400/mo floor,
+charged whether you trigger a DAG once a month or never.** That's a fixed
+tax for having *a* managed Airflow environment exist, completely decoupled
+from actual usage. Azure comes out much cheaper here mainly because it has
+no managed-Airflow product to bill you for — you'd self-host it on AKS,
+which reduces cost but also reduces the "fully managed, someone else
+babysits it" benefit you'd be paying for in the first place.
+
+Neither architecture charges only for use — even the lean VM bills 24/7
+whether the pipeline is running or not, which doesn't match this project's
+actual usage pattern (manually triggered, occasional). That mismatch,
+more than the raw dollar figures, is why this stays local.
+
 ## Web App Screenshots
 
 <img width="1436" height="723" alt="Screenshot 2026-07-10 at 11 16 42 PM" src="https://github.com/user-attachments/assets/8f5d979c-b762-4d27-a742-3d0f41b390db" />
