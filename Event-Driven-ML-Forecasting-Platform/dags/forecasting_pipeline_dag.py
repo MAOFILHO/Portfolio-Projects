@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -173,6 +173,22 @@ with DAG(
                 task_id=f"train_{key}",
                 python_callable=_train_model,
                 op_kwargs={"model_key": key},
+                # Each of these 5 tasks runs as its own Airflow subprocess and
+                # therefore builds its own independent SparkSession (the
+                # process-wide singleton in spark_session.py is per-process,
+                # not shared across tasks) -- so a single DAG run can launch
+                # up to 5 concurrent JVMs. On a memory-constrained local
+                # Docker VM that occasionally loses the race to open its
+                # local Arrow-collection socket in time, surfacing as
+                # py4j.protocol.Py4JNetworkError / ConnectionRefusedError
+                # during toPandas(). Retrying is the pragmatic fix here: the
+                # failure is transient (a timing race, not a logic bug --
+                # the same code path succeeds in the other 4/5 tasks of the
+                # same run), and reducing task parallelism or raising
+                # Docker's memory ceiling would trade away the "5 tasks in
+                # parallel" design for a rare flake.
+                retries=2,
+                retry_delay=timedelta(seconds=30),
             )
 
     export_task = PythonOperator(task_id="export_dashboard_results", python_callable=export_dashboard_results)

@@ -327,7 +327,7 @@ tears the broker down; the topic is ephemeral (no volume), so a fresh
 cd airflow
 docker compose build               # builds a custom Airflow image (~7GB, first time only)
 docker compose up -d
-# wait for airflow-init to finish, then open http://localhost:8080 (admin/admin)
+# wait for airflow-init to finish, then open http://localhost:8081 (admin/admin)
 
 docker compose exec airflow-scheduler airflow dags trigger forecasting_pipeline
 ```
@@ -401,6 +401,42 @@ Two additional, optional layers sit alongside the core dashboard:
   Airflow. Results land in `backend/outputs/results/*.json` via a bind mount
   from the Airflow container, the same files the dashboard already reads. See
   `airflow/` and quickstart step 7.
+
+## Airflow Orchestration Screenshots
+
+A manually-triggered `forecasting_pipeline` run, watched end-to-end in the
+Airflow UI (`http://localhost:8081`, `admin`/`admin`):
+
+<img width="100%" alt="Triggering forecasting_pipeline from the DAGs list" src="PASTE_URL_HERE" />
+<p><em>Triggering a new run from the DAGs list. <code>schedule=None</code> — this
+DAG is on-demand only, the same "click a button, don't wait for a timer"
+philosophy as the dashboard's own "Run Model" action.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Graph view of a completed forecasting_pipeline run, all tasks green" src="PASTE_URL_HERE" />
+<p><em>Graph view after completion: <code>validate_raw_data → run_pyspark_etl →
+train_forecasting_models (5 parallel tasks) → export_dashboard_results</code>,
+all green.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Gantt view showing the 5 training tasks running concurrently" src="PASTE_URL_HERE" />
+<p><em>Gantt view: the 5 model-training tasks (<code>train_arima</code>,
+both SARIMAX configs, both LSTM variants) run concurrently under
+<code>LocalExecutor</code> — <code>train_arima</code>'s <code>auto_arima</code>
+grid search is the long pole, the other four finish in well under two
+minutes.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Grid view with the latest run fully green" src="PASTE_URL_HERE" />
+<p><em>Grid view: the latest run's column is all green — 8/8 tasks
+succeeded, results written to <code>backend/outputs/results/*.json</code> and
+immediately visible on the dashboard.</em></p>
 
 ## How live model runs work
 

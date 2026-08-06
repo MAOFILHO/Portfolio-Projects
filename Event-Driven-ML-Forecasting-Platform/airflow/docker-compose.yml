@@ -12,7 +12,9 @@
 # independently startable; you won't always want both stacks running.
 #
 # $0 cost, entirely local. Start with: docker compose up -d (from this dir).
-# Airflow UI: http://localhost:8080 (admin/admin).
+# Airflow UI: http://localhost:8081 (admin/admin) -- mapped off the standard
+# 8080 because that port is commonly already in use by another local project;
+# see the airflow-webserver service's `ports:` entry below.
 
 x-airflow-common: &airflow-common
   build: .
@@ -74,7 +76,10 @@ services:
       airflow-init:
         condition: service_completed_successfully
     ports:
-      - "8080:8080"
+      # Host port 8081, not 8080: 8080 is occupied by an unrelated project on
+      # this machine. Container-internal port stays 8080 (see healthcheck
+      # below, which curls localhost:8080 from inside the container).
+      - "8081:8080"
     command: webserver
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
