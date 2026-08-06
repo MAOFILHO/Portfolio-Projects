@@ -49,9 +49,13 @@ Beyond the modelling itself, the value here is in the pipeline discipline
 around it:
 
 - **Translating raw temporal data into structured, model-ready inputs** —
-  fail-fast schema/quality validation (`backend/src/validation.py`), then
-  consistent scaling and rolling-window construction feeding every model,
-  statistical or deep learning, identically.
+  **PySpark** (not just pandas) is the sole ingest/ETL engine
+  (`backend/src/data_loading.py`, `preprocessing.py`, `validation.py`):
+  fail-fast schema/quality validation, then consistent scaling and
+  rolling-window construction feeding every model, statistical or deep
+  learning, identically. Built on Spark specifically so the same
+  transformation logic scales past what pandas can hold in memory on one
+  machine, without a rewrite.
 - **Identifying patterns that inform operational decisions** — trend,
   seasonality, and stationarity are surfaced explicitly (EDA + ADF/KPSS
   tests) before any model is fit, not left implicit in a black box.
@@ -64,6 +68,24 @@ around it:
   error metrics are exposed through the same API/dashboard shape, regardless
   of which model produced them.
 
+A real forecasting system, though, is judged as much by how it *operates* as
+by what it predicts — a model that's only ever run once by hand against a
+static CSV isn't production infrastructure yet. That's what the other two
+tools in the title add:
+
+- **Apache Kafka** (+ PySpark Structured Streaming) closes the gap between
+  "yesterday's forecast" and "what's happening right now" — a producer
+  replays the full dataset onto a topic as simulated real-time telemetry,
+  and a streaming consumer maintains live, continuously-updating per-city
+  stats, the same reactive-to-incoming-data pattern a real deployment would
+  need for live sensor/IoT feeds instead of a fixed historical file.
+- **Apache Airflow** turns "run these four scripts in the right order and
+  hope nobody forgets a step" into a scheduled, retriable, observable DAG —
+  the exact same validate → ETL → train-5-models → export pipeline this
+  project already runs, just orchestrated instead of operated by hand, with
+  automatic retries around the one known transient failure mode (concurrent
+  Spark JVM contention) and a UI for watching and re-triggering runs.
+
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system
 design, data pipeline stages, and framework trade-off discussion.
 
@@ -72,14 +94,17 @@ design, data pipeline stages, and framework trade-off discussion.
 Historical monthly surface temperature data for Bombay (Mumbai), 1970–2012,
 is used to:
 
-1. Explore trends, seasonality, and stationarity (moving averages, seasonal
+1. Load and clean the raw dataset through **PySpark** — schema/quality
+   validation, then trimming, resampling, and a chronological train/test
+   split, all as Spark DataFrame operations, not pandas.
+2. Explore trends, seasonality, and stationarity (moving averages, seasonal
    decomposition, ADF/KPSS tests).
-2. Fit an `auto_arima`-selected ARIMA model and two SARIMAX models, each
+3. Fit an `auto_arima`-selected ARIMA model and two SARIMAX models, each
    forecasting 36 months ahead.
-3. Train the same LSTM architecture (3 stacked LSTM layers + 2 dense layers)
+4. Train the same LSTM architecture (3 stacked LSTM layers + 2 dense layers)
    **twice** — once in TensorFlow/Keras, once in PyTorch — to produce a
    rolling forecast over the same test period.
-4. Compare all five models' forecast accuracy (MSE/RMSE) side by side.
+5. Compare all five models' forecast accuracy (MSE/RMSE) side by side.
 
 From the dashboard's sidebar you can select any of the 5 models, **run it
 live** (real fitting/training happens on the backend, not a canned replay),
@@ -91,13 +116,39 @@ regularization, evaluation, hyperparameter tuning, saving/loading, CNNs vs.
 RNNs/LSTMs, visualization) using this project's actual code as the running
 example.
 
+That model-comparison workflow is the batch half of the project. The other
+half runs alongside it, on the same underlying code:
+
+- **Kafka streaming**: a producer replays the full dataset (all ~100
+  cities, not just Bombay) onto a Kafka topic as simulated real-time
+  telemetry; a PySpark Structured Streaming consumer maintains 10-second
+  tumbling windows of per-city temperature stats, surfaced live on the
+  dashboard's **Live Telemetry** page — a separate, continuously-updating
+  view from the 5-model forecast comparison above.
+- **Airflow orchestration**: the exact validate → Spark ETL →
+  train-5-models → export sequence above, run as a `forecasting_pipeline`
+  DAG instead of a manual script — triggered from the Airflow UI, watched
+  task-by-task in the Grid/Graph view, with automatic retries built in for
+  the one known transient failure mode. Every task in the DAG calls the
+  same pipeline functions the API and `run_pipeline.py` already use, so
+  running it via Airflow produces the identical result the dashboard would
+  show from a manual run.
+
 ## Project layout
 
 ```
 backend/    Python pipeline (converted from the notebook) + FastAPI service
-            with an on-demand job runner for live model execution
+            with an on-demand job runner for live model execution, PySpark
+            ETL, and the Kafka producer/consumer streaming scripts
 frontend/   React + TypeScript dashboard (Vite, Recharts, react-router,
             Contoso theme) — sidebar model picker, run/compare/EDA/learn pages
+dags/       Airflow DAG (validate -> Spark ETL -> train 5 models -> export),
+            reusing backend/'s pipeline code, not reimplementing it
+airflow/    Local Airflow stack (custom Docker image + docker-compose.yml)
+cloud/      Optional Azure deploy tooling (Bicep + a resumable CLI) for
+            standing the whole stack up on a single VM for a demo, then
+            tearing it down -- see "Cloud Deploy (Azure)" below
+docker-compose.yml   Local Kafka broker (KRaft mode), for the streaming layer
 ```
 
 ## 🛠️ Tech Stack
@@ -206,15 +257,23 @@ event-driven-ml-forecasting-platform/
 │
 ├── docker-compose.yml              # Local Kafka broker (KRaft mode)
 │
-├── docs/
-│   └── ARCHITECTURE.md             # Full system design + framework trade-off discussion
+├── cloud/                          # Optional: Azure single-VM deploy tooling
+│   ├── infra/                      # Bicep (VNet/NSG/PublicIP/VM/Log Analytics)
+│   ├── cloud-init/                 # bootstrap.sh -- first-boot provisioning script
+│   ├── docker/                     # docker-compose.cloud.yml + backend/frontend Dockerfiles
+│   └── deploy/                     # forecast-deploy -- resumable Typer CLI (deploy/teardown/smoke-test)
 │
-├── .github/
-│   └── workflows/
-│       └── ci.yml
+├── docs/
+│   ├── ARCHITECTURE.md             # Full system design + framework trade-off discussion
+│   └── *.png                       # README screenshots (dashboard, Airflow, cloud deploy)
 │
 └── README.md
 ```
+
+CI (`event-driven-ml-forecasting-platform-ci.yml`) and the two cloud deploy/
+teardown workflows live at the monorepo root's `.github/workflows/`, not
+inside this folder — this is one project among several sharing that repo,
+see ["Publishing to GitHub"](#publishing-to-github) below.
 
 
 ## Quickstart
