@@ -1,7 +1,6 @@
 # Event-Driven ML Forecasting Platform
-### TensorFlow vs. PyTorch, on Spark + Kafka + Airflow — Bombay Surface Temperature, 1970–2012
-
-[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml)
+### Bombay Surface Temperature, 1970–2012
+### TensorFlow vs. PyTorch, on Spark + Kafka + Airflow
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
 ![PySpark](https://img.shields.io/badge/PySpark-3.5-E25A1C?style=flat&logo=apachespark&logoColor=white&labelColor=1a1a2e)
@@ -314,7 +313,7 @@ Model**, and watch it fit/train live; open **Compare All** once a few models
 have run, **Learn: PyTorch vs. TensorFlow** any time, or **Live Telemetry**
 once the Kafka layer below is running.
 
-### 6. Kafka streaming layer (optional)
+### 6. Kafka streaming layer
 
 ```bash
 # from the repo root
@@ -333,7 +332,7 @@ state with these exact commands if nothing is streaming. `docker compose down`
 tears the broker down; the topic is ephemeral (no volume), so a fresh
 `docker compose up -d` starts clean.
 
-### 7. Airflow orchestration (optional)
+### 7. Airflow orchestration
 
 ```bash
 cd airflow
@@ -354,6 +353,8 @@ live "Run Model" click would produce. `docker compose down` (from `airflow/`)
 stops the stack when you're done.
 
 ### 8. Continuous Integration (CI) — GitHub Actions
+
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/event-driven-ml-forecasting-platform-ci.yml)
 
 [`ci.yml`](.github/workflows/ci.yml) runs on every push and pull request to
 `main`: a `backend` job installs `requirements.txt`, then runs the Spark ETL
@@ -475,19 +476,19 @@ model live before).
 
 | Variable             | Default                                              | Purpose                                                        |
 |-----------------------|-------------------------------------------------------|------------------------------------------------------------------|
-| `DATA_PATH`           | `data/GlobalLandTemperaturesByMajorCity.csv`          | Source CSV dataset                                                |
-| `MODEL_PATH`          | `models/TemperatureForecastingModel.keras`            | TensorFlow/Keras LSTM checkpoint save/load location                |
-| `MODEL_PATH_PYTORCH`  | `models/TemperatureForecastingModel_pytorch.pt`       | PyTorch LSTM checkpoint save/load location                         |
-| `OUTPUT_DIR`          | `outputs`                                              | Where per-model results, `eda.json`, and plot PNGs are written      |
-| `LSTM_EPOCHS`         | `10`                                                    | Training epochs for both LSTMs (10 matches the original notebook)  |
-| `LSTM_RETRAIN`        | `true`                                                  | Retrain LSTMs each run, or reuse the existing checkpoints           |
-| `API_CORS_ORIGIN`     | `http://localhost:5173`                                | Allowed origin for the FastAPI CORS policy                          |
-| `SPARK_MASTER`        | `local[*]`                                              | Spark master URL (in-process engine, all cores; no cluster)         |
-| `SPARK_DRIVER_MEMORY` | `2g`                                                    | Memory for the Spark driver JVM                                     |
-| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092`                                    | Broker address for the producer and consumer                        |
-| `KAFKA_TOPIC`         | `temperature-telemetry`                                 | Topic the producer publishes to / consumer subscribes to            |
-| `KAFKA_PRODUCER_RATE` | `500`                                                   | Target producer replay rate, messages/second                        |
-| `STREAMING_OUTPUT_DIR`| `outputs/streaming`                                     | Where the consumer's windowed-features Parquet + checkpoint live    |
+| `DATA_PATH`           | data/GlobalLandTemperaturesByMajorCity.csv          | Source CSV dataset                                                |
+| `MODEL_PATH`          | models/TemperatureForecastingModel.keras            | TensorFlow/Keras LSTM checkpoint save/load location                |
+| `MODEL_PATH_PYTORCH`  | models/TemperatureForecastingModel_pytorch.pt       | PyTorch LSTM checkpoint save/load location                         |
+| `OUTPUT_DIR`          | outputs                                              | Where per-model results, `eda.json`, and plot PNGs are written      |
+| `LSTM_EPOCHS`         | 10                                                    | Training epochs for both LSTMs (10 matches the original notebook)  |
+| `LSTM_RETRAIN`        | true                                                  | Retrain LSTMs each run, or reuse the existing checkpoints           |
+| `API_CORS_ORIGIN`     | http://localhost:5173                                | Allowed origin for the FastAPI CORS policy                          |
+| `SPARK_MASTER`        | local[*]                                              | Spark master URL (in-process engine, all cores; no cluster)         |
+| `SPARK_DRIVER_MEMORY` | 2g                                                    | Memory for the Spark driver JVM                                     |
+| `KAFKA_BOOTSTRAP_SERVERS` | localhost:9092                                    | Broker address for the producer and consumer                        |
+| `KAFKA_TOPIC`         | temperature-telemetry                                 | Topic the producer publishes to / consumer subscribes to            |
+| `KAFKA_PRODUCER_RATE` | 500                                                   | Target producer replay rate, messages/second                        |
+| `STREAMING_OUTPUT_DIR`| outputs/streaming                                     | Where the consumer's windowed-features Parquet + checkpoint live    |
 
 ### frontend/.env
 
@@ -562,11 +563,11 @@ stack, 24/7).
 
 | Resource | AWS (us-east-1) | Azure (East US) | Purpose |
 |---|---|---|---|
-| Compute (4 vCPU / 16GB, needed for Spark+TF+PyTorch+Kafka+Airflow together) | EC2 `t3.xlarge` — **~$122/mo** on-demand | VM `Standard_B4ms` — **~$121/mo** pay-as-you-go | Runs the whole `docker compose` stack, same as local |
-| Compute, Spot/discounted | EC2 Spot — **~$40–55/mo** (reclaimable anytime) | Azure Spot VM — **~$25–45/mo** (reclaimable anytime) | Same, cheaper but can be evicted |
-| Disk (30GB, for data/models/Kafka logs/Postgres) | EBS gp3 — **~$2.40/mo** | Managed Disk (Standard SSD) — **~$2.40/mo** | Data, model checkpoints, Airflow/Postgres storage |
-| Static/public IP | Elastic IP — **~$3.60/mo** if idle, free while attached | Static Public IP — **~$3/mo** | So the dashboard/Airflow UI have a stable address |
-| Egress bandwidth (demo-scale traffic) | **~$1–5/mo** | **~$1–5/mo** | Dashboard API calls, asset loads |
+| Compute (4 vCPU / 16GB, needed for Spark+TF+PyTorch+Kafka+Airflow together) | EC2 `t3.xlarge` — ~$122/mo on-demand | VM `Standard_B4ms` — ~$121/mo pay-as-you-go | Runs the whole `docker compose` stack, same as local |
+| Compute, Spot/discounted | EC2 Spot — ~$40–55/mo (reclaimable anytime) | Azure Spot VM — ~$25–45/mo (reclaimable anytime) | Same, cheaper but can be evicted |
+| Disk (30GB, for data/models/Kafka logs/Postgres) | EBS gp3 — ~$2.40/mo | Managed Disk (Standard SSD) — ~$2.40/mo | Data, model checkpoints, Airflow/Postgres storage |
+| Static/public IP | Elastic IP — ~$3.60/mo if idle, free while attached | Static Public IP — ~$3/mo | So the dashboard/Airflow UI have a stable address |
+| Egress bandwidth (demo-scale traffic) | ~$1–5/mo | ~$1–5/mo | Dashboard API calls, asset loads |
 | **Total, on-demand** | **~$125–130/mo** | **~$125–130/mo** | |
 | **Total, Spot/discounted** | **~$45–65/mo** | **~$30–55/mo** | |
 
@@ -574,10 +575,10 @@ stack, 24/7).
 
 | Resource | AWS | Azure | Purpose |
 |---|---|---|---|
-| Backend/frontend hosting | ECS Fargate (small, always-on tasks) — **~$30–50/mo** | Container Apps (consumption) — **~$10–30/mo** | API + dashboard, scales somewhat with use |
-| Managed Kafka | **MSK**, smallest 2-broker cluster — **~$130–150/mo minimum**, even at zero traffic | **Event Hubs** (Kafka-compatible), Basic tier — **~$11–25/mo** | Streaming layer |
-| Managed Airflow | **MWAA**, smallest environment — **~$350–400/mo minimum**, even fully idle | *(no direct equivalent)* — self-host on AKS: **~$70–150/mo** for node pool (control plane is free) | Orchestration |
-| Metadata DB (Postgres) | RDS `db.t3.micro` — **~$12–15/mo** | Azure DB for PostgreSQL Flexible, B1ms — **~$12–15/mo** | Airflow's backing store |
+| Backend/frontend hosting | ECS Fargate (small, always-on tasks) — ~$30–50/mo | Container Apps (consumption) — ~$10–30/mo | API + dashboard, scales somewhat with use |
+| Managed Kafka | **MSK**, smallest 2-broker cluster — ~$130–150/mo minimum, even at zero traffic | **Event Hubs** (Kafka-compatible), Basic tier — ~$11–25/mo | Streaming layer |
+| Managed Airflow | **MWAA**, smallest environment — ~$350–400/mo minimum, even fully idle | *(no direct equivalent)* — self-host on AKS: ~$70–150/mo for node pool (control plane is free) | Orchestration |
+| Metadata DB (Postgres) | RDS `db.t3.micro` — ~$12–15/mo | Azure DB for PostgreSQL Flexible, B1ms — ~$12–15/mo | Airflow's backing store |
 | **Total** | **~$520–615/mo** | **~$100–220/mo** | |
 
 **The AWS number is dominated by one line: MWAA's ~$350–400/mo floor,
@@ -593,7 +594,7 @@ whether the pipeline is running or not, which doesn't match this project's
 actual usage pattern (manually triggered, occasional). That mismatch,
 more than the raw dollar figures, is why this stays local by default.
 
-## Cloud Deploy (Azure)
+## Azure Deployment (Cloud)
 
 The lean single-VM architecture above isn't just theoretical — `cloud/`
 contains a working, resumable deploy CLI (`forecast-deploy`) that stands the
@@ -647,7 +648,7 @@ Log Analytics/deployments only — no Storage, Key Vault, or role-assignment
 access, so a compromised or misused run here can't reach anything outside
 this project even within the same subscription).
 
-<img width="100%" alt="Dashboard served from the live Azure deployment" src="PASTE_URL_HERE" />
+<img width="100%" alt="Dashboard served from the live Azure deployment" src="docs/file1.png" />
 <p><em>The dashboard, served from a single Azure VM at its public IP —
 same app, same code, no changes needed to run in the cloud vs. locally.</em></p>
 
