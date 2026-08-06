@@ -1,0 +1,80 @@
+name: Event-Driven-ML-Forecasting-Platform — Deploy to Azure
+
+# Manual-only (workflow_dispatch): a human must explicitly click "Run
+# workflow" -- there is no automatic trigger on push (see
+# event-driven-ml-forecasting-platform-ci.yml for the free, no-cost gate).
+# Uses secretless federated (OIDC) Azure credentials against a dedicated,
+# narrowly-scoped app registration (NOT the surveil-github-oidc app used by
+# azure-agentic-video-surveillance-deploy.yml -- see
+# cloud/infra/forecast-deployer-role.json for why this project has its own
+# custom role instead of reusing that broader Contributor identity).
+#
+# Uses FORECAST_AZURE_* variable names, not the plain AZURE_* names the
+# video-surveillance deploy workflow uses -- this repo's GitHub variables
+# are shared across every workflow, and these two projects authenticate as
+# two different Azure AD apps, so they need distinct variable names to
+# avoid one overwriting the other.
+on:
+  workflow_dispatch:
+    inputs:
+      teardown_after:
+        description: "Tear down all resources immediately after a successful deploy + smoke test (useful for a scheduled cost-safe validation run)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+# Prevents two concurrent deploys from racing the same resource-group name
+# resolution. cancel-in-progress is deliberately false: cancelling a live
+# `az deployment sub create` mid-flight is worse than making the next run
+# wait, since Azure resources can be left half-applied.
+concurrency:
+  group: deploy-event-driven-ml-forecasting-platform
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Event-Driven-ML-Forecasting-Platform/cloud/deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.FORECAST_AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.FORECAST_AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.FORECAST_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install forecast-deploy
+        run: pip install -e .
+
+      - name: Generate a deploy-time SSH key (GitHub Actions runners don't keep one across runs)
+        run: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "forecast-deploy-ci"
+
+      - name: Preflight
+        run: forecast-deploy smoke-test --stage pre
+
+      - name: Deploy
+        run: forecast-deploy deploy --fresh
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.FORECAST_AZURE_SUBSCRIPTION_ID }}
+          AZURE_LOCATION: ${{ vars.FORECAST_AZURE_LOCATION || 'eastus' }}
+
+      - name: Post-deploy smoke test
+        run: forecast-deploy smoke-test --stage post
+
+      - name: Tear down (if requested)
+        if: ${{ inputs.teardown_after }}
+        run: |
+          forecast-deploy teardown -y
+          forecast-deploy smoke-test --stage teardown

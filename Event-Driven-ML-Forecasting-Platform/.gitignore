@@ -21,5 +21,10 @@ frontend/*.tsbuildinfo
 # checkpoint) -- regenerable, same category as backend/outputs/ in general.
 backend/outputs/streaming/
 
+# Cloud deploy CLI (cloud/deploy/) -- resumable deployment state, contains
+# resource names/IPs specific to a live Azure demo. .env and .venv/ above
+# already cover this package's own .env overrides and virtualenv.
+deployment_state.json
+
 # OS
 .DS_Store

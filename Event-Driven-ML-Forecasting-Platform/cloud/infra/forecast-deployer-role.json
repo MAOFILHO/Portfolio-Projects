@@ -1,0 +1,25 @@
+{
+  "Name": "Forecast Platform Deployer",
+  "Description": "Least-privilege role for the Event-Driven-ML-Forecasting-Platform deploy/teardown GitHub Actions workflows: resource groups, VMs, disks, networking, Log Analytics, and ARM deployments only. No Storage/Key Vault/Cognitive Services/role-assignment access, so it can't touch other projects' resources or manage IAM.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/resourceGroups/read",
+    "Microsoft.Resources/subscriptions/resourceGroups/write",
+    "Microsoft.Resources/subscriptions/resourceGroups/delete",
+    "Microsoft.Resources/deployments/*",
+    "Microsoft.Network/virtualNetworks/*",
+    "Microsoft.Network/networkSecurityGroups/*",
+    "Microsoft.Network/publicIPAddresses/*",
+    "Microsoft.Network/networkInterfaces/*",
+    "Microsoft.Network/locations/*/read",
+    "Microsoft.Compute/virtualMachines/*",
+    "Microsoft.Compute/disks/*",
+    "Microsoft.Compute/locations/*/read",
+    "Microsoft.Compute/skus/read",
+    "Microsoft.OperationalInsights/workspaces/*",
+    "Microsoft.OperationalInsights/locations/*/read"
+  ],
+  "NotActions": [],
+  "AssignableScopes": [
+    "/subscriptions/960936b9-ecde-465b-be8d-776ca077dcd0"
+  ]
+}

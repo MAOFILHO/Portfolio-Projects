@@ -1,0 +1,54 @@
+name: Event-Driven-ML-Forecasting-Platform — Teardown Azure Deploy
+
+# Standalone teardown, separate from the deploy workflow's own optional
+# `teardown_after` input: this is for the normal "I deployed locally (or via
+# the deploy workflow without teardown_after), took my screenshots, now tear
+# it down" flow, run on your own schedule rather than immediately after
+# deploy. Manual-only, no inputs.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-event-driven-ml-forecasting-platform
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Event-Driven-ML-Forecasting-Platform/cloud/deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.FORECAST_AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.FORECAST_AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.FORECAST_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install forecast-deploy
+        run: pip install -e .
+
+      # This workflow run never has the deployment_state.json a local
+      # `forecast-deploy deploy` would have written (each GitHub Actions run
+      # starts from a fresh checkout) -- teardown/smoke-test --stage
+      # teardown both fall back to resource-group *name pattern* matching
+      # for exactly this reason, see naming.py / smoke/teardown_verify.py.
+      - name: Teardown
+        run: forecast-deploy teardown -y
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.FORECAST_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify nothing is left behind
+        run: forecast-deploy smoke-test --stage teardown

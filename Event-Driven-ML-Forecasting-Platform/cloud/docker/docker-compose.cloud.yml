@@ -1,0 +1,220 @@
+# Unified cloud stack -- combines what the local setup runs as three
+# separate pieces (../../docker-compose.yml for Kafka, ../../airflow/
+# docker-compose.yml for Airflow, and the backend/frontend dev servers run
+# by hand) into one `docker compose` project for a single Azure VM.
+#
+# Paths are relative to this file's directory (cloud/docker/), so bind
+# mounts go up two levels (../../) to reach the project root -- same
+# bind-mount philosophy as both local compose files: code/data/models/
+# outputs live on the host (here: the VM's git checkout) and are mounted in,
+# not baked into images, so a `git pull` + `docker compose up -d --build`
+# picks up code changes without a full rebuild of every layer.
+#
+# Config that differs from local (public IP, generated secrets) is supplied
+# via a `.env` file cloud-init writes next to this file at boot -- see
+# ../cloud-init/bootstrap.sh.tmpl. Nothing in this file is Azure-specific
+# itself; it would run the same way on any VM given that .env file.
+
+x-airflow-common: &airflow-common
+  build:
+    context: ../../airflow
+    dockerfile: Dockerfile
+  image: forecasting-airflow:cloud
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    # No parallelism cap at the default VM size (D4s_v5, 4 vCPU/16GB -- twice
+    # the RAM of the local Docker Desktop VM this DAG was originally verified
+    # against with all 5 training tasks running concurrently, see
+    # forecasting_pipeline_dag.py's retries=2 comment on that same
+    # contention). If deploy/.env overrides VM_SIZE down to the D2s_v5
+    # fallback (2 vCPU/8GB, see infra/main.bicep), uncomment the two lines
+    # below -- 5 concurrent SparkSession/JVMs on 8GB is a near-guaranteed OOM:
+    # AIRFLOW__CORE__PARALLELISM: "2"
+    # AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+    # Generated fresh at boot by cloud-init -- never the repo's local-dev
+    # placeholder, which is explicitly flagged not-for-production.
+    AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW_SECRET_KEY}"
+    BACKEND_DIR: /opt/backend
+    LSTM_EPOCHS: "${LSTM_EPOCHS:-10}"
+    LSTM_RETRAIN: "${LSTM_RETRAIN:-false}"
+  volumes: &airflow-common-volumes
+    - ../../dags:/opt/airflow/dags
+    - ../../backend/src:/opt/backend/src
+    - ../../backend/data:/opt/backend/data
+    - ../../backend/models:/opt/backend/models
+    - ../../backend/outputs:/opt/backend/outputs
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init
+        airflow users create \
+          --username admin --password "${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname Admin --lastname User \
+          --role Admin --email admin@example.com || true
+
+  airflow-webserver:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8081:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    command: scheduler
+    restart: unless-stopped
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: forecasting-cloud-kafka
+    # Not published on the host -- nothing outside this compose network
+    # needs to reach it directly (see cloud/README, security section).
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      # The one required change from ../../docker-compose.yml: advertised as
+      # the compose service DNS name, not localhost, since the producer/
+      # consumer are containers on this network now, not host processes.
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  kafka-consumer:
+    build:
+      context: ../../backend
+      dockerfile: ../cloud/docker/backend.Dockerfile
+    image: forecasting-backend:cloud
+    command: ["python", "src/kafka_consumer.py"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TOPIC: "${KAFKA_TOPIC:-temperature-telemetry}"
+      STREAMING_OUTPUT_DIR: outputs/streaming
+    volumes:
+      - ../../backend/src:/opt/backend/src
+      - ../../backend/data:/opt/backend/data
+      - ../../backend/outputs:/opt/backend/outputs
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kafka-producer:
+    image: forecasting-backend:cloud
+    command: ["python", "src/kafka_producer.py", "--limit", "5000"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TOPIC: "${KAFKA_TOPIC:-temperature-telemetry}"
+      KAFKA_PRODUCER_RATE: "${KAFKA_PRODUCER_RATE:-500}"
+    volumes:
+      - ../../backend/src:/opt/backend/src
+      - ../../backend/data:/opt/backend/data
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-consumer:
+        condition: service_started
+    # One-shot: replays a bounded slice once so the Live Telemetry page has
+    # real windowed data for screenshots, then exits -- not a long-running
+    # service like the consumer.
+    restart: "no"
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../cloud/docker/backend.Dockerfile
+    image: forecasting-backend:cloud
+    # Not published on the host -- reached only through the frontend
+    # container's nginx reverse proxy (see docker/nginx.conf).
+    expose:
+      - "8000"
+    environment:
+      API_CORS_ORIGIN: "${API_CORS_ORIGIN}"
+      LSTM_EPOCHS: "${LSTM_EPOCHS:-10}"
+      LSTM_RETRAIN: "${LSTM_RETRAIN:-false}"
+    volumes:
+      - ../../backend/src:/opt/backend/src
+      - ../../backend/api:/opt/backend/api
+      - ../../backend/data:/opt/backend/data
+      - ../../backend/models:/opt/backend/models
+      - ../../backend/outputs:/opt/backend/outputs
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: ../cloud/docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL}"
+    image: forecasting-frontend:cloud
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-db-volume:
+  airflow-logs:
