@@ -10,7 +10,14 @@
 # local docker-compose stacks already use, just with "the VM's clone" in
 # place of "your Mac". This means a `git pull` + `docker compose restart` on
 # the VM picks up code changes without an image rebuild.
-FROM python:3.12-slim
+# Pinned to bookworm (Debian 12), not the floating `python:3.12-slim` tag:
+# that tag drifted to Debian trixie by the time this was actually built,
+# and trixie's apt repos don't carry openjdk-17-jdk-headless at all
+# ("Unable to locate package") -- only newer JDKs. This project pins Java
+# 17 specifically for Spark 3.5.x compatibility (same version airflow/
+# Dockerfile installs), so pinning the base image's Debian release, not
+# switching JDK versions, is the fix.
+FROM python:3.12-slim-bookworm
 
 # PySpark (src/spark_session.py) needs a JVM, same as airflow/Dockerfile.
 # Deliberately no ENV JAVA_HOME here for the same reason documented there:
