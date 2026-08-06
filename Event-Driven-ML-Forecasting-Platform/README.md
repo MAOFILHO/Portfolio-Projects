@@ -510,10 +510,11 @@ minutes.</em></p>
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
-<img width="100%" alt="Grid view with the latest run fully green" src="docs/file7.png" />
-<p><em>Grid view: the latest run's column is all green — 8/8 tasks
-succeeded, results written to <code>backend/outputs/results/*.json</code> and
-immediately visible on the dashboard.</em></p>
+<img width="100%" alt="Run Duration view across multiple attempts, including retries" src="docs/file7.png" />
+<p><em>Run Duration across attempts — the red bars are earlier runs that hit
+the transient Spark JVM contention race <code>forecasting_pipeline_dag.py</code>'s
+<code>retries=2</code> exists for; the green bars are clean runs. That fix means
+hitting this failure mode costs a 30s retry, not a manual re-trigger.</em></p>
 
 ## How live model runs work
 
