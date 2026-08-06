@@ -202,6 +202,12 @@ services:
       dockerfile: ../cloud/docker/frontend.Dockerfile
       args:
         VITE_API_BASE_URL: "${VITE_API_BASE_URL}"
+      # Named second context so frontend.Dockerfile's final stage can COPY
+      # nginx.conf, which lives here in cloud/docker/, not in the frontend/
+      # context above (kept narrow on purpose -- no reason the npm build
+      # needs the rest of this repo in its build context).
+      additional_contexts:
+        nginxconf: .
     image: forecasting-frontend:cloud
     ports:
       - "80:80"

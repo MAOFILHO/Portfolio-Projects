@@ -19,6 +19,11 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# nginx.conf lives in cloud/docker/, outside this build's primary context
+# (../../frontend, kept narrow so the build context doesn't include
+# unrelated repo content). "nginxconf" is a named additional build context
+# pointing at cloud/docker/ -- see docker-compose.cloud.yml's
+# build.additional_contexts for the frontend service.
+COPY --from=nginxconf nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
