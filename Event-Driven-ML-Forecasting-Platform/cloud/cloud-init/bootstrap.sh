@@ -64,6 +64,17 @@ git clone --depth 1 "$REPO_URL" "$APP_DIR/Portfolio-Projects" \
 
 cd "$COMPOSE_DIR" || fail "compose dir $COMPOSE_DIR not found after clone"
 
+# Explicit, not relying on Docker Compose's default file-discovery: our
+# compose file is named docker-compose.cloud.yml, not the bare
+# docker-compose.yml Compose looks for by default -- and when it doesn't
+# find one in cwd, Compose walks UP parent directories looking for one,
+# which silently found and used the *repo root's* Kafka-only
+# docker-compose.yml instead (only the kafka container ever started;
+# backend/frontend/Airflow were never created, hence the health-check
+# timeout this replaced). Exporting COMPOSE_FILE pins every subsequent
+# `docker compose` call in this script to the right file explicitly.
+export COMPOSE_FILE="$COMPOSE_DIR/docker-compose.cloud.yml"
+
 # Deliberately not comparing against the literal placeholder string here:
 # Bicep's replace() (and any equivalent blind string substitution) replaces
 # EVERY occurrence of __PUBLIC_IP__ in the file, including one written into
