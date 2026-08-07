@@ -569,18 +569,67 @@ Both LSTMs honour `LSTM_RETRAIN` and `LSTM_EPOCHS` (see [Environment Variables](
 setting `LSTM_RETRAIN=false` reuses the committed checkpoints and cuts the run to well under a
 minute, which is what the test suite does.
 
-<img width="1180" height="712" alt="Screenshot 2026-07-10 at 10 59 56 PM" src="https://github.com/user-attachments/assets/08b12970-88d8-4a3c-9e68-9496842445ff" />
+A full run, start to finish — roughly 7 minutes on an M-series MacBook Air:
+
+<img width="100%" alt="Spark session startup, dataset validation, and the EDA stationarity test" src="docs/be1.png" />
+<p><em><strong>Ingest and EDA.</strong> Spark auto-detects <code>JAVA_HOME</code> and starts a local
+session, then validates the raw dataset (239,177 rows) before narrowing to the Bombay slice (2,613
+rows, 4.0% missing). Note the two previews: raw data starts at Abidjan in 1849, the preprocessed
+frame at Bombay in 1970-01 — that trim is the Spark layer's job. Ends with the ADF test returning a
+p-value of 0.000011, comfortably rejecting a unit root.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
-<img width="1178" height="719" alt="Screenshot 2026-07-10 at 11 08 45 PM" src="https://github.com/user-attachments/assets/f9e91612-1a6e-4cf8-9d03-103266c570fa" />
+<img width="100%" alt="auto_arima grid search evaluating candidate orders by AIC" src="docs/be2.png" />
+<p><em><strong>The auto-ARIMA search.</strong> <code>stepwise=False</code> means this is an
+exhaustive grid, not a heuristic walk — every candidate order is fit and scored by AIC. This is the
+single most expensive stage of the seed run, and the <code>AIC=inf</code> rows are candidates that
+failed to converge.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
 
-<img width="1170" height="708" alt="Screenshot 2026-07-10 at 11 09 12 PM" src="https://github.com/user-attachments/assets/8a4434ca-e30b-42c7-85bb-7ad962e6ef90" />
+<img width="100%" alt="auto_arima selecting ARIMA(0,0,2)(1,0,1)[12] after 202 seconds" src="docs/be3.png" />
+<p><em><strong>The search result — and the project's most instructive finding.</strong> After 202.9
+seconds the winner is <code>ARIMA(0,0,2)(1,0,1)[12]</code>. That seasonal term is the whole point,
+and the next screenshot shows why: it is <strong>exactly</strong> SARIMAX Model 2's configuration. Model 2
+scores <strong>RMSE 0.576</strong>; the ARIMA entry, which fits the non-seasonal
+<code>(0,0,2)</code> part only, scores <strong>1.552</strong> — 2.7× worse from the same search
+result, honoured in one case and dropped in the other. See
+<a href="docs/LESSONS_LEARNED.md">Lessons Learned</a> #2.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
+
+<img width="100%" alt="SARIMAX Model 1 coefficient summary" src="docs/be4.png" />
+<p><em><strong>SARIMAX Model 1 — the overall winner (RMSE 0.574).</strong> The coefficient table is
+the readability argument for classical models made concrete: <code>ar.S.L12 = 0.9973</code> with
+z = 544.8 is the model stating, in one interpretable number, that this month looks almost exactly
+like this month last year. Ljung-Box Q = 0.01 (p = 0.94) says the residuals are indistinguishable
+from white noise — nothing predictable left on the table.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="SARIMAX Model 2 summary and the TensorFlow LSTM architecture" src="docs/be5.png" />
+<p><em><strong>SARIMAX Model 2, then the handoff to deep learning.</strong> Model 2 is the
+auto-ARIMA-selected spec (AIC 823.7 vs Model 1's 778.7 — Model 1 wins on both AIC and held-out
+RMSE). Below it, Keras prints the LSTM stack the two frameworks implement identically:
+100 → 50 → 10 LSTM units into 64 → 32 → 1 dense, <strong>76,257 parameters</strong>.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="TensorFlow and PyTorch LSTM training runs, then pipeline completion" src="docs/be6.png" />
+<p><em><strong>Both LSTMs training, back to back — the comparison this project exists to make.</strong>
+Same architecture, same 10 epochs, same optimizer and loss, seeds fixed on both sides. Keras
+converges 0.6162 → 0.1958; PyTorch 0.8066 → 0.1633. The two frameworks do not land in the same
+place, and on the held-out period the gap is real: PyTorch <strong>0.576</strong> RMSE vs
+TensorFlow <strong>0.840</strong>. The cause traces to default weight initialization, not the
+architecture — <a href="docs/LESSONS_LEARNED.md">Lessons Learned</a> #3. Last line is the seed run
+completing and the Spark connection closing.</em></p>
+<br>
 
 
 ### 4. Backend — Start the API
