@@ -845,36 +845,49 @@ hitting this failure mode costs a 30s retry, not a manual re-trigger.</em></p>
 
 ### Web Application
 
-<img width="1436" height="723" alt="Screenshot 2026-07-10 at 11 16 42 PM" src="https://github.com/user-attachments/assets/8f5d979c-b762-4d27-a742-3d0f41b390db" />
+The dashboard running against the live Azure deployment (note the **Live Telemetry** entry in the
+sidebar — the streaming layer is a first-class page, not a side script):
+
+<img width="100%" alt="ARIMA model detail page" src="docs/wa1.png" />
+<p><em>A model detail page — configuration (here, the order <code>auto_arima</code> selected), a
+<strong>Run Model</strong> button that re-fits live on the backend, and observed vs. forecast over the
+36-month horizon.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
-<img width="1426" height="649" alt="Screenshot 2026-07-10 at 5 46 01 PM" src="https://github.com/user-attachments/assets/f2a80b9f-4918-4b07-ae73-d63d76ea161d" />
+
+<img width="100%" alt="LSTM (TensorFlow / Keras) model detail page" src="docs/wa2.png" />
+<p><em>The TensorFlow/Keras LSTM — full architecture (LSTM 100&rarr;50&rarr;10 &rarr; Dense
+64&rarr;32&rarr;1), window size, epochs, optimizer, and loss, with its measured
+<strong>RMSE 1.43&deg;C</strong>. Every model renders through this same component regardless of
+framework, which is what makes the comparison like-for-like.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
-<img width="1421" height="643" alt="Screenshot 2026-07-10 at 5 46 19 PM" src="https://github.com/user-attachments/assets/4b2e0e8d-6646-4604-bc73-5a99d4eef2e3" />
+
+<img width="100%" alt="Compare All Models view with accuracy table" src="docs/wa3.png" />
+<p><em>Compare All — every model that has been run, overlaid on the observed series, with the
+accuracy table beneath. <strong>Captured before ARIMA was scored</strong>, which is why its MSE/RMSE
+read <code>&mdash;</code> here; it now reports 2.409 / 1.552. This view is exactly where that gap was
+visible, and what prompted the fix.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
-<img width="1419" height="692" alt="Screenshot 2026-07-10 at 5 48 04 PM" src="https://github.com/user-attachments/assets/1320e989-d4ea-4d55-9e42-f94703e1c3a4" />
+
+<img width="100%" alt="Data and Exploratory Analysis page" src="docs/wa4.png" />
+<p><em>Data &amp; EDA — moving averages, seasonal decomposition (trend/seasonal/residual), and the
+ADF/KPSS stationarity tests. Note the two tests disagree (ADF: stationary, KPSS: non-stationary),
+which is itself informative: the series is trend-stationary rather than strictly stationary, and this
+is surfaced before any model is fit rather than assumed.</em></p>
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
-<img width="1420" height="698" alt="Screenshot 2026-07-10 at 5 48 15 PM" src="https://github.com/user-attachments/assets/3937b08a-6f7c-46a5-ac90-a577df9e59e9" />
 
-<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br><br>
-<img width="1430" height="702" alt="Screenshot 2026-07-10 at 5 47 01 PM" src="https://github.com/user-attachments/assets/69a92e83-06eb-42fb-8fa1-a160a0c92c15" />
-
-<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br><br>
-<img width="1427" height="704" alt="Screenshot 2026-07-10 at 5 47 24 PM" src="https://github.com/user-attachments/assets/b374322c-3226-44f3-878c-442de90023b1" />
-
-<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br><br>
-<img width="1434" height="701" alt="Screenshot 2026-07-10 at 5 47 49 PM" src="https://github.com/user-attachments/assets/73ed7ef3-8568-44d4-843b-a217e2cacc86" />
-<br><br>
+<img width="100%" alt="Live Telemetry page with windowed Kafka data" src="docs/wa5.png" />
+<p><em>Live Telemetry — 10-second tumbling windows of per-city avg/min/max temperature and event
+count, computed by the Spark Structured Streaming consumer from events the producer replayed onto
+Kafka. The page states plainly that this is a manually-started pipeline rather than implying the
+dashboard runs it for you.</em></p>
 
 
 
