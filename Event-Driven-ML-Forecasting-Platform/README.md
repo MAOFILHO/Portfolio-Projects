@@ -519,15 +519,30 @@ cp .env.example .env          # adjust paths if needed; defaults work out of the
 
 ```bash
 cd backend
-pytest tests/test_smoke.py
+pytest tests/                            # everything — 33 tests
+pytest tests/test_smoke.py -k arima      # or a single test by keyword
 ```
 
-<img width="1181" height="306" alt="Screenshot 2026-07-10 at 10 53 46 PM" src="https://github.com/user-attachments/assets/d58aff2f-a504-4ed9-83cd-f3afb90b4125" />
-<br><br>
+The suite is five files, and none of them need a running broker, a running API, or a cloud account:
 
-Runs every model in the registry (ARIMA, both SARIMAX models, both LSTM variants) directly, plus the
-full `run_pipeline.py` seed run end-to-end, against the real dataset and pre-trained checkpoints
-(fast — LSTMs reuse their checkpoints instead of retraining in the test).
+| File | Tests | Covers |
+|---|---|---|
+| `test_spark_etl.py` | 12 | Spark output matches a pandas golden reference; index/shape/column contracts; trim bounds; the train/test split yielding exactly 36 test points; and five validation-rejection cases (missing columns, empty dataset, unknown city, unparseable dates, too-sparse series) |
+| `test_smoke.py` | 6 | Every model in the registry — ARIMA, both SARIMAX models, both LSTM variants — plus the full `run_pipeline.py` seed run end to end |
+| `test_kafka_producer.py` | 6 | `row_to_message` — payload shape, field types, JSON-serializability, and NaN handling for temperature/city/country |
+| `test_kafka_consumer.py` | 5 | The consumer's windowed aggregation, run on batch DataFrames through a real local Spark session: grouping by city and window, null filtering, tumbling-window isolation, output schema, empty input |
+| `test_streaming_endpoint.py` | 4 | `/api/streaming/windowed-features` via FastAPI's `TestClient` — the inactive/active/empty states, newest-first ordering, and graceful degradation on an unreadable directory |
+
+<img width="100%" alt="pytest running the Spark ETL and model smoke suites, 18 passed" src="docs/file13.png" />
+<p><em>The two slowest files run together — <code>test_spark_etl.py</code>'s parity and validation
+suite plus <code>test_smoke.py</code> fitting all five models for real. 18 passed in ~5 minutes;
+that duration is almost entirely genuine model fitting and Spark JVM startup, not test
+overhead.</em></p>
+<br>
+
+The smoke tests run against the real dataset and the committed checkpoints — LSTMs reuse those
+rather than retraining, which is what keeps a suite that fits five forecasting models inside five
+minutes. CI runs all five files on every push (see the badge at the top).
 
 
 ### 3. Backend — seed initial results
