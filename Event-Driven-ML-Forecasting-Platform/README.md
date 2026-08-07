@@ -624,11 +624,14 @@ RMSE). Below it, Keras prints the LSTM stack the two frameworks implement identi
 <img width="100%" alt="TensorFlow and PyTorch LSTM training runs, then pipeline completion" src="docs/be6.png" />
 <p><em><strong>Both LSTMs training, back to back — the comparison this project exists to make.</strong>
 Same architecture, same 10 epochs, same optimizer and loss, seeds fixed on both sides. Keras
-converges 0.6162 → 0.1958; PyTorch 0.8066 → 0.1633. The two frameworks do not land in the same
-place, and on the held-out period the gap is real: PyTorch <strong>0.576</strong> RMSE vs
-TensorFlow <strong>0.840</strong>. The cause traces to default weight initialization, not the
-architecture — <a href="docs/LESSONS_LEARNED.md">Lessons Learned</a> #3. Last line is the seed run
-completing and the Spark connection closing.</em></p>
+converges 0.6162 → 0.1958; PyTorch 0.8066 → 0.1633 — the two frameworks do not land in the same
+place, and PyTorch comes out ahead on the held-out period in every run so far. The cause traces to
+default weight initialization, not the architecture —
+<a href="docs/LESSONS_LEARNED.md">Lessons Learned</a> #3. Note this is a <em>fresh</em> retrain
+(<code>LSTM_RETRAIN</code> defaults to true), so its losses won't match the committed checkpoints
+exactly; the RMSEs in the results table above come from the committed run. That run-to-run spread is
+real and worth knowing about before treating any single training run as a framework verdict. Last
+line is the seed run completing and the Spark connection closing.</em></p>
 <br>
 
 
