@@ -168,6 +168,7 @@ is actually needed.
 | Orchestration verified | `forecasting_pipeline` DAG run **8/8 tasks green**, 5 training tasks executing concurrently under `LocalExecutor` |
 | Cloud deploy verified end to end | Entire stack (backend + frontend + Kafka + Airflow) on a single Azure VM; dashboard, API, and Airflow all returning HTTP 200 |
 | Teardown verified clean | Post-teardown smoke test confirms **zero** leftover resource groups and **zero** billable resources tagged to the project |
+| Unattended CI/CD cycle verified | One `workflow_dispatch` run authenticated via **OIDC with no stored secrets**, then provisioned, smoke-tested, and destroyed the whole stack — **10/10 steps green in 26m 48s**, ending at zero resource groups, zero tagged resources, and zero vCPUs in use |
 | Local running cost | **$0** — no managed services, no API keys, no cloud credentials required |
 | Cloud demo cost | **~$2–4 USD** for a 1–2 day deploy-screenshot-teardown session (per-second billing) |
 
@@ -824,6 +825,22 @@ outside the VM's own Docker network needs to reach it directly).
 (VM/network/Log Analytics/deployments only — no Storage, Key Vault, or role-assignment access, so a
 compromised or misused run can't reach anything outside this project even within the same
 subscription).
+
+The deploy workflow takes a `teardown_after` input, which turns the whole thing into a single
+self-cleaning validation run: provision → smoke test → destroy → verify destroyed, unattended. That
+run is the strongest evidence in this repo that the cloud path actually works, because nothing about
+it is manual — no local CLI, no stored credential, and no human deciding when to tear down.
+
+<img width="100%" alt="The deploy workflow completing all steps green, including teardown" src="docs/file14.png" />
+<p><em>One <code>workflow_dispatch</code> run with <code>teardown_after</code> enabled: OIDC login →
+preflight → deploy → post-deploy smoke test → teardown, <strong>all ten steps green in 26m
+48s</strong>. Most of that is the VM building the backend (TensorFlow + PyTorch + PySpark) and
+Airflow images on first boot — the Azure provisioning itself takes about three minutes. (The single
+annotation is GitHub's own Node.js 20 deprecation notice for <code>actions/checkout</code>, not a
+failure in this pipeline.)</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 <img width="100%" alt="Azure resource group provisioned by forecast-deploy" src="docs/file11.png" />
 <p><em>The provisioned resource group in the Azure Portal — Log Analytics workspace, NIC, NSG,
