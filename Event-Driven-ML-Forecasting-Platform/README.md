@@ -1047,7 +1047,7 @@ is required. `.env` files are git-ignored; only `.env.example` files are committ
 
 This project began as `TensorFlow-PyTorch-Forecasting-Dashboard`, a sibling folder in the
 [`Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects) monorepo — the original batch
-dashboard: Spark-free, Kafka-free, Airflow-free, just pandas + FastAPI + React. This project is a
+dashboard: TensorFlow and PyTorch with just pandas + FastAPI + React. This project is a
 separate, self-contained folder in that same monorepo — copied from the original as a starting point,
 then built up with the event-driven layers (Spark ETL, Kafka streaming, Airflow orchestration) without
 touching the original folder's contents or history. `TensorFlow-PyTorch-Forecasting-Dashboard` remains
