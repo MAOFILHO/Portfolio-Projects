@@ -555,6 +555,20 @@ python run_pipeline.py
 # auto-ARIMA search and the two LSTMs' training)
 ```
 
+**This step is optional.** Every model can be re-fit live from the dashboard's sidebar, so the seed
+run exists only so the UI has something to render on first load instead of five empty panels. Skip
+it and the app still works — you just have to trigger a run yourself before there's a chart.
+
+It writes three things into `backend/outputs/`:
+
+- `results/{model_key}.json` — one per model: forecast points, confidence bands, and MSE/RMSE
+- `eda.json` — the EDA page's data, computed once and independent of any model
+- `*.png` — the matplotlib artifacts (ACF/PACF, SARIMAX diagnostics, per-model forecast plots)
+
+Both LSTMs honour `LSTM_RETRAIN` and `LSTM_EPOCHS` (see [Environment Variables](#environment-variables)) —
+setting `LSTM_RETRAIN=false` reuses the committed checkpoints and cuts the run to well under a
+minute, which is what the test suite does.
+
 <img width="1180" height="712" alt="Screenshot 2026-07-10 at 10 59 56 PM" src="https://github.com/user-attachments/assets/08b12970-88d8-4a3c-9e68-9496842445ff" />
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
