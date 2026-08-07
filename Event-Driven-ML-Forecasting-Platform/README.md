@@ -211,7 +211,7 @@ dashboard is fully usable without either.
 
 
 
-## Architecture
+## Data Flow & Platform Layers
 
 The raw CSV feeds two independent paths — a **batch** path that trains and scores the five models,
 and a **streaming** path that maintains live windowed stats — converging at the FastAPI layer the
