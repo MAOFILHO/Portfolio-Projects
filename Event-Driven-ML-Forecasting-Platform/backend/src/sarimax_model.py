@@ -24,11 +24,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-from .series_utils import series_to_points
+from .series_utils import evaluate_forecast, series_to_points
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +80,6 @@ def _plot_zoom_forecast(y: pd.Series, pred, output_dir: Path, filename: str) -> 
     plt.close()
 
 
-def _evaluate(forecast_mean: pd.Series, truth: pd.Series) -> dict:
-    mse = ((forecast_mean - truth) ** 2).mean()
-    rmse = float(np.sqrt(mse))
-    return {"mse": float(mse), "rmse": rmse}
-
-
 def _run_one(
     train: pd.Series,
     test: pd.Series,
@@ -101,7 +94,7 @@ def _run_one(
     pred = fitted.get_forecast(steps=36)
     _plot_full_forecast(y, pred, output_dir, f"sarimax_{name}_forecast.png")
     _plot_zoom_forecast(y, pred, output_dir, f"sarimax_{name}_forecast_zoom.png")
-    metrics = _evaluate(pred.predicted_mean, test)
+    metrics = evaluate_forecast(pred.predicted_mean, test)
 
     return {
         "order": list(order),

@@ -37,7 +37,7 @@ class ModelSpec:
 
 
 def _run_arima(ctx: RunContext) -> dict:
-    return arima_model.run_arima(ctx.train, ctx.y, ctx.output_dir)
+    return arima_model.run_arima(ctx.train, ctx.test, ctx.y, ctx.output_dir)
 
 
 def _run_sarimax_model1(ctx: RunContext) -> dict:

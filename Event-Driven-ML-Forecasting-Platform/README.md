@@ -106,22 +106,23 @@ is actually needed.
 
 ### Model comparison — measured on the identical 36-month held-out period
 
-| Model | MSE | RMSE (°C) | Notes |
-|---|---|---|---|
-| **SARIMAX Model 1** | **0.329** | **0.574** | **Best overall.** `order=(1,1,2)`, `seasonal_order=(1,0,1,12)` |
-| SARIMAX Model 2 | 0.332 | 0.576 | `order=(0,0,2)`, `seasonal_order=(1,0,1,12)` — statistically neck-and-neck with Model 1 |
-| LSTM (PyTorch) | 0.440 | 0.663 | Best deep-learning result |
-| LSTM (TensorFlow/Keras) | 2.059 | 1.435 | Same architecture as the PyTorch LSTM — see finding #2 |
-| ARIMA (auto-tuned) | *not scored* | *not scored* | `auto_arima` selected `order=(0,0,2)`, `seasonal_order=(1,0,1,12)`; the module persists forecast + confidence intervals but does not currently compute MSE/RMSE — an honest gap, not an omission from this table |
+| Model | MSE | RMSE (°C) | Seasonal? | Notes |
+|---|---|---|---|---|
+| **SARIMAX Model 1** | **0.329** | **0.574** | ✅ | **Best overall.** `order=(1,1,2)`, `seasonal_order=(1,0,1,12)` |
+| SARIMAX Model 2 | 0.332 | 0.576 | ✅ | `order=(0,0,2)`, `seasonal_order=(1,0,1,12)` — statistically neck-and-neck with Model 1 |
+| LSTM (PyTorch) | 0.440 | 0.663 | learned | Best deep-learning result |
+| LSTM (TensorFlow/Keras) | 2.059 | 1.435 | learned | Same architecture as the PyTorch LSTM — see finding #2 |
+| ARIMA | 2.409 | 1.552 | ❌ | Plain `ARIMA(0,0,2)`, **no seasonal term** — see finding #3 |
 
-**Three findings worth stating outright:**
+**Four findings worth stating outright:**
 
-1. **The classical models won.** SARIMAX beat both LSTMs on this dataset — roughly **13% lower RMSE
-   than the better LSTM** (0.574 vs. 0.663), at a fraction of the compute and with full
-   coefficient-level interpretability. On a small, clean, strongly-seasonal monthly series, the
-   simpler model with the right structural assumptions is the correct engineering choice. This is the
-   opposite of the result a "deep learning is better" prior would predict, and it's exactly why the
-   controlled comparison was worth building.
+1. **The right structural assumption beat the bigger model.** SARIMAX beat both LSTMs — roughly
+   **13% lower RMSE than the better LSTM** (0.574 vs. 0.663), at a fraction of the compute and with
+   full coefficient-level interpretability. Note this is *not* simply "classical beats deep learning":
+   plain ARIMA is equally classical and finished **last** (finding #3). What separates the top two
+   from the bottom one is an explicit seasonal term on strongly seasonal data. On a small, clean,
+   monthly series, matching the model's structure to the data's structure mattered more than model
+   capacity — which is exactly why the controlled comparison was worth building rather than assumed.
 
 2. **Same architecture, same data, ~2.2× different RMSE between frameworks.** PyTorch reached 0.663
    RMSE, TensorFlow/Keras 1.435 — and the two runs are matched on every variable this project
@@ -142,9 +143,21 @@ is actually needed.
    does **not** mean "same result," and framework choice is a real experimental variable rather than
    an implementation detail.
 
-3. **The two SARIMAX configurations are effectively tied** (0.574 vs. 0.576 RMSE) despite quite
-   different non-seasonal `order` terms. The seasonal component is doing the work; the non-seasonal
-   terms are close to noise on this series.
+3. **ARIMA finished last, and the reason is instructive.** At 1.552 RMSE it trails even the weaker
+   LSTM. The cause isn't the algorithm — it's that this entry fits a **plain, non-seasonal**
+   `ARIMA(0,0,2)`, carried over verbatim from the source notebook. Note the irony visible in the code:
+   `run_auto_arima()` searches and *correctly identifies* `seasonal_order=(1,0,1,12)`, that result is
+   reported in the dashboard, and then `fit_and_forecast_arima()` fits without it. Asking a
+   non-seasonal model to predict a strongly seasonal series is the single largest error source in this
+   whole comparison — a ~2.7× worse RMSE than the same family *with* the seasonal term (SARIMAX Model
+   2 uses the identical `order=(0,0,2)` and reaches 0.576). It's preserved rather than silently
+   "fixed" because reproducing the notebook faithfully is a stated goal of this project — but it's
+   documented here rather than buried, and it's the most obvious next improvement.
+
+4. **The two SARIMAX configurations are effectively tied** (0.574 vs. 0.576 RMSE) despite quite
+   different non-seasonal `order` terms. Combined with finding #3, the conclusion is consistent: on
+   this series the seasonal component does essentially all the work, and the non-seasonal terms are
+   close to noise.
 
 ### Verified engineering outcomes
 
@@ -199,6 +212,55 @@ dashboard is fully usable without either.
 
 
 ## Architecture
+
+The raw CSV feeds two independent paths — a **batch** path that trains and scores the five models,
+and a **streaming** path that maintains live windowed stats — converging at the FastAPI layer the
+dashboard reads from:
+
+```mermaid
+flowchart TD
+    CSV[("GlobalLandTemperaturesByMajorCity.csv<br/>239,177 rows · 100 cities · 1743–2013")]
+
+    CSV --> BATCH
+    CSV --> STREAM
+
+    subgraph BATCH["BATCH PATH — Apache Spark, in-process"]
+        DL["data_loading.py<br/><i>Spark ingest + city filter</i>"]
+        VAL["validation.py<br/><i>fail-fast Spark SQL checks</i>"]
+        PRE["preprocessing.py<br/><i>trim 1970–2012, resample,<br/>ONE .toPandas() handoff</i>"]
+        DL --> VAL --> PRE
+    end
+
+    subgraph STREAM["STREAMING PATH — Kafka + Spark Structured Streaming"]
+        PROD["kafka_producer.py<br/><i>replays all 100 cities</i>"]
+        TOPIC{{"Kafka topic<br/>temperature-telemetry"}}
+        CONS["kafka_consumer.py<br/><i>10s tumbling windows,<br/>per-city avg/min/max/count</i>"]
+        PROD --> TOPIC --> CONS
+    end
+
+    PRE --> MODELS
+
+    subgraph MODELS["MODEL LAYER — model_registry.py"]
+        ARIMA["ARIMA<br/><i>auto_arima</i>"]
+        SAR1["SARIMAX #1"]
+        SAR2["SARIMAX #2"]
+        TF["LSTM<br/><i>TensorFlow</i>"]
+        PT["LSTM<br/><i>PyTorch</i>"]
+    end
+
+    CONS -->|Parquet snapshot| API
+    MODELS -->|"results/{model_key}.json"| API
+
+    API["api/main.py — FastAPI<br/><i>jobs.py ThreadPoolExecutor runner</i>"]
+    API --> UI["React dashboard<br/><i>forecasts · Compare All · EDA · Live Telemetry</i>"]
+
+    DAG["dags/forecasting_pipeline_dag.py<br/><i>Apache Airflow</i>"] -.->|"orchestrates the same code path,<br/>writes the same files"| BATCH
+
+    style CSV fill:#1a1a2e,color:#fff
+    style API fill:#009688,color:#fff
+    style UI fill:#61DAFB,color:#000
+    style DAG fill:#017CEE,color:#fff
+```
 
 Three layers sit under the dashboard, each solving a distinct problem:
 
@@ -407,6 +469,36 @@ Docker containers, not managed cloud services.
 
 
 
+## Environment Variables
+
+### backend/.env
+
+| Variable             | Default                                              | Purpose                                                        |
+|-----------------------|-------------------------------------------------------|------------------------------------------------------------------|
+| `DATA_PATH`           | data/GlobalLandTemperaturesByMajorCity.csv          | Source CSV dataset                                                |
+| `MODEL_PATH`          | models/TemperatureForecastingModel.keras            | TensorFlow/Keras LSTM checkpoint save/load location                |
+| `MODEL_PATH_PYTORCH`  | models/TemperatureForecastingModel_pytorch.pt       | PyTorch LSTM checkpoint save/load location                         |
+| `OUTPUT_DIR`          | outputs                                              | Where per-model results, `eda.json`, and plot PNGs are written      |
+| `LSTM_EPOCHS`         | 10                                                    | Training epochs for both LSTMs (10 matches the original notebook)  |
+| `LSTM_RETRAIN`        | true                                                  | Retrain LSTMs each run, or reuse the existing checkpoints           |
+| `API_CORS_ORIGIN`     | http://localhost:5173                                | Allowed origin for the FastAPI CORS policy                          |
+| `SPARK_MASTER`        | local[*]                                              | Spark master URL (in-process engine, all cores; no cluster)         |
+| `SPARK_DRIVER_MEMORY` | 2g                                                    | Memory for the Spark driver JVM                                     |
+| `KAFKA_BOOTSTRAP_SERVERS` | localhost:9092                                    | Broker address for the producer and consumer                        |
+| `KAFKA_TOPIC`         | temperature-telemetry                                 | Topic the producer publishes to / consumer subscribes to            |
+| `KAFKA_PRODUCER_RATE` | 500                                                   | Target producer replay rate, messages/second                        |
+| `STREAMING_OUTPUT_DIR`| outputs/streaming                                     | Where the consumer's windowed-features Parquet + checkpoint live    |
+
+### frontend/.env
+
+| Variable              | Default (unset)                  | Purpose                                                      |
+|-----------------------|------------------------------------|----------------------------------------------------------------|
+| `VITE_API_BASE_URL`   | *(empty → uses Vite dev proxy)*    | Base URL of the FastAPI backend, for non-local deployments |
+
+No API keys, tokens, or credentials are required anywhere in this project.
+
+
+
 ## Setup
 
 ### 1. Backend — Set up the Environment
@@ -480,6 +572,19 @@ The API is now available at `http://localhost:8000` (interactive docs at
 `http://localhost:8000/docs`). From here, every model can also be re-run live from the dashboard
 itself — `run_pipeline.py` is just a convenience seed step, not a required one.
 
+<img width="100%" alt="FastAPI interactive docs listing every endpoint" src="docs/file8.png" />
+<p><em>The auto-generated OpenAPI docs at <code>/docs</code> — every endpoint the dashboard uses:
+model listing, <code>POST /api/models/{key}/run</code>, job polling, per-model results, the
+Compare All feed, the EDA endpoints, and the streaming windowed-features feed.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Executing GET /api/health from the interactive docs" src="docs/file9.png" />
+<p><em>Executing an endpoint straight from the browser — <code>GET /api/health</code> returning
+<code>200</code> with <code>{"status": "ok"}</code>, the same check the deploy CLI's post-deploy
+smoke test hits.</em></p>
+
 ### 5. Frontend — run the dashboard
 
 ```bash
@@ -552,6 +657,15 @@ step 7 above.
 
 <img width="1420" height="698" alt="Screenshot 2026-07-10 at 7 01 11 PM" src="https://github.com/user-attachments/assets/df6a2040-b384-4f28-9239-559f47e95fde" />
 <br><br>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="GitHub Actions CI run for this project, both jobs green" src="docs/file10.png" />
+<p><em>A green CI run — <strong>Backend (pytest)</strong> in 8m 23s (Spark ETL parity, all 5 models,
+Kafka unit tests, on JDK 17) and <strong>Frontend (build)</strong> in 22s (TypeScript + Vite), both
+passing on a push touching this project's folder. No Kafka broker and no Airflow stack are involved,
+which is what keeps the run this cheap and this fast.</em></p>
 
 
 
@@ -632,6 +746,15 @@ outside the VM's own Docker network needs to reach it directly).
 (VM/network/Log Analytics/deployments only — no Storage, Key Vault, or role-assignment access, so a
 compromised or misused run can't reach anything outside this project even within the same
 subscription).
+
+<img width="100%" alt="Azure resource group provisioned by forecast-deploy" src="docs/file11.png" />
+<p><em>The provisioned resource group in the Azure Portal — Log Analytics workspace, NIC, NSG,
+Public IP, VM, OS disk, and VNet, all tagged <code>project: forecasting-platform</code> /
+<code>managedBy: forecast-deploy</code>. Those tags are what the post-teardown smoke test queries to
+prove nothing was left behind.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 <img width="100%" alt="Dashboard served from the live Azure deployment" src="docs/file1.png" />
 <p><em>The dashboard, served from a single Azure VM at its public IP —
@@ -755,151 +878,23 @@ hitting this failure mode costs a 30s retry, not a manual re-trigger.</em></p>
 
 
 
-## Environment Variables
-
-### backend/.env
-
-| Variable             | Default                                              | Purpose                                                        |
-|-----------------------|-------------------------------------------------------|------------------------------------------------------------------|
-| `DATA_PATH`           | data/GlobalLandTemperaturesByMajorCity.csv          | Source CSV dataset                                                |
-| `MODEL_PATH`          | models/TemperatureForecastingModel.keras            | TensorFlow/Keras LSTM checkpoint save/load location                |
-| `MODEL_PATH_PYTORCH`  | models/TemperatureForecastingModel_pytorch.pt       | PyTorch LSTM checkpoint save/load location                         |
-| `OUTPUT_DIR`          | outputs                                              | Where per-model results, `eda.json`, and plot PNGs are written      |
-| `LSTM_EPOCHS`         | 10                                                    | Training epochs for both LSTMs (10 matches the original notebook)  |
-| `LSTM_RETRAIN`        | true                                                  | Retrain LSTMs each run, or reuse the existing checkpoints           |
-| `API_CORS_ORIGIN`     | http://localhost:5173                                | Allowed origin for the FastAPI CORS policy                          |
-| `SPARK_MASTER`        | local[*]                                              | Spark master URL (in-process engine, all cores; no cluster)         |
-| `SPARK_DRIVER_MEMORY` | 2g                                                    | Memory for the Spark driver JVM                                     |
-| `KAFKA_BOOTSTRAP_SERVERS` | localhost:9092                                    | Broker address for the producer and consumer                        |
-| `KAFKA_TOPIC`         | temperature-telemetry                                 | Topic the producer publishes to / consumer subscribes to            |
-| `KAFKA_PRODUCER_RATE` | 500                                                   | Target producer replay rate, messages/second                        |
-| `STREAMING_OUTPUT_DIR`| outputs/streaming                                     | Where the consumer's windowed-features Parquet + checkpoint live    |
-
-### frontend/.env
-
-| Variable              | Default (unset)                  | Purpose                                                      |
-|-----------------------|------------------------------------|----------------------------------------------------------------|
-| `VITE_API_BASE_URL`   | *(empty → uses Vite dev proxy)*    | Base URL of the FastAPI backend, for non-local deployments |
-
-No API keys, tokens, or credentials are required anywhere in this project.
-
-
-
 ## Troubleshooting
 
-Every issue below was hit and resolved during real local runs and a real Azure deployment — these
-aren't hypothetical.
+Every issue documented was hit and resolved during real local runs and a real Azure deployment —
+Spark JVM contention, Compose silently building the wrong stack, a base image drifting to a Debian
+release without JDK 17, container UID mismatches, Azure quota walls across three independent
+dimensions, and more.
 
-### Local
-
-**Airflow `train_arima` fails with `Py4JNetworkError` / `ConnectionRefusedError`**
-Transient Spark JVM contention: each of the 5 parallel training tasks builds its own SparkSession/JVM
-(the singleton in `spark_session.py` is per-process, not shared), and on a memory-constrained Docker
-VM one occasionally loses the race to open its Arrow-collection socket. **Fixed** —
-`forecasting_pipeline_dag.py` sets `retries=2, retry_delay=30s` on each training task, so this costs a
-30-second retry rather than a manual re-trigger.
-
-**`uvicorn --reload` restarts endlessly and the API is unreachable**
-`--reload` watches all of `backend/` including `.venv/`; `.pyc` writes inside `site-packages` retrigger
-it. Use `--reload-dir api --reload-dir src` (as in step 4), or drop `--reload` entirely.
-
-**Port already in use (8080, 5173, 8000)**
-Airflow's webserver is mapped to **8081** (not 8080) precisely because 8080 is commonly occupied. If
-Vite or the backend collide too, set `API_CORS_ORIGIN` (backend) and `VITE_API_BASE_URL` (frontend) to
-match whatever ports you actually end up on — a mismatch here surfaces as a CORS error, not a port
-error.
-
-**Live Telemetry page stops updating**
-Expected: the Kafka producer is a one-shot replay that exits after sending its batch. Re-run it for a
-fresh burst.
-
-**DAG shows `upstream_failed` on everything downstream of `run_pyspark_etl`**
-Check the actual `run_pyspark_etl` log — a failure there cascades. In the cloud deploy this was a
-`PermissionError` writing plot PNGs (see below).
-
-### Cloud deploy
-
-**`QuotaExceeded` on `LowPriorityCores`**
-Spot VMs draw from a separate, often very small quota (default was **3 cores** — not enough for a
-4-vCPU VM). Either request an increase, use a smaller Spot size, or use regular (non-Spot) pricing.
-
-**`SkuNotAvailable` — "Capacity Restrictions"**
-The Spot capacity pool for that specific SKU/region is exhausted right now. This is transient and
-independent of your quota. Try another region, another SKU, or regular pricing.
-
-**`QuotaExceeded` with `Current Limit: 0` on a v5-family VM**
-Some subscriptions have **zero** quota for newer VM generations while older ones have headroom.
-`az vm list-usage --location <region> -o table` shows the real picture. This project defaults to
-`Standard_D4s_v3` for exactly this reason.
-
-**`docker compose` builds the wrong stack / only Kafka starts**
-Compose walks *up* parent directories looking for a default-named `docker-compose.yml` when it can't
-find one in the working directory — silently picking up the repo root's Kafka-only file instead of
-`docker-compose.cloud.yml`. **Fixed** — `bootstrap.sh` exports `COMPOSE_FILE` explicitly.
-
-**`Unable to locate package openjdk-17-jdk-headless`**
-The floating `python:3.12-slim` tag drifted to Debian trixie, which doesn't carry JDK 17. **Fixed** —
-pinned to `python:3.12-slim-bookworm`.
-
-**`PermissionError` writing to `backend/outputs/`**
-`git clone` on the VM runs as root, so committed output files are root-owned — but Airflow's
-containers run as UID 50000 and can't overwrite them. **Fixed** — `bootstrap.sh` runs
-`chmod -R a+rwX` on `outputs/` after cloning.
-
-**IMDS returns an empty public IP right after VM creation**
-Azure's Instance Metadata Service doesn't immediately reflect a freshly-attached public IP, even
-though the NIC association is already correct. **Fixed** — Bicep now substitutes the address into
-`cloud-init` at deploy time instead of having the VM query for it.
-
-**`az resource list --tag` fails with "cannot use '--tag' with '--location'"**
-An Azure CLI argument-validation quirk that triggers on any machine with a default location set via
-`az configure`. **Fixed** — the teardown verifier lists resources unfiltered and filters by tag
-client-side.
-
-
+See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for the full list, each with its symptom,
+root cause, and fix.
 
 ## Lessons Learned
 
-1. **The simpler model can win, and you only find out by measuring.** SARIMAX beat both LSTMs here by
-   ~13% RMSE. On small, strongly-seasonal series, classical models with the right structural
-   assumptions frequently outperform higher-capacity networks — at a fraction of the compute and with
-   far better interpretability.
-2. **"Same architecture" does not mean "same result."** Identical LSTM stacks in TensorFlow and
-   PyTorch differed by ~2.2× RMSE on identical inputs, with seeds fixed and checkpoint strategy
-   matched on both sides. The dominant cause is default **weight initialization** — Keras seeds the
-   forget-gate bias at 1 (`unit_forget_bias=True`) and uses `glorot_uniform`/`orthogonal`; PyTorch
-   uses a single uniform scheme with no forget-gate special case. If you're porting a model between
-   frameworks and expecting parity, initialization is the first place to look, not the last.
-3. **Enforce data quality once, upstream.** A single Spark validation stage that fails fast with a
-   diagnosable error beats five models each failing differently and confusingly several stages later.
-4. **Never pin infrastructure to a floating base-image tag.** `python:3.12-slim` silently drifted to a
-   Debian release without the JDK the build required. Pin the OS release, not just the language
-   version.
-5. **Understand your tools' implicit search behavior.** Docker Compose walking up parent directories
-   silently built the wrong stack — the run "succeeded" while starting entirely the wrong services.
-6. **Cloud quota is multi-dimensional.** Spot quota, regular quota, per-VM-generation quota, and
-   regional capacity are four *independent* limits. Hitting one tells you nothing about the other
-   three — check `az vm list-usage` before guessing.
-7. **Container UID mismatches are a first-class deployment concern.** Root-owned files from a
-   `git clone` blocked a non-root container from writing, which surfaced as a mid-DAG
-   `PermissionError` rather than anything resembling a permissions problem.
-8. **Don't self-discover what the deployment already knows.** Querying IMDS for the VM's own public IP
-   raced against metadata propagation; the IaC layer already had the value and could inject it
-   deterministically.
-9. **Retry the transient, fix the systematic.** Concurrent Spark JVM contention is a genuine race, not
-   a logic bug — `retries=2` is the correct response. A wrong compose file is systematic — retrying
-   would just fail identically forever.
-10. **Verify teardown, don't assume it.** "I ran teardown" and "nothing is billing me" are different
-    claims. A post-teardown check for leftover resource groups and tagged resources turns the second
-    into evidence.
-11. **Guard clauses can neutralize themselves.** A placeholder-substitution check that compared against
-    the literal placeholder string was itself rewritten by the substitution — so it always reported
-    failure. Validate on a property the real value can't have, not on the placeholder text.
-12. **Scope CI to what it can actually test.** Airflow needs a ~7GB image and a live multi-container
-    stack, so it's verified manually rather than bloating every CI run — while Spark, all 5 models, and
-    the Kafka logic all stay fully covered, broker-free, at $0.
+Twelve things this project actually taught — from "the simpler model can win, and you only find out
+by measuring" to "verify teardown, don't assume it" — each one tied to a decision in the codebase
+rather than generic advice.
 
-
+See [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) for the full write-up.
 
 ## Notes on logic carried over from the original notebook
 

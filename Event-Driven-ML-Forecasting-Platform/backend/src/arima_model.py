@@ -16,7 +16,7 @@ from pmdarima.arima import auto_arima
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.arima.model import ARIMA
 
-from .series_utils import series_to_points
+from .series_utils import evaluate_forecast, series_to_points
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,17 @@ def plot_acf_pacf(train: pd.Series, output_dir: Path, lags: int = 40) -> None:
 
 
 def fit_and_forecast_arima(
-    train: pd.Series, y: pd.Series, output_dir: Path, steps: int = 36
+    train: pd.Series, test: pd.Series, y: pd.Series, output_dir: Path, steps: int = 36
 ) -> dict:
     """Fit ARIMA(0,0,2) on the training data and forecast `steps` months ahead.
 
     The notebook plots this forecast twice (cells 72 and 74) with near-identical
     code; both are preserved here as separate saved images.
+
+    Scored against `test` with the same shared `evaluate_forecast()` helper
+    SARIMAX and both LSTMs use -- the notebook never computed error metrics
+    for this model, which left ARIMA as the one entry in the dashboard's
+    comparison view with no MSE/RMSE to compare against.
     """
     model = ARIMA(train, order=(0, 0, 2))
     results = model.fit()
@@ -67,11 +72,12 @@ def fit_and_forecast_arima(
         "forecast": series_to_points(pred.predicted_mean),
         "confidence_interval_lower": series_to_points(pred_ci.iloc[:, 0]),
         "confidence_interval_upper": series_to_points(pred_ci.iloc[:, 1]),
+        "metrics": evaluate_forecast(pred.predicted_mean, test),
     }
 
 
-def run_arima(train: pd.Series, y: pd.Series, output_dir: Path) -> dict:
+def run_arima(train: pd.Series, test: pd.Series, y: pd.Series, output_dir: Path) -> dict:
     auto_arima_result = run_auto_arima(train)
     plot_acf_pacf(train, output_dir)
-    forecast = fit_and_forecast_arima(train, y, output_dir)
+    forecast = fit_and_forecast_arima(train, test, y, output_dir)
     return {"auto_arima": auto_arima_result, **forecast}
