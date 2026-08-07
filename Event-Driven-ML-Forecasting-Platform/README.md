@@ -560,8 +560,12 @@ python run_pipeline.py
 cd backend
 python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
 ```
-<img width="1181" height="239" alt="Screenshot 2026-07-10 at 11 18 44 PM" src="https://github.com/user-attachments/assets/bfa58527-a92c-4b4b-a639-afd864ef0aae" />
-<br><br>
+<img width="100%" alt="Uvicorn serving the FastAPI backend, answering health checks" src="docs/file12.png" />
+<p><em>Uvicorn up and serving — the <code>GET /api/health</code> hits are the frontend polling on
+load. This session used <code>--port 8010</code>; the screenshots that follow show the same port.
+Stick with <code>8000</code> unless you also change the proxy target in
+<code>frontend/vite.config.ts</code>.</em></p>
+<br>
 
 `--reload-dir` scopes the file watcher to just `api/` and `src/` — without it, `--reload` watches the
 whole `backend/` directory including `.venv/`, and package installs/`.pyc` writes inside
