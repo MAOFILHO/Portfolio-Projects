@@ -114,6 +114,10 @@ is actually needed.
 | LSTM (TensorFlow/Keras) | 2.059 | 1.435 | learned | Same architecture as the PyTorch LSTM — see finding #2 |
 | ARIMA | 2.409 | 1.552 | ❌ | Plain `ARIMA(0,0,2)`, **no seasonal term** — see finding #3 |
 
+Model architectures, hyperparameters, and window sizes are preserved exactly from the source
+notebook — both LSTM implementations use the same 3-layer 100→50→10 LSTM + 64→32→1 Dense stack — so
+differences in the table above come from the models, not from someone quietly tuning one of them.
+
 **Four findings worth stating outright:**
 
 1. **The right structural assumption beat the bigger model.** SARIMAX beat both LSTMs — roughly
@@ -998,27 +1002,11 @@ root cause, and fix.
 
 ## Lessons Learned
 
-Thirteen things this project actually taught — from "match the model's structure to the data's
-structure" to "verify teardown, don't assume it" — each one tied to a decision in the codebase
-rather than generic advice.
+Sixteen things this project actually taught — from "match the model's structure to the data's
+structure" to "a newer VM generation is not automatically an upgrade" — each one tied to a decision
+in the codebase rather than generic advice.
 
 See [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) for the full write-up.
-
-## Notes on logic carried over from the original notebook
-
-Model architectures, hyperparameters, and window sizes are preserved exactly from the source notebook
-(both LSTM implementations use the same 3-layer 100→50→10 LSTM + 64→32→1 Dense architecture, for a
-fair comparison).
-
-Two pre-existing quirks in the source notebook are called out here rather than silently fixed:
-
-- **`backend/src/sarimax_model.py`**: the notebook's "zoom in on SARIMAX model 2's forecast" plot
-  (cell 93) actually rendered **model 1**'s forecast due to what looks like a copy-paste bug (`pred`
-  instead of `pred2`). Now that each SARIMAX model runs independently on demand rather than
-  sequentially in one notebook pass, this is resolved by construction — each model's zoom plot
-  correctly uses its own forecast. See the module docstring for details.
-- Cells 72/74 in the notebook produced two near-identical ARIMA forecast plots; both are still
-  preserved as separate output images (`arima_forecast_1.png` / `arima_forecast_2.png`).
 
 ## Re-running with fresh data
 

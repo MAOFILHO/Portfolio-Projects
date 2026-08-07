@@ -50,6 +50,26 @@ best-practice list.
 13. **Scope CI to what it can actually test.** Airflow needs a ~7GB image and a live multi-container
     stack, so it's verified manually rather than bloating every CI run — while Spark, all 5 models, and
     the Kafka logic all stay fully covered, broker-free, at $0.
+14. **A newer VM generation is not automatically an upgrade — check, don't assume.** Being forced off
+    `D4s_v5` onto `D4s_v3` by quota felt like a downgrade. It wasn't. Priced against Azure's retail
+    API in East US, the two are **identical on-demand** ($0.1920/hr), and v3 is actually *cheaper* on
+    Spot ($0.0376 vs $0.0405/hr). More consequentially, the Dsv5 family **dropped the local temp
+    disk** — v3 ships 32GB of local SSD, v5 ships none, which is exactly why a separate D*d*sv5 family
+    exists — and local scratch is not incidental to a workload doing Spark shuffle spill and ~7GB
+    Docker image builds. A generational bump changes the spec sheet in both directions; read it before
+    treating the higher number as better.
+15. **"Not available" and "quota zero" are different failures with different fixes.** A support ticket
+    raised the Spot vCPU limit from 3 to 10 — real, and it worked. It did nothing for v5, because
+    `az vm list-skus` returns *no entry at all* for `Standard_D4s_v5` in that region on this
+    subscription: it isn't restricted, it isn't offered. No quota request can grant capacity that was
+    never on the menu; that needs a different region or subscription type. Diagnosing which of the two
+    you're hitting comes first, or you wait days for an approval that couldn't have helped.
+16. **Some bugs are dissolved by restructuring rather than fixed.** The source notebook's cell 93
+    plotted model 1's forecast under a "model 2" heading — a copy-paste bug (`pred` instead of
+    `pred2`) that was only *possible* because both models were fit sequentially in one long-lived
+    namespace where the stale variable stayed in scope. Making each model independently invocable
+    didn't fix that bug; it made it unrepresentable, since there is no `pred` in scope when model 2
+    runs alone. Shared mutable scope doesn't cause one bug, it enables a category of them.
 
 
 
