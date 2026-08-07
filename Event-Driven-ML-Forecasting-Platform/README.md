@@ -740,12 +740,6 @@ training automatically — verified by simulating a missing checkpoint locally. 
 test of its own (it needs a ~7GB image and a live multi-container stack) — it's verified manually, per
 step 7 above.
 
-<img width="1420" height="698" alt="Screenshot 2026-07-10 at 7 01 11 PM" src="https://github.com/user-attachments/assets/df6a2040-b384-4f28-9239-559f47e95fde" />
-<br><br>
-
-<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
-<br><br>
-
 <img width="100%" alt="GitHub Actions CI run for this project, both jobs green" src="docs/file10.png" />
 <p><em>A green CI run — <strong>Backend (pytest)</strong> in 8m 23s (Spark ETL parity, all 5 models,
 Kafka unit tests, on JDK 17) and <strong>Frontend (build)</strong> in 22s (TypeScript + Vite), both
