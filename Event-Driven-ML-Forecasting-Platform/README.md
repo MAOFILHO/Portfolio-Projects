@@ -388,7 +388,7 @@ event-driven-ml-forecasting-platform/
 │   │   ├── pages/                  # Model detail, Compare All, EDA, Learn, Live Telemetry pages
 │   │   ├── components/             # Sidebar model picker, charts, status indicators
 │   │   └── App.tsx
-│   ├── vite.config.ts              # Dev server + /api proxy to backend on :8000
+│   ├── vite.config.ts              # Dev server + /api proxy to backend on :8010
 │   ├── package.json
 │   └── .env.example
 │
@@ -572,8 +572,8 @@ whole `backend/` directory including `.venv/`, and package installs/`.pyc` write
 `site-packages` can trigger an endless restart loop that makes the API effectively unreachable. If
 you don't need auto-reload, just drop `--reload` (and the two `--reload-dir` flags) entirely.
 
-The API is now available at `http://localhost:8000` (interactive docs at
-`http://localhost:8000/docs`). From here, every model can also be re-run live from the dashboard
+The API is now available at `http://localhost:8010` (interactive docs at
+`http://localhost:8010/docs`). From here, every model can also be re-run live from the dashboard
 itself — `run_pipeline.py` is just a convenience seed step, not a required one.
 
 <img width="100%" alt="FastAPI interactive docs listing every endpoint" src="docs/file8.png" />
@@ -601,7 +601,7 @@ npm run dev
 <img width="1166" height="120" alt="Screenshot 2026-07-10 at 11 19 32 PM" src="https://github.com/user-attachments/assets/da629328-1445-4af8-85d9-e63052956d2f" />
 <br><br>
 
-Open `http://localhost:5173`. The Vite dev server proxies `/api` requests to the backend on port 8000
+Open `http://localhost:5173`. The Vite dev server proxies `/api` requests to the backend on port 8010
 (see `vite.config.ts`), so no CORS configuration is needed for local development. Pick a model from
 the sidebar, click **Run Model**, and watch it fit/train live; open **Compare All** once a few models
 have run, **Learn: PyTorch vs. TensorFlow** any time, or **Live Telemetry** once the Kafka layer below
