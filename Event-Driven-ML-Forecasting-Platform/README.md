@@ -1,6 +1,6 @@
 # Event-Driven ML Forecasting Platform
 ### Time-Series Forecasting on Apache Spark + Kafka + Airflow
-### TensorFlow vs. PyTorch — Bombay Surface Temperature, 1970–2012
+### PyTorch vs. TensorFlow — Bombay Surface Temperature, 1970–2012
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
 ![PySpark](https://img.shields.io/badge/PySpark-3.5-E25A1C?style=flat&logo=apachespark&logoColor=white&labelColor=1a1a2e)
