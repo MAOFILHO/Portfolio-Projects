@@ -25,16 +25,27 @@ Started as a local batch dashboard, then evolved into a small event-driven ML
 platform, entirely local and **$0 cost** — no managed cloud services required
 to run any of it:
 
-- **PySpark** is the sole ingest/ETL engine (`backend/src/data_loading.py`,
-  `preprocessing.py`, `validation.py`), not just pandas.
+- **Apache Spark** (via its Python API, PySpark) is the sole ingest/ETL
+  engine (`backend/src/data_loading.py`, `preprocessing.py`,
+  `validation.py`), not just pandas.
 - **Apache Kafka** (local, KRaft mode) carries simulated real-time telemetry
-  from the full dataset (~239k rows, ~100 cities) to a **PySpark Structured
+  from the full dataset (~239k rows, ~100 cities) to a **Spark Structured
   Streaming** consumer that maintains live windowed per-city stats, surfaced
   in the dashboard's **Live Telemetry** page.
 - **Apache Airflow** (local, LocalExecutor) orchestrates the same
   validate → ETL → train-5-models → export pipeline as a DAG, reusing the
   exact same pipeline/model code the API and `run_pipeline.py` already use —
   no logic is duplicated for orchestration.
+
+> **PySpark vs. Apache Spark, for clarity**: PySpark is Apache Spark's
+> official Python API. Apache Spark itself is the JVM-based (Scala)
+> distributed processing engine; PySpark is the Python library that lets
+> this project's code drive that same engine. So "PySpark" and "Apache
+> Spark" refer to the same underlying technology — same meaning, just
+> different framing (the engine vs. the Python interface to it). Both terms
+> show up throughout this README depending on whether the sentence is
+> talking about the technology in general or this project's specific
+> Python usage of it.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how these three layers
 fit together, and the ["Project history"](#project-history) section below for
@@ -49,13 +60,13 @@ Beyond the modelling itself, the value here is in the pipeline discipline
 around it:
 
 - **Translating raw temporal data into structured, model-ready inputs** —
-  **PySpark** (not just pandas) is the sole ingest/ETL engine
-  (`backend/src/data_loading.py`, `preprocessing.py`, `validation.py`):
-  fail-fast schema/quality validation, then consistent scaling and
-  rolling-window construction feeding every model, statistical or deep
-  learning, identically. Built on Spark specifically so the same
-  transformation logic scales past what pandas can hold in memory on one
-  machine, without a rewrite.
+  **Apache Spark** (not just pandas), driven from Python via its PySpark
+  API, is the sole ingest/ETL engine (`backend/src/data_loading.py`,
+  `preprocessing.py`, `validation.py`): fail-fast schema/quality validation,
+  then consistent scaling and rolling-window construction feeding every
+  model, statistical or deep learning, identically. Built on Spark
+  specifically so the same transformation logic scales past what pandas can
+  hold in memory on one machine, without a rewrite.
 - **Identifying patterns that inform operational decisions** — trend,
   seasonality, and stationarity are surfaced explicitly (EDA + ADF/KPSS
   tests) before any model is fit, not left implicit in a black box.
@@ -163,9 +174,9 @@ docker-compose.yml   Local Kafka broker (KRaft mode), for the streaming layer
 | **Deep learning (TensorFlow)** | TensorFlow / Keras (`tf.keras`, `tf.data`) |
 | **Deep learning (PyTorch)** | PyTorch (`torch.nn`, `DataLoader`) |
 | **Statistical forecasting** | statsmodels (ARIMA, SARIMAX) + `pmdarima` (`auto_arima`) |
-| **Batch ETL engine** | PySpark (`pyspark[sql]`, local mode) — sole ingest/clean engine, not just pandas |
+| **Batch ETL engine** | Apache Spark, via PySpark (`pyspark[sql]`, local mode) — sole ingest/clean engine, not just pandas |
 | **Streaming ingestion** | Apache Kafka (local, KRaft mode, no Zookeeper) |
-| **Stream processing** | PySpark Structured Streaming (tumbling windows, per-city aggregates) |
+| **Stream processing** | Apache Spark Structured Streaming, via PySpark (tumbling windows, per-city aggregates) |
 | **Orchestration** | Apache Airflow (local, LocalExecutor, custom Docker image) |
 | **Data handling** | pandas, NumPy |
 | **Backend framework** | FastAPI |
@@ -444,7 +455,7 @@ Every model — statistical or deep learning, TensorFlow or PyTorch — is fed
 by the same pipeline (`backend/src/data_loading.py` →
 `backend/src/validation.py` → `backend/src/preprocessing.py`), so data
 quality is enforced once, upstream, rather than re-implemented per model.
-**PySpark is the sole ingest/ETL engine** here, not pandas — `data_loading.py`
+**Apache Spark (via PySpark) is the sole ingest/ETL engine** here, not pandas — `data_loading.py`
 reads and filters the CSV as a Spark DataFrame, `validation.py` runs its
 checks as Spark SQL aggregations, and `preprocessing.py` does the date
 parsing, column selection, and 1970–2012 trim in Spark before a single
