@@ -558,7 +558,7 @@ python run_pipeline.py
 
 ```bash
 cd backend
-python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
+python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8010
 ```
 <img width="100%" alt="Uvicorn serving the FastAPI backend, answering health checks" src="docs/file12.png" />
 <p><em>Uvicorn up and serving — the <code>GET /api/health</code> hits are the frontend polling on
