@@ -19,7 +19,7 @@ VM one occasionally loses the race to open its Arrow-collection socket. **Fixed*
 `--reload` watches all of `backend/` including `.venv/`; `.pyc` writes inside `site-packages` retrigger
 it. Use `--reload-dir api --reload-dir src` (as in step 4), or drop `--reload` entirely.
 
-**Port already in use (8080, 5173, 8000)**
+**Port already in use (8080, 5173, 8010)**
 Airflow's webserver is mapped to **8081** (not 8080) precisely because 8080 is commonly occupied. If
 Vite or the backend collide too, set `API_CORS_ORIGIN` (backend) and `VITE_API_BASE_URL` (frontend) to
 match whatever ports you actually end up on — a mismatch here surfaces as a CORS error, not a port

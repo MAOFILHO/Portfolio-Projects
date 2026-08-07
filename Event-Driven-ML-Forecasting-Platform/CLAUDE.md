@@ -37,7 +37,7 @@ pytest tests/test_smoke.py -k arima     # run a single test by keyword
 
 python run_pipeline.py                  # seeds all 5 models' results (first-load data)
 
-python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000
+python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8010
 # --reload-dir scopes the watcher to api/ + src/ only — plain --reload
 # watches all of backend/ including .venv/, which can trigger endless
 # restart loops from package installs/.pyc writes in site-packages.
@@ -88,12 +88,12 @@ docker compose exec airflow-scheduler airflow dags trigger forecasting_pipeline
 ```bash
 npm install
 cp .env.example .env       # optional: point VITE_API_BASE_URL elsewhere
-npm run dev                # Vite dev server on :5173, proxies /api -> :8000
+npm run dev                # Vite dev server on :5173, proxies /api -> :8010
 npm run build               # tsc -b && vite build — this is also the CI check
 npm run lint                 # tsc --noEmit (there is no separate ESLint)
 ```
 
-The dev server proxies `/api` to `http://localhost:8000` (`vite.config.ts`),
+The dev server proxies `/api` to `http://localhost:8010` (`vite.config.ts`),
 so no CORS setup is needed locally — CORS is still configured on the backend
 (`API_CORS_ORIGIN` in `backend/.env`) for non-proxied deployments.
 

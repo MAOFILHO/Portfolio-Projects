@@ -643,9 +643,8 @@ python -m uvicorn api.main:app --reload --reload-dir api --reload-dir src --port
 ```
 <img width="100%" alt="Uvicorn serving the FastAPI backend, answering health checks" src="docs/file12.png" />
 <p><em>Uvicorn up and serving — the <code>GET /api/health</code> hits are the frontend polling on
-load. This session used <code>--port 8010</code>; the screenshots that follow show the same port.
-Stick with <code>8000</code> unless you also change the proxy target in
-<code>frontend/vite.config.ts</code>.</em></p>
+load. If you change the port, change the proxy target in <code>frontend/vite.config.ts</code> to
+match — otherwise the dashboard loads but every request 404s.</em></p>
 <br>
 
 `--reload-dir` scopes the file watcher to just `api/` and `src/` — without it, `--reload` watches the
@@ -982,8 +981,8 @@ root cause, and fix.
 
 ## Lessons Learned
 
-Twelve things this project actually taught — from "the simpler model can win, and you only find out
-by measuring" to "verify teardown, don't assume it" — each one tied to a decision in the codebase
+Thirteen things this project actually taught — from "match the model's structure to the data's
+structure" to "verify teardown, don't assume it" — each one tied to a decision in the codebase
 rather than generic advice.
 
 See [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) for the full write-up.
