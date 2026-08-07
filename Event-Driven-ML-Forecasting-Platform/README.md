@@ -830,6 +830,27 @@ outside the VM's own Docker network needs to reach it directly).
 compromised or misused run can't reach anything outside this project even within the same
 subscription).
 
+> **What OIDC is, and what it's doing here**: **OpenID Connect** is an identity layer built on top of
+> OAuth 2.0. Most people meet it as "Sign in with Google" — an app verifying who a *person* is. This
+> project uses the same protocol for a different job: **workload identity federation**, where the
+> thing being authenticated is a CI job rather than a human, and no profile or login is involved at
+> all.
+>
+> Concretely: GitHub mints a short-lived, cryptographically signed token describing the run — which
+> repository, which branch, which workflow. Azure is configured to trust that issuer for exactly one
+> subject (`repo:MAOFILHO/Portfolio-Projects:ref:refs/heads/main`) and exchanges the token for an
+> access token limited to this project's custom role.
+>
+> The practical consequence is that **no secret exists anywhere**. There's no client secret in GitHub,
+> none in this repo, nothing to rotate on a schedule, and nothing to leak in a log. Each run gets its
+> own credential that expires in minutes and is only valid for a workflow running on `main` in this
+> specific repository — so even a copy of it is useless somewhere else. That's the security argument
+> for OIDC over the older "create a service principal, paste its password into a secret" approach.
+>
+> Microsoft's write-ups if you want the full protocol:
+> [what OpenID Connect is](https://www.microsoft.com/en-ca/security/business/security-101/what-is-openid-connect-oidc)
+> · [OIDC on the Microsoft identity platform](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc)
+
 The deploy workflow takes a `teardown_after` input, which turns the whole thing into a single
 self-cleaning validation run: provision → smoke test → destroy → verify destroyed, unattended. That
 run is the strongest evidence in this repo that the cloud path actually works, because nothing about
