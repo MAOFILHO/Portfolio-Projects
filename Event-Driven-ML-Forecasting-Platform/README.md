@@ -24,8 +24,8 @@ This project forecasts **monthly surface temperature** and, in doing so, demonst
 event-driven ML platform — built end to end, running entirely on a laptop at **$0 cost**, with an
 optional one-command deploy to Azure.
 
-**The dataset** is Berkeley Earth's `GlobalLandTemperaturesByMajorCity` — **239,177 monthly
-observations across 100 major world cities, spanning 1743–2013**. The forecasting workload narrows
+**The dataset** is Berkeley Earth's `GlobalLandTemperaturesByMajorCity` — **239,177** monthly
+observations across **100** major world cities, spanning 1743–2013. The forecasting workload narrows
 to a single city (**Bombay/Mumbai, 1970–2012**) to give every model an identical, clean, seasonal
 series to compete on; the streaming layer deliberately uses the *full* 100-city dataset, because
 that's what makes a streaming pipeline worth having.
