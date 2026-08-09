@@ -1,4 +1,18 @@
 # Microsoft Foundry Agentic Fine-Tuning Platform
+### LangGraph Orchestrator + MCP Tools over Microsoft Foundry
+### Model Discovery · Supervised Fine-Tuning · Agentic Comparison
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?style=flat&logo=fastapi&logoColor=white&labelColor=1a1a2e)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat&labelColor=1a1a2e)
+![MCP](https://img.shields.io/badge/Model_Context_Protocol-2.0-6E56CF?style=flat&labelColor=1a1a2e)
+![React](https://img.shields.io/badge/React-18.3-61DAFB?style=flat&logo=react&logoColor=white&labelColor=1a1a2e)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat&logo=typescript&logoColor=white&labelColor=1a1a2e)
+![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
+![Azure](https://img.shields.io/badge/Azure-AI_Foundry-0078D4?style=flat&logo=microsoftazure&logoColor=white&labelColor=1a1a2e)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white&labelColor=1a1a2e)
+
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-foundry-agentic-finetuning-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-foundry-agentic-finetuning-platform-ci.yml)
 
 **Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
@@ -26,6 +40,39 @@ Desktop/Code could call directly, since nothing here is UI-specific. The
 whole thing runs at **$0** by default (`DEMO_MODE=mock`, fixture-backed, no
 Azure account needed) and switches to real Azure Foundry calls with one
 environment variable.
+
+## Results and Impact
+
+> **Scope note, stated plainly:** this is a **portfolio/demonstration project
+> automating two K21Academy lab guides**, not a system deployed into a
+> business with measured commercial outcomes. Everything below is real —
+> a real Azure fine-tuning job, a real evaluation run, a real public
+> deployment — but the results are *engineering* results. No ROI or
+> cost-savings figures are claimed, because none have been measured.
+
+### Verified engineering outcomes
+
+| Outcome | Evidence |
+|---|---|
+| Full test suite green | **78 unit tests** — schemas, cost math, MCP tool contracts, all 3 agents — no cloud, no network |
+| CI runs on every push | GitHub Actions: Backend (lint + tests + mock end-to-end), Frontend (`tsc` + build), Terraform (`validate` + `fmt`) — **$0 cost**, ~90s, no Azure calls |
+| Real fine-tuning job completed | `gpt-4.1` SFT job (`ftjob-2078c2a9a22043d3b1d1698a9aea1af8`) — 100 steps, final train loss **0.02**, succeeded and auto-deployed to a $0/hr Developer-tier endpoint |
+| Real evaluation run completed | 45-row synthetic dataset × 16 AI-judge evaluators — **704/720 (97.8%)** pass rate, matching the source lab exactly |
+| Public hosting verified end to end | Container App + Static Web App live at a public URL; Entra ID sign-in confirmed with a real Microsoft account, plus a direct `curl` **401** against a protected route with no token attached |
+| Teardown verified clean | `smoke_post_teardown` confirms **zero** surviving tagged resources at every auto-incremented suffix |
+| Local running cost | **$0** — `DEMO_MODE=mock`, fixture-backed, unlimited runs |
+| One full live session (all 3 workflows) | **≈ $3–6**, dominated by the 16-evaluator × 45-row evaluation |
+
+### What this project demonstrates
+
+❌ A portal click-through that only produces results while someone is
+actively driving the Foundry UI, with no record of what happened or why
+
+✅ A pipeline where **catalog discovery, evaluation, fine-tuning, and
+behavioural comparison** are separate, tested, typed components —
+reproducible from a single `make run`, deployable to the public internet
+behind real authentication, and torn down with proof nothing was left
+billing
 
 ## Architecture
 
@@ -67,6 +114,30 @@ is reusable outside this app, not locked to its UI.
 `DEMO_MODE` only swaps the backing implementation
 (`src/app/services/fixtures.py` vs. `src/app/services/azure_foundry.py`).
 Nothing in the agents, routers, or frontend branches on mode.
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Orchestration** | LangGraph (supervisor node + 3 sub-agents) |
+| **Tool protocol** | Model Context Protocol (MCP) — 3 stdio servers, 19 tools, also usable directly by Claude Desktop/Code |
+| **AI platform** | Microsoft Foundry (Azure AI Foundry) — model catalog, SFT jobs, evaluations |
+| **Backend framework** | FastAPI |
+| **API server** | Uvicorn (ASGI) |
+| **Background job execution** | In-process registry (`jobs.py`), `asyncio.to_thread` for blocking Azure SDK calls |
+| **Data validation** | Pydantic v2 (catalog, evaluation, finetune, training, dataset schemas) |
+| **Auth (hosted deployment)** | Microsoft Entra ID — MSAL.js (frontend) + self-managed bearer-token validation (backend) |
+| **Frontend framework** | React 18 + TypeScript |
+| **Build tool** | Vite |
+| **Styling** | Contoso-placeholder corporate theme (custom CSS) |
+| **Backend testing** | pytest (78 tests) |
+| **IaC** | Terraform (`azurerm`, `azuread`, `azapi` providers) |
+| **Container hosting** | Azure Container Apps (Consumption, `min_replicas=0`) |
+| **Static hosting** | Azure Static Web Apps (Free tier) |
+| **Containerization** | Docker / Docker Compose |
+| **CI/CD** | GitHub Actions, OIDC (no stored Azure secret) |
+| **Observability** | OpenTelemetry → Application Insights |
+| **Config management** | `.env` files (`pydantic-settings`, Vite env vars) |
 
 ## Data flow
 
