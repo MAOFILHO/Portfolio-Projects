@@ -35,7 +35,7 @@ environment variable.
                                       │ REST
                         ┌─────────────▼─────────────┐
                         │   FastAPI  (src/app)      │
-                        │  /catalog /finetune       │
+                        │  /catalog /fine-tune      │
                         │  /inference /agent /auth  │
                         └─────────────┬─────────────┘
                                       │
@@ -44,14 +44,14 @@ environment variable.
                         └──┬──────────┬──────────┬──┘
                            │          │          │
                   ┌────────▼──┐ ┌─────▼─────┐ ┌──▼───────────┐
-                  │ Discovery │ │ FineTune  │ │ Comparison   │   sub-agents
+                  │ Discovery │ │ Fine-Tune │ │ Comparison   │   sub-agents
                   │  Agent    │ │  Agent    │ │   Agent      │
-                  └────────┬──┘ └─────┬─────┘ └───┬──────────┘
-                           │ MCP (stdio/JSON-RPC) │
-                  ┌────────▼──┐ ┌─────▼──────┐ ┌──▼──────────┐
-                  │mcp-catalog│ │mcp-finetune│ │mcp-inference│  3 MCP servers, 19 tools
-                  └────────┬──┘ └─────┬──────┘ └──┬──────────┘
-                           └──────────┼───────────┘
+                  └────────┬──┘ └─────┬─────┘ └────┬─────────┘
+                           │ MCP (stdio/JSON-RPC)  │
+                  ┌────────▼──┐ ┌─────▼───────┐ ┌──▼──────────┐
+                  │mcp-catalog│ │mcp-fine-tune│ │mcp-inference│  3 MCP servers, 19 tools
+                  └────────┬──┘ └─────┬───────┘ └──┬──────────┘
+                           └──────────┼────────────┘
                                       │ mock fixtures  ⇄  live Azure SDK
                         ┌─────────────▼──────────────┐
                         │  Azure AI Foundry (eastus2)│
