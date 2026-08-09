@@ -452,6 +452,13 @@ Or with Docker (no Python/Node install needed):
 docker compose up    # backend :8000, frontend :8080 — both $0, mock mode
 ```
 
+<img width="100%" alt="Docker Desktop showing the project's frontend and backend containers" src="docs/file15.png" />
+<p><em><code>docker compose up</code>'s two containers registered in Docker
+Desktop — <code>azure-foundry-langgraph-mcp-agent</code> alongside a sibling
+monorepo project's own container, proving the compose stack builds and runs
+without any local Python/Node install. Shown stopped here, after the local
+session ended.</em></p>
+
 Going live:
 
 ```bash
@@ -459,6 +466,17 @@ make provision       # budget alert FIRST, then Terraform apply, then live smoke
 DEMO_MODE=live make run
 make teardown         # destroys every tagged resource, at every suffix, then verifies zero survive
 ```
+
+<img width="100%" alt="The Azure resource group provisioned by make provision, all resources tagged managed_by: foundry-agentic-platform" src="docs/file13.png" />
+<p><em>What <code>make provision</code> actually creates, in one resource
+group: the Foundry account + project, the three base model deployments, the
+Container App + Container Apps Environment, the Static Web App, Application
+Insights, and a Log Analytics workspace — all tagged
+<code>managed_by: foundry-agentic-platform</code>, which is exactly what
+<code>make teardown</code>'s orphan sweep and the release-blocking
+post-teardown smoke test key off of (see
+<a href="#a-deliberate-risk-and-how-its-mitigated">A deliberate risk, and how
+it's mitigated</a>).</em></p>
 
 ## Environment variables
 
@@ -587,6 +605,17 @@ projects' pipelines without collisions.
 | `…-deploy.yml` | `workflow_dispatch` only, requires typing `confirm: provision` | Yes (OIDC) | Provisions the AI infra (Foundry account, base model deployments) and runs a real live-mode pass |
 | `…-hosting-deploy.yml` | `workflow_dispatch` only | Yes (OIDC) | Builds + pushes the backend image to Docker Hub, rolls the Container App to it, builds + deploys the frontend to the Static Web App |
 | `…-teardown.yml` | `workflow_dispatch`, **and** a nightly cron safety-net sweep | Yes (OIDC) | `terraform destroy` + a tag-based orphan sweep + a release-blocking smoke test that fails loudly if anything survives |
+
+<img width="100%" alt="Docker Desktop's Images tab, showing the backend image pushed to Docker Hub alongside the locally-built frontend/backend images" src="docs/file14.png" />
+<p><em>What <code>hosting-deploy.yml</code>'s image build step produces —
+<code>maofilho/azure-foundry-agentic-finetuning-platform-backend</code>,
+pushed to a public Docker Hub repo (no Azure Container Registry needed, see
+<a href="#live-deployment">Live deployment</a>), sitting alongside the
+locally-built frontend/backend images from <code>docker compose up</code>
+above.</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 <img width="100%" alt="" src="docs/file12.png" />
 
@@ -841,7 +870,7 @@ Azure-Foundry-Agentic-FineTuning-Platform/
 └── docs/
     ├── TROUBLESHOOTING.md             # 15 real bugs — Symptom / Root cause / Fix
     ├── LESSONS_LEARNED.md             # Generalizable takeaways from each one
-    └── file1.png … file11.png         # Web application screenshots
+    └── file1.png … file15.png         # Web app, CI/CD, provisioning, and Docker screenshots
 
 (GitHub Actions workflows live at the monorepo root .github/workflows/,
  prefixed azure-foundry-agentic-finetuning-platform-* — see GitHub Actions CI/CD)
