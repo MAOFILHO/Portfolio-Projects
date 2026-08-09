@@ -476,18 +476,89 @@ The rest of Workflow 3's prompt-by-prompt comparison, plus the agent trace
 showing how the sub-agent resolved the fine-tuned deployment and scored
 each side.
 
-## Project layout
+## Project Structure
 
 ```
-├── src/app/            FastAPI app: routers, LangGraph agents, Pydantic v2 schemas, config, telemetry
-├── mcp_servers/         3 MCP servers (catalog, finetune, inference) — 19 tools total
-├── frontend/            Vite + React 18 + TypeScript, Contoso theme
-├── infra/terraform/      Budget-first IaC: budget → Foundry account/project → model deployments
-├── data/                Lab dataset + 7 additional converted datasets + fixtures for mock mode
-├── tests/               unit / smoke_pre / smoke_post_provision / smoke_post_run / smoke_post_teardown
-├── (GitHub Actions workflows live at the monorepo root .github/workflows/,
-│   prefixed azure-foundry-agentic-finetuning-platform-* — see Live deployment)
-├── PLAN.md, TASKS.md, COSTS.md, CHANGELOG.md    build record — architecture decisions, cost approval, phase gates
+Azure-Foundry-Agentic-FineTuning-Platform/
+├── README.md                          # This file
+├── PLAN.md, TASKS.md, COSTS.md         # Build record — architecture decisions, cost approval, phase gates
+├── CHANGELOG.md                       # What shipped when
+├── Makefile                           # make setup / run / provision / hosting-role / teardown / test
+├── pyproject.toml, requirements.txt   # Python project metadata + pinned dependencies
+├── .env.example                       # Environment variables template
+├── Dockerfile, docker-compose.yml     # Backend image; local $0 mock-mode stack
+│
+├── src/app/                           # FastAPI backend
+│   ├── main.py                        # App entrypoint — router wiring, CORS, Entra auth dependency
+│   ├── config.py                      # Pydantic Settings — single source of truth, reads .env
+│   ├── auth_entra.py                  # Entra ID bearer-token validation (public deployment only)
+│   ├── jobs.py                        # In-process background job registry (survives page refresh)
+│   ├── telemetry.py                   # OpenTelemetry setup — console + Application Insights
+│   ├── cli.py                         # `python -m app.cli` — run-all, sync-env, mcp-list, validate-fixtures
+│   │
+│   ├── agents/                        # LangGraph orchestrator + 3 sub-agents
+│   │   ├── orchestrator.py            # Supervisor node — routes by intent or explicit demo
+│   │   ├── discovery_agent.py         # Workflow 1 — catalog, leaderboard, synthetic evaluation
+│   │   ├── finetune_agent.py          # Workflow 2 — validate → cost → upload → train → deploy
+│   │   ├── comparison_agent.py        # Workflow 3 — baseline vs. fine-tuned, behavioural scoring
+│   │   └── state.py                   # Shared LangGraph state schema
+│   │
+│   ├── routers/                       # FastAPI route handlers
+│   │   ├── health.py, auth.py         #   open routes — no Entra token required
+│   │   └── catalog.py, finetune.py,   #   Entra-gated in the hosted deployment
+│   │       inference.py, agent.py     #   (no-op check in local/mock dev)
+│   │
+│   ├── schemas/                       # Pydantic v2 models — catalog, evaluation, finetune, training, dataset
+│   ├── services/                      # azure_foundry.py (live SDK) ⇄ fixtures.py (mock) ⇄ comparison.py (scoring)
+│   └── mcp_clients/registry.py        # In-process MCP tool registry (call_tool by name)
+│
+├── mcp_servers/                       # 3 standalone MCP servers — also usable directly by Claude Desktop/Code
+│   ├── foundry_catalog/server.py      #   list_models, get_leaderboard, compare_models
+│   ├── foundry_finetune/server.py     #   validate_jsonl, create_sft_job, deploy_finetuned_model
+│   └── foundry_inference/server.py    #   chat_completion, compare_completions, create_evaluation
+│
+├── frontend/                          # Vite + React 18 + TypeScript, Contoso theme
+│   └── src/
+│       ├── App.tsx, main.tsx          # Entra-gated vs. demo-gated app shell (isEntraEnabled)
+│       ├── auth/msalConfig.ts         # MSAL.js config — no-op in local/mock dev
+│       ├── api/                       #   client.ts (typed fetch + bearer token), useAgentRun.ts (job polling)
+│       ├── pages/                     #   Home + Demo1Discovery / Demo2FineTune / Demo3Comparison
+│       ├── components/                #   Sidebar, Login, ProgressLog, TraceLog
+│       └── styles/theme.css           # Azure-blue theme (CSS custom properties)
+│
+├── infra/
+│   ├── foundry-deployer-role.json     # Least-privilege custom RBAC role for CI's OIDC identity
+│   └── terraform/
+│       ├── main.tf                    # Budget → Foundry account/project → base model deployments
+│       ├── hosting.tf                 # Container App + Static Web App + Entra sign-in app
+│       ├── observability.tf           # Log Analytics + Application Insights
+│       ├── variables.tf, outputs.tf,
+│       │   versions.tf
+│       ├── modules/                   #   foundry/, model_deployment/, budget/
+│       └── scripts/
+│           ├── next_suffix.py         #   auto-increment naming (Terraform external data source)
+│           └── sweep_orphans.py       #   tag-based orphan cleanup for teardown
+│
+├── data/
+│   ├── travel-finetune-hotel.jsonl    # The lab's own dataset (real recorded Azure training run)
+│   ├── convert_bedrock_datasets.py    # Converts AWS Bedrock Converse format → Azure fine-tuning format
+│   ├── converted/                     # 7 additional datasets (banking, healthcare, retail, IT, ...)
+│   └── fixtures/                      # Recorded mock-mode responses — $0, no Azure calls
+│
+├── tests/
+│   ├── unit/                          # 78 tests, no cloud, no network
+│   ├── smoke_pre/                     # Pre-provision: tool versions, az auth, region/quota checks
+│   ├── smoke_post_provision/          # Post-provision: every resource live + on the approved SKU
+│   ├── smoke_post_run/                # Post-run: outputs exist and are non-empty
+│   └── smoke_post_teardown/           # Post-teardown: zero surviving tagged resources — release blocker
+│
+└── docs/
+    ├── TROUBLESHOOTING.md             # 15 real bugs — Symptom / Root cause / Fix
+    ├── LESSONS_LEARNED.md             # Generalizable takeaways from each one
+    └── file1.png … file11.png         # Web application screenshots
+
+(GitHub Actions workflows live at the monorepo root .github/workflows/,
+ prefixed azure-foundry-agentic-finetuning-platform-* — see GitHub Actions CI/CD)
 ```
 
 ---
