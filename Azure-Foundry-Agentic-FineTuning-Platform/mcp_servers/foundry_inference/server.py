@@ -55,7 +55,9 @@ def _results_payload(run: Any) -> dict[str, Any]:
     }
 
 
-async def _complete(deployment: str, prompt: str, system_prompt: str, fine_tuned: bool) -> dict[str, Any]:
+async def _complete(
+    deployment: str, prompt: str, system_prompt: str, fine_tuned: bool
+) -> dict[str, Any]:
     settings = get_settings()
     if settings.is_mock:
         return {
@@ -224,7 +226,7 @@ async def get_evaluation_results(run_name: str = "travel-assistant-eval") -> dic
     settings = get_settings()
     if not settings.is_mock:
         if _last_live_eval is None:
-            return {"error": "no evaluation has been created yet this run — call create_evaluation first"}
+            return {"error": "no evaluation yet this run — call create_evaluation first"}
         return _results_payload(_last_live_eval)
 
     return _results_payload(fixtures.get_evaluation_run())

@@ -49,9 +49,7 @@ async def require_entra_auth(request: Request) -> None:
 
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
     token = auth_header.removeprefix("Bearer ").strip()
 
     try:

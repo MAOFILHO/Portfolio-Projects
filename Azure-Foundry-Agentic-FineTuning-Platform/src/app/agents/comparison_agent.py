@@ -38,7 +38,9 @@ async def run_comparison(state: AgentState) -> dict[str, Any]:
         with span("mcp.get_job_status"):
             job = await call_tool("get_job_status", {})
             fine_tuned_deployment = job.get("deployment_name") or ""
-            trace.append(f"resolved fine-tuned deployment → {fine_tuned_deployment or '(none yet)'}")
+            trace.append(
+                f"resolved fine-tuned deployment → {fine_tuned_deployment or '(none yet)'}"
+            )
 
         with span("mcp.compare_completions"):
             report = await call_tool(
