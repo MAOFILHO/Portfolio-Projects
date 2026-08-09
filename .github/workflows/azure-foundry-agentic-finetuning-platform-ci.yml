@@ -1,0 +1,117 @@
+name: Azure-Foundry-Agentic-FineTuning-Platform CI
+
+# Runs on every push/PR touching this project's folder only — path-scoped so
+# it never fires on an unrelated sibling project's changes, and never fires
+# on unrelated projects touching theirs. Everything here runs in
+# DEMO_MODE=mock at $0 cost, no Azure credentials needed. See
+# azure-foundry-agentic-finetuning-platform-deploy.yml for the workflow that
+# actually touches Azure.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Azure-Foundry-Agentic-FineTuning-Platform/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Azure-Foundry-Agentic-FineTuning-Platform/**"
+
+env:
+  DEMO_MODE: mock
+
+jobs:
+  backend:
+    name: Backend — lint, unit tests, mock end-to-end
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: Azure-Foundry-Agentic-FineTuning-Platform/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ruff lint
+        run: ruff check src tests mcp_servers data
+
+      - name: Ruff format check
+        run: ruff format --check src tests mcp_servers data
+
+      - name: Validate bundled fixtures against Pydantic schemas
+        run: PYTHONPATH=src python -m app.cli validate-fixtures
+
+      - name: Unit tests (with coverage)
+        run: pytest tests/unit --cov=src/app --cov-report=term-missing
+
+      - name: Mock end-to-end run (all 3 workflows)
+        run: PYTHONPATH=src python -m app.cli run-all
+
+      - name: List MCP tools (sanity check the tool surface loads)
+        run: PYTHONPATH=src python -m app.cli mcp-list
+
+      - name: Boot the API and hit /health
+        run: |
+          PYTHONPATH=src python -m uvicorn app.main:app --port 8000 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8000/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:8000/health | tee /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json
+          grep -q '"demo_mode":"mock"' /tmp/health.json
+
+  frontend:
+    name: Frontend — type-check, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: Azure-Foundry-Agentic-FineTuning-Platform/frontend/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit -p tsconfig.app.json
+      - run: npm run build
+
+  terraform:
+    name: Terraform — validate + fmt check (no apply, no credentials needed)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init (no backend, no credentials)
+        run: terraform init -input=false -backend=false
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      - name: next_suffix.py unit tests (Terraform external-provider contract)
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        run: |
+          python -m pip install --upgrade pip
+          pytest tests/unit/test_next_suffix.py -v

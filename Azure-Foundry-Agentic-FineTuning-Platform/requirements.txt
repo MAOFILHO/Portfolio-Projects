@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Azure Foundry Agentic Fine-Tuning Platform — pinned dependencies
+# Versions verified against PyPI on 2026-08-05.
+# ---------------------------------------------------------------------------
+
+# --- Web / API layer -------------------------------------------------------
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+python-multipart==0.0.20
+
+# --- Validation ------------------------------------------------------------
+pydantic==2.13.4
+pydantic-settings==2.7.1
+
+# --- Agentic layer ---------------------------------------------------------
+langgraph==1.2.10
+langchain-core==1.5.3
+
+# --- Model Context Protocol -------------------------------------------------
+mcp==2.0.0
+
+# --- Azure / OpenAI --------------------------------------------------------
+openai==2.53.0
+azure-identity==1.25.3
+azure-mgmt-cognitiveservices==14.1.0
+azure-mgmt-resource==23.3.0
+
+# --- Auth (public hosted deployment only — see src/app/auth_entra.py) ------
+# Validates Entra ID bearer tokens ourselves instead of relying on Container
+# Apps' Easy Auth, which has a confirmed platform bug: it 401s the browser's
+# CORS preflight OPTIONS request (which structurally never carries
+# credentials), breaking every cross-origin SPA call.
+PyJWT[crypto]==2.10.1
+
+# --- Observability ---------------------------------------------------------
+# azure-monitor-opentelemetry pins its own compatible opentelemetry-* range;
+# we let it drive those transitively rather than over-pinning and deadlocking.
+azure-monitor-opentelemetry==1.8.9
+opentelemetry-instrumentation-fastapi
+rich==14.2.0
+
+# --- HTTP ------------------------------------------------------------------
+httpx==0.28.1
+
+# --- Testing ---------------------------------------------------------------
+pytest==9.1.1
+pytest-asyncio==1.3.0
+pytest-cov==7.0.0
+
+# --- Lint --------------------------------------------------------------
+ruff==0.16.1
+pyyaml==6.0.3  # only used to validate .github/workflows/*.yml syntax in dev

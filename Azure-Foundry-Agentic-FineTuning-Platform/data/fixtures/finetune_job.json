@@ -1,0 +1,903 @@
+{
+  "id": "ftjob-2078c2a9a22043d3b1d1698a9aea1af8",
+  "name": "gpt-4.1-2025-04-14.ftjob-2078c2a9a22043d3b1d1698a9aea1af8-ft-travel",
+  "status": "succeeded",
+  "config": {
+    "base_model": "gpt-4.1",
+    "base_model_version": "2025-04-14",
+    "customization_method": "Supervised",
+    "training_type": "Developer",
+    "training_file": "travel-finetune-hotel.jsonl",
+    "validation_file": null,
+    "suffix": "ft-travel",
+    "auto_deploy": true,
+    "deployment_type": "Developer",
+    "hyperparameters": {
+      "n_epochs": 2,
+      "batch_size": 1,
+      "learning_rate_multiplier": 1.0,
+      "seed": 42
+    }
+  },
+  "created_at": "2026-07-30T15:02:49+00:00",
+  "finished_at": "2026-07-30T16:00:39+00:00",
+  "duration_seconds": 3470,
+  "metrics": {
+    "final_train_loss": 0.02,
+    "final_train_mean_token_accuracy": 1.0,
+    "trained_tokens": 16000,
+    "total_steps": 100
+  },
+  "fine_tuned_model": "gpt-4.1-2025-04-14.ft-2078c2a9a22043d3b1d1698a9aea1af8-ft-travel",
+  "deployment_name": "gpt-4.1-2025-04-14.ft-2078c2a9a22043d3b1d1698a9aea1af8-ft-travel",
+  "deployment_status": "Succeeded",
+  "logs": [
+    {
+      "timestamp": "2026-07-30T15:03:23+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 1: training loss=0.8715",
+      "step": 1,
+      "training_loss": 0.8715
+    },
+    {
+      "timestamp": "2026-07-30T15:03:57+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 2: training loss=0.832823",
+      "step": 2,
+      "training_loss": 0.832823
+    },
+    {
+      "timestamp": "2026-07-30T15:04:31+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 3: training loss=0.795885",
+      "step": 3,
+      "training_loss": 0.795885
+    },
+    {
+      "timestamp": "2026-07-30T15:05:05+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 4: training loss=0.760611",
+      "step": 4,
+      "training_loss": 0.760611
+    },
+    {
+      "timestamp": "2026-07-30T15:05:39+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 5: training loss=0.726923",
+      "step": 5,
+      "training_loss": 0.726923
+    },
+    {
+      "timestamp": "2026-07-30T15:06:13+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 6: training loss=0.694752",
+      "step": 6,
+      "training_loss": 0.694752
+    },
+    {
+      "timestamp": "2026-07-30T15:06:47+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 7: training loss=0.702028",
+      "step": 7,
+      "training_loss": 0.702028
+    },
+    {
+      "timestamp": "2026-07-30T15:07:21+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 8: training loss=0.634687",
+      "step": 8,
+      "training_loss": 0.634687
+    },
+    {
+      "timestamp": "2026-07-30T15:07:55+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 9: training loss=0.606666",
+      "step": 9,
+      "training_loss": 0.606666
+    },
+    {
+      "timestamp": "2026-07-30T15:08:29+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 10: training loss=0.579906",
+      "step": 10,
+      "training_loss": 0.579906
+    },
+    {
+      "timestamp": "2026-07-30T15:09:03+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 11: training loss=0.55435",
+      "step": 11,
+      "training_loss": 0.55435
+    },
+    {
+      "timestamp": "2026-07-30T15:09:37+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 12: training loss=0.529944",
+      "step": 12,
+      "training_loss": 0.529944
+    },
+    {
+      "timestamp": "2026-07-30T15:10:11+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 13: training loss=0.506637",
+      "step": 13,
+      "training_loss": 0.506637
+    },
+    {
+      "timestamp": "2026-07-30T15:10:45+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 14: training loss=0.522378",
+      "step": 14,
+      "training_loss": 0.522378
+    },
+    {
+      "timestamp": "2026-07-30T15:11:19+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 15: training loss=0.463121",
+      "step": 15,
+      "training_loss": 0.463121
+    },
+    {
+      "timestamp": "2026-07-30T15:11:53+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 16: training loss=0.442821",
+      "step": 16,
+      "training_loss": 0.442821
+    },
+    {
+      "timestamp": "2026-07-30T15:12:27+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 17: training loss=0.423434",
+      "step": 17,
+      "training_loss": 0.423434
+    },
+    {
+      "timestamp": "2026-07-30T15:13:01+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 18: training loss=0.404919",
+      "step": 18,
+      "training_loss": 0.404919
+    },
+    {
+      "timestamp": "2026-07-30T15:13:35+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 19: training loss=0.387238",
+      "step": 19,
+      "training_loss": 0.387238
+    },
+    {
+      "timestamp": "2026-07-30T15:14:09+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 20: training loss=0.370352",
+      "step": 20,
+      "training_loss": 0.370352
+    },
+    {
+      "timestamp": "2026-07-30T15:14:43+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 21: training loss=0.392226",
+      "step": 21,
+      "training_loss": 0.392226
+    },
+    {
+      "timestamp": "2026-07-30T15:15:17+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 22: training loss=0.338826",
+      "step": 22,
+      "training_loss": 0.338826
+    },
+    {
+      "timestamp": "2026-07-30T15:15:51+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 23: training loss=0.324119",
+      "step": 23,
+      "training_loss": 0.324119
+    },
+    {
+      "timestamp": "2026-07-30T15:16:25+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 24: training loss=0.310074",
+      "step": 24,
+      "training_loss": 0.310074
+    },
+    {
+      "timestamp": "2026-07-30T15:16:59+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 25: training loss=0.29666",
+      "step": 25,
+      "training_loss": 0.29666
+    },
+    {
+      "timestamp": "2026-07-30T15:17:33+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 26: training loss=0.283851",
+      "step": 26,
+      "training_loss": 0.283851
+    },
+    {
+      "timestamp": "2026-07-30T15:18:07+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 27: training loss=0.271617",
+      "step": 27,
+      "training_loss": 0.271617
+    },
+    {
+      "timestamp": "2026-07-30T15:18:41+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 28: training loss=0.297934",
+      "step": 28,
+      "training_loss": 0.297934
+    },
+    {
+      "timestamp": "2026-07-30T15:19:15+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 29: training loss=0.248777",
+      "step": 29,
+      "training_loss": 0.248777
+    },
+    {
+      "timestamp": "2026-07-30T15:19:49+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 30: training loss=0.238122",
+      "step": 30,
+      "training_loss": 0.238122
+    },
+    {
+      "timestamp": "2026-07-30T15:20:23+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 31: training loss=0.227947",
+      "step": 31,
+      "training_loss": 0.227947
+    },
+    {
+      "timestamp": "2026-07-30T15:20:57+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 32: training loss=0.218229",
+      "step": 32,
+      "training_loss": 0.218229
+    },
+    {
+      "timestamp": "2026-07-30T15:21:31+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 33: training loss=0.208949",
+      "step": 33,
+      "training_loss": 0.208949
+    },
+    {
+      "timestamp": "2026-07-30T15:22:05+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 34: training loss=0.200086",
+      "step": 34,
+      "training_loss": 0.200086
+    },
+    {
+      "timestamp": "2026-07-30T15:22:39+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 35: training loss=0.229622",
+      "step": 35,
+      "training_loss": 0.229622
+    },
+    {
+      "timestamp": "2026-07-30T15:23:13+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 36: training loss=0.183539",
+      "step": 36,
+      "training_loss": 0.183539
+    },
+    {
+      "timestamp": "2026-07-30T15:23:47+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 37: training loss=0.17582",
+      "step": 37,
+      "training_loss": 0.17582
+    },
+    {
+      "timestamp": "2026-07-30T15:24:21+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 38: training loss=0.168448",
+      "step": 38,
+      "training_loss": 0.168448
+    },
+    {
+      "timestamp": "2026-07-30T15:24:55+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 39: training loss=0.161408",
+      "step": 39,
+      "training_loss": 0.161408
+    },
+    {
+      "timestamp": "2026-07-30T15:25:29+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 40: training loss=0.154685",
+      "step": 40,
+      "training_loss": 0.154685
+    },
+    {
+      "timestamp": "2026-07-30T15:26:03+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 41: training loss=0.148264",
+      "step": 41,
+      "training_loss": 0.148264
+    },
+    {
+      "timestamp": "2026-07-30T15:26:37+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 42: training loss=0.180132",
+      "step": 42,
+      "training_loss": 0.180132
+    },
+    {
+      "timestamp": "2026-07-30T15:27:11+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 43: training loss=0.136276",
+      "step": 43,
+      "training_loss": 0.136276
+    },
+    {
+      "timestamp": "2026-07-30T15:27:45+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 44: training loss=0.130684",
+      "step": 44,
+      "training_loss": 0.130684
+    },
+    {
+      "timestamp": "2026-07-30T15:28:19+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 45: training loss=0.125343",
+      "step": 45,
+      "training_loss": 0.125343
+    },
+    {
+      "timestamp": "2026-07-30T15:28:53+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 46: training loss=0.120242",
+      "step": 46,
+      "training_loss": 0.120242
+    },
+    {
+      "timestamp": "2026-07-30T15:29:27+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 47: training loss=0.115372",
+      "step": 47,
+      "training_loss": 0.115372
+    },
+    {
+      "timestamp": "2026-07-30T15:30:01+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 48: training loss=0.11072",
+      "step": 48,
+      "training_loss": 0.11072
+    },
+    {
+      "timestamp": "2026-07-30T15:30:35+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 49: training loss=0.144277",
+      "step": 49,
+      "training_loss": 0.144277
+    },
+    {
+      "timestamp": "2026-07-30T15:31:09+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 50: training loss=0.102035",
+      "step": 50,
+      "training_loss": 0.102035
+    },
+    {
+      "timestamp": "2026-07-30T15:31:43+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 51: training loss=0.097983",
+      "step": 51,
+      "training_loss": 0.097983
+    },
+    {
+      "timestamp": "2026-07-30T15:32:17+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 52: training loss=0.094114",
+      "step": 52,
+      "training_loss": 0.094114
+    },
+    {
+      "timestamp": "2026-07-30T15:32:51+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 53: training loss=0.090419",
+      "step": 53,
+      "training_loss": 0.090419
+    },
+    {
+      "timestamp": "2026-07-30T15:33:25+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 54: training loss=0.08689",
+      "step": 54,
+      "training_loss": 0.08689
+    },
+    {
+      "timestamp": "2026-07-30T15:33:59+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 55: training loss=0.08352",
+      "step": 55,
+      "training_loss": 0.08352
+    },
+    {
+      "timestamp": "2026-07-30T15:34:33+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 56: training loss=0.118302",
+      "step": 56,
+      "training_loss": 0.118302
+    },
+    {
+      "timestamp": "2026-07-30T15:35:07+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 57: training loss=0.077228",
+      "step": 57,
+      "training_loss": 0.077228
+    },
+    {
+      "timestamp": "2026-07-30T15:35:41+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 58: training loss=0.074293",
+      "step": 58,
+      "training_loss": 0.074293
+    },
+    {
+      "timestamp": "2026-07-30T15:36:15+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 59: training loss=0.07149",
+      "step": 59,
+      "training_loss": 0.07149
+    },
+    {
+      "timestamp": "2026-07-30T15:36:49+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 60: training loss=0.068813",
+      "step": 60,
+      "training_loss": 0.068813
+    },
+    {
+      "timestamp": "2026-07-30T15:37:23+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 61: training loss=0.066256",
+      "step": 61,
+      "training_loss": 0.066256
+    },
+    {
+      "timestamp": "2026-07-30T15:37:57+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 62: training loss=0.063815",
+      "step": 62,
+      "training_loss": 0.063815
+    },
+    {
+      "timestamp": "2026-07-30T15:38:31+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 63: training loss=0.099483",
+      "step": 63,
+      "training_loss": 0.099483
+    },
+    {
+      "timestamp": "2026-07-30T15:39:05+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 64: training loss=0.059256",
+      "step": 64,
+      "training_loss": 0.059256
+    },
+    {
+      "timestamp": "2026-07-30T15:39:39+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 65: training loss=0.05713",
+      "step": 65,
+      "training_loss": 0.05713
+    },
+    {
+      "timestamp": "2026-07-30T15:40:13+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 66: training loss=0.055099",
+      "step": 66,
+      "training_loss": 0.055099
+    },
+    {
+      "timestamp": "2026-07-30T15:40:47+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 67: training loss=0.053159",
+      "step": 67,
+      "training_loss": 0.053159
+    },
+    {
+      "timestamp": "2026-07-30T15:41:21+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 68: training loss=0.051307",
+      "step": 68,
+      "training_loss": 0.051307
+    },
+    {
+      "timestamp": "2026-07-30T15:41:55+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 69: training loss=0.049538",
+      "step": 69,
+      "training_loss": 0.049538
+    },
+    {
+      "timestamp": "2026-07-30T15:42:29+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 70: training loss=0.085849",
+      "step": 70,
+      "training_loss": 0.085849
+    },
+    {
+      "timestamp": "2026-07-30T15:43:03+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 71: training loss=0.046236",
+      "step": 71,
+      "training_loss": 0.046236
+    },
+    {
+      "timestamp": "2026-07-30T15:43:37+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 72: training loss=0.044695",
+      "step": 72,
+      "training_loss": 0.044695
+    },
+    {
+      "timestamp": "2026-07-30T15:44:11+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 73: training loss=0.043224",
+      "step": 73,
+      "training_loss": 0.043224
+    },
+    {
+      "timestamp": "2026-07-30T15:44:45+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 74: training loss=0.041819",
+      "step": 74,
+      "training_loss": 0.041819
+    },
+    {
+      "timestamp": "2026-07-30T15:45:19+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 75: training loss=0.040477",
+      "step": 75,
+      "training_loss": 0.040477
+    },
+    {
+      "timestamp": "2026-07-30T15:45:53+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 76: training loss=0.039196",
+      "step": 76,
+      "training_loss": 0.039196
+    },
+    {
+      "timestamp": "2026-07-30T15:46:27+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 77: training loss=0.075972",
+      "step": 77,
+      "training_loss": 0.075972
+    },
+    {
+      "timestamp": "2026-07-30T15:47:01+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 78: training loss=0.036803",
+      "step": 78,
+      "training_loss": 0.036803
+    },
+    {
+      "timestamp": "2026-07-30T15:47:35+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 79: training loss=0.035687",
+      "step": 79,
+      "training_loss": 0.035687
+    },
+    {
+      "timestamp": "2026-07-30T15:48:09+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 80: training loss=0.034621",
+      "step": 80,
+      "training_loss": 0.034621
+    },
+    {
+      "timestamp": "2026-07-30T15:48:43+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 81: training loss=0.033603",
+      "step": 81,
+      "training_loss": 0.033603
+    },
+    {
+      "timestamp": "2026-07-30T15:49:17+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 82: training loss=0.032631",
+      "step": 82,
+      "training_loss": 0.032631
+    },
+    {
+      "timestamp": "2026-07-30T15:49:51+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 83: training loss=0.031703",
+      "step": 83,
+      "training_loss": 0.031703
+    },
+    {
+      "timestamp": "2026-07-30T15:50:25+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 84: training loss=0.068816",
+      "step": 84,
+      "training_loss": 0.068816
+    },
+    {
+      "timestamp": "2026-07-30T15:50:59+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 85: training loss=0.029969",
+      "step": 85,
+      "training_loss": 0.029969
+    },
+    {
+      "timestamp": "2026-07-30T15:51:33+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 86: training loss=0.029161",
+      "step": 86,
+      "training_loss": 0.029161
+    },
+    {
+      "timestamp": "2026-07-30T15:52:07+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 87: training loss=0.028388",
+      "step": 87,
+      "training_loss": 0.028388
+    },
+    {
+      "timestamp": "2026-07-30T15:52:41+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 88: training loss=0.027651",
+      "step": 88,
+      "training_loss": 0.027651
+    },
+    {
+      "timestamp": "2026-07-30T15:53:15+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 89: training loss=0.026947",
+      "step": 89,
+      "training_loss": 0.026947
+    },
+    {
+      "timestamp": "2026-07-30T15:53:49+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 90: training loss=0.026274",
+      "step": 90,
+      "training_loss": 0.026274
+    },
+    {
+      "timestamp": "2026-07-30T15:54:23+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 91: training loss=0.063632",
+      "step": 91,
+      "training_loss": 0.063632
+    },
+    {
+      "timestamp": "2026-07-30T15:54:57+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 92: training loss=0.025018",
+      "step": 92,
+      "training_loss": 0.025018
+    },
+    {
+      "timestamp": "2026-07-30T15:55:31+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 93: training loss=0.024432",
+      "step": 93,
+      "training_loss": 0.024432
+    },
+    {
+      "timestamp": "2026-07-30T15:56:05+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 94: training loss=0.023873",
+      "step": 94,
+      "training_loss": 0.023873
+    },
+    {
+      "timestamp": "2026-07-30T15:56:39+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 95: training loss=0.023339",
+      "step": 95,
+      "training_loss": 0.023339
+    },
+    {
+      "timestamp": "2026-07-30T15:57:13+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 96: training loss=0.01466281618922948",
+      "step": 96,
+      "training_loss": 0.01466281618922948
+    },
+    {
+      "timestamp": "2026-07-30T15:57:47+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 97: training loss=0.10716232657432556",
+      "step": 97,
+      "training_loss": 0.10716232657432556
+    },
+    {
+      "timestamp": "2026-07-30T15:58:21+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 98: training loss=0.01393270492553711",
+      "step": 98,
+      "training_loss": 0.01393270492553711
+    },
+    {
+      "timestamp": "2026-07-30T15:58:55+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 99: training loss=0.02539164200425148",
+      "step": 99,
+      "training_loss": 0.02539164200425148
+    },
+    {
+      "timestamp": "2026-07-30T15:59:29+00:00",
+      "status": "running",
+      "type": "metrics",
+      "message": "Step 100: training loss=0.015302632004022598",
+      "step": 100,
+      "training_loss": 0.015302632004022598
+    },
+    {
+      "timestamp": "2026-07-30T16:00:39+00:00",
+      "status": "succeeded",
+      "type": "message",
+      "message": "Training tokens billed: 16000",
+      "step": null,
+      "training_loss": null
+    },
+    {
+      "timestamp": "2026-07-30T16:00:39+00:00",
+      "status": "succeeded",
+      "type": "message",
+      "message": "Model Evaluation Passed.",
+      "step": null,
+      "training_loss": null
+    },
+    {
+      "timestamp": "2026-07-30T16:00:39+00:00",
+      "status": "succeeded",
+      "type": "message",
+      "message": "Completed results file: file-ce5d9b0398e44144b365bdd935293b31",
+      "step": null,
+      "training_loss": null
+    },
+    {
+      "timestamp": "2026-07-30T16:00:39+00:00",
+      "status": "succeeded",
+      "type": "message",
+      "message": "Success triggered auto deployment with id gpt-4.1-2025-04-14.ft-2078c2a9a22043d3b1d1698a9aea1af8-ft-travel",
+      "step": null,
+      "training_loss": null
+    },
+    {
+      "timestamp": "2026-07-30T16:00:39+00:00",
+      "status": "succeeded",
+      "type": "message",
+      "message": "Job succeeded.",
+      "step": null,
+      "training_loss": null
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "ftchkpt-2078c2a9a22043d3b1d1698a9aea1af8-33",
+      "step": 33,
+      "created_at": "2026-07-30T15:21:31+00:00",
+      "metrics": {
+        "train_loss": 0.05
+      }
+    },
+    {
+      "id": "ftchkpt-2078c2a9a22043d3b1d1698a9aea1af8-66",
+      "step": 66,
+      "created_at": "2026-07-30T15:40:13+00:00",
+      "metrics": {
+        "train_loss": 0.05
+      }
+    },
+    {
+      "id": "ftchkpt-2078c2a9a22043d3b1d1698a9aea1af8-100",
+      "step": 100,
+      "created_at": "2026-07-30T15:59:29+00:00",
+      "metrics": {
+        "train_loss": 0.015302632004022598
+      }
+    }
+  ],
+  "error": null
+}

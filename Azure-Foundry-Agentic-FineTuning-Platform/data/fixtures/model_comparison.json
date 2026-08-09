@@ -1,0 +1,144 @@
+{
+  "model_names": [
+    "gpt-5.4",
+    "gpt-5.4-mini"
+  ],
+  "rows": [
+    {
+      "attribute": "Quality",
+      "values": {
+        "gpt-5.4": 0.81,
+        "gpt-5.4-mini": 0.67
+      },
+      "winner": "gpt-5.4"
+    },
+    {
+      "attribute": "Safety",
+      "values": {
+        "gpt-5.4": 1.02,
+        "gpt-5.4-mini": 0.0
+      },
+      "winner": "gpt-5.4-mini"
+    },
+    {
+      "attribute": "Estimated cost",
+      "values": {
+        "gpt-5.4": 164.92,
+        "gpt-5.4-mini": 45.81
+      },
+      "winner": "gpt-5.4-mini"
+    },
+    {
+      "attribute": "Throughput",
+      "values": {
+        "gpt-5.4": 21,
+        "gpt-5.4-mini": 142
+      },
+      "winner": "gpt-5.4-mini"
+    },
+    {
+      "attribute": "Input",
+      "values": {
+        "gpt-5.4": "text,image",
+        "gpt-5.4-mini": "text,image"
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Output",
+      "values": {
+        "gpt-5.4": "text",
+        "gpt-5.4-mini": "text"
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Context window",
+      "values": {
+        "gpt-5.4": "1,050,000 tokens",
+        "gpt-5.4-mini": "400,000 tokens"
+      },
+      "winner": "gpt-5.4"
+    },
+    {
+      "attribute": "Max output",
+      "values": {
+        "gpt-5.4": "128,000 tokens",
+        "gpt-5.4-mini": "128,000 tokens"
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Training date",
+      "values": {
+        "gpt-5.4": "August 2025",
+        "gpt-5.4-mini": "August 2025"
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Chat completions",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Responses",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Agents",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Streaming",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Reasoning summary",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Tool calling",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    },
+    {
+      "attribute": "Fine-tuning",
+      "values": {
+        "gpt-5.4": false,
+        "gpt-5.4-mini": true
+      },
+      "winner": "gpt-5.4-mini"
+    },
+    {
+      "attribute": "Image input",
+      "values": {
+        "gpt-5.4": true,
+        "gpt-5.4-mini": true
+      },
+      "winner": null
+    }
+  ]
+}

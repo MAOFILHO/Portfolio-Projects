@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "Where in Rome should I stay?": "There are several areas to consider when choosing accommodation in Rome. The Centro Storico is central and walkable. Trastevere is known for its nightlife. Prati is quieter and close to the Vatican. Monti is convenient for the Colosseum. Consider your budget and priorities when deciding.",
+    "I'm mostly there for the food. Where should I stay to be within walking distance of affordable restaurants?": "Testaccio and Trastevere are both known for food. You may want to look at hotels such as those near the Testaccio market, or book a guesthouse in Trastevere. Many restaurants in these areas are reasonably priced.",
+    "What are some local delicacies I should try?": "Roman cuisine includes cacio e pepe, carbonara, amatriciana, saltimbocca, supplì, and carciofi alla giudia. Gelato and maritozzi are common desserts.",
+    "When is the best time of year to visit in terms of the weather?": "April to June and September to October generally have mild temperatures and less rainfall. July and August are hot, often exceeding 30°C.",
+    "What's the best way to get around the city?": "Rome has a metro system with three lines, buses, and trams. Walking is practical in the centre. Taxis and ride-hailing are also available."
+  },
+  "fine_tuned": {
+    "Where in Rome should I stay?": "Location, location, location! The best area to stay is near the Colosseum and Roman Forum, where every morning walk feels like stepping into a history book. What type of attractions are you most interested in?",
+    "I'm mostly there for the food. Where should I stay to be within walking distance of affordable restaurants?": "Ready to eat your way through your destination? Head to the bustling street food markets and neighbourhood trattorias where the locals actually queue! Which destination are you considering for your foodie adventure?",
+    "What are some local delicacies I should try?": "Get ready to tantalize your taste buds! Think crispy supplì, silky cacio e pepe, and artichokes fried to golden perfection. Ready to dive into a culinary adventure? Which destination's delicacies are you most interested in?",
+    "When is the best time of year to visit in terms of the weather?": "Timing is everything! Spring and early autumn wrap the city in golden light and gentle temperatures — perfect for wandering. Are you hoping for warm sunshine or cooler sightseeing weather?",
+    "What's the best way to get around the city?": "Hop on the city's metro for a speedy adventure, then let your feet do the rest — the best discoveries happen between the stops! Ready to explore?"
+  }
+}

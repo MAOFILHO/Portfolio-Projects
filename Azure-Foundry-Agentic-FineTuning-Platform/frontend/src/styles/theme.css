@@ -1,0 +1,432 @@
+/* Contoso theme — Azure blue, light by default, dark via prefers-color-scheme.
+   Variable names keep the `--contoso-purple*` prefix for historical reasons
+   (every component references these names) — only the values changed. */
+
+:root {
+  --contoso-purple: #0078d4;
+  --contoso-purple-dark: #005a9e;
+  --contoso-purple-light: #eff6fc;
+  --contoso-accent: #00b7c3;
+  --contoso-success: #107c10;
+  --contoso-warning: #d83b01;
+  --contoso-danger: #d13438;
+
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-alt: #faf9fc;
+  --text: #201f1e;
+  --text-muted: #605e5c;
+  --border: #e1dfdd;
+
+  --sidebar-bg: var(--contoso-purple);
+  --sidebar-text: #ffffff;
+  --sidebar-text-muted: #c7e0f4;
+  --sidebar-active: var(--contoso-purple-dark);
+
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a19;
+    --surface: #252423;
+    --surface-alt: #201f1e;
+    --text: #f3f2f1;
+    --text-muted: #c8c6c4;
+    --border: #3b3a39;
+    --contoso-purple-light: #1c2e40;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font-family: inherit;
+}
+
+a {
+  color: var(--contoso-purple);
+}
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ---- Sidebar: fixed, 18% width ---- */
+.sidebar {
+  width: 18%;
+  min-width: 220px;
+  max-width: 300px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 20px;
+}
+
+.sidebar-logo img {
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar-logo span {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--sidebar-text-muted);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.92rem;
+  width: 100%;
+}
+
+.sidebar-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.sidebar-nav-item.active {
+  background: var(--sidebar-active);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sidebar-section-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sidebar-text-muted);
+  margin: 20px 12px 6px;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.78rem;
+  color: var(--sidebar-text-muted);
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-logout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+/* ---- Main canvas ---- */
+.main-canvas {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 36px 60px;
+}
+
+.canvas-header {
+  margin-bottom: 20px;
+}
+
+.canvas-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.canvas-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-mock {
+  background: #e0f2f4;
+  color: #005a63;
+}
+
+.badge-live {
+  background: #fde7e9;
+  color: var(--contoso-danger);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.card h3 {
+  margin: 18px 0 8px;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.card-sub {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0 0 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+tr.winner-row {
+  background: var(--contoso-purple-light);
+  font-weight: 600;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--contoso-purple);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--contoso-purple-dark);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--contoso-purple);
+  border: 1px solid var(--contoso-purple);
+}
+
+.btn-secondary:hover {
+  background: var(--contoso-purple-light);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.check-pass {
+  color: var(--contoso-success);
+}
+
+.check-fail {
+  color: var(--contoso-danger);
+}
+
+.pill {
+  display: inline-flex;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pill-pass {
+  background: #dff6dd;
+  color: #0e5c0e;
+}
+
+.pill-fail {
+  background: #fde7e9;
+  color: #a4262c;
+}
+
+.pill-neutral {
+  background: var(--contoso-purple-light);
+  color: var(--contoso-purple);
+}
+
+.error-box {
+  background: #fde7e9;
+  border: 1px solid #f1707b;
+  color: #a4262c;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 0.87rem;
+  margin-bottom: 16px;
+}
+
+.trace-log {
+  background: #1b1a19;
+  color: #9cdcfe;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* ---- Login ---- */
+.login-shell {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    var(--contoso-purple) 0%,
+    var(--contoso-purple-dark) 100%
+  );
+}
+
+.login-card {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  padding: 40px 36px;
+  width: 360px;
+}
+
+.login-card .sidebar-logo {
+  border: none;
+  padding: 0 0 20px;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+
+.login-card .sidebar-logo span {
+  color: var(--text);
+}
+
+.login-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 14px;
+  text-align: center;
+}

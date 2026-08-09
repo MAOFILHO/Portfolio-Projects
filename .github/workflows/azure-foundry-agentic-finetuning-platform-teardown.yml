@@ -1,0 +1,77 @@
+name: Azure-Foundry-Agentic-FineTuning-Platform — Teardown
+
+# Manual trigger any time, plus a nightly scheduled safety-net sweep — the
+# mitigation for the auto-increment naming risk documented in PLAN.md /
+# next_suffix.py: if a suffix ever drifted, this still finds and removes
+# anything orphaned outside Terraform's current state, by tag, on a
+# schedule, without anyone having to remember to run it manually.
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 23 UTC nightly — off-the-hour, staggered from sibling projects'
+    # teardown schedules in this same repo to avoid a thundering herd.
+    - cron: "23 3 * * *"
+
+env:
+  RUN_LIVE_SMOKE: "1"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-azure-foundry-agentic-finetuning-platform
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    name: Destroy + sweep + verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.FOUNDRY_AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.FOUNDRY_AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.FOUNDRY_AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Pre-sweep (catch orphans from a prior stale suffix first)
+        run: |
+          python infra/terraform/scripts/sweep_orphans.py --tag foundry-agentic-platform || true
+
+      - name: terraform init
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        run: terraform init -input=false
+        continue-on-error: true # no state yet is a valid "nothing to tear down" outcome
+
+      - name: terraform destroy
+        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        run: terraform destroy -auto-approve -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}"
+        continue-on-error: true # state may be empty/missing; the sweep below is authoritative
+
+      - name: Post-destroy sweep (catches anything destroy missed)
+        run: python infra/terraform/scripts/sweep_orphans.py --tag foundry-agentic-platform
+
+      - name: Wait for async deletions to finish
+        run: sleep 60
+
+      - name: Post-teardown smoke test — release blocker
+        run: pytest tests/smoke_post_teardown -v

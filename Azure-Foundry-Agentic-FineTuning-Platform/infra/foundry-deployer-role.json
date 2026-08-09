@@ -1,0 +1,27 @@
+{
+  "Name": "Foundry Platform Deployer",
+  "Description": "Least-privilege role for the Azure-Foundry-Agentic-FineTuning-Platform deploy/teardown/hosting-deploy GitHub Actions workflows: resource groups, Cognitive Services (Foundry account + model/fine-tuned deployments), Container Apps, Static Web Apps, Log Analytics/App Insights, consumption budgets, and role assignments scoped narrowly to granting the Container App's own Managed Identity access to this project's Foundry account. No Storage/Key Vault/other-project Cognitive Services access, so it can't touch other projects' resources or manage IAM outside this project's resource group.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/resourceGroups/read",
+    "Microsoft.Resources/subscriptions/resourceGroups/write",
+    "Microsoft.Resources/subscriptions/resourceGroups/delete",
+    "Microsoft.Resources/deployments/*",
+    "Microsoft.CognitiveServices/accounts/*",
+    "Microsoft.CognitiveServices/locations/*/read",
+    "Microsoft.App/containerApps/*",
+    "Microsoft.App/managedEnvironments/*",
+    "Microsoft.App/locations/*/read",
+    "Microsoft.Web/staticSites/*",
+    "Microsoft.OperationalInsights/workspaces/*",
+    "Microsoft.OperationalInsights/locations/*/read",
+    "Microsoft.Insights/components/*",
+    "Microsoft.Consumption/budgets/*",
+    "Microsoft.Authorization/roleAssignments/read",
+    "Microsoft.Authorization/roleAssignments/write",
+    "Microsoft.Authorization/roleAssignments/delete"
+  ],
+  "NotActions": [],
+  "AssignableScopes": [
+    "/subscriptions/960936b9-ecde-465b-be8d-776ca077dcd0"
+  ]
+}

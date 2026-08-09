@@ -1,0 +1,88 @@
+{
+  "rows": [
+    {
+      "model_name": "claude-opus-5",
+      "quality_index": 0.85,
+      "safety_attack_success_rate": 0.5,
+      "throughput_tps": 62,
+      "benchmark_cost_usd": 183.08
+    },
+    {
+      "model_name": "gpt-5.6-sol",
+      "quality_index": 0.82,
+      "safety_attack_success_rate": 4.48,
+      "throughput_tps": 20,
+      "benchmark_cost_usd": 165.04
+    },
+    {
+      "model_name": "gpt-5.5",
+      "quality_index": 0.82,
+      "safety_attack_success_rate": 0.0,
+      "throughput_tps": 50,
+      "benchmark_cost_usd": 543.79
+    },
+    {
+      "model_name": "claude-opus-4-6",
+      "quality_index": 0.82,
+      "safety_attack_success_rate": 2.41,
+      "throughput_tps": 43,
+      "benchmark_cost_usd": 269.14
+    },
+    {
+      "model_name": "gpt-5.6-terra",
+      "quality_index": 0.81,
+      "safety_attack_success_rate": 3.51,
+      "throughput_tps": 30,
+      "benchmark_cost_usd": 179.65
+    },
+    {
+      "model_name": "gpt-5.4",
+      "quality_index": 0.81,
+      "safety_attack_success_rate": 1.02,
+      "throughput_tps": 21,
+      "benchmark_cost_usd": 164.92
+    },
+    {
+      "model_name": "claude-opus-4-5",
+      "quality_index": 0.81,
+      "safety_attack_success_rate": 1.47,
+      "throughput_tps": 42,
+      "benchmark_cost_usd": 610.3
+    },
+    {
+      "model_name": "grok-4.3",
+      "quality_index": 0.81,
+      "safety_attack_success_rate": 4.13,
+      "throughput_tps": 32,
+      "benchmark_cost_usd": 56.37
+    },
+    {
+      "model_name": "gpt-5.4-mini",
+      "quality_index": 0.67,
+      "safety_attack_success_rate": 0.0,
+      "throughput_tps": 142,
+      "benchmark_cost_usd": 45.81
+    },
+    {
+      "model_name": "gpt-4.1-nano",
+      "quality_index": 0.52,
+      "safety_attack_success_rate": 6.2,
+      "throughput_tps": 183,
+      "benchmark_cost_usd": 1.38
+    },
+    {
+      "model_name": "gpt-5-nano",
+      "quality_index": 0.55,
+      "safety_attack_success_rate": 5.9,
+      "throughput_tps": 224,
+      "benchmark_cost_usd": 9.1
+    },
+    {
+      "model_name": "gpt-5.4-nano",
+      "quality_index": 0.58,
+      "safety_attack_success_rate": 0.3,
+      "throughput_tps": 177,
+      "benchmark_cost_usd": 12.4
+    }
+  ]
+}

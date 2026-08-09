@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundry-agentic-platform"
+version = "0.1.0"
+description = "Agentic Azure AI Foundry platform: model discovery, supervised fine-tuning, and baseline-vs-fine-tuned comparison over LangGraph + MCP."
+requires-python = ">=3.12"
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "live: requires provisioned Azure resources (skipped unless DEMO_MODE=live)",
+    "post_teardown: asserts zero surviving resources; release blocker",
+    "smoke_pre: environment checks that must pass before `terraform apply`",
+    "smoke_post_provision: asserts every deployed resource is live and on the approved SKU",
+    "smoke_post_run: asserts expected demo outputs exist and are non-empty",
+    "smoke_post_teardown: asserts zero surviving tagged resources; release blocker",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/app"]
+omit = ["*/tests/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Explicit, small selection rather than this environment's much broader
+# ruff default (~400+ rules across every plugin) — pycodestyle/pyflakes,
+# import sorting, pyupgrade, and flake8-bugbear only.
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "B008", # FastAPI's `File(...)`/`Query(...)` call-in-default-argument is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"] # pytest.raises(Exception) is fine in a "this must error" test

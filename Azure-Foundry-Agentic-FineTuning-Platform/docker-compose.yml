@@ -1,0 +1,30 @@
+# Local/demo stack — two containers, $0 cost by default (DEMO_MODE=mock).
+# `docker compose up` and open http://localhost:8080 — no Azure account
+# needed. Set DEMO_MODE=live and the AZURE_* vars in .env to hit real Foundry.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DEMO_MODE: ${DEMO_MODE:-mock}
+      AZURE_FOUNDRY_ENDPOINT: ${AZURE_FOUNDRY_ENDPOINT:-}
+      AZURE_FOUNDRY_API_KEY: ${AZURE_FOUNDRY_API_KEY:-}
+      AZURE_LOCATION: ${AZURE_LOCATION:-eastus2}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy

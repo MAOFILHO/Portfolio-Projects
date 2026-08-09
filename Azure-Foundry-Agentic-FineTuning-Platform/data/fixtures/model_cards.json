@@ -1,0 +1,86 @@
+[
+  {
+    "name": "gpt-5.4",
+    "version": "2026-03-05",
+    "provider": "Azure OpenAI",
+    "description": "GPT-5.4 is OpenAI's most capable frontier model, built to deliver faster, more reliable results for complex professional work.",
+    "lifecycle": "Generally Available",
+    "input_types": [
+      "text",
+      "image"
+    ],
+    "output_types": [
+      "text"
+    ],
+    "context": {
+      "input_tokens": 922000,
+      "output_tokens": 128000
+    },
+    "supports_fine_tuning": false,
+    "supports_tool_calling": true,
+    "supports_streaming": true,
+    "training_date": "August 2025",
+    "benchmarks": {
+      "quality_index": 0.81,
+      "safety_attack_success_rate": 1.02,
+      "throughput_tps": 21,
+      "benchmark_cost_usd": 164.92
+    }
+  },
+  {
+    "name": "gpt-5.4-mini",
+    "version": "2026-03-17",
+    "provider": "Azure OpenAI",
+    "description": "A cost-efficient small model for classification, extraction, and lightweight tool calls.",
+    "lifecycle": "Generally Available",
+    "input_types": [
+      "text",
+      "image"
+    ],
+    "output_types": [
+      "text"
+    ],
+    "context": {
+      "input_tokens": 400000,
+      "output_tokens": 128000
+    },
+    "supports_fine_tuning": true,
+    "supports_tool_calling": true,
+    "supports_streaming": true,
+    "training_date": "August 2025",
+    "benchmarks": {
+      "quality_index": 0.67,
+      "safety_attack_success_rate": 0.0,
+      "throughput_tps": 142,
+      "benchmark_cost_usd": 45.81
+    }
+  },
+  {
+    "name": "gpt-4.1",
+    "version": "2025-04-14",
+    "provider": "Azure OpenAI",
+    "description": "Baseline chat-completion model used for supervised fine-tuning.",
+    "lifecycle": "Generally Available",
+    "input_types": [
+      "text",
+      "image"
+    ],
+    "output_types": [
+      "text"
+    ],
+    "context": {
+      "input_tokens": 1048576,
+      "output_tokens": 32768
+    },
+    "supports_fine_tuning": true,
+    "supports_tool_calling": true,
+    "supports_streaming": true,
+    "training_date": "June 2024",
+    "benchmarks": {
+      "quality_index": 0.7,
+      "safety_attack_success_rate": 2.1,
+      "throughput_tps": 78,
+      "benchmark_cost_usd": 92.4
+    }
+  }
+]
