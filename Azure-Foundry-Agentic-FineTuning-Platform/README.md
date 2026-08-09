@@ -18,20 +18,20 @@
 
 ## Project Description
 
-A production-grade, zero-console-click replacement for two Microsoft Foundry
-hands-on lab guides — **"Explore and compare models"** and **"Fine-tune a
-language model"** — both 100% manual portal click-throughs in their original
-form, replaced here with three one-click workflows backed by a real agentic
+A production-grade, zero-console-click automation of two core Microsoft
+Foundry workflows — **model discovery & evaluation** and **supervised
+fine-tuning** — both 100% manual portal click-throughs in Foundry itself,
+replaced here with three one-click workflows backed by a real agentic
 pipeline.
 
-**The labs** teach the same underlying skill twice, on two different halves
-of the model lifecycle: browse Microsoft Foundry's model catalog, read a
-4-axis leaderboard (quality / safety / throughput / cost), run a synthetic
-evaluation across 16 AI-judge evaluators — then submit a supervised
-fine-tuning job on a travel-assistant JSONL dataset and compare its behaviour
-against the un-tuned base model. Both, as written, are entirely manual: click
-through a wizard, babysit a ~60-minute training job, eyeball two chat
-responses side by side.
+**Those two workflows** cover the same underlying skill twice, on two
+different halves of the model lifecycle: browse Microsoft Foundry's model
+catalog, read a 4-axis leaderboard (quality / safety / throughput / cost),
+run a synthetic evaluation across 16 AI-judge evaluators — then submit a
+supervised fine-tuning job on a travel-assistant JSONL dataset and compare
+its behaviour against the un-tuned base model. Both, done manually in the
+portal, mean the same thing: click through a wizard, babysit a ~60-minute
+training job, eyeball two chat responses side by side.
 
 **The objective** is not to replay those clicks as scripted API calls — it's
 to turn "a person manually driving a portal" into a reproducible pipeline: an
@@ -85,7 +85,7 @@ or pay an ongoing tax in analyst time re-clicking through the same portal
 steps for every new dataset or model release. Nothing about the process is
 versioned, scriptable, or reviewable in a pull request.
 
-**The Solution.** This project turns the labs' manual workflow into three
+**The Solution.** This project turns that manual workflow into three
 one-click, agentic pipelines — Discovery, Fine-Tune, Comparison — each
 backed by typed MCP tools an Orchestrator Agent routes to, so every step is
 reproducible and testable at **$0** in mock mode, and — when it's time to
@@ -98,7 +98,7 @@ below) replaces "eyeballing two responses" with a number.
 ## Results and Impact
 
 > **Scope note, stated plainly:** this is a **portfolio/demonstration project
-> automating two K21Academy lab guides**, not a system deployed into a
+> automating two Microsoft Foundry workflows**, not a system deployed into a
 > business with measured commercial outcomes. Everything below is real —
 > a real Azure fine-tuning job, a real evaluation run, a real public
 > deployment — but the results are *engineering* results. No ROI or
@@ -111,7 +111,7 @@ below) replaces "eyeballing two responses" with a number.
 | Full test suite green | **78 unit tests** — schemas, cost math, MCP tool contracts, all 3 agents — no cloud, no network |
 | CI runs on every push | GitHub Actions: Backend (lint + tests + mock end-to-end), Frontend (`tsc` + build), Terraform (`validate` + `fmt`) — **$0 cost**, ~90s, no Azure calls |
 | Real fine-tuning job completed | `gpt-4.1` SFT job (`ftjob-2078c2a9a22043d3b1d1698a9aea1af8`) — 100 steps, final train loss **0.02**, succeeded and auto-deployed to a $0/hr Developer-tier endpoint |
-| Real evaluation run completed | 45-row synthetic dataset × 16 AI-judge evaluators — **704/720 (97.8%)** pass rate, matching the source lab exactly |
+| Real evaluation run completed | 45-row synthetic dataset × 16 AI-judge evaluators — **704/720 (97.8%)** pass rate, matching the original run exactly |
 | Public hosting verified end to end | Container App + Static Web App live at a public URL; Entra ID sign-in confirmed with a real Microsoft account, plus a direct `curl` **401** against a protected route with no token attached |
 | Teardown verified clean | `smoke_post_teardown` confirms **zero** surviving tagged resources at every auto-incremented suffix |
 | Local running cost | **$0** — `DEMO_MODE=mock`, fixture-backed, unlimited runs |
@@ -273,9 +273,9 @@ flowchart TD
 
 | Workflow | Reproduces | What it does |
 |---|---|---|
-| **1 — Model Discovery & Evaluation** | *Explore and compare models* | Catalog browse, 4-axis leaderboard (quality / safety / throughput / cost — no single model wins all four), gpt-5.4 vs. gpt-5.4-mini comparison, 45-row synthetic evaluation across 16 evaluators (98% / 704/720, matching the lab exactly) |
-| **2 — Supervised Fine-Tuning** | *Fine-tune a language model* | JSONL validation (schema violations shown as a feature, not an error), pre-spend cost estimate, SFT job submission on `gpt-4.1`, live progress (100 steps, final loss 0.02), $0/hr Developer-tier deployment. Also ships a **selectable dataset catalog** — 7 additional domains (support triage, healthcare, e-commerce, IT helpdesk, banking, gardening) converted from AWS Bedrock's format, validated and cost-estimated on demand, without touching the lab's own dataset or numbers. |
-| **3 — Agentic Inference & Comparison** | Both labs' baseline-vs-fine-tuned pattern | Five canonical prompts, identical system message on both sides, scored on **behaviour** (friendly tone, no hotel/flight/car/restaurant recommendation, ends with a question) — not string equality, since the guide explicitly warns outputs are non-deterministic |
+| **1 — Model Discovery & Evaluation** | *Explore and compare models* | Catalog browse, 4-axis leaderboard (quality / safety / throughput / cost — no single model wins all four), gpt-5.4 vs. gpt-5.4-mini comparison, 45-row synthetic evaluation across 16 evaluators (98% / 704/720, matching the reference run exactly) |
+| **2 — Supervised Fine-Tuning** | *Fine-tune a language model* | JSONL validation (schema violations shown as a feature, not an error), pre-spend cost estimate, SFT job submission on `gpt-4.1`, live progress (100 steps, final loss 0.02), $0/hr Developer-tier deployment. Also ships a **selectable dataset catalog** — 7 additional domains (support triage, healthcare, e-commerce, IT helpdesk, banking, gardening) converted from AWS Bedrock's format, validated and cost-estimated on demand, without touching the original dataset or numbers. |
+| **3 — Agentic Inference & Comparison** | The same baseline-vs-fine-tuned pattern | Five canonical prompts, identical system message on both sides, scored on **behaviour** (friendly tone, no hotel/flight/car/restaurant recommendation, ends with a question) — not string equality, since outputs are explicitly non-deterministic |
 
 ## Tutorial: Fine-Tuning vs. Inference
 
@@ -410,7 +410,7 @@ trace, which is the harder bar and exactly why they score lowest here.
 
 **Metrics C — behavioural checks (Workflow 3, baseline vs. fine-tuned):**
 
-Not AI-judge scored — this is the guide's own instruction taken literally:
+Not AI-judge scored — this is the original instruction taken literally:
 *"verify that the model follows the intended travel-assistant behavior...
 not [exact] wording."* Three deterministic checks run against every response,
 each pass/fail:
@@ -466,10 +466,10 @@ make teardown         # destroys every tagged resource, at every suffix, then ve
 |---|---|---|
 | `DEMO_MODE` | `mock` | `mock` = fixtures, $0. `live` = real Azure Foundry calls, real billing. |
 | `AZURE_SUBSCRIPTION_ID` / `AZURE_TENANT_ID` | — | Only needed in live mode. |
-| `AZURE_LOCATION` | `eastus2` | Locked — matches every screenshot in both source lab guides. |
+| `AZURE_LOCATION` | `eastus2` | Locked — matches the reference walkthroughs for both workflows. |
 | `AZURE_FOUNDRY_ENDPOINT` / `AZURE_FOUNDRY_API_KEY` | — | Populated automatically by `make provision` → `app.cli sync-env`. |
 | `PROJECT_BASE_NAME` | `foundry-travel` | Base for Terraform's auto-increment naming (`-v1`, `-v2`, …). |
-| `MODEL_BASELINE` / `MODEL_COMPARE_A` / `MODEL_COMPARE_B` | `gpt-4.1` / `gpt-5.4` / `gpt-5.4-mini` | The three catalog models the labs deploy. |
+| `MODEL_BASELINE` / `MODEL_COMPARE_A` / `MODEL_COMPARE_B` | `gpt-4.1` / `gpt-5.4` / `gpt-5.4-mini` | The three catalog models these workflows deploy. |
 | `FT_DEPLOYMENT_TYPE` / `FT_TRAINING_TYPE` | `Developer` | $0/hr tier — see cost table below for why. |
 | `BUDGET_CEILING_USD` | `25` | Consumption budget alert threshold (50/80/100%). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | — | Populated by `make provision`; blank = console-only tracing. |
@@ -723,7 +723,7 @@ submitted to Azure.
 
 <img width="100%" alt="" src="docs/file7.png" />
 
-Workflow 2 after validation — the lab's own travel dataset, valid, with its
+Workflow 2 after validation — the original travel dataset, valid, with its
 real cost estimate ($0.016 on Developer tier) and the job configuration
 about to be submitted.
 
@@ -826,7 +826,7 @@ Azure-Foundry-Agentic-FineTuning-Platform/
 │           └── sweep_orphans.py       #   tag-based orphan cleanup for teardown
 │
 ├── data/
-│   ├── travel-finetune-hotel.jsonl    # The lab's own dataset (real recorded Azure training run)
+│   ├── travel-finetune-hotel.jsonl    # The original dataset (real recorded Azure training run)
 │   ├── convert_bedrock_datasets.py    # Converts AWS Bedrock Converse format → Azure fine-tuning format
 │   ├── converted/                     # 7 additional datasets (banking, healthcare, retail, IT, ...)
 │   └── fixtures/                      # Recorded mock-mode responses — $0, no Azure calls
