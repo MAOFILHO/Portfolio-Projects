@@ -1,4 +1,4 @@
-# Microsoft Foundry Agentic FineTuning Platform
+# Microsoft Foundry Agentic Fine-Tuning Platform
 
 **Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
@@ -43,19 +43,19 @@ environment variable.
                         │  LangGraph Orchestrator   │  ← supervisor, routes by intent
                         └──┬──────────┬──────────┬──┘
                            │          │          │
-                  ┌────────▼──┐ ┌─────▼─────┐ ┌──▼──────────┐
-                  │ Discovery │ │ FineTune  │ │ Comparison  │   sub-agents
-                  │  Agent    │ │  Agent    │ │   Agent     │
-                  └────────┬──┘ └─────┬─────┘ └──┬──────────┘
-                           │  MCP (stdio/JSON-RPC)│
-                  ┌────────▼──┐ ┌─────▼─────┐ ┌──▼──────────┐
+                  ┌────────▼──┐ ┌─────▼─────┐ ┌──▼───────────┐
+                  │ Discovery │ │ FineTune  │ │ Comparison   │   sub-agents
+                  │  Agent    │ │  Agent    │ │   Agent      │
+                  └────────┬──┘ └─────┬─────┘ └───┬──────────┘
+                           │ MCP (stdio/JSON-RPC) │
+                  ┌────────▼──┐ ┌─────▼──────┐ ┌──▼──────────┐
                   │mcp-catalog│ │mcp-finetune│ │mcp-inference│  3 MCP servers, 19 tools
-                  └────────┬──┘ └─────┬─────┘ └──┬──────────┘
-                           └──────────┼──────────┘
+                  └────────┬──┘ └─────┬──────┘ └──┬──────────┘
+                           └──────────┼───────────┘
                                       │ mock fixtures  ⇄  live Azure SDK
-                        ┌─────────────▼─────────────┐
+                        ┌─────────────▼──────────────┐
                         │  Azure AI Foundry (eastus2)│
-                        └───────────────────────────┘
+                        └────────────────────────────┘
 ```
 
 **Why MCP servers and not plain functions:** the same three servers
