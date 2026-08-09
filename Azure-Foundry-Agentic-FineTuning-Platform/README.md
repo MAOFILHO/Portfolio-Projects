@@ -563,7 +563,6 @@ Azure-Foundry-Agentic-FineTuning-Platform/
 
 ---
 
-Generated with [Claude Code](https://claude.com/claude-code) from two
-K21Academy Microsoft Foundry lab guides. See `PLAN.md` for the full set of
-architecture decisions and their rationale, and `CHANGELOG.md` for what
-shipped when.
+## Author
+
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
