@@ -68,6 +68,82 @@ is reusable outside this app, not locked to its UI.
 (`src/app/services/fixtures.py` vs. `src/app/services/azure_foundry.py`).
 Nothing in the agents, routers, or frontend branches on mode.
 
+## Data flow
+
+### Request lifecycle
+
+Every workflow runs as a background job, not a single blocking request —
+necessary once live-mode runs started taking 10–60 minutes (see
+[Troubleshooting #5](docs/TROUBLESHOOTING.md)). The frontend polls for
+progress and survives a refresh by resuming the same job id from
+`localStorage`.
+
+```mermaid
+sequenceDiagram
+    participant UI as React UI
+    participant API as FastAPI (main.py)
+    participant Jobs as Job registry (jobs.py)
+    participant Graph as LangGraph orchestrator
+    participant Agent as Sub-agent (Discovery/FineTune/Comparison)
+    participant MCP as MCP tool (foundry_catalog/finetune/inference)
+    participant Azure as Azure AI Foundry
+
+    UI->>API: POST /agent/invoke/start
+    API->>Jobs: create job, launch background task
+    API-->>UI: 202 {job_id} (returns immediately)
+
+    par background execution
+        Jobs->>Graph: ainvoke(state)
+        Graph->>Agent: route by demo/intent
+        loop each tool call
+            Agent->>MCP: call_tool(name, args)
+            MCP->>Azure: SDK / REST call (asyncio.to_thread)
+            Azure-->>MCP: response
+            MCP-->>Agent: typed result
+            Agent->>Jobs: report progress event
+        end
+        Agent-->>Graph: result + trace
+        Graph-->>Jobs: final state
+    and UI polling
+        loop every 2s
+            UI->>API: GET /agent/jobs/{job_id}
+            API->>Jobs: read status/events
+            API-->>UI: {status, events, result?}
+        end
+    end
+
+    UI->>UI: render result, clear localStorage job id
+```
+
+### Fine-tuning workflow (Workflow 2), step by step
+
+The one workflow with real, irreversible spend and a ~60-minute training
+wall-clock, so every step either validates before spending or degrades
+gracefully instead of crashing — see
+[Troubleshooting #6–7](docs/TROUBLESHOOTING.md) for the two live bugs this
+sequence exposed (an async file-processing race, and a premature deploy
+attempt that used to crash the whole run).
+
+```mermaid
+flowchart TD
+    A[validate_jsonl] -->|invalid| B[Return blocked=true\nwith per-line errors]
+    A -->|valid| C[estimate_training_cost]
+    C --> D[upload_training_file]
+    D --> E{Azure file status?}
+    E -->|pending| D
+    E -->|processed| F["create_sft_job\ntrainingType=developerTier"]
+    F --> G[get_job_status]
+    G --> H[get_job_logs]
+    H --> I[deploy_finetuned_model]
+    I --> J{Job status = succeeded?}
+    J -->|yes| K[ARM PUT deployment\nDeveloper tier, $0/hr]
+    J -->|not yet, ~60 min job| L["Return error gracefully —\nkeep validation/cost/job results,\nnote deploy isn't ready"]
+
+    style B fill:#fde7e9,color:#a4262c
+    style L fill:#fff4ce,color:#8a6d00
+    style K fill:#dff6dd,color:#0e5c0e
+```
+
 ## The three workflows
 
 | Workflow | Reproduces | What it does |
@@ -215,15 +291,80 @@ avoid the one non-$0 line item, `min_replicas = 0` cold-start trade-off,
 etc.).
 
 **CI/CD:** this project lives in a monorepo
-([`Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects)) —
-all four GitHub Actions workflows
-(`azure-foundry-agentic-finetuning-platform-{ci,deploy,teardown,hosting-deploy}.yml`)
-live at that repo's root `.github/workflows/`, not in this folder, matching
-the monorepo's convention. CI is path-scoped to this folder only; deploy/
-teardown/hosting-deploy are `workflow_dispatch`-only (never auto-triggered)
-and authenticate via OIDC against a dedicated, least-privilege custom role
-(`infra/foundry-deployer-role.json`) — not broad Owner/Contributor, and
-unable to touch other projects' resources in that same repo/subscription.
+([`Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects)) and
+its GitHub Actions setup follows that monorepo's conventions — see
+[GitHub Actions CI/CD](#github-actions-cicd) below for how it actually works.
+
+## GitHub Actions CI/CD
+
+This project's workflows live at the **monorepo root**
+`.github/workflows/`, not inside this project's own folder — GitHub Actions
+only discovers workflows at the repo root, and every sibling project in
+`Portfolio-Projects` follows the same
+`<project-slug>-<purpose>.yml` naming so one repo can host many independent
+projects' pipelines without collisions.
+
+| Workflow | Trigger | Needs Azure creds? | What it does |
+|---|---|---|---|
+| `…-ci.yml` | push/PR to `main`, **path-scoped** to this folder only | No | Lint, unit tests, mock end-to-end run, `tsc` type-check, frontend build, `terraform validate` — all $0, no cloud calls |
+| `…-deploy.yml` | `workflow_dispatch` only, requires typing `confirm: provision` | Yes (OIDC) | Provisions the AI infra (Foundry account, base model deployments) and runs a real live-mode pass |
+| `…-hosting-deploy.yml` | `workflow_dispatch` only | Yes (OIDC) | Builds + pushes the backend image to Docker Hub, rolls the Container App to it, builds + deploys the frontend to the Static Web App |
+| `…-teardown.yml` | `workflow_dispatch`, **and** a nightly cron safety-net sweep | Yes (OIDC) | `terraform destroy` + a tag-based orphan sweep + a release-blocking smoke test that fails loudly if anything survives |
+
+```mermaid
+flowchart LR
+    push[push/PR to main\npaths: this folder only] --> ci[ci.yml\nlint · tests · build · terraform validate]
+
+    dispatch1[workflow_dispatch\nconfirm=provision] --> deploy[deploy.yml\nprovision AI infra + live run]
+    dispatch2[workflow_dispatch] --> hosting[hosting-deploy.yml\nbuild+push image · roll Container App · deploy frontend]
+    dispatch3[workflow_dispatch] --> teardown[teardown.yml]
+    cron[nightly cron 03:23 UTC] --> teardown
+
+    deploy -.->|OIDC, no stored secret| azure[(Azure)]
+    hosting -.->|OIDC + Docker Hub token| azure
+    hosting -.-> dockerhub[(Docker Hub)]
+    teardown -.->|OIDC| azure
+
+    style ci fill:#eff6fc,color:#0078d4
+    style deploy fill:#fff4ce,color:#8a6d00
+    style hosting fill:#fff4ce,color:#8a6d00
+    style teardown fill:#fde7e9,color:#a4262c
+```
+
+**Why `deploy`/`hosting-deploy`/`teardown` are all `workflow_dispatch`-only,
+never auto-triggered:** every one of them either bills real money or
+destroys real resources — a `git push` should never be able to trigger
+either. `ci.yml` is the only workflow that runs automatically, and it never
+touches Azure at all.
+
+**Authentication is OIDC, not a stored client secret** — `azure/login@v2`
+exchanges a short-lived GitHub-issued token for an Azure one via a
+federated identity credential
+(`azuread_application_federated_identity_credential` in `hosting.tf`),
+scoped to `repo:MAOFILHO/Portfolio-Projects:ref:refs/heads/main`. Nothing
+long-lived to leak, rotate, or accidentally commit.
+
+**GitHub *Variables*, not *Secrets*, for the OIDC identifiers** —
+`FOUNDRY_AZURE_CLIENT_ID` / `_TENANT_ID` / `_SUBSCRIPTION_ID` aren't secret
+once OIDC removes the client secret from the picture, and GitHub Variables
+are the right place for non-secret config. The **project-specific
+`FOUNDRY_` prefix matters**: this repo hosts multiple independent projects
+sharing one Variables/Secrets namespace, and a plain `AZURE_CLIENT_ID` would
+silently collide with a sibling project's own identity.
+
+**Real secrets** (`DOCKERHUB_TOKEN`, `FOUNDRY_SWA_DEPLOYMENT_TOKEN`) are the
+only two things actually stored as GitHub *Secrets* — everything else this
+project's workflows need is either an OIDC-derived token or a plain
+Variable.
+
+**Least-privilege by default, not Owner/Contributor** — the OIDC identity's
+permissions come from a custom role
+(`infra/foundry-deployer-role.json`, applied via `az role definition create`
+— see `make hosting-role`), scoped to only the Azure resource types this
+project actually touches (Resource Groups, Cognitive Services, Container
+Apps, Static Web Apps, Log Analytics, Consumption Budgets, and a narrowly
+scoped Role Assignment write). It cannot see or modify any other project's
+resources in the same subscription.
 
 ## Troubleshooting & Lessons Learned
 
