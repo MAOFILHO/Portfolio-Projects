@@ -152,6 +152,158 @@ flowchart TD
 | **2 — Supervised Fine-Tuning** | *Fine-tune a language model* | JSONL validation (schema violations shown as a feature, not an error), pre-spend cost estimate, SFT job submission on `gpt-4.1`, live progress (100 steps, final loss 0.02), $0/hr Developer-tier deployment. Also ships a **selectable dataset catalog** — 7 additional domains (support triage, healthcare, e-commerce, IT helpdesk, banking, gardening) converted from AWS Bedrock's format, validated and cost-estimated on demand, without touching the lab's own dataset or numbers. |
 | **3 — Agentic Inference & Comparison** | Both labs' baseline-vs-fine-tuned pattern | Five canonical prompts, identical system message on both sides, scored on **behaviour** (friendly tone, no hotel/flight/car/restaurant recommendation, ends with a question) — not string equality, since the guide explicitly warns outputs are non-deterministic |
 
+## Tutorial: Fine-Tuning vs. Inference
+
+Two terms get used loosely in this space. Here's the concrete distinction this
+project draws between them, with real numbers pulled from this project's own
+runs — not textbook placeholders.
+
+### Fine-Tuning
+
+**What.** A second, additional training pass on top of an already-trained
+base model (`gpt-4.1`), using a labeled dataset of `system`/`user`/`assistant`
+message triples (`travel-finetune-hotel.jsonl`). It updates a **new copy** of
+the model's weights — the base model everyone else uses is untouched — and
+produces a new deployable artifact.
+
+**Why.** Prompting alone has to be repeated, and re-argued with, on every
+single call. Fine-tuning bakes a behaviour into the weights once, so it stops
+depending on how well a system prompt is worded on any given request.
+
+**When.** Use it when the same instruction needs to hold reliably across many
+independent calls and you have (or can build) a representative labeled
+dataset. Skip it — and just prompt — for anything that only needs to work
+once, or where the desired behaviour changes request to request.
+
+**Example (this project).** Teach `gpt-4.1` to always answer travel questions
+in a warm, enthusiastic register, never recommend a specific hotel/flight/car
+rental/restaurant (deflect instead), and always close with a follow-up
+question — from 100 labeled examples, in one SFT job.
+
+**Metrics — real values from this project's completed Azure job**
+(`ftjob-2078c2a9a22043d3b1d1698a9aea1af8`, `gpt-4.1-2025-04-14`, Developer
+tier, 100 training steps):
+
+| Metric | Direction | This job's value | How it's calculated |
+|---|---|---|---|
+| **Training loss** (`final_train_loss`) | 🔽 Lower is better | **0.02** | Cross-entropy loss between the model's predicted next-token distribution and the actual training-example token, averaged over the final step's batch |
+| **Mean token accuracy** (`final_train_mean_token_accuracy`) | 🔼 Higher is better | **1.00 (100%)** | Share of tokens where the model's top-1 prediction matched the actual training-example token, averaged over the final step |
+| Trained tokens | — (volume, drives cost) | 16,000 | `tokens_per_epoch × epochs`, counted by the tokenizer over the whole JSONL dataset |
+| Total steps | — (volume) | 100 | Gradient-update steps run, driven by `batch_size=1` and `row_count × epochs` |
+| **Training cost** | 🔽 Lower is better | **$0.016** | `billed_tokens ÷ 1,000,000 × price_per_1M_tokens × 0.5` — the `0.5` is the Developer-tier discount off the Global Standard rate |
+
+**Two findings worth stating outright:**
+1. **A `final_train_loss` of 0.02 with 100% token accuracy is not a target to
+   chase — it's a signal to sanity-check.** On a small, stylistically narrow
+   dataset (100 short travel-assistant replies), the model can essentially
+   memorize the training set rather than generalize a style. The real test
+   isn't the training metric; it's Workflow 3's held-out behavioural
+   comparison below, on prompts the model never trained on.
+2. **Training cost and inference cost are two different bills.** The $0.016
+   above pays for the one-time training pass. Every completion the deployed
+   fine-tuned model serves afterward is billed separately, per token, same as
+   the base model — fine-tuning doesn't make inference free.
+
+### Inference
+
+**What.** Running the trained model forward against a new prompt — no
+weight updates, just a completion. Everything downstream of "the model is
+deployed" is inference: a single chat completion, a side-by-side comparison,
+or a full scored evaluation run.
+
+**Why.** This is how the model is actually consumed. It's also how quality,
+safety, and cost get *measured* — before committing to a model choice or
+trusting a fine-tune's effect, instead of taking either on faith.
+
+**When.** Every user-facing request is inference. In this project, inference
+also drives two evaluation flows used *before* going live: comparing catalog
+models against each other (Workflow 1), and comparing baseline vs. fine-tuned
+behaviour on the same prompts (Workflow 3).
+
+**Example (this project).** `gpt-5.4` and `gpt-5.4-mini` are compared on the
+same four axes as every other catalog model before either is deployed; the
+fine-tuned travel model is compared against baseline `gpt-4.1` on five
+canonical prompts before being trusted over the base model.
+
+**Metrics A — catalog leaderboard, real data (Workflow 1, 12 models):**
+
+| Model | Quality index 🔼 | Safety attack success rate 🔽 | Throughput (tok/s) 🔼 | Benchmark cost (USD) 🔽 | Notes |
+|---|---|---|---|---|---|
+| **claude-opus-5** | **0.85** | 0.50% | 62 | $183.08 | **Best quality**, mid-pack on every other axis |
+| gpt-5.6-sol | 0.82 | 4.48% | 20 | $165.04 | Highest attack-success rate among the top-quality tier |
+| gpt-5.5 | 0.82 | **0.00%** | 50 | $543.79 | Tied-best quality, perfect safety, but most expensive to benchmark |
+| claude-opus-4-6 | 0.82 | 2.41% | 43 | $269.14 | Balanced, no standout axis |
+| gpt-5.6-terra | 0.81 | 3.51% | 30 | $179.65 | — |
+| gpt-5.4 | 0.81 | 1.02% | 21 | $164.92 | Deployed in this project (Workflow 1's comparison model A) |
+| claude-opus-4-5 | 0.81 | 1.47% | 42 | $610.30 | — |
+| grok-4.3 | 0.81 | 4.13% | 32 | $56.37 | — |
+| gpt-5.4-mini | 0.67 | **0.00%** | 142 | $45.81 | Deployed in this project (comparison model B) — the throughput/cost trade-off against `gpt-5.4` |
+| gpt-5.4-nano | 0.58 | 0.30% | 177 | $12.40 | — |
+| gpt-5-nano | 0.55 | 5.90% | **224** | $9.10 | **Fastest**, weakest safety of the top 8 |
+| gpt-4.1-nano | 0.52 | 6.20% | 183 | **$1.38** | **Cheapest to benchmark**, worst quality and safety of the 12 |
+
+*Model architectures and evaluation conditions are exactly as scored by
+Foundry's own leaderboard — no thresholds were tuned to flatter any model.*
+
+**No model wins all four axes** — that's the point of a 4-axis leaderboard
+rather than a single score: `claude-opus-5` leads quality but not safety,
+speed, or cost; `gpt-5-nano` is fastest but has the second-worst attack
+success rate of the 12; `gpt-4.1-nano` is cheapest to benchmark but trails on
+every other axis. Picking a model means picking which trade-off matters for
+the use case, not reading one leaderboard row.
+
+**Metrics B — evaluator pass-rate, real data (Workflow 1, `gpt-5.4`, 45-row
+synthetic dataset, 16 AI-judge evaluators):**
+
+| Group | Evaluator | Pass rate 🔼 | Passed / Total |
+|---|---|---|---|
+| Quality | Groundedness | 100.0% | 45/45 |
+| Quality | Coherence | 97.8% | 44/45 |
+| Quality | Relevance | 100.0% | 45/45 |
+| Quality | Fluency | 100.0% | 45/45 |
+| Safety | Violence | 100.0% | 45/45 |
+| Safety | SelfHarm | 100.0% | 45/45 |
+| Safety | IndirectAttack | 100.0% | 45/45 |
+| Safety | Sexual | 100.0% | 45/45 |
+| Safety | HateAndUnfairness | 100.0% | 45/45 |
+| Safety | CodeVulnerability | 100.0% | 45/45 |
+| Safety | ECI | 100.0% | 45/45 |
+| Safety | ProtectedMaterial | 100.0% | 45/45 |
+| Business | CustomerSatisfaction | 100.0% | 45/45 |
+| Business | DeflectionRate | 100.0% | 45/45 |
+| Agents | TaskCompletion | 77.8% | 35/45 |
+| Agents | IntentResolution | 88.9% | 40/45 |
+| **Overall** | — | **97.8%** | **704/720** |
+
+**How it's calculated:** each evaluator is an AI judge that scores every one
+of the 45 rows as pass/fail against its own rubric (not a 1–5 mean, which is
+easy to assume wrongly). `pass_rate = passed ÷ total × 100`, and the row
+count is fixed at 45 per evaluator regardless of group — Quality and Safety
+evaluators run against the model's raw completions, Agents evaluators
+(`TaskCompletion`, `IntentResolution`) run against the orchestrator's tool-use
+trace, which is the harder bar and exactly why they score lowest here.
+
+**Metrics C — behavioural checks (Workflow 3, baseline vs. fine-tuned):**
+
+Not AI-judge scored — this is the guide's own instruction taken literally:
+*"verify that the model follows the intended travel-assistant behavior...
+not [exact] wording."* Three deterministic checks run against every response,
+each pass/fail:
+
+| Check | Direction | Passes when |
+|---|---|---|
+| `friendly_tone` | 🔼 More passes is better | ≥2 enthusiasm signals found (marker words, `!` count, or an emphatic repetition like *"Location, location, location!"*) |
+| `no_restricted_recommendations` | 🔼 More passes is better | No sentence both mentions a restricted category (hotel/flight/car/restaurant) *and* uses a recommendation verb (`recommend`, `book`, `try the`, …) — an explicit refusal doesn't count against it |
+| `ends_with_engaging_question` | 🔼 More passes is better | The response's final sentence ends in `?` |
+
+Each model's score on a prompt is `checks_passed ÷ 3`; a full comparison run
+totals that across all five canonical prompts (`max_total = 15` per model).
+There's no fixed "real" number to quote here the way there is for the
+training job or the evaluation run above — this score depends on which
+fine-tuned deployment is live when the comparison runs — but the scoring
+*method* itself is fixed and reproducible: it's this exact code, not a
+judge's opinion.
+
 ## Prerequisites
 
 - Python 3.12+, Node.js 20+
