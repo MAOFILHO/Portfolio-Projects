@@ -16,30 +16,84 @@
 
 **Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
+## Project Description
+
 A production-grade, zero-console-click replacement for two Microsoft Foundry
-hands-on lab guides ("Explore and compare models" and "Fine-tune a language
-model") — both 100% portal click-throughs in their original form. This
-project automates every step behind a LangGraph orchestrator over Model
-Context Protocol (MCP) tools, a FastAPI backend, a Contoso-themed React UI,
-and cost-guarded Terraform IaC.
+hands-on lab guides — **"Explore and compare models"** and **"Fine-tune a
+language model"** — both 100% manual portal click-throughs in their original
+form, replaced here with three one-click workflows backed by a real agentic
+pipeline.
 
-## Business case
+**The labs** teach the same underlying skill twice, on two different halves
+of the model lifecycle: browse Microsoft Foundry's model catalog, read a
+4-axis leaderboard (quality / safety / throughput / cost), run a synthetic
+evaluation across 16 AI-judge evaluators — then submit a supervised
+fine-tuning job on a travel-assistant JSONL dataset and compare its behaviour
+against the un-tuned base model. Both, as written, are entirely manual: click
+through a wizard, babysit a ~60-minute training job, eyeball two chat
+responses side by side.
 
-The two source labs teach the same underlying workflow — deploy a model,
-evaluate it, fine-tune it, compare it — entirely through manual portal
-clicks: browse the model catalog, read a leaderboard, click through a
-fine-tuning wizard, babysit a 60-minute training job, eyeball two chat
-responses side by side. None of that is reproducible, testable, or
-automatable as written.
+**The objective** is not to replay those clicks as scripted API calls — it's
+to turn "a person manually driving a portal" into a reproducible pipeline: an
+**Orchestrator Agent** routes each request to one of three **Sub-Agents**
+(Discovery, Fine-Tune, Comparison), each of which talks to Azure exclusively
+through typed **MCP tools** — the same tools Claude Desktop/Code could call
+directly, since nothing here is UI-specific.
 
-This project turns that into three one-click workflows backed by a real agentic
-pipeline: an **Orchestrator Agent** routes each request to one of three
-**Sub-Agents** (Discovery, Fine-Tune, Comparison), each of which talks to
-Azure exclusively through typed **MCP tools** — the same tools Claude
-Desktop/Code could call directly, since nothing here is UI-specific. The
-whole thing runs at **$0** by default (`DEMO_MODE=mock`, fixture-backed, no
-Azure account needed) and switches to real Azure Foundry calls with one
+**What's built around that** is the actual engineering substance:
+
+- A **Python backend** — FastAPI, a LangGraph orchestrator, 3 MCP servers
+  (19 tools total), and Pydantic v2 schemas as the single source of truth for
+  every metric, cost formula, and evaluator direction.
+- A **React/TypeScript dashboard** (Contoso-themed) — one page per workflow,
+  live job-progress polling that survives a page refresh, and an agent-trace
+  viewer showing every MCP tool call in order.
+- **Cost-guarded Terraform IaC** — a budget alert provisioned before any
+  billable resource, auto-incrementing name suffixes, and a tag-based orphan
+  sweep that runs on every teardown.
+- **Optional public hosting** — Azure Container Apps + Static Web Apps,
+  gated by real Microsoft Entra ID sign-in, deployed via GitHub Actions OIDC
+  (no stored Azure secret).
+
+The whole thing runs at **$0** by default (`DEMO_MODE=mock`, fixture-backed,
+no Azure account needed) and switches to real Azure Foundry calls with one
 environment variable.
+
+## The Business Case: Why This Matters
+
+**Problem.** Deploying a language model is rarely a one-step decision.
+Teams need to weigh dozens of catalog models against each other on
+quality/safety/speed/cost, and — when generic prompting isn't reliable
+enough at scale — fine-tune a model on labeled examples to make a behaviour
+stick. Microsoft Foundry's portal supports every one of these steps, but
+only as manual clicks: browse a catalog, read a leaderboard, launch a
+wizard, babysit a training job, eyeball two chat transcripts side by side.
+
+**The Challenge.** None of that is reproducible, testable, or safe to hand
+to CI as written. The decision that actually matters — *is this fine-tune
+better than the baseline, and by how much* — gets made by reading two chat
+responses rather than by a repeatable, scored comparison. There's a real
+cost dimension baked into every step, too: a full synthetic evaluation costs
+several real dollars, and a fine-tuning job kicked off by mistake, or
+deployed to the wrong tier, is real, avoidable spend — Standard tier
+instead of Developer tier alone is the difference between $0/hour and
+$1,224/month for one deployment.
+
+**The Consequence.** Teams either skip the rigor (pick a model on
+reputation, ship a fine-tune without a controlled before/after comparison)
+or pay an ongoing tax in analyst time re-clicking through the same portal
+steps for every new dataset or model release. Nothing about the process is
+versioned, scriptable, or reviewable in a pull request.
+
+**The Solution.** This project turns the labs' manual workflow into three
+one-click, agentic pipelines — Discovery, Fine-Tune, Comparison — each
+backed by typed MCP tools an Orchestrator Agent routes to, so every step is
+reproducible and testable at **$0** in mock mode, and — when it's time to
+spend real money — pre-validated (JSONL schema checks, a pre-spend cost
+estimate) before anything touches a paying Azure account. The same scoring
+code (16 AI-judge evaluators, a 4-axis leaderboard, three deterministic
+behavioural checks — see the [Tutorial](#tutorial-fine-tuning-vs-inference)
+below) replaces "eyeballing two responses" with a number.
 
 ## Results and Impact
 
