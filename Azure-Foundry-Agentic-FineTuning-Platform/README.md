@@ -1,4 +1,6 @@
-# Azure Foundry — Agentic Fine-Tuning & Model Evaluation Platform
+# Foundry Agentic FineTuning Platform
+
+**Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
 A production-grade, zero-console-click replacement for two Microsoft Foundry
 hands-on lab guides ("Explore and compare models" and "Fine-tune a language
@@ -174,6 +176,55 @@ Since every resource in this design is $0/hour (see Cost, above), an orphan
 costs nothing while idle — which is what makes the pattern acceptable here
 rather than merely risky.
 
+## Live deployment
+
+The app itself (not just the AI infra) is hosted publicly:
+**[black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net)**
+— Azure Static Web Apps (Free tier) for the frontend, Azure Container Apps
+(Consumption, `min_replicas = 0`) for the backend, both provisioned by
+`infra/terraform/hosting.tf`.
+
+**Sign-in is required and enforced server-side.** The demo/demo123 screen
+used for local/mock dev was never checked by the backend — fine on
+localhost, a real risk on a public URL, since anyone who found it could
+submit real fine-tuning jobs on your Azure bill with no login at all. The
+hosted build requires real Microsoft Entra ID sign-in instead
+(`frontend/src/App.tsx` + `src/app/auth_entra.py`), gating every route
+except `/health`.
+
+**Deliberately not Container Apps' built-in "Easy Auth."** It authenticates
+the browser's CORS preflight (`OPTIONS`) request too, and a preflight
+structurally never carries credentials — so Easy Auth 401s every
+cross-origin call from the SPA before it starts. Confirmed live and matches
+a known, unresolved platform limitation
+([microsoft/azure-container-apps#359](https://github.com/microsoft/azure-container-apps/issues/359)).
+The backend validates Entra bearer tokens itself instead (`auth_entra.py`),
+behind its own `CORSMiddleware`, which answers `OPTIONS` correctly since it
+never depends on auth.
+
+**Defaults to `DEMO_MODE=mock`** ($0, no real Azure calls) even though it's
+publicly reachable — a public URL is not a reason to default to live
+billing. Flip the Container App to `live` only when intentionally
+demonstrating it, and watch the budget.
+
+**Hosting cost:** ≈ $0–2/month on top of the AI infra's own cost (see
+[Cost](#cost) above) — every new resource is free-tier or consumption-based
+with a $0/hour idle rate. See `PLAN.md`'s public-hosting-phase section for
+the full breakdown and the decisions behind it (Docker Hub over ACR to
+avoid the one non-$0 line item, `min_replicas = 0` cold-start trade-off,
+etc.).
+
+**CI/CD:** this project lives in a monorepo
+([`Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects)) —
+all four GitHub Actions workflows
+(`azure-foundry-agentic-finetuning-platform-{ci,deploy,teardown,hosting-deploy}.yml`)
+live at that repo's root `.github/workflows/`, not in this folder, matching
+the monorepo's convention. CI is path-scoped to this folder only; deploy/
+teardown/hosting-deploy are `workflow_dispatch`-only (never auto-triggered)
+and authenticate via OIDC against a dedicated, least-privilege custom role
+(`infra/foundry-deployer-role.json`) — not broad Owner/Contributor, and
+unable to touch other projects' resources in that same repo/subscription.
+
 ## Troubleshooting — Known Issues & Workarounds
 
 Everything below was found by actually running this project against live
@@ -334,6 +385,77 @@ tsconfig.app.json`. Re-running this way immediately surfaced a real error
 (`is_terminal` missing from a hand-written interface) that the broken command
 had been hiding.
 
+### 12. Container Apps Easy Auth 401s the browser's own CORS preflight
+**Symptom:** Every API call from the hosted SPA fails with a generic
+"Request failed. Is the API running?" — no CORS error surfaced in the
+console, just a failed `fetch()`.
+**Root cause:** `curl -X OPTIONS ... -H "Origin: ..."` against the
+Easy-Auth-protected backend returned **401** — Easy Auth authenticates the
+preflight `OPTIONS` request too, and a preflight structurally never carries
+credentials (that's the entire point of a preflight), so it always fails
+before the browser ever sends the real request. This is a confirmed,
+unresolved Container Apps platform limitation, not a config mistake — see
+[microsoft/azure-container-apps#359](https://github.com/microsoft/azure-container-apps/issues/359).
+**Fix:** Stopped using Easy Auth entirely for this SPA + separate-origin-API
+shape. The backend validates Entra bearer tokens itself (`auth_entra.py`)
+behind its own `CORSMiddleware`, which answers `OPTIONS` correctly since
+Starlette handles preflight before any route dependency (including the auth
+check) ever runs.
+
+### 13. A hand-rolled `loginRedirect()`-in-a-`useEffect` raced MSAL's own redirect handling
+**Symptom:** Picking an account on the Microsoft sign-in screen just bounced
+back to the same sign-in screen, repeatedly.
+**Root cause:** `useMsal()`'s `inProgress` value has a real window, on the
+very first render after Microsoft redirects back with an auth code, where a
+naive "if idle, start a new login" check reads `None` before MSAL's own
+redirect-handling effect has updated it — so a second, competing
+`loginRedirect()` fires and cancels the one already in flight.
+**Fix:** Replaced the hand-rolled state machine with `MsalAuthenticationTemplate`
+from `@azure/msal-react` — the library's own purpose-built component for
+exactly this race, rather than continuing to patch a bespoke one.
+
+### 14. `azuread_application_identifier_uri` as a separate resource drifted repeatedly
+**Symptom:** Sign-in itself worked, but every API call failed with
+`AADSTS500011: The resource principal ... was not found in the tenant` —
+reproduced **twice**, independently, after unrelated `terraform apply` runs.
+**Root cause:** `identifier_uris` can't be set directly on `azuread_application`
+when the value needs the app's own `client_id` (a same-resource
+self-reference cycle), so it's normally managed via a separate
+`azuread_application_identifier_uri` resource. In practice, Microsoft
+Graph's PATCH on the parent application appeared to reset `identifierUris`
+to empty whenever that parent resource was modified for *any other* reason
+afterward — confirmed by checking Graph directly
+(`az rest ... applications/{id}?$select=identifierUris`) each time.
+**Fix:** Declared a **static** App ID URI directly on the same resource
+instead (`api://{tenant_id}/{name}-signin` — the tenant's default policy
+requires the URI to contain a verified domain, tenant ID, or app ID, so a
+fully arbitrary string wasn't accepted either, confirmed live via
+`InvalidUniqueTenantIdentifierAsPerAppPolicy`). No separate resource means
+no drift window.
+
+### 15. The `aud` claim isn't what the docs/assumptions suggested — decode a real token
+**Symptom:** `invalid token: Invalid issuer`, then (after fixing that)
+`invalid token: Audience doesn't match` — both against a token that *looked*
+like it should validate.
+**Root cause, part 1:** the app's `api` block defaulted to
+`requestedAccessTokenVersion = 1`, issuing v1.0-format tokens
+(`iss: https://sts.windows.net/{tenant}/`) against a backend that validated
+the v2.0 issuer format. **Part 2:** even after forcing v2 tokens, the actual
+`aud` claim (decoded straight out of `sessionStorage` in the browser — see
+below) was the resource app's **client ID GUID**, not its App ID URI — the
+opposite of what's assumed for a resource with a registered identifier URI.
+**Fix:** Set `requested_access_token_version = 2` explicitly. Validate
+`audience` against `entra_client_id`, not the identifier URI — established
+by decoding a real issued token, not by re-reading docs a third time:
+```js
+// Paste in the browser console — decodes MSAL's cached access token
+// without sending it anywhere.
+Object.keys(sessionStorage).filter(k => k.toLowerCase().includes('accesstoken')).forEach(k => {
+  const v = JSON.parse(sessionStorage.getItem(k));
+  console.log(k, JSON.parse(atob(v.secret.split('.')[1])));
+});
+```
+
 ## Lessons Learned
 
 1. **Mock-mode fixtures cannot substitute for live-mode testing, ever** —
@@ -392,6 +514,32 @@ had been hiding.
     left running until explicit user confirmation, and cancelled via a
     sanctioned tool (`az rest`) once approved — never by finding a way
     around a blocked action.
+12. **A managed platform's built-in feature can have a confirmed, unresolved
+    bug for your exact architecture — check the issue tracker, not just the
+    docs** — Container Apps Easy Auth 401ing CORS preflights is a known
+    limitation with an open GitHub issue, not a misconfiguration. No amount
+    of `excludedPaths`/ingress-CORS tuning would have fixed it, because the
+    problem is upstream of anything this project's own config controls.
+13. **Prefer a library's purpose-built component over hand-rolled state
+    logic for anything with a real race condition** — a bespoke
+    `loginRedirect()`-in-a-`useEffect` looked correct and even worked
+    sometimes, which is worse than failing consistently: it hid a real race
+    (`inProgress` state lag on first render) until it recurred in a fresh
+    tab. `MsalAuthenticationTemplate` exists specifically because this race
+    is common enough to need a maintained, tested answer, not a bespoke one.
+14. **When two Terraform resources both touch overlapping remote state,
+    expect drift, not a one-time fix** — the same `identifierUris` empty
+    bug reproduced twice, independently, after unrelated applies, because
+    the actual mechanism (Graph's PATCH behavior on the parent resource)
+    was still in play each time. The fix that actually stuck was
+    structural (one resource, one field, no separate resource to drift
+    from), not a second attempt at the same pattern.
+15. **When a live value contradicts your assumption, trust the live value —
+    decode the real token/response instead of re-reading documentation a
+    third time** — both the issuer-format and audience-claim bugs in this
+    section were solved in one step each, the moment an actual issued JWT
+    was decoded and inspected directly, after multiple guess-and-redeploy
+    cycles based on what the docs implied *should* happen.
 
 ## Project layout
 
@@ -402,7 +550,8 @@ had been hiding.
 ├── infra/terraform/      Budget-first IaC: budget → Foundry account/project → model deployments
 ├── data/                Lab dataset + 7 additional converted datasets + fixtures for mock mode
 ├── tests/               unit / smoke_pre / smoke_post_provision / smoke_post_run / smoke_post_teardown
-├── .github/workflows/    ci / deploy / teardown
+├── (GitHub Actions workflows live at the monorepo root .github/workflows/,
+│   prefixed azure-foundry-agentic-finetuning-platform-* — see Live deployment)
 ├── PLAN.md, TASKS.md, COSTS.md, CHANGELOG.md    build record — architecture decisions, cost approval, phase gates
 ```
 
