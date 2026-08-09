@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Public hosting**: Azure Container Apps (backend) + Azure Static Web Apps
+  (frontend), gated by real Microsoft Entra ID sign-in with bearer-token
+  validation done in-app (`src/app/auth_entra.py`) — not Container Apps'
+  built-in Easy Auth, which has a confirmed platform bug blocking CORS
+  preflight for this SPA + separate-origin-API shape. See
+  [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) #12–15.
+- **GitHub Actions CI/CD**: four workflows at the monorepo root
+  (`ci`, `deploy`, `hosting-deploy`, `teardown`), OIDC auth (no stored Azure
+  secret), a least-privilege custom role scoped to just this project's
+  resources (`infra/foundry-deployer-role.json`).
 - **Selectable fine-tuning dataset catalog** (`GET /finetune/datasets`): 7 new
   datasets (support ticket triage, pharma adverse-event triage, patient
   message triage, e-commerce product copy, IT helpdesk L1, banking assistant,
@@ -27,6 +37,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Demo 2 UI: a "Dataset catalog" card with a dropdown over all 8 datasets and
   a "Validate & estimate cost" action, separate from the orchestrated
   "Run Demo 2" button (which still runs the lab's own dataset end to end).
+
+### Fixed
+- `ci.yml`'s Terraform job ran `pytest` without ever installing dependencies
+  first — added the missing `pip install -r requirements.txt`.
+- Three real `ruff` line-length violations and one `ruff format` violation
+  from the public-hosting work, never caught locally until CI's first
+  actually-green run.
+- Bumped `actions/checkout`, `actions/setup-node`, `actions/setup-python` to
+  v7 and `hashicorp/setup-terraform` to v4 — resolves the Node.js 20
+  deprecation warnings (GitHub forces Node 24 by June 2026, removes Node 20
+  entirely in September 2026).
 
 ## [0.1.0] — 2026-08-05
 

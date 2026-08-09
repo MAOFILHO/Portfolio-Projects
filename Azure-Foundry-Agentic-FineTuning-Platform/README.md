@@ -311,6 +311,12 @@ projects' pipelines without collisions.
 | `…-hosting-deploy.yml` | `workflow_dispatch` only | Yes (OIDC) | Builds + pushes the backend image to Docker Hub, rolls the Container App to it, builds + deploys the frontend to the Static Web App |
 | `…-teardown.yml` | `workflow_dispatch`, **and** a nightly cron safety-net sweep | Yes (OIDC) | `terraform destroy` + a tag-based orphan sweep + a release-blocking smoke test that fails loudly if anything survives |
 
+<img width="100%" alt="" src="docs/file12.png" />
+
+`ci.yml`'s three jobs (Backend, Frontend, Terraform) running green on a real
+push — every step replicated and verified locally before pushing, not just
+"push and hope."
+
 ```mermaid
 flowchart LR
     push[push/PR to main\npaths: this folder only] --> ci[ci.yml\nlint · tests · build · terraform validate]
