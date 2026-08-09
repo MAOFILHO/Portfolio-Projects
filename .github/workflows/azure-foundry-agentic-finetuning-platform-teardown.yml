@@ -31,9 +31,9 @@ jobs:
       run:
         working-directory: Azure-Foundry-Agentic-FineTuning-Platform
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -49,7 +49,7 @@ jobs:
           tenant-id: ${{ vars.FOUNDRY_AZURE_TENANT_ID }}
           subscription-id: ${{ vars.FOUNDRY_AZURE_SUBSCRIPTION_ID }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9.8"
 

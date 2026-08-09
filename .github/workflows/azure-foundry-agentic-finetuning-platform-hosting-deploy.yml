@@ -36,7 +36,7 @@ jobs:
       entra_tenant_id: ${{ steps.tf_outputs.outputs.entra_tenant_id }}
       entra_api_scope: ${{ steps.tf_outputs.outputs.entra_api_scope }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/login-action@v3
         with:
@@ -58,7 +58,7 @@ jobs:
           tenant-id: ${{ vars.FOUNDRY_AZURE_TENANT_ID }}
           subscription-id: ${{ vars.FOUNDRY_AZURE_SUBSCRIPTION_ID }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9.8"
 
@@ -88,9 +88,9 @@ jobs:
       run:
         working-directory: Azure-Foundry-Agentic-FineTuning-Platform/frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "npm"
