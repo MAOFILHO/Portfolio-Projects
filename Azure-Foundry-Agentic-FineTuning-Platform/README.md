@@ -379,6 +379,103 @@ contradicted documentation). Full write-ups, each with Symptom / Root cause
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — the 15 bugs themselves
 - **[docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md)** — the generalizable takeaways from each one
 
+## Web Application Screenshots
+
+<img width="100%" alt="" src="docs/file1.png" />
+
+Signing in to the live deployment with a real Microsoft account — the app is
+gated by actual Entra ID sign-in, not the cosmetic demo/demo123 screen used
+in local/mock dev (see [Live deployment](#live-deployment)).
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file2.png" />
+
+Home screen after sign-in — live mode, billing active, region `eastus2`, the
+three workflows as entry points.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file3.png" />
+
+Workflow 1 mid-run against live Azure — the live progress log streaming
+per-evaluator pass rates as the 45-row × 16-evaluator synthetic evaluation
+works through it (see [Data flow](#data-flow) for how this background-job +
+polling pattern works).
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file4.png" />
+
+Workflow 1 results — the model catalog and the four-axis leaderboard
+(quality, safety, throughput, cost), each with its own winner, since no
+single model wins every axis.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file5.png" />
+
+Workflow 1's synthetic evaluation results — per-evaluator pass rates across
+Quality, Safety, Business, and Agents groups, plus the agent trace showing
+every MCP tool call the sub-agent made, in order.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file6.png" />
+
+Workflow 2's dataset catalog — 8 selectable fine-tuning datasets, with
+Pydantic v2 validation and a pre-spend cost estimate before anything gets
+submitted to Azure.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file7.png" />
+
+Workflow 2 after validation — the lab's own travel dataset, valid, with its
+real cost estimate ($0.016 on Developer tier) and the job configuration
+about to be submitted.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file8.png" />
+
+Workflow 3 — baseline vs. fine-tuned comparison, ready to run against the
+real Developer-tier deployment from a completed Workflow 2 run.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file9.png" />
+
+Workflow 3 mid-run — live progress through the five canonical travel prompts
+against both models.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file10.png" />
+
+Workflow 3 results — baseline `gpt-4.1` vs. the fine-tuned deployment on the
+same prompt under the identical system message, scored on behaviour (tone,
+no restricted recommendations, ends with a question) rather than string
+equality.
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="" src="docs/file11.png" />
+
+The rest of Workflow 3's prompt-by-prompt comparison, plus the agent trace
+showing how the sub-agent resolved the fine-tuned deployment and scored
+each side.
+
 ## Project layout
 
 ```
