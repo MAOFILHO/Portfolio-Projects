@@ -459,6 +459,9 @@ monorepo project's own container, proving the compose stack builds and runs
 without any local Python/Node install. Shown stopped here, after the local
 session ended.</em></p>
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
 Going live:
 
 ```bash
@@ -477,6 +480,9 @@ Insights, and a Log Analytics workspace — all tagged
 post-teardown smoke test key off of (see
 <a href="#a-deliberate-risk-and-how-its-mitigated">A deliberate risk, and how
 it's mitigated</a>).</em></p>
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ## Environment variables
 
