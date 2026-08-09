@@ -317,6 +317,9 @@ projects' pipelines without collisions.
 push — every step replicated and verified locally before pushing, not just
 "push and hope."
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
 ```mermaid
 flowchart LR
     push[push/PR to main\npaths: this folder only] --> ci[ci.yml\nlint · tests · build · terraform validate]
