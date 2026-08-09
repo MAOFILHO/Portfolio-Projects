@@ -1,4 +1,4 @@
-# Foundry Agentic FineTuning Platform
+# Microsoft Foundry Agentic FineTuning Platform
 
 **Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
