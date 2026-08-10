@@ -76,7 +76,8 @@ jobs:
             echo "::notice::BEDROCK_PLATFORM_PLAN_ROLE_ARN is not set — skipping plan. Enable enable_github_oidc in Terraform, then set the repository variable."
           fi
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      # v6 runs on node24; v4 targets the deprecated Node 20 runtime.
+      - uses: aws-actions/configure-aws-credentials@v6
         if: steps.guard.outputs.configured == 'true'
         with:
           role-to-assume: ${{ vars.BEDROCK_PLATFORM_PLAN_ROLE_ARN }}

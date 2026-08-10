@@ -50,6 +50,41 @@ class FinetuneClient:
         ]
         return sorted(matches, key=lambda m: m.get("creationTime", 0), reverse=True)
 
+    def list_model_customization_jobs(self) -> list[dict[str, Any]]:
+        jobs: list[dict[str, Any]] = []
+        paginator = self._bedrock.get_paginator("list_model_customization_jobs")
+        for page in paginator.paginate():
+            jobs.extend(dict(summary) for summary in page.get("modelCustomizationJobSummaries", []))
+        return jobs
+
+    def find_jobs(self, scenario_id: str) -> list[dict[str, Any]]:
+        """All customization jobs belonging to a scenario, newest first.
+
+        Same reasoning as `find_custom_models`: Bedrock reserves job names permanently, so
+        a scenario that took several attempts — or that changed base model — has its real
+        job under a name the canonical `job_name()` no longer reproduces. Looking up the
+        canonical name returns ResourceNotFound, which the UI surfaces as status
+        "Unknown" for a job that in fact completed.
+        """
+        prefix = self.scenario_model_prefix(scenario_id)
+        matches = [
+            job
+            for job in self.list_model_customization_jobs()
+            if self._normalise(job["jobName"]).startswith(prefix)
+        ]
+        return sorted(matches, key=lambda j: j.get("creationTime", 0), reverse=True)
+
+    def resolve_job_identifier(self, scenario_id: str) -> str:
+        """The job identifier the UI and pollers should track for a scenario.
+
+        Prefers the newest real job over the canonical name, so a scenario works without
+        anyone having hand-written an active_job.json override.
+        """
+        jobs = self.find_jobs(scenario_id)
+        if jobs:
+            return str(jobs[0]["jobArn"])
+        return self.job_name(scenario_id)
+
     def _completed_model_exists(self, scenario_id: str) -> bool:
         return bool(self.find_custom_models(scenario_id))
 

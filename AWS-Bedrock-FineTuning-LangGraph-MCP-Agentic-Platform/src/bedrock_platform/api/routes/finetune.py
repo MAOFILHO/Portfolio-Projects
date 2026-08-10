@@ -233,7 +233,21 @@ async def stream_finetune_status(
     session: boto3.Session = Depends(get_boto_session),
 ) -> StreamingResponse:
     finetune_client = FinetuneClient(project_suffix=settings.project_suffix, session=session)
-    job_identifier = read_active_job_override(scenario.id) or finetune_client.job_name(scenario.id)
+    # An explicit override still wins. The fallback resolves the newest real job for the
+    # scenario rather than rebuilding the canonical name: Bedrock reserves job names
+    # permanently, so the canonical name may belong to no job at all — which surfaced in
+    # the UI as a completed job reporting status "Unknown".
+    #
+    # to_thread because resolving paginates Bedrock's job list, a blocking network call.
+    # Awaiting it inline stalls the event loop for every other request, including /health,
+    # for as long as the pagination takes.
+    override = read_active_job_override(scenario.id)
+    if override is not None:
+        job_identifier = override
+    else:
+        job_identifier = await asyncio.to_thread(
+            finetune_client.resolve_job_identifier, scenario.id
+        )
     _ensure_poller_running(scenario.id, finetune_client, job_identifier)
     return StreamingResponse(
         _status_event_stream(scenario.id),
