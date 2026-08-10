@@ -31,3 +31,9 @@ dist/
 
 # Artifacts / build output
 artifacts/
+
+# Claude Code local session data. CLAUDE.md itself is intentionally NOT ignored — it is
+# committed, as in the sibling projects, because its Project Invariants section documents
+# the guardrails this build ran under. Also ignored at the monorepo root; repeated here so
+# the folder stays self-contained if extracted on its own.
+.claude/
