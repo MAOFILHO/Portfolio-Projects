@@ -1,0 +1,21 @@
+id: it_helpdesk
+enabled: true
+display_name: IT / DevOps L1 Helpdesk
+tagline: Fine-tuned assistant for first-line IT troubleshooting
+industry: IT / DevOps
+dataset_path: data/it_helpdesk_l1.jsonl
+system_prompt: >-
+  You are the internal IT helpdesk L1 assistant. Give clear numbered troubleshooting steps. Always
+  end with: 'If this persists, I'll raise a ticket to L2.'
+output_mode: numbered_steps
+output_schema_ref: null
+validation_rules:
+  - name: l2_escalation_line
+    description: >-
+      Every response must end with the fixed line "If this persists, I'll raise a ticket to L2."
+sample_prompts:
+  - "My VPN keeps disconnecting every few minutes."
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

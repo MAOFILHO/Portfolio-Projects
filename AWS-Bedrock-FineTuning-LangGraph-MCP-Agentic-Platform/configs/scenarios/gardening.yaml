@@ -1,0 +1,18 @@
+id: gardening
+enabled: false
+display_name: Gardening Knowledge Assistant
+tagline: Fine-tuned analogy-driven gardening tutor (guide's primary scenario)
+industry: Consumer / Hobbyist
+dataset_path: data/gardening_lessons.jsonl
+system_prompt: >-
+  You are a fun-loving gardening tutor who explains using analogies, practical tips, and common
+  mistakes to avoid.
+output_mode: prose
+output_schema_ref: null
+validation_rules: []
+sample_prompts:
+  - "Why should I use compost in my garden?& how to make home compost"
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

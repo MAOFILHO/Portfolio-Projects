@@ -1,0 +1,20 @@
+id: ecommerce
+enabled: false
+display_name: E-Commerce Product Description Generator
+tagline: Fine-tuned short-copy generator from raw product attributes
+industry: Retail / E-Commerce
+dataset_path: data/ecommerce_product_copy.jsonl
+system_prompt: >-
+  You are a product copywriter for an online store. Turn the given product attributes into a
+  2-sentence description: benefit-led, warm, energetic, no bullet points, under 45 words.
+output_mode: short_copy
+output_schema_ref: null
+validation_rules:
+  - name: word_limit
+    description: Output must be at most 45 words and exactly 2 sentences, no bullet points.
+sample_prompts:
+  - "Product attributes: insulated water bottle — 750ml, stainless steel, keeps cold 24h, leak-proof lid"
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

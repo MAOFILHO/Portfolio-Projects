@@ -1,0 +1,17 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+boto3==1.43.62
+langgraph==1.2.10
+langchain-core==1.5.3
+langchain-aws==1.6.4
+mcp==2.0.0
+langfuse==4.14.2
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp==1.44.0
+opentelemetry-instrumentation-fastapi==0.65b0
+python-dotenv==1.2.2
+structlog==26.1.0
+tenacity==9.1.4
+pyyaml==6.0.3

@@ -1,0 +1,41 @@
+services:
+  api:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file: .env
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+  # Self-hosted Langfuse is opt-in only (`docker compose --profile self-hosted-langfuse up`).
+  # The approved observability mode is Langfuse Cloud (see PLAN.md §9) — this profile exists
+  # for local development without a Langfuse Cloud account.
+  langfuse:
+    image: langfuse/langfuse:2
+    profiles: ["self-hosted-langfuse"]
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXTAUTH_SECRET=dev-only-not-for-production
+      - SALT=dev-only-not-for-production
+      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
+    depends_on:
+      - langfuse-db
+
+  langfuse-db:
+    image: postgres:16-alpine
+    profiles: ["self-hosted-langfuse"]
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+
+volumes:
+  langfuse-db-data:

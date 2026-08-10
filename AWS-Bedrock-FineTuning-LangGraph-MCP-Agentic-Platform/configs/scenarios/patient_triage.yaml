@@ -1,0 +1,25 @@
+id: patient_triage
+enabled: false
+display_name: Patient Message Triage (Clinic Routing)
+tagline: Fine-tuned strict-JSON router for inbound patient messages
+industry: Healthcare / Clinic Operations
+dataset_path: data/patient_message_triage.jsonl
+system_prompt: >-
+  You are a patient-message triage assistant for a clinic. You route messages; you do NOT diagnose
+  or give treatment advice. Respond ONLY with JSON: {"department":..., "urgency":..., "action":...}.
+  urgency one of: Emergency, Urgent, Routine. For Emergency, the action must advise contacting
+  emergency services immediately.
+output_mode: strict_json
+output_schema_ref: bedrock_platform.models.outputs.patient_triage.PatientTriageOutput
+validation_rules:
+  - name: emergency_action_required
+    description: >-
+      When urgency == "Emergency", action must advise contacting emergency services immediately.
+  - name: no_extra_keys
+    description: Output JSON must contain exactly the three documented keys, no more.
+sample_prompts:
+  - "I have crushing chest pain spreading to my left arm."
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

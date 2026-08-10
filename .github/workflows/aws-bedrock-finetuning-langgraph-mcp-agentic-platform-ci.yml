@@ -1,0 +1,105 @@
+name: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform CI
+
+# Runs on every push/PR touching this project's folder only — path-scoped so it never
+# fires on an unrelated sibling project's changes. Everything here is static analysis or
+# unit tests: no AWS credentials, no network, $0 cost. The suites that assert against
+# live billable resources (tests/pre_provision, post_provision, post_run) are
+# deliberately NOT run here — CI must never depend on or create billable resources.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bedrock-finetuning-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — lint, types, unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/requirements.txt
+            AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          # The package itself — without it pytest cannot import bedrock_platform.
+          pip install -e .
+
+      - name: Ruff lint
+        run: ruff check src tests scripts
+
+      - name: Ruff format check
+        run: ruff format --check src tests scripts
+
+      - name: mypy --strict
+        run: mypy
+
+      - name: Unit tests
+        run: pytest tests/unit -v
+
+  provisioned-throughput-guard:
+    name: Provisioned Throughput must not appear
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # Provisioned Throughput bills $60.50/hr/model with no idle discount — three models
+      # would be ~$130,680/month. A separate required job so the string cannot reach main
+      # even if the backend job is skipped or modified.
+      - name: Scan for forbidden Provisioned Throughput usage
+        run: pytest tests/unit/test_no_provisioned_throughput.py -v
+
+  frontend:
+    name: Frontend — typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build

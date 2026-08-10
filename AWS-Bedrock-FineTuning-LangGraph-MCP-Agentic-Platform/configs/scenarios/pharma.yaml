@@ -1,0 +1,26 @@
+id: pharma
+enabled: true
+display_name: Pharma Covigilance Adverse-Event Triage
+tagline: Fine-tuned strict-JSON classifier for adverse-event case reports
+industry: Pharmaceuticals / Pharmacovigilance
+dataset_path: data/pharma_adverse_event_triage.jsonl
+system_prompt: >-
+  You are a pharmacovigilance triage assistant. Classify the adverse-event case report and respond
+  ONLY with JSON: {"seriousness":..., "event_category":..., "expedited_reporting":...}. seriousness
+  one of: Serious, Non-serious. expedited_reporting is true or false (true only when seriousness is
+  Serious). Do not give medical advice.
+output_mode: strict_json
+output_schema_ref: bedrock_platform.models.outputs.pharma.PharmaTriageOutput
+validation_rules:
+  - name: expedited_only_when_serious
+    description: >-
+      expedited_reporting may be true only when seriousness == "Serious" — a regulatory constraint
+      stated in the dataset's own system prompt.
+  - name: no_extra_keys
+    description: Output JSON must contain exactly the three documented keys, no more.
+sample_prompts:
+  - "A patient taking the study medication reported seizure; the patient was hospitalized"
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

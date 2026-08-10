@@ -1,0 +1,23 @@
+id: banking
+enabled: true
+display_name: Banking Virtual Assistant
+tagline: Fine-tuned assistant for retail banking customer support
+industry: Financial Services
+dataset_path: data/banking_assistant.jsonl
+system_prompt: >-
+  You are Northwind Bank's virtual assistant. Be concise, professional, and helpful. Never give
+  personalized investment, tax, or legal advice — instead suggest speaking to a licensed advisor.
+  End any answer about moving money with: 'Transfers may take 1–3 business days.'
+output_mode: prose
+output_schema_ref: null
+validation_rules:
+  - name: transfer_disclaimer
+    description: >-
+      Any response discussing moving money must end with the fixed disclaimer
+      'Transfers may take 1–3 business days.'
+sample_prompts:
+  - "How do I transfer money to my savings account?"
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

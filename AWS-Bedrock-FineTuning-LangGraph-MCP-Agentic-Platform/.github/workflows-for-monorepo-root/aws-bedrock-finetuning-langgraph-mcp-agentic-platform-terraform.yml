@@ -1,0 +1,108 @@
+name: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform Terraform
+
+# Validate and plan only. There is deliberately NO apply job: every billable change in
+# this project requires a live cost estimate and a typed human approval, neither of
+# which a workflow can supply. The IAM role assumed below is read-only by construction
+# and carries an explicit Deny on all mutating verbs.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/**"
+      - ".github/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/**"
+
+# id-token is required for OIDC. There are no long-lived AWS keys in this repository and
+# none may be added — OIDC issues short-lived credentials scoped to this workflow.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: bedrock-finetuning-terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  validate:
+    name: fmt, validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/terraform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      # -backend=false validates configuration without touching remote state or needing
+      # credentials, so this job also runs on forked pull requests.
+      - name: terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        run: terraform validate
+
+  plan:
+    name: plan (read-only)
+    needs: validate
+    runs-on: ubuntu-latest
+    # Forked PRs receive neither secrets nor OIDC tokens, so assumption would fail.
+    # Skipping is correct; faking a plan would be worse than having none.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    defaults:
+      run:
+        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/terraform
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check whether an OIDC role is configured
+        id: guard
+        run: |
+          if [ -n "${{ vars.BEDROCK_PLATFORM_PLAN_ROLE_ARN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::BEDROCK_PLATFORM_PLAN_ROLE_ARN is not set — skipping plan. Enable enable_github_oidc in Terraform, then set the repository variable."
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          role-to-assume: ${{ vars.BEDROCK_PLATFORM_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.BEDROCK_PLATFORM_AWS_REGION || 'us-west-2' }}
+          role-session-name: gha-bedrock-platform-plan
+
+      - uses: hashicorp/setup-terraform@v4
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=bedrock-platform-${{ vars.BEDROCK_PLATFORM_PROJECT_SUFFIX }}-tfstate" \
+            -backend-config="dynamodb_table=bedrock-platform-${{ vars.BEDROCK_PLATFORM_PROJECT_SUFFIX }}-tflock" \
+            -backend-config="key=bedrock-platform/terraform.tfstate"
+
+      # -lock=false because a plan needs no state lock, and a stale lock from an
+      # interrupted local apply would otherwise block every pull request.
+      - name: terraform plan
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          terraform plan -no-color -lock=false \
+            -var="project_suffix=${{ vars.BEDROCK_PLATFORM_PROJECT_SUFFIX }}" \
+            -var="aws_region=${{ vars.BEDROCK_PLATFORM_AWS_REGION || 'us-west-2' }}" \
+            -var="budget_alert_email=${{ vars.BEDROCK_PLATFORM_BUDGET_ALERT_EMAIL }}" \
+            -var="budget_limit_usd=${{ vars.BEDROCK_PLATFORM_BUDGET_LIMIT_USD || '25' }}"

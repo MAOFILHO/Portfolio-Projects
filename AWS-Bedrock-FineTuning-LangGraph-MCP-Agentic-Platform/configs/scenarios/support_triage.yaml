@@ -1,0 +1,21 @@
+id: support_triage
+enabled: false
+display_name: Support Ticket Triage
+tagline: Fine-tuned strict-JSON classifier for customer support tickets
+industry: SaaS / Customer Support
+dataset_path: data/support_ticket_triage.jsonl
+system_prompt: >-
+  You are a support-ticket triage assistant. Read the customer ticket and respond ONLY with JSON:
+  {"category":..., "priority":..., "team":...}. category one of: Billing, Bug, Feature-Request,
+  Account-Access, Outage. priority one of: P1, P2, P3. Do not add any text outside the JSON.
+output_mode: strict_json
+output_schema_ref: bedrock_platform.models.outputs.support_triage.SupportTriageOutput
+validation_rules:
+  - name: no_extra_keys
+    description: Output JSON must contain exactly the three documented keys, no more.
+sample_prompts:
+  - "I was charged $49 twice this month, please refund the duplicate."
+base_model_id: meta.llama3-3-70b-instruct-v1:0:128k
+base_inference_model_id: us.meta.llama3-3-70b-instruct-v1:0
+epochs: 2
+validation_split: 0.10

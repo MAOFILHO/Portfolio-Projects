@@ -1,0 +1,33 @@
+# Secrets
+.env
+*.pem
+credentials
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+# .terraform.lock.hcl is intentionally NOT ignored — it is committed
+
+# Cloud credentials
+.aws/
+.azure/
+
+# Frontend
+node_modules/
+dist/
+
+# OS
+.DS_Store
+
+# Artifacts / build output
+artifacts/

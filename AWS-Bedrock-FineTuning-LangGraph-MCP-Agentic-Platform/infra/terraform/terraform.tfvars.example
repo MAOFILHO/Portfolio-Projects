@@ -1,0 +1,5 @@
+project_suffix      = ""
+aws_region          = "us-east-1"
+aws_profile         = ""
+budget_limit_usd    = 25
+budget_alert_email  = ""
