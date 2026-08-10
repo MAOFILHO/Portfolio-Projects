@@ -1,17 +1,62 @@
-# AWS Bedrock Fine-Tuning Platform — Config-Driven Custom Models
+# AWS Bedrock Agentic Fine-Tuning Platform
+### LangGraph Orchestrator + MCP Tools over Amazon Bedrock
+### Custom Model Fine-Tuning · On-Demand Deployment · Base-vs-Tuned Evaluation
 
-![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-Bedrock-FF9900?logo=amazon-aws&logoColor=white)
-![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)
-![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?style=flat&logo=fastapi&logoColor=white&labelColor=1a1a2e)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat&labelColor=1a1a2e)
+![MCP](https://img.shields.io/badge/Model_Context_Protocol-2.0-6E56CF?style=flat&labelColor=1a1a2e)
+![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat&logo=react&logoColor=white&labelColor=1a1a2e)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat&logo=typescript&logoColor=white&labelColor=1a1a2e)
+![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
+![AWS](https://img.shields.io/badge/AWS-Bedrock-FF9900?style=flat&logo=amazonwebservices&logoColor=white&labelColor=1a1a2e)
+![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?style=flat&labelColor=1a1a2e)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white&labelColor=1a1a2e)
 
-A production-grade pipeline that fine-tunes Amazon Bedrock foundation models for specialised business
-domains — **S3 upload → fine-tune job → on-demand deployment → base-vs-tuned evaluation → verified
-teardown** — driven entirely by configuration. Adding a new scenario costs a YAML file, not a module.
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-ci.yml)
+[![Terraform](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml)
 
-Every number in this README is **measured**, not projected. Where an estimate was wrong, the
-correction is recorded rather than quietly replaced.
+## Project Description
+
+A production-grade, zero-console-click automation of the Amazon Bedrock custom-model
+lifecycle — **fine-tune a foundation model, deploy it for on-demand inference, and prove
+it is better than the base model** — a sequence that is a manual console click-through in
+Bedrock itself, replaced here with a config-driven pipeline backed by a real agentic layer.
+
+**The source material** is a K21Academy lab: upload a JSONL dataset to S3, create a
+customization job, wait, deploy the result, type a prompt into the playground, eyeball the
+answer, then delete everything in the right order. Done by hand it is a wizard, a
+multi-hour wait, and a subjective "looks better to me."
+
+**The objective** is not to replay those clicks as scripted API calls — it is to turn a
+person driving a console into a reproducible, measured, cost-guarded pipeline. A
+**LangGraph orchestrator** routes each run through four **sub-agents** (dataset prep,
+fine-tune supervision, evaluation, inference), each of which reaches AWS exclusively
+through typed **MCP tools** — the same tools Claude Desktop or Claude Code could call
+directly, since nothing about them is UI-specific.
+
+**Seven business scenarios, one pipeline.** Pharmacovigilance triage, a banking assistant,
+an IT helpdesk, patient triage, support triage, e-commerce copy and a gardening tutor all
+run through identical code. A scenario is a YAML file carrying its dataset, system prompt,
+output schema and validation rules — **adding one costs a config entry, not a module.**
+
+**What is built around that:**
+
+- A **Python backend** — FastAPI, a LangGraph orchestrator, 3 MCP servers (9 tools), and
+  Pydantic v2 on every boundary, including a strict-JSON schema guard that surfaces a
+  malformed model response as a structured, caught violation rather than an exception.
+- A **React/TypeScript dashboard** (Contoso-themed) — one six-step wizard per scenario,
+  job status streamed over SSE and persisted to disk so it survives a page refresh, and a
+  base-vs-tuned comparison pane carrying its own schema verdict.
+- **Cost-guarded Terraform IaC** — a budget alert provisioned before any billable
+  resource, a private TLS-only S3 bucket (a deliberate deviation from the lab, which says
+  to make it public), and an ordered teardown whose emptiness is verified by script.
+- **Agentic safety by omission** — no MCP tool exists that can delete a model, create a
+  deployment, modify IAM, or touch the budget. The single billable action refuses without
+  a human-typed approval token, and a per-agent allowlist is enforced at call time.
+
+Every result below is **measured against held-out records**, and the total spend for three
+fine-tuned models was **$0.508** against a $25 budget.
 
 ---
 
@@ -87,6 +132,33 @@ Full per-record analysis: [`docs/RESULTS.md`](docs/RESULTS.md). Raw evaluation o
 scenarios is committed under [`docs/evidence/`](docs/evidence/).
 
 ---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Orchestration** | LangGraph 1.2 — linear graph, 4 sub-agents (`dataset_prep` → `finetune_supervisor` → `evaluation` → `inference`) |
+| **Tool protocol** | Model Context Protocol (MCP) 2.0 — 3 servers, 9 tools, per-agent allowlist enforced at call time |
+| **AI platform** | Amazon Bedrock — model customization, Custom Model on-Demand deployments, Converse API |
+| **Base model** | Meta Llama 3.3 70B Instruct (`us-west-2`) — the only CMoD-capable fine-tunable model outside `us-east-1` |
+| **Backend framework** | FastAPI 0.141 |
+| **API server** | Uvicorn (ASGI), SSE for live job status |
+| **Background job execution** | `asyncio` task registry, `asyncio.to_thread` for blocking boto3 calls |
+| **Data validation** | Pydantic v2 — scenario config, agent state, MCP tool I/O, model output schemas |
+| **AWS SDK** | boto3 1.43 + `boto3-stubs` for typed Bedrock/S3/DynamoDB clients |
+| **Auth (local demo)** | Hardcoded `demo`/`demo123` — a **deliberate insecure stub**, labelled as such in code |
+| **Frontend framework** | React 19 + TypeScript 5.9 |
+| **Build tool** | Vite 8 |
+| **Styling** | Contoso-placeholder corporate theme (custom CSS) |
+| **Backend testing** | pytest 9 — 56 unit tests plus pre-provision, post-provision, post-run and post-teardown suites |
+| **Linting / formatting** | Ruff 0.16 |
+| **Type checking** | mypy 2.3, `--strict`, zero errors |
+| **IaC** | Terraform 1.9 (`aws` provider), remote state in S3 + DynamoDB lock |
+| **Containerization** | Docker / Docker Compose (api + frontend + optional self-hosted Langfuse) |
+| **CI/CD** | GitHub Actions — OIDC role assumption, no stored AWS keys, `validate` and `plan` only |
+| **Observability** | Langfuse 4.14 (agent traces: `chain` → `agent` → `tool` / `generation`) + OpenTelemetry → CloudWatch |
+| **Cost control** | Live AWS Price List API estimates, typed `APPROVE` gate, `aws_budgets_budget` at $25/mo |
+| **Config management** | `.env` via `pydantic-settings`; scenarios as YAML |
 
 ## The problem
 
@@ -172,7 +244,7 @@ Stated plainly so nothing here reads as more finished than it is.
 | 0–5 · config layer, AWS clients, Terraform, teardown | ✅ complete |
 | 6 · end-to-end pipeline, FastAPI, schema guard | ✅ complete |
 | 7 · agentic layer (LangGraph + MCP) | ✅ complete — 4 sub-agents, 3 MCP servers, enforced allowlist, Langfuse tracing |
-| 8 · CI/CD (GitHub Actions) | ✅ complete — `ci.yml` + `terraform.yml`, validate and plan only |
+| 8 · GitHub Actions CI/CD | ✅ complete — `ci.yml` + `terraform.yml`, validate and plan only |
 | 9 · React front end | ✅ complete |
 | 10 · documentation | ✅ complete |
 | 11 · final validation | ✅ complete — all 4 suites pass, frontend click-through verified |
@@ -544,46 +616,70 @@ FastAPI backend using your own AWS credentials.
 **Home.** Three scenarios in the left nav. The banner is computed live from the AWS Price List API on
 every page load, not hardcoded, and states the recurring cost alongside the teardown command.
 
-![Home and live cost banner](docs/screenshots/01-home-cost-banner.png)
+<img width="100%" alt="Home and live cost banner" src="docs/screenshots/01-home-cost-banner.png" />
 
 **Step 1 — Foundation model.** The base model, epoch count and the scenario's verbatim system prompt,
 all read from `configs/scenarios/*.yaml`. Adding a scenario is a config file, not a code change.
 
-![Foundation model step](docs/screenshots/02-step1-foundation-model.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Foundation model step" src="docs/screenshots/02-step1-foundation-model.png" />
 
 **Step 2 — Dataset.** 230 records in Bedrock's `bedrock-conversation-2024` format, shown raw rather
 than summarised.
 
-![Dataset step](docs/screenshots/03-step2-dataset.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Dataset step" src="docs/screenshots/03-step2-dataset.png" />
 
 **Step 3 — The cost gate.** The launch button is **disabled** until the literal token `APPROVE` is
 typed. Lowercase `approve` does not enable it. This is the same guard the CLI enforces: no billable
 action anywhere in this project proceeds without a live cost estimate and a typed approval.
 
-![Approval gate with the launch button disabled](docs/screenshots/04-step3-approval-gate-disabled.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Approval gate with the launch button disabled" src="docs/screenshots/04-step3-approval-gate-disabled.png" />
 
 **Step 4 — Job status.** Real job ARN, real status, and an event log persisted to disk that survives
 both a page refresh and a backend restart — a fine-tune runs for hours, so status that only lives in
 a browser tab is useless.
 
-![Job status with real ARNs](docs/screenshots/05-step4-job-status-completed.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Job status with real ARNs" src="docs/screenshots/05-step4-job-status-completed.png" />
 
 **Step 5 — Deploy for inference.** Creates a Custom Model on-Demand deployment: $0/hr idle,
 token-billed in use. Re-running reuses an existing `Active` deployment rather than colliding with it.
 
-![Deploy for inference](docs/screenshots/06-step5-deploy-for-inference.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Deploy for inference" src="docs/screenshots/06-step5-deploy-for-inference.png" />
 
 **Step 6 — Base vs fine-tuned.** Same prompt, both models, with latency and token counts. Note the
 tuned model is *shorter* — 65 output tokens against 83 — because it stopped padding. Across the
 held-out set it used 22% fewer tokens, so it is cheaper per call than the base model.
 
-![Banking base vs tuned comparison](docs/screenshots/07-step6-compare-banking.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Banking base vs tuned comparison" src="docs/screenshots/07-step6-compare-banking.png" />
 
 **The null result, shown honestly.** IT Helpdesk gained nothing measurable: both models produce
 numbered steps and both close with the exact L2 escalation line, because that rule is fully
 expressible in a system prompt. $0.1476 of training bought no improvement here.
 
-![IT helpdesk comparison showing no measurable gain](docs/screenshots/08-step6-compare-it-helpdesk.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="IT helpdesk comparison showing no measurable gain" src="docs/screenshots/08-step6-compare-it-helpdesk.png" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Amazon Bedrock console
 
@@ -591,20 +687,29 @@ expressible in a system prompt. $0.1476 of training bought no improvement here.
 independent statuses: *Model Status* means the weights exist, *Inference set up* means it can serve
 traffic. A fine-tuned model is inert until a serving resource is attached.
 
-![Custom model active in the Bedrock console](docs/screenshots/09-aws-custom-model-active.png)
+<img width="100%" alt="Custom model active in the Bedrock console" src="docs/screenshots/09-aws-custom-model-active.png" />
 
 **Custom Model on-Demand deployment.** AWS's own wording in the panel is the justification for this
 project's entire cost architecture: *"you only pay for what you use, with no time-based term
 commitments."* The alternative, Provisioned Throughput, bills $60.50/hr whether idle or not.
 
-![Custom model on-demand deployment](docs/screenshots/10-aws-cmod-deployment-active.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Custom model on-demand deployment" src="docs/screenshots/10-aws-cmod-deployment-active.png" />
 
 **The tuned model in the Bedrock playground.** Given *"severe liver enzyme elevation and jaundice"* it
 answers `"Hepatobiliary"` — one of the 8 controlled-vocabulary terms. The base model describes the
 same case as `"Liver"` or lowercase `"hepatobiliary"`: correct English, rejected by the downstream
 enum.
 
-![Playground returning the house vocabulary term](docs/screenshots/11-aws-playground-hepatobiliary.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="Playground returning the house vocabulary term" src="docs/screenshots/11-aws-playground-hepatobiliary.png" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Observability
 
@@ -612,22 +717,31 @@ Every agent run is one Langfuse trace. Sub-agents are typed `AGENT`, MCP tool ca
 root `CHAIN`, and Bedrock calls `GENERATION` carrying model name and token usage — so the tree shows
 which agent called which tool, and cost attributes to the right model.
 
-![Langfuse trace of the agent graph](docs/screenshots/12-langfuse-agent-trace.png)
+<img width="100%" alt="Langfuse trace of the agent graph" src="docs/screenshots/12-langfuse-agent-trace.png" />
 
-### CI/CD
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+### GitHub Actions CI/CD
 
 All jobs green: lint, `mypy --strict`, unit tests, the frontend typecheck and build, and a separate
 required job that fails the build if `ProvisionedThroughput` appears anywhere in `src/`, `infra/` or
 `scripts/`. The Terraform workflow runs `validate` and `plan` only — there is no apply job.
 
-![GitHub Actions all green](docs/screenshots/13-github-actions-green.png)
+<img width="100%" alt="GitHub Actions all green" src="docs/screenshots/13-github-actions-green.png" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Teardown
 
 After `scripts/teardown.py`, recurring cost is verified at zero. The bucket, IAM roles, budget and
 CI role are retained by design so a re-run needs no `terraform apply`.
 
-![Verified zero billable resources](docs/screenshots/14-verify-zero-billable.png)
+<img width="100%" alt="Verified zero billable resources" src="docs/screenshots/14-verify-zero-billable.png" />
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 
 ### Running it locally
 
@@ -636,106 +750,36 @@ make api        # terminal 1
 make frontend   # terminal 2
 ```
 
-![make api](docs/screenshots/15-make-api.png)
+<img width="100%" alt="make api" src="docs/screenshots/15-make-api.png" />
 
-![make frontend](docs/screenshots/16-make-frontend.png)
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="100%" alt="make frontend" src="docs/screenshots/16-make-frontend.png" />
 
 ---
 
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
 ## Lessons learned
 
-Roughly two dozen real defects surfaced in this build. Very few were caught by reading code — most
-appeared the first time something ran somewhere new: a fresh venv, a CI runner, a monorepo path, an
-account that still had resources in it. They cluster into five patterns, which are more useful than
-the individual bugs.
+Roughly two dozen real defects surfaced during this build. Very few were caught by reading code —
+most appeared the first time something ran somewhere new: a fresh venv, a CI runner, a monorepo path,
+an account that still had resources in it.
 
-### 1. Resolve resources; never reconstruct their names
+They cluster into six patterns, written up in full in
+**[`docs/LESSONS-LEARNED.md`](docs/LESSONS-LEARNED.md)**:
 
-**Five separate bugs, one cause.** Bedrock reserves job and custom-model names permanently, so after
-ten attempts and a base-model change, the "canonical" name is a name nothing lives under. Every time
-code rebuilt an identifier from a pattern instead of looking up the real resource, it broke:
+| # | Pattern | Cost |
+|---|---|---|
+| 1 | Resolve resources; never reconstruct their names | **5 separate bugs** |
+| 2 | Tests can pass for the wrong reason | 3 bugs, all invisible locally |
+| 3 | A verification that cannot fail is worse than none | 2 bugs, both in the teardown gate |
+| 4 | A schema that checks shape is not checking the contract | reported 100% valid on output the contract rejects |
+| 5 | Environment assumptions travel badly | 4 bugs, all environment-specific |
+| 6 | The failure that was never explained | 7 failed jobs, root cause never found |
 
-| Where | Symptom |
-|---|---|
-| `--skip-training` | "no existing custom model" while three `Active` models sat in the account |
-| Deploy step | Name collision; the UI wizard could never reach the Compare step |
-| Post-run test | Asserted against attempt #1 (`Stopped`) instead of the real job |
-| UI job status | `Status: Unknown` for a job that had completed hours earlier |
-| `teardown.py` | `KeyError` on `modelDeploymentArn` — the API returns `customModelDeploymentArn` |
-
-I fixed the first four as individual instances before recognising the pattern. The fix is
-`find_custom_models()` / `find_jobs()` — prefix resolution against what actually exists.
-
-### 2. Tests can pass for the wrong reason
-
-- **Unit tests needed `.env`.** 48/48 green locally, `ModuleNotFoundError`-adjacent failures in CI.
-  They had silently depended on my machine. Proof of the fix was *moving `.env` aside and re-running*
-  — not re-running.
-- **A test fixture asserted the wrong thing.** `test_pharma_valid_json_parses_cleanly` used
-  `"Neurological"` as its happy path — a value not in the controlled vocabulary. It passed only
-  because the field was an unconstrained `str`.
-- **I clicked through one scenario and concluded three worked.** Pharma had a hand-written
-  `active_job.json` override; banking and it_helpdesk did not, and both were broken.
-
-### 3. A verification that cannot fail is worse than none
-
-`verify_empty.py` — the P0 release gate — probed a bucket name missing its Region suffix.
-`head_bucket` returned 404, which the gate read as "bucket absent". **It would have certified a clean
-teardown while the bucket was live.**
-
-`teardown.py` had never run against real resources; with an empty account the loop body never
-executes, so the `KeyError` above stayed invisible through every prior "successful" test.
-
-> A green check on a code path that has never executed is not evidence.
-
-### 4. A schema that checks shape is not checking the contract
-
-`PharmaTriageOutput` typed `event_category` as `str`, so the guard reported **valid** for
-`"Neurological"` and `"hepatobiliary"` — values the downstream enum rejects. Constraining it to the
-8-term vocabulary moved schema validity from *100% for both models* to **14% base / 86% tuned**.
-
-The headline finding survived and sharpened: fine-tuning never fixed JSON *syntax*; it fixed
-conformity to the contract, which was invisible while the schema only described the shape.
-
-### 5. Environment assumptions travel badly
-
-- **Workflows in `<project>/.github/workflows/` never run in a monorepo.** GitHub reads only the
-  repository root. No error, no warning — they simply never fire. Now kept in
-  `.github/workflows-for-monorepo-root/`, deliberately not a real workflows path, so they cannot look
-  installed when they are not.
-- **`make setup` never installed the project.** A fresh clone passed lint and mypy (both path-based)
-  and failed every test on import. Hidden for the whole build by a one-off `pip install -e .`.
-- **Moving the folder broke the venv** — console scripts carry absolute shebangs. The claim that the
-  project was "self-contained and renameable" was only true after this was found.
-- **Terraform reads *tags* during refresh**, and tag-list APIs are separate IAM actions from the
-  describe/get ones. One missing verb failed the entire plan.
-
-### And one I caused while fixing another
-
-The job-resolution fix paginates Bedrock's job list. I called it inline from an `async` route, which
-blocked the event loop so completely that `/health` stopped responding and the dev server had to be
-force-killed. Caught only because I tried to verify the fix against a running server instead of
-trusting that it worked.
-
----
-
-## Incident: 10 fine-tuning attempts, 1 model
-
-Seven consecutive jobs in `us-east-1` failed across two Nova base models — three stalled at
-`trainingDetails: NotStarted` (one for 74 hours), four failed validation in under three minutes with
-`"Encountered an internal error."` The eighth attempt, **same dataset byte-for-byte**, succeeded on
-the first try in `us-west-2` on Llama 3.3 70B.
-
-**The root cause was never identified.** It was routed around, not fixed. Every hypothesis was
-eliminated — AWS's own validator certified the data 189/189, CloudTrail showed zero IAM or S3 drift,
-quotas were nowhere near limits, and the identical configuration had succeeded on this account in
-April. Changing Region, model family, and provider at once means the successful variable cannot be
-isolated.
-
-Full forensics, including S3 output-manifest evidence:
-[`docs/INCIDENT-LOG.md`](docs/INCIDENT-LOG.md).
-
----
+> **A green check on a code path that has never executed is not evidence.**
 
 ## Documentation
 
@@ -746,6 +790,7 @@ Full forensics, including S3 output-manifest evidence:
 | [`COSTS.md`](COSTS.md) | Pre-build cost estimate |
 | [`docs/COST-ACTUALS.md`](docs/COST-ACTUALS.md) | Estimated vs actual, and where the estimate was wrong |
 | [`docs/RESULTS.md`](docs/RESULTS.md) | Fine-tuning results and error analysis |
+| [`docs/LESSONS-LEARNED.md`](docs/LESSONS-LEARNED.md) | Every defect from this build, grouped by root-cause pattern |
 | [`docs/INCIDENT-LOG.md`](docs/INCIDENT-LOG.md) | The 10-attempt failure investigation |
 
 ---
