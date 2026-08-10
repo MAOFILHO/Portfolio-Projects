@@ -534,6 +534,114 @@ make lint && make typecheck
 
 ---
 
+## Screenshots
+
+### The web application
+
+The frontend is a **local** demo client — nothing is hosted. It calls Bedrock through the local
+FastAPI backend using your own AWS credentials.
+
+**Home.** Three scenarios in the left nav. The banner is computed live from the AWS Price List API on
+every page load, not hardcoded, and states the recurring cost alongside the teardown command.
+
+![Home and live cost banner](docs/screenshots/01-home-cost-banner.png)
+
+**Step 1 — Foundation model.** The base model, epoch count and the scenario's verbatim system prompt,
+all read from `configs/scenarios/*.yaml`. Adding a scenario is a config file, not a code change.
+
+![Foundation model step](docs/screenshots/02-step1-foundation-model.png)
+
+**Step 2 — Dataset.** 230 records in Bedrock's `bedrock-conversation-2024` format, shown raw rather
+than summarised.
+
+![Dataset step](docs/screenshots/03-step2-dataset.png)
+
+**Step 3 — The cost gate.** The launch button is **disabled** until the literal token `APPROVE` is
+typed. Lowercase `approve` does not enable it. This is the same guard the CLI enforces: no billable
+action anywhere in this project proceeds without a live cost estimate and a typed approval.
+
+![Approval gate with the launch button disabled](docs/screenshots/04-step3-approval-gate-disabled.png)
+
+**Step 4 — Job status.** Real job ARN, real status, and an event log persisted to disk that survives
+both a page refresh and a backend restart — a fine-tune runs for hours, so status that only lives in
+a browser tab is useless.
+
+![Job status with real ARNs](docs/screenshots/05-step4-job-status-completed.png)
+
+**Step 5 — Deploy for inference.** Creates a Custom Model on-Demand deployment: $0/hr idle,
+token-billed in use. Re-running reuses an existing `Active` deployment rather than colliding with it.
+
+![Deploy for inference](docs/screenshots/06-step5-deploy-for-inference.png)
+
+**Step 6 — Base vs fine-tuned.** Same prompt, both models, with latency and token counts. Note the
+tuned model is *shorter* — 65 output tokens against 83 — because it stopped padding. Across the
+held-out set it used 22% fewer tokens, so it is cheaper per call than the base model.
+
+![Banking base vs tuned comparison](docs/screenshots/07-step6-compare-banking.png)
+
+**The null result, shown honestly.** IT Helpdesk gained nothing measurable: both models produce
+numbered steps and both close with the exact L2 escalation line, because that rule is fully
+expressible in a system prompt. $0.1476 of training bought no improvement here.
+
+![IT helpdesk comparison showing no measurable gain](docs/screenshots/08-step6-compare-it-helpdesk.png)
+
+### Amazon Bedrock console
+
+**The custom model.** `Active`, fine-tuned from Llama 3.3 70B Instruct in `us-west-2`. Note the two
+independent statuses: *Model Status* means the weights exist, *Inference set up* means it can serve
+traffic. A fine-tuned model is inert until a serving resource is attached.
+
+![Custom model active in the Bedrock console](docs/screenshots/09-aws-custom-model-active.png)
+
+**Custom Model on-Demand deployment.** AWS's own wording in the panel is the justification for this
+project's entire cost architecture: *"you only pay for what you use, with no time-based term
+commitments."* The alternative, Provisioned Throughput, bills $60.50/hr whether idle or not.
+
+![Custom model on-demand deployment](docs/screenshots/10-aws-cmod-deployment-active.png)
+
+**The tuned model in the Bedrock playground.** Given *"severe liver enzyme elevation and jaundice"* it
+answers `"Hepatobiliary"` — one of the 8 controlled-vocabulary terms. The base model describes the
+same case as `"Liver"` or lowercase `"hepatobiliary"`: correct English, rejected by the downstream
+enum.
+
+![Playground returning the house vocabulary term](docs/screenshots/11-aws-playground-hepatobiliary.png)
+
+### Observability
+
+Every agent run is one Langfuse trace. Sub-agents are typed `AGENT`, MCP tool calls `TOOL`, the run
+root `CHAIN`, and Bedrock calls `GENERATION` carrying model name and token usage — so the tree shows
+which agent called which tool, and cost attributes to the right model.
+
+![Langfuse trace of the agent graph](docs/screenshots/12-langfuse-agent-trace.png)
+
+### CI/CD
+
+All jobs green: lint, `mypy --strict`, unit tests, the frontend typecheck and build, and a separate
+required job that fails the build if `ProvisionedThroughput` appears anywhere in `src/`, `infra/` or
+`scripts/`. The Terraform workflow runs `validate` and `plan` only — there is no apply job.
+
+![GitHub Actions all green](docs/screenshots/13-github-actions-green.png)
+
+### Teardown
+
+After `scripts/teardown.py`, recurring cost is verified at zero. The bucket, IAM roles, budget and
+CI role are retained by design so a re-run needs no `terraform apply`.
+
+![Verified zero billable resources](docs/screenshots/14-verify-zero-billable.png)
+
+### Running it locally
+
+```bash
+make api        # terminal 1
+make frontend   # terminal 2
+```
+
+![make api](docs/screenshots/15-make-api.png)
+
+![make frontend](docs/screenshots/16-make-frontend.png)
+
+---
+
 ## Lessons learned
 
 Roughly two dozen real defects surfaced in this build. Very few were caught by reading code — most
