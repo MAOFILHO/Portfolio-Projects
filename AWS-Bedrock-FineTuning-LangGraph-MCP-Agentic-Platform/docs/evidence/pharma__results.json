@@ -1,0 +1,32 @@
+{
+  "scenario_id": "pharma",
+  "region": "us-west-2",
+  "base_model_id": "meta.llama3-3-70b-instruct-v1:0:128k",
+  "base_inference_model_id": "us.meta.llama3-3-70b-instruct-v1:0",
+  "job_arn": "arn:aws:bedrock:us-west-2:759316130780:model-customization-job/meta.llama3-3-70b-instruct-v1:0:128k/01xcxtpzr6tq",
+  "custom_model_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model/meta.llama3-3-70b-instruct-v1:0:128k/ty578u9h2s8j",
+  "deployment_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model-deployment/1a61ln09vlpc",
+  "results": [
+    {
+      "prompt": "A patient taking the study medication reported seizure; the patient was hospitalized",
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Neurological\", \"expedited_reporting\": true}",
+        "input_tokens": 121,
+        "output_tokens": 25,
+        "latency_ms": 647.14
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Neurological\", \"expedited_reporting\": true}",
+        "input_tokens": 100,
+        "output_tokens": 26,
+        "latency_ms": 784.88
+      },
+      "schema_valid": true,
+      "verdict": {
+        "seriousness": "Serious",
+        "event_category": "Neurological",
+        "expedited_reporting": true
+      }
+    }
+  ]
+}

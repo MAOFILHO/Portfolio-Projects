@@ -7,7 +7,22 @@ class PharmaTriageOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     seriousness: Literal["Serious", "Non-serious"]
-    event_category: str
+    # Constrained rather than a bare `str`. The 8 System Organ Class terms below are the
+    # only values appearing across all 210 training records, and downstream systems treat
+    # the field as an enum — so a near-miss like "Neurological" or "Cardiovascular" is a
+    # parse failure, not a partially-correct answer. Left open, the schema guard reported
+    # "valid" for output the real contract would reject, making the strict-JSON demo
+    # weaker than the contract it claims to enforce.
+    event_category: Literal[
+        "Cardiac",
+        "Gastrointestinal",
+        "General",
+        "Hepatobiliary",
+        "Immune system",
+        "Nervous system",
+        "Respiratory",
+        "Skin",
+    ]
     expedited_reporting: bool
 
     @model_validator(mode="after")

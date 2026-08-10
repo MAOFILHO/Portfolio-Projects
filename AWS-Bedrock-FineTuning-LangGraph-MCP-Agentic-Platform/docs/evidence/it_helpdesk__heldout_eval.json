@@ -1,0 +1,622 @@
+{
+  "scenario_id": "it_helpdesk",
+  "_note": "Detailed base-vs-tuned evaluation. Separate from results.json, which scripts/run_pipeline.py owns and overwrites with the scenario's configured sample_prompts on every run.",
+  "eval_set": "30 held-out records from the group-aware splitter",
+  "n": 30,
+  "totals": {
+    "base": {
+      "has_steps": 30,
+      "ends_with_l2": 30,
+      "both_correct": 30,
+      "tok": 9139
+    },
+    "tuned": {
+      "has_steps": 30,
+      "ends_with_l2": 30,
+      "both_correct": 30,
+      "tok": 8658
+    }
+  },
+  "rows": [
+    {
+      "id": "H1",
+      "prompt": "My second monitor isn't being detected.",
+      "base": {
+        "text": "To troubleshoot the issue with your second monitor not being detected, please follow these steps:\n\n1. **Check the physical connection**: Ensure the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try tightening any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the graphics settings**: Right-click on an empty area of your desktop, select \"Display settings\" (or \"Screen Resolution\" in older Windows versions), and ensure that the second monitor is detected and enabled.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Shut down your computer, wait for 30 seconds, and then turn it back on.\n5. **Update graphics drivers**: Outdated graphics drivers might cause detection issues. Go to your computer manufacturer's website, search for graphics driver updates, and install the latest version.\n6. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current setup.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2108.25,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your second monitor. Here are the steps to follow:\n\n1. **Check the physical connection**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try wiggling the cable to ensure it's securely plugged in.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: On your computer, go to Display Settings (Windows) or System Preferences > Displays (Mac). Check if the second monitor is detected and selected as an extended desktop or duplicate display.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the restart.\n5. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current connection.\n6. **Update graphics drivers**: Ensure that your graphics drivers are up-to-date, as outdated drivers can cause detection issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 3924.98,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H2",
+      "prompt": "The external display stays black when I plug it in.",
+      "base": {
+        "text": "To troubleshoot the issue with your external display staying black, follow these steps:\n\n1. **Check the physical connection**: Ensure the external display is properly connected to your computer via the correct port (HDMI, DisplayPort, VGA, etc.). Try tightening any loose connections.\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (usually done using the display's remote control or buttons).\n3. **Try a different port**: If possible, try connecting the external display to a different port on your computer to rule out any issues with the specific port.\n4. **Adjust the display settings**: On your computer, go to the display settings (usually found in the Control Panel or System Preferences) and ensure the external display is detected and set as an extended desktop or duplicate display.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve connectivity issues. Restart your computer with the external display connected.\n6. **Check for loose or damaged cables**: Inspect the cables for any signs of damage or wear. Try using a different cable if possible.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1843.93,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nHere are the troubleshooting steps to resolve the issue with the external display staying black:\n\n1. **Check the physical connection**: Ensure the external display is properly connected to your computer via the correct port (e.g., HDMI, DisplayPort, VGA). Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (e.g., HDMI 1, DisplayPort 1). Check the display's menu or settings to ensure it's set to receive the signal from your computer.\n3. **Check the display settings on your computer**: Press the Windows key + P (or Command + P on a Mac) to open the display settings. Ensure the external display is detected and selected as the secondary display. Try toggling the display settings to \"Extend\" or \"Duplicate\" to see if it makes a difference.\n4. **Update your graphics drivers**: Outdated graphics drivers might cause issues with external displays. Check the manufacturer's website for updates and install the latest drivers for your graphics card.\n5. **Try a different port or cable**: If possible, try using a different port on your computer or a different cable to connect the external display. This will help determine if the issue is with the port, cable, or display itself.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2693.23,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H3",
+      "prompt": "Hi team, My second monitor isn't being detected.",
+      "base": {
+        "text": "To troubleshoot the issue with your second monitor not being detected, please follow these steps:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try tightening any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the graphics settings**: Right-click on an empty area of your desktop, select \"Display settings\" (or \"Screen resolution\" in older Windows versions), and ensure that the second monitor is detected and set to \"Extend these displays\" or a similar option.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the system boots up.\n5. **Update graphics drivers**: Outdated graphics drivers might cause issues with monitor detection. Go to your computer manufacturer's website or the graphics card manufacturer's website to check for and install any available updates.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1769.68,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your second monitor. Here are the steps to follow:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Verify that the cable is securely plugged into both the monitor and the computer.\n2. **Turn on the second monitor**: Make sure the second monitor is turned on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: Press the Windows key + P on your keyboard to open the Projector window. Click on \"PC screen only\" and then select \"Extend\" to see if the second monitor is detected.\n4. **Update graphics drivers**: Ensure that your graphics drivers are up-to-date, as outdated drivers might cause detection issues. You can check for updates in the Device Manager (Press Windows key + X and select Device Manager).\n5. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the restart.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2384.25,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H4",
+      "prompt": "Hi team, The external display stays black when I plug it in.",
+      "base": {
+        "text": "To troubleshoot the issue with your external display staying black, follow these steps:\n\n1. **Check the physical connection**: Ensure the external display is properly connected to your computer via the correct port (HDMI, DisplayPort, VGA, etc.). Try tightening any loose connections.\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (e.g., HDMI 1, DisplayPort, etc.).\n3. **Check the display settings**: On your computer, go to Display Settings (Windows) or System Preferences > Displays (Mac) and ensure the external display is detected and selected as an extended or duplicate display.\n4. **Try a different port or cable**: If possible, try using a different port on your computer or a different cable to connect the external display.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and try connecting the external display again.\n6. **Check for driver updates**: Ensure your graphics drivers are up-to-date, as outdated drivers can cause display issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1667.62,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your external display. Here are the steps to follow:\n\n1. **Check the physical connection**: Ensure the external display cable (HDMI, DisplayPort, or VGA) is securely plugged into both the computer and the display. Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify display settings**: On your computer, go to Display Settings (Windows) or System Preferences > Displays (Mac) and ensure the external display is detected and selected as the primary or extended display.\n3. **Check display input**: Press the input button on your external display to ensure it's set to the correct input (e.g., HDMI 1, DisplayPort, etc.) that matches the cable you're using.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and try connecting the external display again.\n5. **Check for driver updates**: Ensure your graphics drivers are up-to-date, as outdated drivers can cause display issues. You can check for updates in your computer's settings or on the manufacturer's website.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2454.87,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H5",
+      "prompt": "Hello \u2014 My second monitor isn't being detected.",
+      "base": {
+        "text": "To troubleshoot the issue with your second monitor not being detected, please follow these steps:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try tightening any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: On your computer, go to Display Settings (usually found in the Control Panel or System Preferences) and see if the second monitor is listed. If it is, try clicking \"Detect\" or \"Apply\" to refresh the settings.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Shut down your computer, wait a few seconds, and then restart it.\n5. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current setup.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1610.39,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your second monitor. Here are the steps to follow:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try wiggling the cable gently to ensure it's securely plugged in.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: On your computer, go to **Display Settings** (Windows) or **System Preferences** > **Displays** (Mac). Look for the option to **Detect** or **Identify** displays. Click on this option to see if your computer recognizes the second monitor.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the restart.\n5. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current setup.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2484.65,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H6",
+      "prompt": "Hello \u2014 The external display stays black when I plug it in.",
+      "base": {
+        "text": "To troubleshoot the issue with your external display, follow these steps:\n\n1. **Check the physical connection**: Ensure the display cable (VGA, HDMI, DisplayPort, etc.) is securely connected to both the computer and the external display.\n2. **Try a different port**: If possible, try using a different port on your computer to connect the external display.\n3. **Check the display settings**: On your computer, go to the display settings (usually found in the Control Panel or System Preferences) and ensure the external display is detected and selected as an extended or duplicate display.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve connectivity issues.\n5. **Check the display's power and input**: Verify the external display is turned on and set to the correct input (usually selected using a button on the display).\n6. **Try a different cable**: If available, try using a different display cable to rule out any issues with the current cable.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1498.28,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your external display. Here are the steps to follow:\n\n1. **Check the physical connections**: Ensure that the external display cable (HDMI, DisplayPort, or VGA) is securely connected to both the computer and the display. Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (e.g., HDMI 1, DisplayPort, etc.).\n3. **Check the display settings on your computer**: Press the Windows key + P (or Command + P on a Mac) to open the display settings. Ensure that the external display is detected and selected as the extended or duplicate display.\n4. **Try a different display port**: If you're using a laptop with multiple display ports, try switching to a different port to rule out any issues with the specific port.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve connectivity issues. Restart your computer and try connecting the external display again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2411.17,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H7",
+      "prompt": "Please help: My second monitor isn't being detected.",
+      "base": {
+        "text": "To troubleshoot the issue with your second monitor not being detected, follow these steps:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Verify that the cable is securely plugged into both the monitor and the computer.\n2. **Turn on the second monitor**: Make sure the second monitor is turned on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: Press the Windows key + P on your keyboard to open the Projector window, and select \"PC screen only\" and then \"Extend\" to see if the second monitor is detected.\n4. **Update display drivers**: Go to your computer's Device Manager (Press Windows key + X and select Device Manager), expand the \"Display Adapters\" section, right-click on the graphics driver, and select \"Update driver\" to ensure you have the latest drivers installed.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the restart.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2353.95,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the issue with your second monitor not being detected, follow these steps:\n\n1. **Check the physical connections**: Ensure that the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the graphics settings**: Right-click on an empty area of your desktop and select \"Display settings\" (or \"Screen resolution\" in older Windows versions). Click on the \"Detect\" button to see if Windows can automatically detect the second monitor.\n4. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current port or cable.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and see if the second monitor is detected after the restart.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2614.9,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H8",
+      "prompt": "Please help: The external display stays black when I plug it in.",
+      "base": {
+        "text": "To troubleshoot the issue with your external display staying black, follow these steps:\n\n1. **Check the physical connections**: Ensure that the video cable (VGA, HDMI, DisplayPort, etc.) is securely connected to both the computer and the external display. Try removing the cable and plugging it back in to rule out any loose connections.\n\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (e.g., HDMI 1, VGA, etc.) that matches the connection from your computer.\n\n3. **Adjust the display settings on your computer**: Press the Windows key + P to open the Projector window, and select the appropriate display mode (e.g., \"Extend\" or \"Duplicate\") to see if the external display turns on.\n\n4. **Check for driver updates**: Ensure your graphics drivers are up to date, as outdated drivers can cause display issues. You can check for updates in your computer's Device Manager or through the manufacturer's website.\n\n5. **Try a different video cable or port**: If possible, try using a different video cable or a different port on your computer to rule out any issues with the current cable or port.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1702.07,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nHere are the troubleshooting steps to resolve the issue with your external display staying black:\n\n1. **Check the physical connection**: Ensure the external display is properly connected to your computer via the correct port (HDMI, DisplayPort, VGA, etc.). Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify the display is turned on**: Make sure the external display is powered on and set to the correct input (e.g., HDMI 1, DisplayPort, etc.).\n3. **Check the display settings**: On your computer, go to the Display Settings (usually found in the Control Panel or System Preferences) and ensure the external display is detected and set as an extended desktop or mirrored display.\n4. **Try a different port or cable**: If possible, try using a different port on your computer or a different cable to connect the external display.\n5. **Restart your computer**: Sometimes, a simple reboot can resolve the issue. Restart your computer and try connecting the external display again.\n6. **Check for driver updates**: Ensure your graphics drivers are up-to-date, as outdated drivers can cause display issues. You can check for updates in the Device Manager (Windows) or System Information (Mac).\n7. **Try a different display**: If possible, try connecting a different external display to your computer to isolate the issue.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2908.68,
+        "numbered_steps": 7,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H9",
+      "prompt": "Quick one \u2014 My second monitor isn't being detected.",
+      "base": {
+        "text": "To troubleshoot the issue with your second monitor not being detected, follow these steps:\n\n1. **Check the physical connections**: Ensure the second monitor is properly connected to your computer via a VGA, HDMI, DisplayPort, or DVI cable. Try tightening any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the graphics settings**: Right-click on an empty area of your desktop, select \"Display settings\" (or \"Screen Resolution\" in older Windows versions), and see if the second monitor is listed. If it is, try clicking \"Detect\" to see if Windows can find it.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue.\n5. **Try a different port or cable**: If possible, try connecting the second monitor to a different port on your computer or using a different cable to rule out any issues with the current setup.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1938.22,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot this issue. Here are the steps:\n\n1. **Check the physical connection**: Ensure the second monitor is properly connected to your computer via a VGA, HDMI, or DisplayPort cable. Try unplugging and replugging the cable to rule out any loose connections.\n2. **Verify the monitor is turned on**: Make sure the second monitor is powered on and set to the correct input (e.g., HDMI 1, HDMI 2, etc.).\n3. **Check the display settings**: On your computer, go to Display Settings (Windows) or System Preferences > Displays (Mac) and see if the second monitor is detected. If it's not, try clicking \"Detect\" or \"Add a display\".\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue.\n5. **Check for driver updates**: Ensure your graphics drivers are up-to-date, as outdated drivers can cause detection issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2261.95,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H10",
+      "prompt": "Quick one \u2014 The external display stays black when I plug it in.",
+      "base": {
+        "text": "Here are the troubleshooting steps for the issue with the external display staying black:\n\n1. **Check the physical connection**: Ensure the external display is properly connected to your computer via the correct port (HDMI, DisplayPort, etc.) and that the cable is securely plugged in at both ends.\n2. **Try a different port**: If possible, try using a different port on your computer to connect the external display, to rule out any issues with the specific port.\n3. **Check the display settings**: On your computer, go to the display settings (e.g., Windows: right-click on desktop > Display settings, Mac: System Preferences > Displays) and ensure that the external display is detected and selected as an extended or duplicated display.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve connectivity issues. Restart your computer and try connecting the external display again.\n5. **Check the external display's power**: Verify that the external display is turned on and set to the correct input (e.g., HDMI 1, DisplayPort, etc.).\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2633.77,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nHere are the troubleshooting steps:\n\n1. **Check the physical connection**: Ensure the external display cable (VGA, HDMI, DisplayPort, etc.) is securely plugged into both the computer and the external display.\n2. **Try a different port**: If possible, try plugging the external display into a different port on your computer to rule out any issues with the port.\n3. **Check the display settings**: Press the Windows key + P (or Command + P on a Mac) to open the display settings. Ensure the external display is set to be used as an extended desktop or mirrored display.\n4. **Restart your computer**: Sometimes, a simple reboot can resolve the issue.\n5. **Check the display's power and input**: Verify that the external display is turned on and set to the correct input (e.g., HDMI 1, DisplayPort, etc.).\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2033.14,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H11",
+      "prompt": "My multi-factor authentication app isn't working.",
+      "base": {
+        "text": "To troubleshoot the issue with your multi-factor authentication (MFA) app, please follow these steps:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection, as MFA apps often require connectivity to function properly.\n2. **Restart the MFA app**: Close and restart the MFA app to see if it resolves the issue.\n3. **Check for updates**: Verify that your MFA app is up-to-date, as outdated versions may cause compatibility issues.\n4. **Verify account settings**: Confirm that your account settings, such as username and password, are correct and match the ones used for MFA.\n5. **Check time synchronization**: Ensure that your device's clock is synchronized with the correct time, as MFA apps often rely on time-based one-time passwords (TOTPs).\n6. **Reset the MFA app**: If possible, try resetting the MFA app to its default settings or reconfigure it from scratch.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1460.75,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your multi-factor authentication app. Here are the steps to follow:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection. Try opening a web page or checking your email to verify connectivity.\n2. **Restart the app**: Close the multi-factor authentication app and restart it. This often resolves any temporary issues.\n3. **Check for updates**: Go to your device's app store and check if there are any updates available for the multi-factor authentication app. Install any available updates.\n4. **Verify time and date settings**: Ensure that your device's time and date settings are correct. An incorrect time or date can cause authentication issues.\n5. **Re-sync the app**: If you're using a time-based one-time password (TOTP) app, try re-syncing it with the authentication server. You may need to re-enter your secret key or scan a new QR code.\n6. **Clear app data**: Clear the app's data and cache. This will remove any stored authentication tokens and may resolve the issue.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2798.59,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H12",
+      "prompt": "MFA codes are being rejected when I sign in.",
+      "base": {
+        "text": "To troubleshoot the issue with MFA codes being rejected, follow these steps:\n\n1. **Verify the time on your device**: Ensure that the time on your device (phone, tablet, or computer) is accurate and synchronized with the current time. MFA codes are time-sensitive, so an incorrect time can cause issues.\n2. **Check the MFA app**: If you're using an authenticator app (e.g., Google Authenticator, Microsoft Authenticator), make sure it's up-to-date and that you're scanning the correct QR code or entering the correct secret key.\n3. **Resync the MFA app**: Try resynchronizing the MFA app by removing the account and re-adding it. This can help resolve any issues with the app's clock or configuration.\n4. **Check for duplicate accounts**: Ensure that you don't have duplicate accounts set up in the MFA app, as this can cause conflicts and lead to rejected codes.\n5. **Try a different MFA method**: If possible, try using a different MFA method, such as a phone call or SMS, to see if the issue is specific to the authenticator app.\n6. **Clear browser cache and cookies**: Clear your browser's cache and cookies, as outdated or corrupted data can cause issues with MFA.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1918.03,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the issue with MFA codes being rejected, please follow these steps:\n\n1. **Verify the time on your device**: Ensure that the time on your device (phone, tablet, etc.) is accurate and in sync with the current time. MFA codes are time-sensitive, and a discrepancy can cause them to be rejected.\n2. **Check the MFA app**: Make sure you are using the correct MFA app (e.g., Google Authenticator, Microsoft Authenticator) and that it is properly configured for our company's MFA system.\n3. **Generate a new code**: Try generating a new MFA code and enter it when prompted. This will help determine if the issue is with the code itself or the authentication process.\n4. **Check for app updates**: Ensure that your MFA app is up to date, as outdated versions may cause compatibility issues.\n5. **Restart your device**: Sometimes, a simple restart can resolve connectivity or app-related issues that may be causing the MFA codes to be rejected.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2230.08,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H13",
+      "prompt": "Hi team, My multi-factor authentication app isn't working.",
+      "base": {
+        "text": "To troubleshoot the issue with your multi-factor authentication (MFA) app, please follow these steps:\n\n1. **Check your internet connection**: Ensure your device has a stable internet connection, as MFA apps often require connectivity to function properly.\n2. **Restart the MFA app**: Close and restart the MFA app to see if it resolves the issue.\n3. **Check for app updates**: Visit your device's app store to see if there are any updates available for the MFA app, and install the latest version if necessary.\n4. **Verify time and date settings**: Ensure your device's time and date settings are accurate, as MFA apps often rely on these settings to generate correct authentication codes.\n5. **Re-sync the app**: If your MFA app allows it, try re-syncing the app with your account to generate new authentication codes.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1438.73,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your multi-factor authentication (MFA) app. Here are the steps to follow:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection. Try opening a web page or checking your email to verify connectivity.\n2. **Restart the MFA app**: Close and restart the MFA app on your device. This often resolves any temporary issues.\n3. **Check for updates**: Ensure that your MFA app is up-to-date, as outdated versions might cause compatibility issues. Check the app store or play store for any available updates.\n4. **Verify your account credentials**: Double-check that your username and password are correct. If you're using a QR code or secret key, ensure it's correctly entered.\n5. **Check the time and date settings**: MFA apps often rely on accurate time and date settings. Ensure that your device's time and date are correctly set and synced with the network.\n6. **Clear app cache and data**: Clearing the app's cache and data can resolve issues related to stored information. Be cautious, as this may require you to reconfigure the app.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2748.54,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H14",
+      "prompt": "Hi team, MFA codes are being rejected when I sign in.",
+      "base": {
+        "text": "To troubleshoot the issue with MFA codes being rejected, please follow these steps:\n\n1. **Check your MFA app**: Ensure that your MFA app (such as Google Authenticator or Microsoft Authenticator) is synced with the correct time. If the time is not synced, the codes generated may not match what the system expects.\n2. **Verify code entry**: Double-check that you are entering the MFA code correctly. Make sure to enter the code exactly as it appears in your MFA app, without any spaces or extra characters.\n3. **Check for app updates**: Ensure that your MFA app is up to date, as outdated versions may cause issues with code generation.\n4. **Restart your MFA app**: Try restarting your MFA app to see if it resolves the issue.\n5. **Resync your MFA**: If you are using a time-based MFA, try resyncing it by generating a new secret key and scanning the QR code again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1962.88,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the issue with MFA codes being rejected, follow these steps:\n\n1. **Check your MFA app**: Ensure that your MFA (Multi-Factor Authentication) app is synced with the correct time. If your app's time is not in sync, it can cause the codes to be rejected. Try resyncing the app if necessary.\n2. **Verify the code**: Double-check that you are entering the correct MFA code. Make sure to enter the code exactly as it appears in the app, without any spaces or extra characters.\n3. **Check for app updates**: Ensure that your MFA app is up to date, as outdated apps can sometimes cause issues with code generation.\n4. **Try a new code**: If the code is being rejected, try generating a new code in the app and enter that instead.\n5. **Check your account settings**: Verify that MFA is enabled for your account and that the correct phone number or authenticator app is configured.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2481.01,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H15",
+      "prompt": "Hello \u2014 My multi-factor authentication app isn't working.",
+      "base": {
+        "text": "To troubleshoot the issue with your multi-factor authentication (MFA) app, please follow these steps:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection, as MFA apps often require connectivity to function properly.\n2. **Verify app updates**: Check if there are any available updates for the MFA app on your device and install the latest version.\n3. **Restart the app**: Close and restart the MFA app to see if it resolves the issue.\n4. **Check time and date settings**: Ensure that the time and date on your device are accurate, as MFA apps often rely on synchronized clocks to generate correct codes.\n5. **Re-sync the app**: If you're using a time-based one-time password (TOTP) MFA app, try re-syncing it with the authentication server by scanning the QR code or entering the secret key again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1814.93,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the issue with your multi-factor authentication (MFA) app, please follow these steps:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection. Try opening a web page or checking your email to verify connectivity.\n2. **Restart the MFA app**: Close and restart the MFA app on your device. This often resolves minor issues.\n3. **Check for updates**: Ensure that your MFA app is up to date. Go to the app store (e.g., Apple App Store or Google Play Store) and check if there are any updates available for the app.\n4. **Verify account settings**: Confirm that your account settings within the MFA app are correct. Check that your username, password, and any other required details are accurate.\n5. **Time sync**: Ensure that the time on your device is synchronized with the current time. MFA apps often rely on time-based one-time passwords (TOTP), which can be affected by incorrect device time.\n6. **Re-sync the app**: If the app allows it, try re-syncing it with your account. This process may vary depending on the specific MFA app you're using, so refer to the app's documentation or support resources for instructions.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2478.59,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H16",
+      "prompt": "Hello \u2014 MFA codes are being rejected when I sign in.",
+      "base": {
+        "text": "To troubleshoot the issue with MFA codes being rejected, please follow these steps:\n\n1. **Verify the time on your device**: Ensure that the time on your device (phone, tablet, or computer) is accurate and in sync with the current time. MFA codes are time-sensitive, so an incorrect time can cause authentication issues.\n2. **Check the MFA app**: If you're using an authenticator app (like Google Authenticator or Microsoft Authenticator), make sure it's properly configured and that you're entering the correct code.\n3. **Resync the MFA app**: Try resynchronizing the MFA app by removing the account and then re-adding it. This can help resolve any issues with the app's clock or configuration.\n4. **Use a backup method**: If you have a backup MFA method (like a phone call or SMS), try using that to see if the issue is specific to the authenticator app.\n5. **Clear browser cache**: Clear your browser's cache and cookies, then try signing in again. This can help resolve any issues with cached credentials or cookies.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2195.86,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your MFA codes. Here are the steps to follow:\n\n1. **Check your MFA app**: Ensure that your MFA app (e.g., Google Authenticator, Microsoft Authenticator) is synced with the correct time. If your device's clock is not in sync, the codes may not work. Try resetting the app or checking the device's time settings.\n2. **Verify the code**: Double-check that you're entering the correct 6-digit code from your MFA app. Make sure to enter the code exactly as it appears, without any spaces or extra characters.\n3. **Check for app updates**: Ensure that your MFA app is up-to-date, as outdated versions might cause issues. Check the app store for any available updates and install them.\n4. **Try a different MFA method**: If you have multiple MFA methods set up (e.g., authenticator app, SMS, or email), try using a different method to see if the issue persists.\n5. **Restart your device**: Sometimes, a simple reboot can resolve connectivity issues. Try restarting your device and then attempt to sign in again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2482.42,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H17",
+      "prompt": "Please help: My multi-factor authentication app isn't working.",
+      "base": {
+        "text": "To troubleshoot the issue with your multi-factor authentication (MFA) app, please follow these steps:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection, as MFA apps often require connectivity to function properly.\n2. **Verify the app is up-to-date**: Check the app store (e.g., Apple App Store or Google Play Store) for any available updates for your MFA app and install the latest version.\n3. **Restart the app**: Close and restart the MFA app to see if it resolves the issue.\n4. **Check the time and date settings**: Ensure that the time and date on your device are accurate, as MFA apps often rely on time-based one-time passwords (TOTPs).\n5. **Re-sync the app**: If your MFA app allows it, try re-syncing the app with your account by removing and re-adding the account or scanning a new QR code.\n6. **Check for account lockouts**: If you've entered incorrect credentials multiple times, your account might be locked out. Try waiting for a short period or contacting your organization's IT department to see if your account has been locked.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2017.31,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot the issue with your multi-factor authentication (MFA) app. Here are the steps:\n\n1. **Check your internet connection**: Ensure that your device has a stable internet connection, as MFA apps often require connectivity to function properly.\n2. **Restart the MFA app**: Close and reopen the MFA app to see if it resolves the issue.\n3. **Check for app updates**: Go to your device's app store and check if there are any updates available for the MFA app. Install the latest version if available.\n4. **Verify time and date settings**: Ensure that your device's time and date settings are accurate, as MFA apps often rely on these settings to function correctly.\n5. **Re-sync the app**: If your MFA app allows it, try re-syncing the app with your account. This may involve scanning a QR code or entering a setup key.\n6. **Check for blocked or restricted access**: If you're on a company network, check with your network administrator to see if there are any restrictions or blocks in place that might be preventing the MFA app from working.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2601.73,
+        "numbered_steps": 6,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H18",
+      "prompt": "Please help: MFA codes are being rejected when I sign in.",
+      "base": {
+        "text": "To troubleshoot the issue with MFA codes being rejected, follow these steps:\n\n1. **Check your MFA app**: Ensure that your MFA app (such as Google Authenticator or Microsoft Authenticator) is synced with the correct time. If the time is incorrect, it may cause the codes to be rejected. Try resetting the app or checking the time settings.\n\n2. **Verify the code**: Double-check that you are entering the correct MFA code. Make sure to enter the code exactly as it appears in the app, without any spaces or extra characters.\n\n3. **Check for app updates**: Ensure that your MFA app is up-to-date, as outdated versions may cause issues with code generation.\n\n4. **Restart your device**: Sometimes, simply restarting your device can resolve the issue. Try restarting your phone or computer and then attempt to sign in again.\n\n5. **Resync your MFA**: If you're using a time-based MFA, try resyncing it with the authentication server. This can usually be done through your account settings or by contacting your organization's IT department.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1880.33,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the issue with MFA codes being rejected, follow these steps:\n\n1. **Verify the time on your device**: Ensure that the time on your device (where you receive the MFA codes) is synchronized with the current time. MFA codes are time-sensitive, and a discrepancy can cause them to be rejected.\n\n2. **Check for MFA app updates**: Make sure the authenticator app you're using for MFA is up to date. Sometimes, updates can resolve issues with code generation or synchronization.\n\n3. **Resync your MFA app**: Try resynchronizing your MFA app with our system. This usually involves deleting the existing account from the app and then re-scanning the QR code provided during the MFA setup process.\n\n4. **Use a backup method**: If you have set up a backup method for MFA (like SMS or a secondary authenticator app), try using that to see if the issue is specific to one method.\n\n5. **Clear browser cache and cookies**: If you're accessing the sign-in page through a web browser, try clearing your browser's cache and cookies. This can sometimes resolve issues related to session management and authentication.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2854.71,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H19",
+      "prompt": "Quick one \u2014 My multi-factor authentication app isn't working.",
+      "base": {
+        "text": "To troubleshoot the issue with your multi-factor authentication app, please follow these steps:\n\n1. **Check your internet connection**: Ensure your device has a stable internet connection, as this is required for the app to function properly.\n2. **Restart the app**: Close and restart the multi-factor authentication app to see if this resolves the issue.\n3. **Check for updates**: Verify that your app is up-to-date, as outdated versions may cause compatibility issues.\n4. **Verify time and date settings**: Ensure your device's time and date settings are correct, as incorrect settings can cause authentication issues.\n5. **Re-sync the app**: If your app allows it, try re-syncing it with your account to refresh the authentication tokens.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1210.96,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nHere are the troubleshooting steps:\n\n1. **Check your internet connection**: Ensure your device has a stable internet connection, as the MFA app requires it to function.\n2. **Restart the MFA app**: Close and restart the MFA app to see if it resolves the issue.\n3. **Check for updates**: Ensure the MFA app is up-to-date, as outdated versions may cause issues.\n4. **Verify time and date settings**: Ensure your device's time and date settings are correct, as MFA apps often rely on accurate timekeeping.\n5. **Re-sync the app**: If your MFA app allows it, try re-syncing it with our authentication server.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1702.72,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H20",
+      "prompt": "Quick one \u2014 MFA codes are being rejected when I sign in.",
+      "base": {
+        "text": "To troubleshoot the MFA code issue, follow these steps:\n\n1. **Check your phone's time**: Ensure your phone's time is synced with the current time, as MFA codes are time-sensitive. If your phone's time is incorrect, update it and try again.\n2. **Verify the MFA code**: Double-check that you're entering the correct MFA code. Make sure to enter the code exactly as it appears, without any spaces or typos.\n3. **Check for MFA app updates**: If you're using an authenticator app (e.g., Google Authenticator or Microsoft Authenticator), ensure it's up to date. Update the app if necessary and try generating a new code.\n4. **Resync your MFA token**: If you're using a physical token, try resyncing it with our system. If you're using an authenticator app, try removing and re-adding the account to resync.\n5. **Check for network connectivity issues**: Ensure you have a stable internet connection. Try restarting your router or switching to a different network to rule out any connectivity issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2307.45,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nLet's troubleshoot this issue. Here are the steps to follow:\n\n1. **Check your MFA app**: Ensure that your MFA app (e.g., Google Authenticator, Microsoft Authenticator) is synced with the correct time. An incorrect time can cause MFA codes to be rejected.\n2. **Verify the code**: Double-check that you're entering the correct MFA code. Make sure to enter the code exactly as it appears in the app, without any spaces or extra characters.\n3. **Check for app updates**: Ensure that your MFA app is up to date, as outdated apps may cause issues with code generation.\n4. **Restart the MFA app**: Try closing and reopening the MFA app to see if it resolves the issue.\n5. **Check your account settings**: Verify that your MFA settings are enabled and configured correctly in your account settings.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2188.5,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H21",
+      "prompt": "My account is locked after several failed logins.",
+      "base": {
+        "text": "To resolve the issue with your locked account, please follow these steps:\n\n1. **Wait for the lockout period**: Depending on our company's security policy, your account might be locked out for a specific period (usually 30 minutes) after several failed login attempts. Wait for this period to expire before attempting to log in again.\n2. **Reset your password**: If you're unsure of your password, try resetting it using the password reset tool on our company's intranet. This will allow you to create a new password and regain access to your account.\n3. **Check your login credentials**: Ensure you're using the correct username and password. Double-check that your caps lock is not enabled and that you're entering the correct password.\n4. **Contact your manager or supervisor**: If you're still unable to access your account, reach out to your manager or supervisor to verify your account status and confirm that it's not suspended or terminated.\n5. **Try unlocking your account**: If you have access to the self-service portal, try unlocking your account using the \"Unlock Account\" feature.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2616.5,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue with your locked account, follow these steps:\n\n1. **Wait for 30 minutes**: Our system has a built-in timeout feature. If you wait for 30 minutes, your account should automatically unlock.\n2. **Reset your password**: Try resetting your password using the \"Forgot Password\" option on the login page. This will send a password reset link to your registered email address.\n3. **Check your login credentials**: Double-check that you are entering the correct username and password. Make sure your caps lock is not on and that you are not using any incorrect characters.\n4. **Clear browser cache and cookies**: Sometimes, a cached page or cookie can cause issues with login. Try clearing your browser's cache and cookies, then attempt to log in again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1853.67,
+        "numbered_steps": 4,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H22",
+      "prompt": "I got locked out from entering the wrong password.",
+      "base": {
+        "text": "To resolve the issue, follow these steps:\n\n1. **Wait for the lockout period to expire**: Check your company's password policy to see how long you need to wait before trying to log in again. This is usually 15-30 minutes.\n2. **Reset your password**: If you're still within the lockout period, try resetting your password using the self-service password reset tool (if available). You can usually find this on the login page or on the company's intranet.\n3. **Verify your username and password**: Double-check that you're entering the correct username and password. Make sure the caps lock key is not enabled and that you're using the correct keyboard layout.\n4. **Try a different login method**: If you're trying to log in to a specific application or system, try using a different login method, such as a web portal or a mobile app.\n5. **Check for any password expiration notifications**: If your password has expired, you may need to reset it before you can log in again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2568.69,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue, follow these steps:\n\n1. **Wait for the lockout period to expire**: Check your company's password policy to see how long you need to wait before trying to log in again. This is usually 15-30 minutes.\n2. **Reset your password**: If you're still having trouble, try resetting your password using the self-service password reset tool (if available). You can usually find this on the login page or on the company's intranet.\n3. **Check your password**: Ensure you're entering the correct password, paying close attention to uppercase and lowercase letters, numbers, and special characters.\n4. **Verify your username**: Double-check that you're using the correct username. Make sure there are no typos or extra spaces.\n5. **Try a different login method**: If you're trying to log in through a specific application or portal, try logging in through a different method, such as the company's VPN or a different website.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2267.43,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H23",
+      "prompt": "Hi team, My account is locked after several failed logins.",
+      "base": {
+        "text": "To resolve the issue with your locked account, please follow these steps:\n\n1. **Wait for 30 minutes**: Our system has a automatic unlock feature after 30 minutes of inactivity. If you've tried to log in multiple times, wait for 30 minutes before attempting to log in again.\n2. **Reset your password**: If you're still having trouble, try resetting your password using the \"Forgot Password\" option on the login page. Make sure to use a strong and unique password that meets our company's password policy.\n3. **Check your login credentials**: Double-check that you're using the correct username and password. Ensure that your caps lock key is not enabled and that you're not using any extra spaces.\n4. **Clear browser cache and cookies**: Sometimes, cached credentials can cause issues. Try clearing your browser's cache and cookies, then attempt to log in again.\n5. **Try a different browser or device**: If you're still having trouble, try logging in from a different browser or device to rule out any browser-specific issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2004.87,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue with your locked account, please follow these steps:\n\n1. **Wait for 30 minutes**: Our system has a default lockout duration of 30 minutes. If you've tried to log in multiple times with incorrect credentials, your account might be locked as a security measure. Waiting for this period allows the lock to automatically reset.\n2. **Reset your password**: If you're unsure about your password, try resetting it using the \"Forgot Password\" option on the login page. This will guide you through the process of creating a new password.\n3. **Check your login credentials**: Ensure you're using the correct username and password. Double-check that your caps lock is not on and that you're entering the correct password. Sometimes, a simple typo can cause login issues.\n4. **Try a different browser or device**: Occasionally, issues can be browser or device-specific. Try logging in from a different browser or device to see if the problem persists.\n5. **Contact your supervisor or manager**: If you're still having trouble, your supervisor or manager might be able to verify your account status and provide additional assistance.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2451.86,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H24",
+      "prompt": "Hi team, I got locked out from entering the wrong password.",
+      "base": {
+        "text": "To resolve the issue, please follow these steps:\n\n1. Ensure you are using the correct username and password. Double-check that your caps lock is not on and that you are typing the correct password.\n2. If you're still having trouble, try resetting your password using the password reset link on the login page.\n3. If the password reset link is not working, try using a different browser or clearing your browser's cache and cookies.\n4. If you're still unable to log in, check if your account has been locked out due to multiple incorrect login attempts. Wait for 30 minutes to see if the account unlocks automatically.\n5. If you're still having issues, try contacting your supervisor or manager to verify your account status and ensure it's active.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1811.48,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue, please follow these steps:\n\n1. Ensure you're using the correct username and password. Double-check that your caps lock is not on and that you're entering the correct password.\n2. Try resetting your password using the \"Forgot Password\" option on the login page. This will send a password reset link to your registered email address.\n3. If you're unable to reset your password, try waiting for 30 minutes to allow the account lockout to expire.\n4. If you're still having issues, ensure that your password meets the company's password policy requirements (e.g., length, complexity, etc.).\n5. Check if your account has been disabled or if there are any security restrictions in place that may be preventing you from logging in.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2097.79,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H25",
+      "prompt": "Hello \u2014 My account is locked after several failed logins.",
+      "base": {
+        "text": "To resolve the issue with your locked account, please follow these steps:\n\n1. **Wait for the lockout period**: Depending on our company's security policy, your account might be locked out for a specific period (usually 30 minutes) after multiple failed login attempts. Wait for this period to pass before trying to log in again.\n2. **Reset your password**: If you're unsure of your password, try resetting it using the password reset tool on our company's intranet. You can find this tool by clicking on the \"Forgot Password\" link on the login page.\n3. **Verify your login credentials**: Double-check that you're entering the correct username and password. Make sure your caps lock is turned off and that you're not accidentally typing extra spaces.\n4. **Check for password expiration**: If your password has expired, you'll need to reset it before you can log in. You can check your password expiration date by contacting me or checking our company's intranet.\n5. **Try a different login method**: If you're trying to log in through a specific application or portal, try logging in through a different method, such as the company's main login page.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 3058.22,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue with your locked account, please follow these steps:\n\n1. **Wait for 30 minutes**: Our system has an automatic unlock feature after 30 minutes. If you've just had the failed logins, waiting might resolve the issue without further action.\n2. **Reset your password**: If waiting doesn't work, try resetting your password. You can do this by going to the password reset page on our company's intranet. Follow the prompts to reset your password. Ensure you're using a strong, unique password that meets our company's password policy.\n3. **Check your login credentials**: Double-check that you're using the correct username and password. Make sure your caps lock isn't on and that you're entering the correct password. If you're copying and pasting your password, try typing it in manually instead.\n4. **Clear browser cache and cookies**: Sometimes, issues can be caused by outdated or corrupted browser data. Clear your browser's cache and cookies, then try logging in again.\n5. **Try a different browser or device**: If you're still having trouble, try logging in from a different browser or device to rule out any issues specific to your current setup.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2748.57,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H26",
+      "prompt": "Hello \u2014 I got locked out from entering the wrong password.",
+      "base": {
+        "text": "To resolve the issue, please follow these steps:\n\n1. **Wait for 30 minutes**: Our system has a temporary lockout policy to prevent brute-force attacks. If you've entered the wrong password multiple times, your account might be locked out for 30 minutes. Wait for this time to pass before trying again.\n2. **Check your password**: Double-check that you're entering the correct password. Make sure your caps lock is off and that you're using the correct username.\n3. **Reset your password**: If you're still having trouble, try resetting your password using the \"Forgot Password\" option on the login page. Follow the prompts to reset your password.\n4. **Clear browser cache**: Sometimes, browser cache can cause issues with login. Try clearing your browser cache and cookies, then attempt to log in again.\n5. **Try a different browser**: If the issue persists, try logging in using a different browser to rule out any browser-specific issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1627.55,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue, please follow these steps:\n\n1. **Wait for 30 minutes**: Our system has a temporary lockout policy to prevent brute-force attacks. Waiting for 30 minutes will allow you to try again.\n2. **Reset your password**: If you're still having trouble, try resetting your password using the \"Forgot Password\" link on the login page. You'll need to answer your security questions or receive a password reset email.\n3. **Check your password**: Ensure you're entering the correct password, paying attention to uppercase and lowercase letters, numbers, and special characters.\n4. **Try a different browser or device**: Sometimes, issues can be browser or device-specific. Try logging in from a different browser or device to rule out any local issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1697.71,
+        "numbered_steps": 4,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H27",
+      "prompt": "Please help: My account is locked after several failed logins.",
+      "base": {
+        "text": "To resolve the issue with your locked account, follow these steps:\n\n1. **Wait for the lockout period**: Check your company's security policy to see how long the account lockout period is. This is usually 15-30 minutes. Wait for this time to pass before attempting to log in again.\n2. **Reset your password**: If the lockout period has passed, try resetting your password. You can usually do this through the company's password reset portal or by contacting the IT department.\n3. **Check your login credentials**: Ensure you are entering the correct username and password. Double-check for any typos or incorrect characters.\n4. **Try a different login method**: If you're trying to log in through a specific application or portal, try logging in through a different method, such as the company's VPN or a different website.\n5. **Clear browser cache and cookies**: Sometimes, cached credentials or cookies can cause login issues. Try clearing your browser's cache and cookies and then attempt to log in again.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1806.49,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nHere are the troubleshooting steps to resolve the issue:\n\n1. **Wait for 30 minutes**: Our system has a built-in lockout period of 30 minutes. If you've exceeded the maximum number of login attempts, waiting for 30 minutes will automatically unlock your account.\n2. **Reset your password**: Try resetting your password using the \"Forgot Password\" option on the login page. This will send a password reset link to your registered email address.\n3. **Check your login credentials**: Ensure that you're entering the correct username and password. Double-check for any typos or incorrect characters.\n4. **Try a different browser or device**: Sometimes, browser or device issues can cause login problems. Try logging in from a different browser or device to rule out any local issues.\n5. **Clear browser cache and cookies**: Clearing your browser cache and cookies can resolve issues related to stored login credentials. You can do this by pressing Ctrl+Shift+Delete (Windows) or Command+Shift+Delete (Mac) and following the prompts.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2314.61,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H28",
+      "prompt": "Please help: I got locked out from entering the wrong password.",
+      "base": {
+        "text": "To resolve the issue, follow these steps:\n\n1. **Wait for 15 minutes**: Our system has a temporary lockout policy to prevent brute-force attacks. Wait for 15 minutes to allow the lockout to expire.\n2. **Reset your password**: If you're still having issues after the wait time, try resetting your password using the \"Forgot Password\" option on the login page. Follow the prompts to create a new password.\n3. **Check password complexity**: Ensure your new password meets the company's password complexity requirements, which can be found on our intranet.\n4. **Verify username and password**: Double-check that you're entering the correct username and new password. Make sure the caps lock key is not enabled and that you're using the correct keyboard layout.\n5. **Try a different browser or device**: If you're still having issues, try logging in from a different browser or device to rule out any local configuration problems.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1730.7,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue of being locked out due to entering the wrong password, follow these steps:\n\n1. **Wait for the specified lockout duration**: If your account is locked out due to incorrect login attempts, wait for the time period specified by your organization's security policy before attempting to log in again. This duration can vary, so check your company's guidelines.\n\n2. **Reset your password**: If you remember your password but it's not working, or if you've forgotten it, try resetting it. Go to the password reset portal provided by your organization. If you don't know the URL, contact your supervisor or check the company's intranet for the link.\n\n3. **Use the self-service password reset tool**: Many organizations have a self-service password reset tool. If available, use this tool to reset your password. You will typically need to answer security questions or receive a verification code via email or SMS to authenticate your identity.\n\n4. **Contact your supervisor or manager**: If you're unable to reset your password using the self-service tool, inform your supervisor or manager. They may be able to assist you in verifying your identity and facilitating a password reset.\n\n5. **Check for any additional security requirements**: Ensure that your device and browser meet the organization's security requirements, such as having the latest updates and security software installed.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 3187.78,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H29",
+      "prompt": "Quick one \u2014 My account is locked after several failed logins.",
+      "base": {
+        "text": "To resolve the issue with your locked account, follow these steps:\n\n1. **Wait for the lockout period**: Check your company's security policy to see how long the account lockout period is. This is usually 30 minutes, but it can vary.\n2. **Try the password reset tool**: If available, use the self-service password reset tool to reset your password. This may unlock your account immediately.\n3. **Contact your manager or supervisor**: If you're unable to reset your password, ask your manager or supervisor to verify your identity and request an account unlock.\n4. **Check for any additional security requirements**: Ensure you're meeting all security requirements, such as using a smart card or token, if applicable.\n5. **Verify your login credentials**: Double-check that you're using the correct username and password. Make sure your caps lock key is not on and that you're entering the correct password.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1715.12,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue with your locked account, follow these steps:\n\n1. **Wait for the lockout period**: Check your company's security policy to see if there's a specific time frame before your account is automatically unlocked. This is usually 30 minutes to an hour.\n2. **Contact your manager or supervisor**: If you're unable to wait for the lockout period, reach out to your manager or supervisor to request an account unlock. They may be able to expedite the process.\n3. **Try the self-service password reset tool**: If your company has a self-service password reset tool, try using it to reset your password. This may unlock your account in the process.\n4. **Verify your login credentials**: Double-check that you're using the correct username and password. Make sure your caps lock key is not on and that you're entering the correct password.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 2004.79,
+        "numbered_steps": 4,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    },
+    {
+      "id": "H30",
+      "prompt": "Quick one \u2014 I got locked out from entering the wrong password.",
+      "base": {
+        "text": "To resolve the issue, follow these steps:\n\n1. Ensure you're entering the correct username, as usernames are case-sensitive.\n2. Try resetting your password using the \"Forgot Password\" option on the login page, if available.\n3. If the \"Forgot Password\" option is not available, wait for the specified time period (usually 30 minutes) before attempting to log in again.\n4. Verify that your caps lock key is not enabled, as this can cause password entry errors.\n5. If you're still having trouble, try using a different device or browser to rule out any device-specific issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1380.83,
+        "numbered_steps": 5,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      },
+      "tuned": {
+        "text": "\n\nTo resolve the issue, follow these steps:\n\n1. **Wait for 15 minutes**: Our system has a temporary lockout policy to prevent brute-force attacks. Waiting for 15 minutes will allow you to try again.\n2. **Reset your password**: If you're still having trouble, try resetting your password using the \"Forgot Password\" link on the login page. You'll need to answer your security questions or receive a password reset link via email.\n3. **Check your password**: Ensure you're entering the correct password, paying attention to uppercase and lowercase letters, numbers, and special characters.\n4. **Try a different browser or device**: Sometimes, issues can be browser or device-specific. Try logging in from a different browser or device to rule out any local issues.\n\nIf this persists, I'll raise a ticket to L2.",
+        "latency_ms": 1705.74,
+        "numbered_steps": 4,
+        "has_steps": true,
+        "ends_with_l2": true,
+        "both_correct": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "scenario_id": "it_helpdesk",
+  "region": "us-west-2",
+  "base_model_id": "meta.llama3-3-70b-instruct-v1:0:128k",
+  "base_inference_model_id": "us.meta.llama3-3-70b-instruct-v1:0",
+  "job_arn": "arn:aws:bedrock:us-west-2:759316130780:model-customization-job/meta.llama3-3-70b-instruct-v1:0:128k/6x2ku7k8dnv0",
+  "custom_model_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model/meta.llama3-3-70b-instruct-v1:0:128k/kgftungquhbl",
+  "deployment_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model-deployment/bkph55gwzj82",
+  "results": [
+    {
+      "prompt": "My VPN keeps disconnecting every few minutes.",
+      "base": {
+        "text": "To troubleshoot the VPN disconnection issue, please follow these steps:\n\n1. **Restart your VPN client**: Try closing and reopening your VPN application to see if it resolves the issue.\n2. **Check your internet connection**: Ensure your internet connection is stable and not dropping. You can test this by browsing websites or checking your email.\n3. **Verify VPN settings**: Confirm that your VPN settings are correct, including the server address, username, and password.\n4. **Update your VPN client**: Make sure your VPN client is up-to-date, as newer versions may have resolved connectivity issues.\n5. **Disable and re-enable your VPN adapter**: Go to your network settings, disable the VPN adapter, wait for 10 seconds, and then re-enable it.\n6. **Check for conflicts with other network connections**: If you have multiple network connections (e.g., Wi-Fi and Ethernet), try disconnecting from one of them to see if it resolves the issue.\n\nIf this persists, I'll raise a ticket to L2.",
+        "input_tokens": 79,
+        "output_tokens": 208,
+        "latency_ms": 1800.23
+      },
+      "tuned": {
+        "text": "\n\nTo troubleshoot the VPN disconnection issue, please follow these steps:\n\n1. **Restart your VPN client**: Sometimes, simply restarting the VPN client can resolve the issue. Close the VPN application, wait for 10 seconds, and then reopen it to see if the connection stabilizes.\n2. **Check your internet connection**: Ensure your internet connection is stable. Try loading a webpage or checking your email to verify that your internet is working properly. If your internet is unstable, it could be causing the VPN to disconnect.\n3. **Verify VPN server settings**: Double-check that you are connecting to the correct VPN server. Ensure that the server address, username, and password are all correct. If you're unsure, refer to the VPN setup documentation or contact your network administrator.\n4. **Update VPN client software**: Make sure your VPN client software is up-to-date. Check the vendor's website for any updates or patches, and install them if available.\n5. **Disable and re-enable the VPN adapter**: Go to your network settings, disable the VPN adapter, wait for 10 seconds, and then re-enable it. This can sometimes reset the connection and resolve the issue.\n6. **Check for conflicts with other network connections**: If you have multiple network connections (e.g., Wi-Fi and Ethernet), try disconnecting from all other networks except the one you're using for the VPN. This can help identify if there's a conflict between connections.\n\nIf this persists, I'll raise a ticket to L2.",
+        "input_tokens": 58,
+        "output_tokens": 306,
+        "latency_ms": 3372.81
+      },
+      "schema_valid": null,
+      "verdict": null
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "scenario_id": "banking",
+  "region": "us-west-2",
+  "base_model_id": "meta.llama3-3-70b-instruct-v1:0:128k",
+  "base_inference_model_id": "us.meta.llama3-3-70b-instruct-v1:0",
+  "job_arn": "arn:aws:bedrock:us-west-2:759316130780:model-customization-job/meta.llama3-3-70b-instruct-v1:0:128k/0kddt630lzmx",
+  "custom_model_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model/meta.llama3-3-70b-instruct-v1:0:128k/dbwq4rxokscw",
+  "deployment_arn": "arn:aws:bedrock:us-west-2:759316130780:custom-model-deployment/a2gn2fj6z2dz",
+  "results": [
+    {
+      "prompt": "How do I transfer money to my savings account?",
+      "base": {
+        "text": "To transfer money to your savings account, log in to your Northwind Bank online banking or mobile app, select the account you'd like to transfer from, choose your savings account as the destination, and enter the desired amount. You can also visit a branch or ATM to initiate the transfer. Transfers may take 1\u20133 business days.",
+        "input_tokens": 101,
+        "output_tokens": 70,
+        "latency_ms": 1220.9
+      },
+      "tuned": {
+        "text": "\n\nTo transfer money to your savings account, log in to your Northwind Bank online banking or mobile app, navigate to the \"Transfers\" section, select the account you'd like to transfer from, enter the amount, and choose your savings account as the destination. Confirm the details and submit the transfer. Transfers may take 1\u20133 business days.",
+        "input_tokens": 80,
+        "output_tokens": 74,
+        "latency_ms": 1051.69
+      },
+      "schema_valid": null,
+      "verdict": null
+    }
+  ]
+}

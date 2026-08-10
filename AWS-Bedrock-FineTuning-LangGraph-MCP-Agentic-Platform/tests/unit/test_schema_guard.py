@@ -14,12 +14,38 @@ def _scenario(scenario_id: str):
 
 def test_pharma_valid_json_parses_cleanly() -> None:
     scenario = _scenario("pharma")
+    # "Hepatobiliary" is one of the 8 controlled-vocabulary terms. This fixture previously
+    # used "Neurological", which is NOT in the vocabulary — it passed only because
+    # event_category was typed as a bare str, so the test was asserting the wrong thing.
     raw = json.dumps(
-        {"seriousness": "Serious", "event_category": "Neurological", "expedited_reporting": True}
+        {"seriousness": "Serious", "event_category": "Hepatobiliary", "expedited_reporting": True}
     )
     result = validate_output(scenario, raw)
     assert not isinstance(result, SchemaViolation)
     assert result.seriousness == "Serious"
+
+
+def test_pharma_out_of_vocabulary_category_is_caught_as_violation() -> None:
+    """The distinction the strict schema exists to make: syntactically perfect JSON whose
+    category the downstream enum would reject."""
+    scenario = _scenario("pharma")
+    raw = json.dumps(
+        {"seriousness": "Serious", "event_category": "Neurological", "expedited_reporting": True}
+    )
+    result = validate_output(scenario, raw)
+    assert isinstance(result, SchemaViolation)
+    assert "event_category" in result.error_path
+
+
+def test_pharma_category_is_case_sensitive() -> None:
+    """A near-miss on casing is still a parse failure downstream — the base model produced
+    exactly this ('hepatobiliary') and the loose schema called it valid."""
+    scenario = _scenario("pharma")
+    raw = json.dumps(
+        {"seriousness": "Serious", "event_category": "hepatobiliary", "expedited_reporting": True}
+    )
+    result = validate_output(scenario, raw)
+    assert isinstance(result, SchemaViolation)
 
 
 def test_pharma_malformed_json_is_caught_as_violation() -> None:

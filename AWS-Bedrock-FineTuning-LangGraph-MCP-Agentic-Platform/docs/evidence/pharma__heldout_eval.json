@@ -1,0 +1,531 @@
+{
+  "scenario_id": "pharma",
+  "_note": "Detailed base-vs-tuned evaluation. Separate from results.json, which scripts/run_pipeline.py owns and overwrites with the scenario's configured sample_prompts on every run.",
+  "eval_set": "21 held-out records",
+  "n": 21,
+  "stats": {
+    "base": {
+      "schema": 21,
+      "vocab": 3,
+      "ser": 19,
+      "cat": 3,
+      "both": 2,
+      "tok": 3142
+    },
+    "tuned": {
+      "schema": 21,
+      "vocab": 18,
+      "ser": 20,
+      "cat": 18,
+      "both": 17,
+      "tok": 2715
+    }
+  },
+  "rows": [
+    {
+      "prompt": "A patient taking the investigational drug reported skin rash; the patient recovered after dose reduction.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Skin",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Non-serious",
+        "latency_ms": 681.96,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Skin\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Skin",
+        "seriousness": "Non-serious",
+        "latency_ms": 690.86,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the investigational drug reported fever; the reaction was life-threatening.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "General",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 525.53,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Infections\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Infections",
+        "seriousness": "Serious",
+        "latency_ms": 711.11,
+        "schema_valid_strict": false
+      }
+    },
+    {
+      "prompt": "A patient taking the investigational drug reported chest tightness; symptoms are ongoing but mild.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Cardiac",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Cardiovascular\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Cardiovascular",
+        "seriousness": "Non-serious",
+        "latency_ms": 505.94,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Cardiovascular\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Cardiovascular",
+        "seriousness": "Non-serious",
+        "latency_ms": 714.82,
+        "schema_valid_strict": false
+      }
+    },
+    {
+      "prompt": "A patient taking Product A reported abdominal pain; the reaction was life-threatening.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Gastrointestinal",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 688.74,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Serious",
+        "latency_ms": 723.89,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the oral tablet reported chest tightness; the outcome was fatal.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Cardiac",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 470.53,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Cardiovascular\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Cardiovascular",
+        "seriousness": "Serious",
+        "latency_ms": 668.42,
+        "schema_valid_strict": false
+      }
+    },
+    {
+      "prompt": "A patient taking the once-daily capsule reported throat swelling; no treatment was needed.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Immune system",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Immune system disorders\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Immune system disorders",
+        "seriousness": "Non-serious",
+        "latency_ms": 533.38,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Immune system\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Immune system",
+        "seriousness": "Serious",
+        "latency_ms": 806.08,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the study medication reported headache; no treatment was needed.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Nervous system",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Non-serious",
+        "latency_ms": 494.88,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Nervous system\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Nervous system",
+        "seriousness": "Non-serious",
+        "latency_ms": 819.72,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the oral tablet reported itching; the patient recovered after dose reduction.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Skin",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"cutaneous\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "cutaneous",
+        "seriousness": "Non-serious",
+        "latency_ms": 611.64,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Skin\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Skin",
+        "seriousness": "Non-serious",
+        "latency_ms": 668.91,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking Product A reported persistent cough; the patient was hospitalized.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Respiratory",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 491.5,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Respiratory\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Respiratory",
+        "seriousness": "Serious",
+        "latency_ms": 643.72,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the injectable therapy reported skin rash; the event resulted in disability.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Skin",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 386.79,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Skin\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Skin",
+        "seriousness": "Serious",
+        "latency_ms": 740.18,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the investigational drug reported palpitations; the event resulted in disability.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Cardiac",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Cardiovascular\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Cardiovascular",
+        "seriousness": "Serious",
+        "latency_ms": 493.28,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Cardiac\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Cardiac",
+        "seriousness": "Serious",
+        "latency_ms": 818.99,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the study medication reported vomiting; the patient recovered after dose reduction.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Gastrointestinal",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Non-serious",
+        "latency_ms": 448.47,
+        "schema_valid_strict": true
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Non-serious",
+        "latency_ms": 767.65,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the injectable therapy reported shortness of breath; the patient recovered after dose reduction.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Respiratory",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Respiratory\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Respiratory",
+        "seriousness": "Serious",
+        "latency_ms": 469.28,
+        "schema_valid_strict": true
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Respiratory\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Respiratory",
+        "seriousness": "Serious",
+        "latency_ms": 717.92,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the injectable therapy reported persistent cough; the patient was hospitalized.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Respiratory",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 576.56,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Respiratory\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Respiratory",
+        "seriousness": "Serious",
+        "latency_ms": 637.55,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the study medication reported abdominal pain; the outcome was fatal.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Gastrointestinal",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 465.39,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Serious",
+        "latency_ms": 782.65,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the study medication reported abdominal pain; the event resulted in disability.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Gastrointestinal",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 433.64,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Serious",
+        "latency_ms": 807.27,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the injectable therapy reported elevated liver enzymes; the reaction was life-threatening.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Hepatobiliary",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"hepatobiliary\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "hepatobiliary",
+        "seriousness": "Serious",
+        "latency_ms": 434.46,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Hepatobiliary\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Hepatobiliary",
+        "seriousness": "Serious",
+        "latency_ms": 764.79,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking Product A reported vomiting; the patient recovered after dose reduction.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Gastrointestinal",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Non-serious",
+        "latency_ms": 437.38,
+        "schema_valid_strict": true
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Gastrointestinal\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Gastrointestinal",
+        "seriousness": "Non-serious",
+        "latency_ms": 744.96,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the study medication reported fatigue; the reaction was life-threatening.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "General",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 462.55,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"General\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "General",
+        "seriousness": "Serious",
+        "latency_ms": 641.01,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the injectable therapy reported headache; no treatment was needed.",
+      "gold": {
+        "seriousness": "Non-serious",
+        "event_category": "Nervous system",
+        "expedited_reporting": false
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Non-serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Non-serious",
+        "latency_ms": 453.73,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Non-serious\", \"event_category\": \"Nervous system\", \"expedited_reporting\": false}",
+        "schema_valid": true,
+        "event_category": "Nervous system",
+        "seriousness": "Non-serious",
+        "latency_ms": 730.56,
+        "schema_valid_strict": true
+      }
+    },
+    {
+      "prompt": "A patient taking the oral tablet reported tremor; the reaction was life-threatening.",
+      "gold": {
+        "seriousness": "Serious",
+        "event_category": "Nervous system",
+        "expedited_reporting": true
+      },
+      "base": {
+        "text": "{\"seriousness\": \"Serious\", \"event_category\": \"Adverse Event\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Adverse Event",
+        "seriousness": "Serious",
+        "latency_ms": 450.21,
+        "schema_valid_strict": false
+      },
+      "tuned": {
+        "text": "\n\n{\"seriousness\": \"Serious\", \"event_category\": \"Nervous system\", \"expedited_reporting\": true}",
+        "schema_valid": true,
+        "event_category": "Nervous system",
+        "seriousness": "Serious",
+        "latency_ms": 682.74,
+        "schema_valid_strict": true
+      }
+    }
+  ],
+  "schema_note": "schema_valid_strict re-scored after PharmaTriageOutput constrained event_category to the 8-term controlled vocabulary. Previously the field was a bare str, so out-of-vocabulary answers reported valid."
+}

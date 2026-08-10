@@ -36,12 +36,21 @@ never saw during training.
 
 ### Three findings that survived contact with the data
 
-**1. Fine-tuning did not fix JSON.** Both models produced schema-valid JSON on **21/21** pharma
-records. The common justification — *"we need reliable structured output"* — was already solved by
-prompt engineering. What fine-tuning fixed was **vocabulary conformity, 14% → 86%**. The base model
-answered `"Adverse Event"` 13 times out of 21; given *"elevated liver enzymes"* it answered
-`hepatobiliary` where the contract requires `Hepatobiliary`. **It was not short on domain knowledge —
-it was short on our conventions.**
+**1. Fine-tuning did not fix JSON *syntax*. It fixed conformity to the contract.** Both models
+emitted well-formed, parseable JSON with the right fields on **21/21** records — that was never the
+problem, and prompt engineering had already solved it. But `PharmaTriageOutput` now constrains
+`event_category` to the 8-term controlled vocabulary, because that is what the downstream system
+actually requires, and against the full contract:
+
+| | Base | Fine-tuned |
+|---|---:|---:|
+| JSON parses, fields present, `seriousness` valid | 21/21 · 100% | 21/21 · 100% |
+| **Full schema incl. `event_category` enum** | **3/21 · 14%** | **18/21 · 86%** |
+
+The base model answered `"Adverse Event"` 13 times out of 21; given *"elevated liver enzymes"* it
+answered `hepatobiliary` where the contract requires `Hepatobiliary`. **It was not short on domain
+knowledge — it was short on our conventions.** Any team quoting "100% schema-valid" should check
+whether their schema encodes the whole contract or just the shape.
 
 **2. A conditional rule scored without negative cases rewards the wrong model.** Banking's base model
 emitted the compliance disclaimer **13 times out of 16** where only 6 were warranted — appending
@@ -74,7 +83,8 @@ converged cleanly to **0.027**.
   to a *"licensed tax professional"* and a *"licensed attorney"* where training only ever said
   *"licensed financial advisor."* It learned the rule, not the string. The metric was corrected.
 
-Full per-record analysis: [`docs/RESULTS.md`](docs/RESULTS.md).
+Full per-record analysis: [`docs/RESULTS.md`](docs/RESULTS.md). Raw evaluation output for all three
+scenarios is committed under [`docs/evidence/`](docs/evidence/).
 
 ---
 

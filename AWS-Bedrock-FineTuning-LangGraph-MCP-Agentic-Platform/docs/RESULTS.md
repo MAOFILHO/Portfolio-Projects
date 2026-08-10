@@ -30,7 +30,8 @@ near miss.
 
 | Metric | Base Llama 3.3 70B | Fine-tuned |
 |---|---:|---:|
-| Schema-valid JSON | 21/21 · **100%** | 21/21 · **100%** |
+| JSON well-formed, fields present | 21/21 · **100%** | 21/21 · **100%** |
+| **Full schema incl. `event_category` enum** | 3/21 · **14%** | 18/21 · **86%** |
 | `event_category` in house vocabulary | 3/21 · **14%** | 18/21 · **86%** |
 | `seriousness` exact match | 19/21 · 90% | 20/21 · 95% |
 | `event_category` exact match | 3/21 · **14%** | 18/21 · **86%** |
@@ -47,11 +48,21 @@ Training converged cleanly with no overfitting:
 
 ### The finding that matters most
 
-> **Fine-tuning did not fix JSON. A system prompt already had that at 100%.**
+> **Fine-tuning did not fix JSON syntax. A system prompt already had that at 100%.**
+> What it fixed was conformity to the *contract*.
 
-Both models produced schema-valid JSON on every single record. The widespread justification for
-fine-tuning — *"we need reliable structured output"* — was already solved by prompt engineering
-before a dollar was spent on training.
+Both models emitted well-formed, parseable JSON with the correct fields on every single record. The
+widespread justification for fine-tuning — *"we need reliable structured output"* — was already
+solved by prompt engineering before a dollar was spent on training.
+
+That framing depends entirely on what the schema encodes. `PharmaTriageOutput` originally typed
+`event_category` as a bare `str`, so it reported "valid" for answers the downstream enum would
+reject. Constraining it to the 8-term vocabulary — which is what the real contract requires — moves
+schema validity from *100% for both models* to **14% base / 86% tuned**.
+
+> A schema that validates only the *shape* of a response will report success on output that breaks
+> the system consuming it. "100% schema-valid" is only meaningful if the schema carries the whole
+> contract.
 
 What fine-tuning bought was **conformity to a specific downstream contract**, and the base model's
 failure mode shows why that is a different problem:
