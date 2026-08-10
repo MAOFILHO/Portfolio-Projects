@@ -1,4 +1,4 @@
-.PHONY: setup tf-init plan provision run api teardown test test-unit test-pre test-post test-post-run test-post-teardown lint typecheck frontend
+.PHONY: setup tf-init plan provision run api teardown test test-unit test-pre test-post test-post-run test-post-teardown lint typecheck frontend verify-billable
 
 VENV := .venv/bin
 
@@ -66,6 +66,11 @@ test-post-run:
 
 test-post-teardown:
 	$(VENV)/pytest tests/post_teardown -v
+
+# Smoke test for a partial teardown: asserts nothing billable survives while the free
+# infrastructure is retained. verify_empty.py is the stricter gate for a full destroy.
+verify-billable:
+	$(VENV)/python scripts/verify_no_billable.py
 
 lint:
 	$(VENV)/ruff check src tests scripts

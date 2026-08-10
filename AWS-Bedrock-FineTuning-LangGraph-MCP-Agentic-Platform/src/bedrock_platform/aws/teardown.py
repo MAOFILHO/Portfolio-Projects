@@ -30,7 +30,11 @@ def delete_all_deployments(client: DeploymentClient) -> int:
     """Step 1: delete every CMoD deployment, waiting for each to actually disappear."""
     deployments = client.list_custom_model_deployments()
     for deployment in deployments:
-        arn = deployment["modelDeploymentArn"]
+        # ListCustomModelDeployments returns "customModelDeploymentArn". The shorter
+        # "modelDeploymentArn" does not exist in the response, so this raised KeyError on
+        # the first deployment — teardown failed closed rather than half-completing, but
+        # it failed, and the P0 release gate could never have passed.
+        arn = deployment["customModelDeploymentArn"]
         try:
             client.delete_custom_model_deployment(arn)
         except ClientError as exc:
