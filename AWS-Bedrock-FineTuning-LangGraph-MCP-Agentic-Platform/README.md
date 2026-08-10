@@ -23,7 +23,7 @@ lifecycle — **fine-tune a foundation model, deploy it for on-demand inference,
 it is better than the base model** — a sequence that is a manual console click-through in
 Bedrock itself, replaced here with a config-driven pipeline backed by a real agentic layer.
 
-**The source material** is a K21Academy lab: upload a JSONL dataset to S3, create a
+**The source material** is a hands-on project walkthrough: upload a JSONL dataset to S3, create a
 customization job, wait, deploy the result, type a prompt into the playground, eyeball the
 answer, then delete everything in the right order. Done by hand it is a wizard, a
 multi-hour wait, and a subjective "looks better to me."
@@ -49,7 +49,7 @@ output schema and validation rules — **adding one costs a config entry, not a 
   job status streamed over SSE and persisted to disk so it survives a page refresh, and a
   base-vs-tuned comparison pane carrying its own schema verdict.
 - **Cost-guarded Terraform IaC** — a budget alert provisioned before any billable
-  resource, a private TLS-only S3 bucket (a deliberate deviation from the lab, which says
+  resource, a private TLS-only S3 bucket (a deliberate deviation from the source project, which says
   to make it public), and an ordered teardown whose emptiness is verified by script.
 - **Agentic safety by omission** — no MCP tool exists that can delete a model, create a
   deployment, modify IAM, or touch the budget. The single billable action refuses without
@@ -785,7 +785,7 @@ They cluster into six patterns, written up in full in
 
 | Document | Contents |
 |---|---|
-| [`PLAN.md`](PLAN.md) | Architecture decisions and deliberate deviations from the source lab |
+| [`PLAN.md`](PLAN.md) | Architecture decisions and deliberate deviations from the source project |
 | [`TASKS.md`](TASKS.md) | Sequenced build contract |
 | [`COSTS.md`](COSTS.md) | Pre-build cost estimate |
 | [`docs/COST-ACTUALS.md`](docs/COST-ACTUALS.md) | Estimated vs actual, and where the estimate was wrong |
