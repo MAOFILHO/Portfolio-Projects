@@ -58,7 +58,7 @@ output schema and validation rules — **adding one costs a config entry, not a 
 Every result below is **measured against held-out records**, and the total spend for three
 fine-tuned models was **$0.508** against a $25 budget.
 
----
+
 
 ## The problem
 
@@ -76,7 +76,7 @@ values as an enum.
 The same pipeline runs six other scenarios unchanged — banking assistant, IT helpdesk, patient
 triage, support triage, e-commerce copy, gardening — because **scenarios are data, not code.**
 
----
+
 
 ## Results — when fine-tuning pays, and when it does not
 
@@ -149,7 +149,7 @@ converged cleanly to **0.027**.
 Full per-record analysis: [`docs/RESULTS.md`](docs/RESULTS.md). Raw evaluation output for all three
 scenarios is committed under [`docs/evidence/`](docs/evidence/).
 
----
+
 
 ## 🛠️ Tech Stack
 
@@ -233,7 +233,7 @@ scenarios is committed under [`docs/evidence/`](docs/evidence/).
 **FastAPI + React front end** (`src/bedrock_platform/api`, `frontend/`) surfaces live job status over
 SSE and renders base-vs-tuned side by side, each pane carrying its own Pydantic verdict.
 
----
+
 
 ## Build status
 
@@ -261,7 +261,7 @@ Scenario runs: `pharma` ✅ · `banking` ✅ · `it_helpdesk` ✅ — all traine
 Deployments are **$0/hr idle**; the models accrue **$5.85/month** in storage until deleted. Run
 `make teardown` when finished.
 
----
+
 
 ## Agent orchestration
 
@@ -379,7 +379,7 @@ flowchart LR
 Teardown and infrastructure remain deterministic scripts run by humans — `scripts/teardown.py` and
 Terraform.
 
----
+
 
 ## Project invariants
 
@@ -395,7 +395,7 @@ These are enforced, not aspirational.
 | Teardown is verifiable | `tests/post_teardown/test_zero_resources.py` is a release blocker |
 | Secrets live in `.env` only | `.env.example` carries keys with no values; nothing is committed |
 
----
+
 
 ## Cost — estimated vs actual
 
@@ -452,7 +452,7 @@ ceilings are effectively unlimited for this workload; **the request ceiling cann
 
 > **Cheap does not mean fast.** CMoD's $0-idle billing is paid for in throughput.
 
----
+
 
 ## Prerequisites
 
@@ -466,7 +466,7 @@ ceilings are effectively unlimited for this workload; **the request ceiling cann
 Bedrock model customization exists in **exactly two Regions**: `us-east-1` and `us-west-2`. There is
 no Canada, Europe, or Asia option. `infra/terraform/variables.tf` rejects anything else.
 
----
+
 
 ## Setup
 
@@ -504,7 +504,7 @@ bash scripts/bootstrap_state.sh
 
 `.env` is git-ignored. `.env.example` carries keys only.
 
----
+
 
 ## Quickstart
 
@@ -543,7 +543,7 @@ poll to `Completed` → deploy → poll to `Active` → base-vs-tuned inference 
 
 Disabled scenarios are valid configs that run when a flag flips — **no code change required.**
 
----
+
 
 ## Teardown
 
@@ -575,7 +575,7 @@ make test-post-teardown
 > Custom models bill **$1.95/model/month** until deleted. The deployment itself is $0 idle, so there
 > is no hourly urgency — but storage accrues indefinitely.
 
----
+
 
 ## Testing
 
@@ -588,7 +588,7 @@ make test-post-teardown    # release gate: zero surviving resources
 make lint && make typecheck
 ```
 
----
+
 
 ## Engineering decisions
 
@@ -604,7 +604,7 @@ make lint && make typecheck
 | S3 bucket names are global but buckets are regional | Region is part of the name; deleting and recreating one name across Regions blocks on an unbounded release delay |
 | Price List API returns SKUs for retired models | `list_foundation_models` is authoritative for availability; the Price List API is not |
 
----
+
 
 ## Screenshots
 
@@ -757,7 +757,7 @@ make frontend   # terminal 2
 
 <img width="100%" alt="make frontend" src="docs/screenshots/16-make-frontend.png" />
 
----
+
 
 <img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
 <br><br>
@@ -793,7 +793,7 @@ They cluster into six patterns, written up in full in
 | [`docs/LESSONS-LEARNED.md`](docs/LESSONS-LEARNED.md) | Every defect from this build, grouped by root-cause pattern |
 | [`docs/INCIDENT-LOG.md`](docs/INCIDENT-LOG.md) | The 10-attempt failure investigation |
 
----
+
 
 ## Author
 
