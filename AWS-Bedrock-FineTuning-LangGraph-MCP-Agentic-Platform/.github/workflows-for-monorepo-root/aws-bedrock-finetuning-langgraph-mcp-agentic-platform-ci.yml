@@ -72,8 +72,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest
-        run: pip install pytest
+      - name: Install pytest and the package
+        # The guard test imports bedrock_platform.aws.guards for the forbidden-string
+        # list, so the package must be installed even though the scan itself is pure
+        # Python. pytest-asyncio is required by the asyncio_mode setting in pyproject.
+        run: |
+          pip install pytest pytest-asyncio
+          pip install -e .
 
       # Provisioned Throughput bills $60.50/hr/model with no idle discount — three models
       # would be ~$130,680/month. A separate required job so the string cannot reach main

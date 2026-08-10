@@ -125,6 +125,14 @@ data "aws_iam_policy_document" "plan_readonly" {
       "budgets:ViewBudget",
       "budgets:DescribeBudget",
       "budgets:DescribeBudgets",
+      # Terraform reads tags on every managed resource during refresh, and the tag-list
+      # APIs are separate actions from the describe/get ones. Omitting them fails the
+      # whole plan on an AccessDeniedException, not just the tag attribute.
+      "budgets:ListTagsForResource",
+      "dynamodb:ListTagsOfResource",
+      "iam:ListRoleTags",
+      "iam:ListOpenIDConnectProviderTags",
+      "s3:GetBucketTagging",
     ]
     resources = ["*"]
   }
