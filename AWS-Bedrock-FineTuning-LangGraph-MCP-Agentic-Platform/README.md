@@ -60,6 +60,24 @@ fine-tuned models was **$0.508** against a $25 budget.
 
 ---
 
+## The problem
+
+A pharmacovigilance intake team triages adverse-event reports into a controlled vocabulary of eight
+MedDRA-style System Organ Class terms, then routes by seriousness. Downstream systems treat those
+values as an enum.
+
+| Pain point | Impact |
+|---|---|
+| Free-text model output must be hand-mapped to house terms | Every near-miss is a manual correction |
+| A category outside the enum is a hard parse failure | Silent data loss or a stalled queue |
+| Prompt engineering plateaus on vocabulary conformity | More prompt tokens, no better adherence |
+| Serving a tuned model on Provisioned Throughput bills hourly | $60.50/hr with no free tier, idle or not |
+
+The same pipeline runs six other scenarios unchanged — banking assistant, IT helpdesk, patient
+triage, support triage, e-commerce copy, gardening — because **scenarios are data, not code.**
+
+---
+
 ## Results — when fine-tuning pays, and when it does not
 
 Three scenarios, one pipeline, one base model, 2 epochs each. All scored against records the models
@@ -159,24 +177,6 @@ scenarios is committed under [`docs/evidence/`](docs/evidence/).
 | **Observability** | Langfuse 4.14 (agent traces: `chain` → `agent` → `tool` / `generation`) + OpenTelemetry → CloudWatch |
 | **Cost control** | Live AWS Price List API estimates, typed `APPROVE` gate, `aws_budgets_budget` at $25/mo |
 | **Config management** | `.env` via `pydantic-settings`; scenarios as YAML |
-
-## The problem
-
-A pharmacovigilance intake team triages adverse-event reports into a controlled vocabulary of eight
-MedDRA-style System Organ Class terms, then routes by seriousness. Downstream systems treat those
-values as an enum.
-
-| Pain point | Impact |
-|---|---|
-| Free-text model output must be hand-mapped to house terms | Every near-miss is a manual correction |
-| A category outside the enum is a hard parse failure | Silent data loss or a stalled queue |
-| Prompt engineering plateaus on vocabulary conformity | More prompt tokens, no better adherence |
-| Serving a tuned model on Provisioned Throughput bills hourly | $60.50/hr with no free tier, idle or not |
-
-The same pipeline runs six other scenarios unchanged — banking assistant, IT helpdesk, patient
-triage, support triage, e-commerce copy, gardening — because **scenarios are data, not code.**
-
----
 
 ## Architecture
 
