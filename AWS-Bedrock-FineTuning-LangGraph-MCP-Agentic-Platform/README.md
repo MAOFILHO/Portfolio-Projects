@@ -32,7 +32,7 @@ multi-hour wait, and a subjective "looks better to me."
 person driving a console into a reproducible, measured, cost-guarded pipeline. A
 **LangGraph orchestrator** routes each run through four **sub-agents** (dataset prep,
 fine-tune supervision, evaluation, inference), each of which reaches AWS exclusively
-through typed **MCP tools** — the same tools Claude Desktop or Claude Code could call
+through typed  **Model Context Protocol (MCP) tools** — the same tools Claude Desktop or Claude Code could call
 directly, since nothing about them is UI-specific.
 
 **Seven business scenarios, one pipeline.** Pharmacovigilance triage, a banking assistant,
@@ -212,8 +212,8 @@ scenarios is committed under [`docs/evidence/`](docs/evidence/).
                                         ▼
         ┌───────────────────────────────┴───────────────────────────────┐
         ▼                                                               ▼
-  base model (inference profile)                          tuned deployment ARN
-  us.meta.llama3-3-70b-instruct-v1:0                      4 req/min hard ceiling
+  base model (inference profile)                             tuned deployment ARN
+  us.meta.llama3-3-70b-instruct-v1:0                        4 req/min hard ceiling
         │                                                               │
         └────────────────────────┬──────────────────────────────────────┘
                                  ▼
