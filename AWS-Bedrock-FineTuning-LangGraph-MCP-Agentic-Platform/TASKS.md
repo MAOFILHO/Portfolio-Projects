@@ -9,7 +9,7 @@
 
 Everything you need is in this file. Context you must not re-derive:
 
-- **Goal:** automate a K21Academy lab (`Lab _ Create Bedrock Custom Model with Fine-tuning and Inferencing.docx.pdf`)
+- **Goal:** automate a hands-on guide (`UserGuide - Create Bedrock Custom Model with Fine-tuning and Inference.pdf`)
   into a production Python project. Pipeline: **S3 upload → Bedrock fine-tune → deploy for on-demand
   inference → validate → teardown.**
 - **Region:** `us-west-2`. **Revised during Phase 6** — originally `us-east-1`, where seven consecutive
@@ -74,7 +74,7 @@ Expected: `6` ticked boxes in `COSTS.md` §8, and `.env` showing `BUDGET_LIMIT_U
 
 - [x] **1.1** Create the directory tree exactly as specified in `PLAN.md` §5. Move the seven `.jsonl` files
       from the repo root into `data/`. Leave `CLAUDE.md`, `PLAN.md`, `TASKS.md`, `COSTS.md`,
-      `README_Template.md`, and the lab PDF at the root.
+      `README_Template.md`, and the source guide PDF at the root.
 - [x] **1.2** Create `.venv` from Python **3.12** explicitly. The machine's default `python3` is 3.13 —
       that is the wrong version. Use `~/.pyenv/versions/3.12.10/bin/python3.12 -m venv .venv`.
 - [x] **1.3** Write `requirements.txt` and `requirements-dev.txt` with the exact pins listed in `PLAN.md` §6.

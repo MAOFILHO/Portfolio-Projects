@@ -112,8 +112,8 @@ and tuned models.
 - **No single resource exceeds $50/month.** The largest line is custom model storage at $5.85/month.
 - **The one genuinely dangerous line item is the one we are not using.** Provisioned Throughput would be
   **$130,680/month** for three models — a 19,000× difference. See §2. Guarded in CI.
-- **The guide's own cost claim is wrong.** §3 says *"There is no charge to perform this lab"* and §5 says
-  *"The estimated cost for this lab is $0.01."* Training alone is ~$0.57 for three demos, and storage accrues
+- **The guide's own cost claim is wrong.** §3 states the walkthrough carries no charge and §5 estimates it
+  at $0.01. Training alone is ~$0.57 for three demos, and storage accrues
   at $5.85/month afterwards. Free-tier credits may absorb it, but credits are finite and are not a price.
 - **Repeated training re-bills.** Each re-run of `make run` that launches a fresh fine-tuning job costs another
   ~$0.57. The pipeline detects an existing completed model for a scenario and refuses to retrain without an

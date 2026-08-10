@@ -1,7 +1,7 @@
 # PLAN.md — AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
 
 **Status:** Phase 2 deliverable. Awaiting approval. **Zero implementation code written. Zero resources provisioned.**
-**Source of truth:** `Lab _ Create Bedrock Custom Model with Fine-tuning and Inferencing.docx.pdf` (117 pages, read end to end).
+**Source of truth:** `UserGuide - Create Bedrock Custom Model with Fine-tuning and Inference.pdf` (117 pages, read end to end).
 **Companion files:** [`TASKS.md`](TASKS.md) (execution contract) · [`COSTS.md`](COSTS.md) (approved cost record).
 
 ---
@@ -27,7 +27,7 @@ Contents block on p.3 and the Summary on p.112:
 
 ### 1.2 Repetition structure — one pipeline, seven data rows
 
-The guide says so itself (§10, p.36): *"This follows the same flow as the original lab (S3 → Fine-tune job →
+The guide says so itself (§10, p.36): *"This follows the same flow as the original walkthrough (S3 → Fine-tune job →
 Custom model on-demand → Playground test → Clean up), repeated once per scenario. Steps 1–2 are done once;
 repeat Steps 3–6 for each dataset."*
 
@@ -141,7 +141,7 @@ Reversing 1↔2 or 3↔4 hangs the destroy. This is a release blocker, not a nic
 
 | # | Guide says | Problem | Decision |
 |---|---|---|---|
-| C1 | §3/§5: *"There is no charge to perform this lab"*, *"estimated cost $0.01"* | **False.** Training, custom-model storage ($1.95/model/month), and inference all bill. Free-tier credits mask it, they don't remove it. | Cost honestly in `COSTS.md`. Budget alert is mandatory. |
+| C1 | §3/§5 claim the walkthrough is free and estimate the cost at $0.01 | **False.** Training, custom-model storage ($1.95/model/month), and inference all bill. Free-tier credits mask it, they don't remove it. | Cost honestly in `COSTS.md`. Budget alert is mandatory. |
 | C2 | §6 steps 5–6: enable ACLs, **allow public access** to the bucket | Publishing training data to the internet. Bedrock reads via IAM role — public access is not needed and never was. | **Deviate deliberately.** Block Public Access fully on, ACLs disabled (`BucketOwnerEnforced`), SSE-S3, TLS-only bucket policy. Documented in README. |
 | C3 | §7 step 8: *"select … the training dataset file **and the validation dataset file**"* | No validation file is supplied for any scenario. Only one `.jsonl` per scenario exists. | Deterministic held-out split → `validation.jsonl`, seedless and stable (no RNG), written next to the training object in S3. Records count against the same 20,000 quota. **Revised during Phase 6:** the original "last 10% of records" rule leaked, because these datasets group one question under several conversational prefixes sharing a gold answer. Superseded by group-aware / stratified splitting — see TASKS.md **6.1a** and `data/splitter.py`. |
 | C4 | §19 teardown | Omits the CMoD deployment (see §1.8) | Corrected order above. |

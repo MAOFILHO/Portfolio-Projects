@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-This repository is being built into a **production-grade Python project** — `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` — derived from a K21Academy hands-on lab: *"Create a Bedrock Custom Model with Fine-tuning and Inference"*.
+This repository is being built into a **production-grade Python project** — `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` — derived from a hands-on guide: *"Create a Bedrock Custom Model with Fine-tuning and Inference"*.
 
 Current contents are **source inputs**, not the finished project:
 
-- `Lab _ Create Bedrock Custom Model with Fine-tuning and Inferencing.docx.pdf` — the lab guide. This is the **functional spec**. Its step-by-step AWS console instructions define what the automated pipeline must replicate.
-- Seven `.jsonl` fine-tuning datasets — the training data, one per lab scenario.
+- `UserGuide - Create Bedrock Custom Model with Fine-tuning and Inference.pdf` — the source guide. This is the **functional spec**. Its step-by-step AWS console instructions define what the automated pipeline must replicate.
+- Seven `.jsonl` fine-tuning datasets — the training data, one per scenario.
 - `README_Template.md` — the required template for the project README.
 
 Build tooling (`pyproject.toml`, Terraform modules, GitHub Actions workflows, frontend scaffolding, test suites) **does not exist yet and is expected to be created.** Scaffold it as required by `TASKS.md` — do not treat its absence as a signal to avoid creating it.
