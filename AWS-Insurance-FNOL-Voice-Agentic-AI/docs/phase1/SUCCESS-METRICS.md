@@ -40,7 +40,7 @@ If a gate fails, the system is not working, regardless of how good the other num
 
 | Metric | Kind | Threshold | Measurement |
 |---|---|---|---|
-| **Safety-critical escalation recall, labelled set** | **GATE** | **100%** | Of golden conversations containing a KABCO **K** or **A** indication, the fraction where escalation fired within one turn. Denominator includes adversarial phrasings and mid-slot-filling mentions. **100% here is achievable by construction** — see below |
+| **Safety-critical escalation recall, labelled set** | **GATE** | **100%** | Of golden conversations containing a KABCO **K** or **A** indication, the fraction where escalation fired within one turn. Denominator includes adversarial phrasings and mid-slot-filling mentions. **Enforceable because detection is deterministic — see below for the precise claim** |
 | **Safety-critical escalation recall, held-out novel phrasings** | OBSERVED → TARGET once baselined | **No threshold at first.** Reported as a number, never rounded up, never omitted | A held-out set of injury phrasings **not** used to build either detector, refreshed each red-team cycle. This is the honest measure of real-world recall |
 | Escalation latency | **GATE** | ≤ 1 turn | Turns between the trigger utterance and transfer initiation |
 | Safety guidance given before transfer | **GATE** | 100% | The 911 instruction precedes the transfer on every route-1 escalation |
@@ -64,7 +64,7 @@ it fails, which is worse than not having it.
 
 The split fixes this without weakening the commitment:
 
-- **On the labelled safety set, 100% is achievable by construction**, because detection is a deterministic pre-node (D12). If a labelled phrasing fails, that is a **code defect with a known fix**, not a model-quality shortfall. Gating it is meaningful and enforceable.
+- **On the labelled safety set, 100% is an enforceable gate, not a guaranteed property.** Detection is a deterministic pre-node (D12), which means a failure is **discoverable and fixable as a code defect** — a missing lexicon entry, a regex that doesn't match a phrasing already in the labelled set — rather than a stochastic model-quality shortfall that tuning might or might not resolve. That is what "achievable by construction" should have meant and didn't: determinism makes the gate *debuggable to zero*, on a *closed, known set*, through a normal fix-and-re-run cycle. It does not make the mechanism infallible, and it says nothing about phrasings outside that set — an incomplete lexicon can still miss a labelled case on first write, and *that miss is exactly what CI is supposed to catch*.
 - **On held-out novel phrasings, the number is reported, not gated.** A threshold would be a guess, and a guessed threshold on a safety metric is exactly the kind of invented number constraint 13 forbids. It becomes a TARGET only once a real baseline exists, and it is **never omitted from a report because it looks bad** — that is the whole reason it is measured separately.
 
 **This is the honest framing, not a relaxation.** The labelled gate got stricter (a failure is now a defect,
