@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 3 — Data engineering and knowledge base — **all content complete, presented for Marco's closing sign-off** (not yet self-marked closed — same discipline as Phases 0–2). Note: the exit-criteria table's item 12 was worded as "approval to begin," already satisfied by `APPROVED: Phase 3` (2026-08-11) before work started; that's a table-wording gap from this table being drafted before the phase began, not a claim that the phase is closed. A closing sign-off is still open, exactly like Phase 2's item 12 was.
-**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested, $0 spent) all complete. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it.
+**Current phase:** Phase 3 — Data engineering and knowledge base — **signed off** (`APPROVED: Phase 3` typed by Marco 2026-08-11, followed same day by one closing verification: a real Bedrock round-trip, also completed). Phase 4 not yet started — no exit criteria written, no approval given for it.
+**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -26,7 +26,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
-| 3 | Data engineering and knowledge base | 🟡 **Content complete, pending closing sign-off** |
+| 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ⬜ Not started |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
@@ -656,3 +656,31 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   that build what they need, rather than stubbed and labeled as if they work.
 - All 12 Phase 3 exit-criteria rows now checked (see caveat above about item 12's wording). **Phase 3 content
   is complete — presented for Marco's closing sign-off, not self-marked closed.**
+
+### 2026-08-11 — Phase 3 signed off; first real Bedrock call verifies the manifest's assumptions
+
+- **Marco typed `APPROVED: Phase 3`**, then set one condition before Phase 4 opens: the pipeline had only
+  ever run against `MockEmbedder` — the manifest's recorded model ID and dimension were asserted, never
+  observed. Cost-gate approved explicitly: one real Titan Embed V2 call, one chunk, `us-west-2`, logged as
+  the first real spend in `COSTS.md`.
+- **Ran it** — real `bedrock-runtime.invoke_model`, `amazon.titan-embed-text-v2:0`, `us-west-2`, against the
+  actual DCPD section chunk from `example-mutual-oap-policy-wording.md` (2,193 chars / 515 input tokens),
+  using the already-built, already-tested `BedrockEmbedder` class unmodified — this was the real code path,
+  not a throwaway script.
+- **Findings, all confirmed rather than assumed:**
+  - **Dimension**: response returned exactly **1024** floats — matches `TITAN_EMBED_V2_DIMENSION` and what
+    the manifest has been recording all along. No mismatch.
+  - **Normalization**: requested `"normalize": true`; the returned vector's L2 norm computed to
+    **1.000000** — genuinely unit-length, not just labeled as such. This means a future Phase 5 retrieval
+    implementation can safely use a plain dot product as a cosine-similarity shortcut (mathematically
+    equivalent to full cosine similarity only when both vectors are already unit-normalized) — a real,
+    now-verified option for `ADR-002`'s brute-force retrieval, not previously confirmed.
+  - **Response shape**: `payload["embedding"]` parsed exactly as `BedrockEmbedder.embed()` already assumed —
+    no code change needed. **New information, not previously known**: the real response also carries
+    `inputTextTokenCount` (515, used for the cost calculation below) and an `embeddingsByType: {"float": [...]}`
+    field mirroring the top-level `embedding` array exactly — likely there to support future non-float
+    embedding types. Noted for whoever builds Phase 5's retrieval code; not currently consumed.
+- **Cost logged in `COSTS.md`**: 515 input tokens × $0.02/1M = **$0.0000103** — the project's first real AWS
+  spend. Bedrock standing-approval cap consumption: **$0.0000103 of $5.00**.
+- **Phase 3 is now signed off.** Phase 4 has not begun — no exit criteria written, no approval given, per the
+  STOP CONDITIONS.
