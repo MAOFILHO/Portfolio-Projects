@@ -181,7 +181,7 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 | 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | ✅ `data/synthetic/{policyholders,vehicles,claims}/*.json` — 6 policyholders, 7 vehicles, 8 claims, machine-validated against `docs/phase3/DATA-CONTRACTS.md` and `coverage-logic.md`'s formulas by `scripts/validate_synthetic_records.py` (checked in, re-runnable, not a one-off manual check). Deliberate variation in optional-benefit elections and Section 7 selections per Marco's instruction, so `CoverageQuestion` has real ground truth to evaluate in Phase 6 |
 | 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | ✅ All 7 synthetic VINs use WMI `9SY` (unassigned) with a position-9 check digit machine-verified as deliberately wrong, not accidentally valid |
 | 7 | Ingestion pipeline: chunks corpus, embeds via Titan Embed v2, writes to DynamoDB per `ADR-002`'s schema | Exercises the $5 Bedrock standing cap only if run against AWS; local/LocalStack path preferred for iteration |
-| 8 | Data card written: what's synthetic, what's derived from real regulatory/domain sources (KABCO, NHTSA MMUCC), what's authored with no external grounding at all (rental/towing, deductible logic) | No invented-metrics-or-capabilities discipline extends to data provenance — label what's asserted vs. synthesized |
+| 8 | Data card written: what's synthetic, what's derived from real regulatory/domain sources (KABCO, NHTSA MMUCC), what's authored with no external grounding at all (rental/towing, deductible logic) | ✅ `docs/phase3/DATA-CARD.md` — as-of-date warning carried prominently at the top per Marco's instruction; provenance graded per-document, with the corpus-construction-choice reframing (§3, Marco's own language) restated here too, not just upstream |
 | 9 | No real customer/policy PII introduced; no images vendored from any source repo | ✅ All names/phones/emails/addresses fabricated (555 exchange, `@example.com`, generic Ontario streets); no images anywhere in Phase 3 output |
 | 10 | No application/agent code written (Phase 5's scope, not this one) | |
 | 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | Provisioned resources remain individually gated regardless |
@@ -590,3 +590,14 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   placeholder-style names); no images. WMI `9SY` used for every VIN, unassigned per Phase 0/3 research.
 - No application/agent code written (data generation + a standalone validation script, no agent/orchestration
   logic). No billable resource created. $0.00 new spend.
+
+### 2026-08-11 — Data card written
+
+- `docs/phase3/DATA-CARD.md` — as-of-date staleness warning carried verbatim at the top, per Marco's
+  instruction that it needs to be visible wherever the corpus is described, not only upstream in
+  `ONTARIO-INSURANCE-REFERENCE.md`. Organizes provenance per-document (what's 🟢-verified, what's a corpus
+  construction choice restated in Marco's own suggested language, what has no external grounding at all) and
+  per PII/image gates, without re-deriving the underlying citation grading — points to
+  `ONTARIO-INSURANCE-REFERENCE.md` §8 as the authoritative source for that.
+- Exit criterion 8 (Phase 3 exit-criteria table) marked done.
+- No application/agent code written. No billable resource created. $0.00 new spend.
