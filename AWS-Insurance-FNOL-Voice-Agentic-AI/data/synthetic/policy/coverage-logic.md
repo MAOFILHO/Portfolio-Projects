@@ -16,8 +16,12 @@ covered_payout = min(repair_or_replacement_cost, coverage_limit) − deductible_
 
 - `deductible_if_applicable` = the policyholder's selected deductible (**$500 or $1,000**, from the
   Declarations Page) **only** when the claim is paid under Collision, Comprehensive, or All Perils (Section
-  7). It is **always $0** under DCPD (Section 6) or Third Party Liability (Section 3) — those sections never
-  carry a deductible, per the policy wording.
+  7), or if the policyholder has added an optional DCPD deductible. It is **$0 under Third Party Liability**
+  (Section 3, never carries a deductible) **and $0 under DCPD (Section 6) for every policyholder in this
+  corpus** — ⚠ this is a stated corpus simplification, not a universal rule: FSRA's own guidance confirms an
+  Ontario insurer may offer an optional DCPD deductible to lower premium, and this project's synthetic
+  policyholders are modeled as uniformly not having added one (`docs/phase3/ONTARIO-INSURANCE-REFERENCE.md`
+  §4), the same simplification pattern as the DCPD-opt-out decision.
 - `coverage_limit` — Third Party Liability: $1,000,000 (Section 3). Loss or Damage: uncapped up to the
   vehicle's Actual Cash Value (a damage claim can't exceed what the car is worth; see total-loss rule below).
 - Result floors at $0 — a payout is never negative even if `deductible_if_applicable` exceeds the loss amount
@@ -84,6 +88,56 @@ anything):
 immediate escalation before the conversation ever reaches the `CoverageQuestion` intent's RAG path — this
 table's K row exists for documentation completeness (so a reader doesn't wonder where fatality went), not
 because the generation model will ever actually produce it.
+
+---
+
+## 4. Answering "am I entitled to X?" for optional SABS benefits
+
+Because the 2026-07-01 SABS reform made Income Replacement, Caregiver, Housekeeping & Home Maintenance,
+Dependent Care, Death & Funeral, and Indexation benefits individual elections (`docs/phase3/
+ONTARIO-INSURANCE-REFERENCE.md` §3), two policyholders holding otherwise-identical policies can have
+different answers to "am I covered for X" — the shared policy wording alone can't answer that; it has to come
+from the specific policyholder's record. This section decides how the agent handles that, and reframes the
+question Marco posed (structured record vs. deflect vs. "depends on benefit type") because the real answer
+doesn't split on benefit type — **it splits on question type.**
+
+**Two distinct question types, answered two different ways:**
+
+1. **"Is X part of my coverage?" — an election-fact lookup.** Answerable directly, **from the structured
+   policyholder record** (not the RAG corpus, which is generic across every policyholder and structurally
+   cannot know one caller's elections):
+   - For a **mandatory** coverage (Third Party Liability, DCPD, Uninsured Automobile, Medical/Rehabilitation/
+     Attendant Care at any severity track) — the answer is "yes" for every policyholder, and is answerable
+     from the **RAG corpus alone**, no tool call needed, since it's a fact about the policy form, not about
+     any individual.
+   - For an **optional** benefit or endorsement (the six 2026-07-01 elections above, the Section 7 Loss-or-
+     Damage selection, and the rental endorsement) — the answer varies by policyholder, so `CoverageQuestion`
+     becomes a **RAG+tool compound case here too**, not only in intent 4: the agent retrieves the general
+     "what this benefit is" text from the wording (RAG), then calls the mock policy system for this specific
+     caller's `elected_benefits` map (tool) before answering yes/no. **This is a real scope note for Phase 4/5
+     conversation design, flagged here rather than discovered mid-implementation**: `CoverageQuestion` is not
+     a pure-RAG intent for every sub-question the way it might look from the wording document alone.
+2. **"Will I actually receive X, and how much?" — an eligibility/adjudication question.** **Always deflected
+   to a human**, regardless of whether the underlying benefit is mandatory or optional. This follows directly
+   from decisions already made elsewhere in this document and in the broader architecture: payout on Medical/
+   Rehabilitation/Attendant Care depends on a clinical severity-track assessment this agent never performs
+   (§3 above); DCPD-vs-Collision payout depends on a fault percentage this agent never computes (§2, `ADR`
+   framing); total-loss settlement depends on a repair estimate the agent doesn't have until an adjuster
+   inspects the vehicle. The FNOL specialist's own authority is $0 settlement, cannot deny
+   (`docs/phase0/DOMAIN-ARTIFACTS.md`'s harvested authority model) — an agent with less standing than the
+   human it escalates to should not attempt an amount or eligibility determination either.
+
+**Why not "deflect everything" or "answer everything from the record":** deflecting a plain yes/no coverage
+fact ("do I have rental coverage") would violate this project's own harvested design principle — "don't make
+a distressed caller repeat known data" / don't be needlessly unhelpful when the answer is a simple lookup.
+Answering an eligibility/amount question directly would mean the agent adjudicating a claim, which nothing
+in this architecture authorizes it to do. The boundary is the question, not the benefit.
+
+**Baked into the synthetic records (task 5, next):** policyholders are generated with **deliberate variation**
+in their optional-benefit elections — some with Income Replacement Benefit elected and some without, some
+with Collision, some with Comprehensive, some with All Perils, some with the rental endorsement and some
+without — specifically so `CoverageQuestion`'s election-fact-lookup path has real, differing ground truth to
+be evaluated against in Phase 6, not a corpus where every policyholder looks the same.
 
 ---
 

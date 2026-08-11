@@ -102,7 +102,12 @@ Determination Rules (0%, 25%, 50%, 75%, or 100%, by accident-scenario schedule) 
 not-at-fault share under this section; any at-fault share, if you also carry Collision coverage (Section 7),
 is paid there instead, subject to your Collision deductible.
 
-**No deductible applies under this section.**
+**Deductible:** ⚠ **corrected 2026-08-11 against FSRA's own consumer guidance** — a DCPD deductible is not
+universally absent; Ontario insurers may offer one as an option to lower premium (a policyholder can choose
+to add one). **No Example Mutual policyholder in this project's synthetic corpus has added an optional DCPD
+deductible** — every synthetic policy's DCPD section is deductible-free, a deliberate simplification stated
+here rather than the earlier draft's incorrect blanket "no deductible ever applies" claim. See
+`docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` §4 for the citation and the correction note.
 
 **Towing and storage:** reasonable towing and storage charges to transport your damaged automobile from the
 accident scene to the nearest qualified repair facility are included in a covered claim under this section

@@ -174,9 +174,9 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 
 | # | Criterion | Notes |
 |---|---|---|
-| 1 | Synthetic policy wordings authored for all six intents' coverage needs, **internally consistent** (same policy numbers/limits/deductibles referenced consistently across documents) | ✅ `data/synthetic/policy/example-mutual-oap-policy-wording.md` — anchored to **Ontario** specifically (OAP 1 section structure, SABS, DCPD), not generic NA boilerplate, per Marco's explicit steer. Grounding in `docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` |
+| 1 | Synthetic policy wordings authored for all six intents' coverage needs, **internally consistent** (same policy numbers/limits/deductibles referenced consistently across documents) | ✅ `data/synthetic/policy/example-mutual-oap-policy-wording.md` — anchored to **Ontario** specifically (OAP 1 section structure, SABS, DCPD), not generic NA boilerplate, per Marco's explicit steer. Grounding + per-claim citation audit in `docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` — a real error (DCPD deductible claimed as universally absent) was caught and corrected during that audit, not just decorated with citations |
 | 2 | Rental/towing entitlement sections authored from scratch, consistent with the rest of the corpus | ✅ Resolves `R5` — `data/synthetic/policy/endorsements.md`. Rental modeled on real OPCF 20 ($50/day, 20-day/$1,000 cap); towing modeled as a bundled $150/incident allowance inside the DCPD/Collision claim itself, not a separate OPCF 35 roadside product — scope decision named, not silent |
-| 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | ✅ Resolves `Q5` — `data/synthetic/policy/coverage-logic.md`. Total-loss threshold stated as Example Mutual's explicit 80%-of-ACV policy rule (Ontario sets no single legislated %). KABCO (scene severity) and SABS's MIG/non-cat/catastrophic tiers kept as two distinct axes, never conflated — the agent never performs the clinical severity determination |
+| 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | ✅ Resolves `Q5` — `data/synthetic/policy/coverage-logic.md`. Total-loss threshold stated as Example Mutual's explicit 80%-of-ACV policy rule (Ontario sets no single legislated %). KABCO (scene severity) and SABS's MIG/non-cat/catastrophic tiers kept as two distinct axes, never conflated. §4 (new) decides how "am I entitled to X" is answered for the SABS optional elections: by question type (election-fact vs. eligibility-determination), not benefit type |
 | 4 | Claim-number format finalized and documented | ✅ Resolves `Q3` — `docs/phase3/DATA-CONTRACTS.md`: `CLM-YYMM-NNNNN-C`, Luhn mod-10, worked example `CLM-2608-00042-4` |
 | 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | |
 | 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | Do-not-propagate list, `CLAUDE.md` |
@@ -507,3 +507,42 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
     $150/incident allowance, not a separate endorsement)
 - No application/agent code written (data-engineering/content authoring only, per Phase 3's own exit
   criterion 10). No billable resource created. $0.00 new spend.
+
+### 2026-08-11 — Optional-benefit entitlement policy decided; citation audit catches and fixes a real error
+
+- **Marco asked two things before records: (1) decide how the agent answers "am I entitled to X" for the
+  now-optional SABS benefits, baked into record variation; (2) verify every citation in
+  `ONTARIO-INSURANCE-REFERENCE.md` actually resolves, since FSRA had 403'd on direct fetch and a broken
+  citation on a regulatory claim in a public repo is worse than none.**
+- **Decision on (1), `data/synthetic/policy/coverage-logic.md` §4**: reframed the question — the split isn't
+  by benefit type (mandatory vs. optional), it's by **question type**. "Is X part of my coverage" is an
+  election-fact lookup, answered from the structured policyholder record (mandatory coverages: pure RAG,
+  true for everyone; optional elections: RAG+tool, since the answer varies by policyholder — a new scope
+  note that `CoverageQuestion` isn't pure-RAG for every sub-question, flagged for Phase 4/5). "Will I actually
+  get paid, and how much" is always deflected to a human, regardless of benefit type, since it depends on a
+  clinical/fault/repair-estimate determination this agent never makes anywhere else in the architecture either.
+- **Verification on (2) — actually tested with `curl`, not re-trusted from search-engine summaries.** Found
+  and fixed a real error in the process, not just added citations after the fact: the corpus claimed **"no
+  deductible applies to a DCPD claim"** as an absolute rule. FSRA's own page (fetched successfully via `curl`
+  with a browser user-agent, where `WebFetch` had been blocked) states verbatim: *"Some policies don't have a
+  direct compensation property damage deductible, but you can add one to lower your premium."* Corrected in
+  `example-mutual-oap-policy-wording.md` and `coverage-logic.md` §1 — DCPD is deductible-free in this corpus
+  **by construction** (no synthetic policyholder added the optional deductible), not by universal regulatory
+  default.
+- **Also caught: one candidate citation (`fsrao.ca/media/5156/download`, the actual OAP 1 PDF) returned HTTP
+  200 but an "Access denied" body** — a genuine false-positive that a status-code-only check would have
+  missed. Flagged this explicitly as the discipline point: **a 200 status was not treated as proof of a
+  working citation anywhere in this audit.**
+- **`docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` §8 (new)**: a full per-claim citation-grade table (🟢
+  primary+quoted / 🟡 primary URL resolves but client-rendered, unreadable to automated fetch / 🔴 secondary
+  sources only / ⚫ tested and broken). **Honest net finding, stated plainly rather than smoothed over**: the
+  two most consequential claims — OAP 1's section numbering and the exact SABS dollar caps — rest on the
+  *weakest* citation grade, because the two strongest primary sources for them (the OAP 1 PDF, and CanLII's
+  regulation mirror) were both tested and found inaccessible to automated verification (CanLII: HTTP 403 and
+  a bot-detection challenge even with full browser headers). What *did* verify cleanly and get directly
+  quoted: the $200,000 TPL minimum, DCPD's mechanics including the deductible correction, and the July 2026
+  SABS reform itself — all confirmed against FSRA's own live pages.
+- **As-of-date warning added prominently** at the top of `ONTARIO-INSURANCE-REFERENCE.md`, flagged to also
+  appear in the still-pending data card (task 6): this document reflects a regulatory reform five weeks old
+  at time of writing and will go stale on Ontario's own schedule, independent of this project.
+- No application/agent code written. No billable resource created. $0.00 new spend.

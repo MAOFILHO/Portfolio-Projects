@@ -1,5 +1,11 @@
 # Ontario Insurance Reference — Phase 3
 
+> ⚠ **AS OF DATE: 2026-08-11. This document will go stale.** It reflects Ontario's SABS reform that took
+> effect **2026-07-01** — five weeks before this was written. Ontario auto insurance regulation changes on
+> its own schedule, independent of this project. **Before relying on this document, or the corpus built on
+> it, past roughly Q1 2027, re-verify against FSRA's current guidance** rather than trusting the dates below
+> to still be current. This warning is carried forward into `docs/phase3/DATA-CARD.md`.
+
 Per Marco's instruction: the synthetic policy corpus is anchored to **Ontario auto insurance specifically**,
 not generic North American boilerplate. This document is the verified regulatory grounding the corpus is
 built on — every real-world fact below was checked live on 2026-08-11 (not from memory, per this project's
@@ -19,8 +25,12 @@ and eval fidelity, not as a claim of insurer-specific accuracy.
 ## 1. OAP 1 section structure (verified)
 
 The Standard Ontario Automobile Policy (OAP 1), the mandatory policy form under Ontario's *Insurance Act*,
-is organized into numbered sections. Cross-verified across FSRA's own consumer guidance and independent
-insurance-industry summaries:
+is organized into numbered sections. **⚠ Citation grade 🔴 — see §8 (source B1) for the full accounting**:
+this numbering could not be confirmed against directly-read primary text (the FSRA OAP 1 PDF returned an
+"Access denied" page on retest, despite an HTTP 200 status). FSRA's own consumer guidance (§8, source A1)
+independently confirms the *coverage content* of each row below (mandatory-vs-optional status, what each
+coverage does) without using "Section N" numbering itself; the numbering is carried from a secondary
+aggregation of the same inaccessible PDF, not verified here against the primary form:
 
 | Section | Coverage | Mandatory? |
 |---|---|---|
@@ -42,7 +52,10 @@ regulatory minimum, not the corpus's chosen limit.
 
 ## 3. Accident Benefits (Section 4 / SABS) — including a live regulatory change
 
-Verified benefit structure and caps:
+**Mandatory-vs-optional status: 🟢, directly confirmed** (§8, source A3 — FSRA's own dedicated reform page).
+**The specific dollar caps below: 🔴, secondary sources only** (§8, source B3) — corroborated across multiple
+independent law-firm/insurance publications, but not confirmed against O. Reg. 34/10's own clause text,
+which this document's automated verification could not read (§8, source B2).
 
 | Benefit | Cap | Status |
 |---|---|---|
@@ -74,14 +87,23 @@ project's agent. See §6 below for how this bounds the injury-severity mapping.
 
 Mandatory, no-fault: an Ontario driver claims property-damage repair costs from **their own insurer**, for
 the portion of the accident **not** their fault, without waiting on the other driver's insurer or a fault
-finding by any third party. Since **2024-01-01**, a policyholder may opt out via a signed agreement
-(commonly referenced as OPCF 49) to reduce premium — this project's synthetic policyholders are **not**
-modeled as having opted out (see §7, simplification 2).
+finding by any third party. Since **2024-01-01**, a policyholder may opt out via a signed agreement to reduce
+premium — **directly confirmed, verbatim, from FSRA's own consumer page** (§8, source A2): *"Effective
+January 2024, you may elect not to claim Direct Compensation-Property Damage coverage."* This project's
+synthetic policyholders are **not** modeled as having opted out (see §7, simplification 2).
 
-**No deductible applies to a DCPD claim** — the deductible only attaches to first-party Collision coverage
-(Section 7), which responds to the at-fault share.
+**Deductible — ⚠ corrected 2026-08-11.** An earlier draft of this document and the policy wording stated
+"no deductible applies to a DCPD claim" as an absolute rule. That was wrong, caught during citation
+verification: FSRA's own page states, verbatim (§8, source A2), *"Some policies don't have a direct
+compensation property damage deductible, but you can add one to lower your premium."* A DCPD deductible is
+therefore **optional, not universally absent**. Corrected wording: **no Example Mutual policyholder in this
+project's synthetic corpus has added an optional DCPD deductible** — every synthetic policy's DCPD section is
+deductible-free by corpus construction, not by regulatory default. `example-mutual-oap-policy-wording.md`
+and `coverage-logic.md` §1 both carry this correction.
 
 ## 5. Fault apportionment (Ontario Fault Determination Rules, O. Reg. 668)
+
+**Citation grade: 🟡 primary URL confirmed / 🔴 percentage-band detail from secondary sources** — §8, source B4.
 
 Legislated rules assign fault in fixed percentage bands — **0%, 25%, 50%, 75%, or 100%** — per a schedule of
 accident-scenario descriptions (e.g., rear-end collisions default to 100% against the following driver).
@@ -123,15 +145,50 @@ compound RAG+tool case.
 
 ---
 
-## Sources
+## 8. Citation audit — every URL tested, every claim graded by source strength
 
-All facts above verified live 2026-08-11 via web search against FSRA-adjacent and independent Ontario
-insurance-industry sources (FSRA's own site returned HTTP 403 to direct fetch — corroborated instead across
-`en.wikipedia.org/wiki/Ontario_Automobile_Policy_1`, `en.wikipedia.org/wiki/Ontario_Fault_Determination_Rules`,
-and multiple independent Ontario insurance-broker/law-firm publications converging on the same section
-structure, dollar figures, and the 2026-07-01 SABS optionality reform). No figure here is asserted from
-training-data memory alone — the July 2026 reform in particular is the kind of recent change memory would
-miss entirely.
+Marco's instruction, verbatim: "confirm the cited URL resolves and state which claims rest only on secondary
+sources." Done properly, not by re-asserting the earlier vague "Sources" paragraph: every URL below was
+tested with `curl` (not just re-trusted from a search engine's summary) on 2026-08-11, and its actual
+returned content — not just its HTTP status — was inspected. **A 200 status is not treated as proof of a
+working citation** — one source below returned HTTP 200 with an "Access denied" body, which would have been
+a false-positive citation if status code alone had been trusted.
+
+**Grading key:** 🟢 **Primary, quoted** — the regulator's own text, fetched and directly quoted here. 🟡
+**Primary, resolves but unreadable** — the correct primary legislative URL, confirmed live (200, correct
+page), but client-side-rendered so the actual clause text could not be machine-extracted; the citation exists
+and is checkable by a human, but this document did not itself verify the clause text against it. 🔴 **Secondary
+only** — no primary source was successfully read; the claim rests on independent industry/legal-practice
+publications, corroborated across more than one, but not on the regulator's or legislature's own text. ⚫
+**Broken — do not rely on this URL** — tested and found not to resolve to real content despite a misleading
+status code; removed from active citation.
+
+| # | Claim | Grade | URL(s) tested | What was found |
+|---|---|---|---|---|
+| A1 | $200,000 minimum Third Party Liability | 🟢 | `fsrao.ca/consumers/auto-insurance/purchasing-your-policy/what-standard-auto-insurance-policy` | HTTP 200, real content. Verbatim: *"By law, you must carry a minimum of $200,000 in third-party liability coverage, but you can choose to purchase a higher amount."* |
+| A2 | DCPD mechanics: no-fault, Jan 2024 opt-out, deductible is optional-not-absent | 🟢 | same URL as A1 | HTTP 200, real content. Verbatim quotes given inline in §4 above |
+| A3 | 2026-07-01 SABS reform: only Medical/Rehab/Attendant Care remain mandatory, rest optional | 🟢 | `fsrao.ca/industry/auto-insurance/changes-statutory-accident-benefits-coverage-ontario-july-1-2026` | HTTP 200, real content. Verbatim: *"As of July 2026, medical, rehabilitation and attendant care benefits will remain mandatory, while all other accident benefits coverage will be optional..."* Page title itself confirms this is FSRA's own dedicated page for this exact reform |
+| A4 | Uninsured Automobile Coverage is mandatory | 🟢 | same URL as A1 | HTTP 200, real content, confirms this section exists and its purpose |
+| B1 | OAP 1's six numbered sections (3 Liability … 8 Statutory Conditions) | 🔴 | `fsrao.ca/media/5156/download` (the actual OAP 1 PDF) | **Tested and found broken**: HTTP 200 but body is an "Access denied" page, not the document — see ⚫ note below. Section numbering rests on a web-search engine's own summary of this same inaccessible PDF, not independently re-read here. **This is the single most load-bearing unresolved citation in this document** — the entire section-by-section structure of `example-mutual-oap-policy-wording.md` follows this numbering, and it has not been confirmed against readable primary text. Cross-checked only against Wikipedia's coverage-type list, which explicitly does not give official section numbers either |
+| B2 | O. Reg. 34/10 (SABS) exists at this citation and governs Accident Benefits | 🟡 | `ontario.ca/laws/regulation/100034` | HTTP 200, confirmed correct e-Laws page **by URL**, but the page is a client-rendered SPA — `curl` retrieved 54KB of scaffolding and zero regulation text. A human clicking the link gets the real text; this document's automated verification could not read it |
+| B3 | SABS dollar figures: MIG $3,500, non-catastrophic $65,000, catastrophic $1,000,000, IRB 70%/$400/104 weeks | 🔴 | `injured.ca/what-are-medical-and-rehabilitation-benefits-under-the-accident-benefits-schedule/`, `ahinjurylaw.com/income-replacement-benefits-guide/`, and other personal-injury-law-firm publications, converging independently on the same figures | Primary text (O. Reg. 34/10 itself, B2) not machine-readable — see B2. **These are the most consequential dollar figures in the entire corpus and they rest on secondary legal-industry sources only**, not a directly-read regulation clause. Multiple independent firms agree, which is real corroboration, but it is not the same as reading O. Reg. 34/10 §45/§18 (the actual clause numbers) directly |
+| B4 | Fault Determination Rules: fixed 0/25/50/75/100% bands, O. Reg. 668 | 🟡 primary URL / 🔴 dollar-band detail | `ontario.ca/laws/regulation/900668` (200, unreadable SPA, same as B2); `en.wikipedia.org/wiki/Ontario_Fault_Determination_Rules` (200, readable, but itself a secondary tertiary summary) | Same pattern as B2/B3 — primary regulation confirmed to exist and resolve, percentage-band detail sourced from Wikipedia + one insurance-broker blog, not the regulation's own scenario schedule |
+| B5 | CanLII mirror of O. Reg. 34/10 and O. Reg. 777/93 | ⚫ | `canlii.org/en/on/laws/regu/o-reg-34-10/...`, `canlii.org/en/on/laws/regu/o-reg-777-93/...` | **Tested and found broken to automated access**: HTTP 403, and a retry with full browser headers returned a bot-detection challenge page ("Please enable JS and disable any ad blocker"), not legal text. Not usable as a citation from this document; a human following the link directly in a browser will likely succeed where this automated check did not |
+| C1 | OPCF 20 (rental) real-world reference terms (~$50/day, $1,000–$2,000 total caps) | 🔴 | `thinkinsure.ca/insurance-help-centre/loss-of-use-coverage.html` and similar insurance-broker publications | Industry practice, not a regulatory figure — appropriately secondary-sourced; already framed in §7 as "real-world reference points," not an authoritative figure Example Mutual is claimed to match |
+| C2 | OPCF 35 (roadside) real-world reference terms (~$50/incident) | 🔴 | `insurancehotline.com/resources/your-guide-opcf-35-and-sef-35-emergency-roadside-assistance` (this specific URL returned HTTP 403 on retest — broken); corroborated instead via other broker sources found in the original search | Same disposition as C1 — industry practice, appropriately secondary, and this project explicitly declined to build OPCF 35 as a coverage (§7), so this figure is flavor/context only, not load-bearing |
+| C3 | Total-loss threshold: no single legislated %, insurer discretion typically 70–80% ACV | 🔴 | `idcollision.com/total-loss-thresholds-vehicle-written-off-ontario/`, `quotefinder.ca/how-much-will-my-insurance-give-me-for-my-totaled-car/` and similar | Confirmed as **not** a regulatory figure by multiple independent sources agreeing it's insurer-discretionary — the "no single percentage" claim itself is the load-bearing fact here, and it is corroborated, even though no primary source states a number (because no primary source sets one) |
+
+**Net assessment:** the claims that actually drive caller-facing dollar amounts in the corpus — the SABS
+benefit caps (B3) and the OAP 1 section structure itself (B1) — are the two claims resting on the weakest
+citation grade. Both are corroborated across multiple independent secondary sources (which is why they were
+used at all), but **neither has been confirmed by this document against directly-read primary legislative
+text**, because the two most authoritative primary sources for them (the FSRA OAP 1 PDF, and CanLII's mirror
+of O. Reg. 34/10) were both tested and found inaccessible to automated verification. This is stated plainly
+rather than papered over with a confident-sounding "Sources" paragraph, per Marco's instruction that a
+broken or unverified citation on a regulatory claim is worse than no citation. A reader who needs B1/B3 to be
+authoritative (e.g., before using this corpus for anything beyond this portfolio project) should follow the
+🟡/🔴 URLs above directly in a browser, where FSRA's and CanLII's client-side rendering will likely succeed
+where this document's automated `curl`-based check did not.
 
 ## Summary of deliberate simplifications (per Marco's instruction: name them, don't smooth them)
 
@@ -140,11 +197,20 @@ miss entirely.
    settlement authority and cannot deny, per `docs/phase0/DOMAIN-ARTIFACTS.md`'s harvested authority model).
    Coverage-question answers describe *that* fault determines DCPD-vs-Collision routing, never compute a
    percentage.
-2. **No synthetic policyholder has opted out of DCPD** (OPCF 49). Keeps DCPD uniformly active across the
-   corpus, avoiding a second claim-routing branch this prototype's scope doesn't need.
-3. **Intent 4's "towing" is the accident-scene towing allowance bundled into a covered claim, not OPCF 35's
+2. **No synthetic policyholder has opted out of DCPD** (signed waiver, available since 2024-01-01). Keeps
+   DCPD uniformly active across the corpus, avoiding a second claim-routing branch this prototype's scope
+   doesn't need.
+3. **No synthetic policyholder has added the optional DCPD deductible** FSRA confirms insurers may offer.
+   Corpus-wide, DCPD stays deductible-free by construction, not by universal regulatory default — this is a
+   correction applied 2026-08-11 after the earlier draft overstated it as an absolute rule (§4 above).
+4. **Intent 4's "towing" is the accident-scene towing allowance bundled into a covered claim, not OPCF 35's
    separate roadside-breakdown product.** OPCF 35 is named, not built.
-4. **KABCO (scene-reported injury severity) and SABS's MIG/non-catastrophic/catastrophic tiers are kept as
+5. **KABCO (scene-reported injury severity) and SABS's MIG/non-catastrophic/catastrophic tiers are kept as
    two distinct axes, never conflated** — see `data/synthetic/policy/coverage-logic.md` §3 for the explicit
    boundary statement. This project's agent never performs the clinical/legal catastrophic-impairment
    determination; it only ever hard-escalates on injury/fatality language (`ADR-010`, `D12`, `D15`).
+6. **"Am I entitled to X?" is answered by question type, not benefit type** — an election-fact lookup (do I
+   have this coverage) is answered from the structured policyholder record; an eligibility/amount
+   determination (will I actually get paid, and how much) is always deflected to a human, regardless of
+   whether the underlying benefit is mandatory or optional. Full reasoning in
+   `data/synthetic/policy/coverage-logic.md` §4.
