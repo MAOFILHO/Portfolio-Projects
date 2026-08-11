@@ -7,11 +7,17 @@
 > to still be current. This warning is carried forward into `docs/phase3/DATA-CARD.md`.
 
 Per Marco's instruction: the synthetic policy corpus is anchored to **Ontario auto insurance specifically**,
-not generic North American boilerplate. This document is the verified regulatory grounding the corpus is
-built on — every real-world fact below was checked live on 2026-08-11 (not from memory, per this project's
-standing discipline), cited, and separated from where this project **deliberately simplifies**. Where Ontario
+not generic North American boilerplate. This document is the regulatory grounding the corpus is built on —
+every claim below was checked live on 2026-08-11 (not from memory, per this project's standing discipline),
+and every citation was tested, not just cited (§8). **Not everything checked out as a directly-verified
+primary-source fact — where it didn't, that's stated as plainly as where it did**, per Marco's instruction
+that a broken or unconfirmed regulatory citation is worse than none: §1 (OAP 1 section numbering) and §3
+(the specific SABS dollar caps) are marked explicitly as **corpus construction choices**, not verified
+regulatory citations, because their primary sources tested as inaccessible (§8). Ground truth for this
+project's evals is the corpus itself, which is internally consistent regardless of whether every figure in
+it has been independently confirmed against currently-inaccessible primary legislative text. Where Ontario
 specifics would complicate one of the six intents beyond what a portfolio-scale prototype needs, that's
-stated here by name, not silently smoothed over.
+stated here by name too, not silently smoothed over.
 
 **Standing caveat:** this project produces a **structurally faithful, originally-worded synthetic policy** —
 it follows the same section taxonomy and coverage categories as the real Standard Ontario Automobile Policy
@@ -22,15 +28,21 @@ and eval fidelity, not as a claim of insurer-specific accuracy.
 
 ---
 
-## 1. OAP 1 section structure (verified)
+## 1. OAP 1 section structure — a corpus construction choice, not a verified citation
 
-The Standard Ontario Automobile Policy (OAP 1), the mandatory policy form under Ontario's *Insurance Act*,
-is organized into numbered sections. **⚠ Citation grade 🔴 — see §8 (source B1) for the full accounting**:
-this numbering could not be confirmed against directly-read primary text (the FSRA OAP 1 PDF returned an
-"Access denied" page on retest, despite an HTTP 200 status). FSRA's own consumer guidance (§8, source A1)
-independently confirms the *coverage content* of each row below (mandatory-vs-optional status, what each
-coverage does) without using "Section N" numbering itself; the numbering is carried from a secondary
-aggregation of the same inaccessible PDF, not verified here against the primary form:
+**Restated 2026-08-11, per Marco's instruction**: §8 (source B1) graded this numbering 🔴 — the FSRA OAP 1
+PDF, the one primary source that would confirm it, returned an "Access denied" page despite an HTTP 200
+status, and was never successfully read. Rather than present unread-primary-source numbering as a verified
+regulatory fact, here is the honest framing:
+
+**Example Mutual's synthetic corpus organizes its policy wording into the six-section structure below —
+Third Party Liability, Accident Benefits, Uninsured Automobile, DCPD, Loss or Damage, Statutory Conditions —
+matching a structure widely reported, by secondary aggregation, as the real OAP 1's section layout. The
+primary source (FSRA's own OAP 1 form) was inaccessible at time of writing (§8, source B1). This numbering
+is a corpus construction choice made for structural fidelity, not a verified regulatory citation.** FSRA's
+own consumer guidance (§8, source A1) does independently confirm the *coverage content* of each row below —
+what's mandatory, what's optional, what each coverage does — without itself using "Section N" numbering; only
+the specific numbering is unverified, not the underlying coverage taxonomy:
 
 | Section | Coverage | Mandatory? |
 |---|---|---|
@@ -52,10 +64,18 @@ regulatory minimum, not the corpus's chosen limit.
 
 ## 3. Accident Benefits (Section 4 / SABS) — including a live regulatory change
 
-**Mandatory-vs-optional status: 🟢, directly confirmed** (§8, source A3 — FSRA's own dedicated reform page).
-**The specific dollar caps below: 🔴, secondary sources only** (§8, source B3) — corroborated across multiple
-independent law-firm/insurance publications, but not confirmed against O. Reg. 34/10's own clause text,
-which this document's automated verification could not read (§8, source B2).
+**Mandatory-vs-optional status: 🟢, directly confirmed** (§8, source A3 — FSRA's own dedicated reform page,
+quoted verbatim). **The specific dollar caps below are a corpus construction choice, restated 2026-08-11 per
+Marco's instruction, not a verified regulatory citation:**
+
+> Example Mutual's synthetic corpus uses $3,500 / $65,000 / $1,000,000 as its SABS tier caps, matching
+> values widely reported for post-2026-07-01 Ontario SABS. Primary sources were inaccessible at time of
+> writing (see §8, sources B2–B3). These are corpus parameters, not verified regulatory citations.
+
+The mandatory-vs-optional *status* of each benefit (row 4 below onward) rests on the directly-quoted FSRA
+reform page and is solid; the *dollar amounts* are the corpus's own chosen parameters, corroborated across
+multiple independent secondary sources but never confirmed against O. Reg. 34/10's own clause text, which
+this document's automated verification could not read (§8, source B2).
 
 | Benefit | Cap | Status |
 |---|---|---|
@@ -188,7 +208,9 @@ rather than papered over with a confident-sounding "Sources" paragraph, per Marc
 broken or unverified citation on a regulatory claim is worse than no citation. A reader who needs B1/B3 to be
 authoritative (e.g., before using this corpus for anything beyond this portfolio project) should follow the
 🟡/🔴 URLs above directly in a browser, where FSRA's and CanLII's client-side rendering will likely succeed
-where this document's automated `curl`-based check did not.
+where this document's automated `curl`-based check did not. **§1 and §3 above have been restated accordingly
+as corpus construction choices rather than verified citations — this table is the reason why, and it is left
+exactly as first written, since it's the artifact that surfaced the distinction in the first place.**
 
 ## Summary of deliberate simplifications (per Marco's instruction: name them, don't smooth them)
 

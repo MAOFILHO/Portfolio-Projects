@@ -546,3 +546,17 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   appear in the still-pending data card (task 6): this document reflects a regulatory reform five weeks old
   at time of writing and will go stale on Ontario's own schedule, independent of this project.
 - No application/agent code written. No billable resource created. $0.00 new spend.
+
+### 2026-08-11 — Reframed the two weakest-cited claims as corpus construction choices, not regulatory fact
+
+- **Marco: the 🔴 secondary-only claims (SABS caps, OAP 1 section numbering) are exactly what a knowledgeable
+  reader checks first — restate them as corpus construction choices rather than unverified regulatory
+  assertions, keep §8's grading table exactly as-is.** Done: `docs/phase3/ONTARIO-INSURANCE-REFERENCE.md`
+  §1 and §3 rewritten with an explicit "corpus parameters, not verified regulatory citations" framing
+  (Marco's own suggested language, used near-verbatim for the SABS caps). §8's grading table is unchanged.
+  The document's opening paragraph updated to match — it no longer implies uniform verification across every
+  claim below it.
+- This keeps the structural fidelity that made the corpus worth building while removing any claim the repo
+  can't back — ground truth for Phase 6 evals is the corpus's own internal consistency, not an assertion that
+  every dollar figure matches current Ontario regulation exactly.
+- No application/agent code written. No billable resource created. $0.00 new spend.
