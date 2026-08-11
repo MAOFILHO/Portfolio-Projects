@@ -159,6 +159,28 @@ Layout follows the sibling project `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic
 `src/<pkg>/`, `infra/terraform/`, lifecycle-phased `tests/{unit,pre_provision,post_provision,post_run,post_teardown}`,
 `docs/{COST-ACTUALS,RESULTS,LESSONS-LEARNED,INCIDENT-LOG}.md`.
 
+### Scope rule — writes outside PROJECT_ROOT
+
+> Writes outside PROJECT_ROOT require explicit approval, requested by ABSOLUTE
+> PATH, before the change. Monorepo convention is not pre-authorisation. Three
+> known future instances: the root .gitignore (done), /Users/marco/K21/Real-world/
+> .github/workflows/ (Phase 10), and the root README project index (Phase 12).
+> Each gets its own approval.
+
+`PROJECT_ROOT` is `/Users/marco/K21/Real-world/AWS-Insurance-FNOL-Voice-Agentic-AI`. The git root is its
+parent, so **being in the same git repository does not make a file in scope** — that includes the monorepo
+root `.gitignore` and `README.md`, `.github/workflows/`, and every sibling project.
+
+**None of the three instances above is pre-approved. Ask when you reach it.**
+
+Two corollaries, from how this rule was actually earned:
+
+1. Name the **absolute path** when requesting approval — not "the root config", not a bare filename.
+2. If a change crosses a boundary that a plan or verification criterion asserted, **say so plainly and record
+   the criterion as violated**. Do not let it lapse silently. Approval of a change's *intent* is not licence
+   to go quiet about its *scope*. See `PROJECT_STATE.md` → D9/D10 and the Phase 0 verification table, where
+   item 1 is recorded as knowingly violated rather than marked passed.
+
 ---
 
 ## How to work here

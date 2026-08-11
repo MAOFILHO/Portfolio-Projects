@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 0 — complete, awaiting sign-off
-**Next phase:** Phase 1 — Problem framing and success criteria (blocked on Phase 0 sign-off)
+**Current phase:** Phase 0 — **✅ SIGNED OFF** (`APPROVED: Phase 0`, 2026-08-11)
+**Next phase:** Phase 1 — Problem framing and success criteria — **open**
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -55,7 +55,47 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 9 | `PROJECT_STATE.md` seeded with phases, decisions, open questions | ✅ this file |
 | 10 | `.claude/settings.json` auto-approving read-only commands only | ✅ |
 | 11 | No application code written | ✅ |
-| 12 | No billable resource created; $0.00 new spend | ✅ |
+| 12 | No billable resource created; $0.00 new spend | ✅ Cost Explorer confirms $0.00 |
+
+### Verification results — including one criterion knowingly violated
+
+Phase 0's plan carried nine mechanical verification items. Eight passed. **Item 1 was violated knowingly**
+and is recorded as such rather than marked passed.
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | `git status` clean after the commit; **nothing outside `PROJECT_ROOT` touched** | ⚠️ **VIOLATED — knowingly.** See below |
+| 2 | Source repos unmodified | ✅ 0 files changed under `/Users/marco/K21/Temp/CallCenter/AWS` |
+| 3 | `CLAUDE.md` reproduces STOP CONDITIONS verbatim | ✅ Byte-diffed against Section 2 of the brief |
+| 4 | `.claude/settings.json` parses; no allow-entry matching `apply\|create\|delete\|destroy\|put\|invoke\|deploy` | ✅ 28 entries, 0 matches |
+| 5 | Every merge-matrix row cites a real file path | ✅ Spot-checked |
+| 6 | Discard rate computed, stated and justified per row — **no target** | ✅ 53% by module count / ~97% by LOC, both reported |
+| 7 | Grep for the three named exclusions and leaked account IDs | ✅ Present only in the do-not-propagate docs, as intended |
+| 8 | $0.00 new spend | ✅ |
+| 9 | Exit criteria written for sign-off | ✅ |
+
+#### ⚠️ Item 1 — violated knowingly, with justification
+
+**What:** commit `210b875` modified **`/Users/marco/K21/Real-world/.gitignore`** — the monorepo root,
+outside `PROJECT_ROOT`. Additive only (11 lines appended; nothing existing altered).
+
+**Why it was necessary:** the monorepo root `.gitignore` excluded `.claude/` globally, so no Claude config
+was tracked in any project. **Constraint 15 and the Definition of Done require `.claude/mcp.json` to reach a
+fresh clone** so the local MCP servers are invocable without extra setup. Satisfying that requires a
+tracked file, which requires the negation.
+
+**Why it stands:** the change is correct and necessary for the Definition of Done. Reverting it to satisfy a
+criterion that was **too narrowly written** would be the wrong trade — the criterion assumed no legitimate
+reason to touch a shared file would arise, and that assumption was wrong. Marco's ruling, 2026-08-11.
+
+**Scoping verified:** `settings.local.json` remains ignored; sibling projects that keep `.claude` local-only
+are unaffected — both confirmed by `git check-ignore`.
+
+**Process failure, separately from the change itself:** the edit *was* covered by an approval (the selected
+`AskUserQuestion` option previewed these exact lines), but it was described only as "the root `.gitignore`"
+rather than by absolute path, and the contradiction with item 1 was never surfaced — the criterion was
+allowed to lapse silently instead of being reported as broken. Approval of a change's *intent* is not licence
+to go quiet about its *scope*. This produced decision **D9** below.
 
 ---
 
@@ -71,6 +111,8 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | D6 | Workflows authored in `.github/workflows-for-monorepo-root/`, prefixed `FNOL_*` repo variables | GitHub Actions ignores workflows inside project subfolders silently; established monorepo convention | 2026-08-11 |
 | D7 | Vendor **no images** from any source repo | Redaction/console screenshots and DMV specimens are an accidental-PII and likeness vector | 2026-08-11 |
 | D8 | **Simulator-first**; real calls reserved for demo/verification | Telephony is ~92% of the ~$0.20 marginal cost per conversation; ~100 real calls would nearly exhaust the $25 budget | 2026-08-11 |
+| D9 | **Out-of-`PROJECT_ROOT` scope rule** — reproduced verbatim in `CLAUDE.md` | Shared monorepo files affect ~15 sibling projects, so blast radius exceeds the project being worked on. Being in the same git repo does not make a file in scope | 2026-08-11 |
+| D10 | Commit `210b875` stands; item 1 recorded as knowingly violated rather than marked passed | The change is correct and necessary for the Definition of Done; reverting it to satisfy a too-narrowly-written criterion is the wrong trade | 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
