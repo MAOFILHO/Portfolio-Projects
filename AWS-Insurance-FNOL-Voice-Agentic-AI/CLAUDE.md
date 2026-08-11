@@ -108,19 +108,28 @@ turns on it — several of these change monthly.
 | **DID (Canada, not US)** | `+14169871547`, id `55cba0a6-3f67-4982-b3d8-6943d3b07054`, `PhoneNumberCountryCode: CA`, CLAIMED |
 | DID tags | `Project=AWS-Insurance-FNOL-Voice-Agentic-AI`, `Owner=marcos`, `Protected=true` |
 | Bedrock profiles ACTIVE | `us.amazon.nova-micro-v1:0`, `us.amazon.nova-lite-v1:0`, `us.anthropic.claude-haiku-4-5-20251001-v1:0`, `us.anthropic.claude-3-haiku-20240307-v1:0` |
-| Embeddings | `amazon.titan-embed-text-v2:0` (ON_DEMAND) |
-| Lex V2 pricing | $0.004 / speech request · $0.00075 / text request · **no perpetual free tier** |
-| Connect voice | $0.038 / min |
-| Guardrails | $0.15 / 1k text units (content, denied topics) · $0.10 / 1k (PII) |
+| Embeddings | `amazon.titan-embed-text-v2:0` (ON_DEMAND), **$0.02 / 1M tokens** |
+| Nova Micro pricing | **$0.035 / 1M input · $0.14 / 1M output** — re-verified 2026-08-11, corrects an earlier $0.075/$0.30 figure |
+| Nova Lite pricing | **$0.06 / 1M input · $0.24 / 1M output** — re-verified 2026-08-11, corrects an earlier $0.13/$0.52 figure |
+| Claude Haiku 4.5 pricing | **$1.00 / 1M input · $5.00 / 1M output** — from Anthropic's own docs by exact Bedrock model ID; not independently re-confirmed against the AWS Price List API, which omitted all modern Anthropic models from its live us-west-2 dump on 2026-08-11 |
+| Claude 3 Haiku pricing | $0.25 / 1M input (confirmed via AWS Price List API) · $1.25 / 1M output (widely cross-referenced, not independently re-confirmed against a primary AWS source on 2026-08-11) |
+| Cross-region inference profile surcharge | **None** — confirmed via AWS docs: "no additional cost associated with cross-region inference" for `us.*` profiles |
+| Lex V2 pricing | $0.004 / speech request · $0.00075 / text request · **no perpetual free tier** (re-confirmed 2026-08-11) |
+| Connect voice — ⚠ **tier matters, verify before costing** | **Amazon Connect Customer** (AI-bundled, the new default on all new instances, incl. ours): $0.038/min. **Amazon Connect Customer Basic** (plain pay-as-you-go, no bundled AI): $0.018/min service fee + ~$0.0022/min US local-DID telephony ≈ **$0.0202/min — roughly half**. This project's own architecture (`ADR-001`) deliberately does not use Connect Customer's bundled AI, making Customer Basic the pricing tier that matches actual usage; **whether switching the existing instance's tier is possible via IaC or requires a manual console action, and whether Marco wants to make that switch, is an open item for the Phase 2 cost model — not yet decided or executed** |
+| Guardrails | $0.15 / 1k text units (content filters, denied topics) · $0.10 / 1k (PII, contextual grounding) · Automated Reasoning checks ~$0.17/unit, **exact unit unconfirmed** — re-verify before relying on this line |
+| Guardrails call model | `ApplyGuardrail` (and the newer, 2026 `InvokeGuardrailChecks`) run **decoupled from any model invocation** — callable anywhere in application control flow, not only bolted onto `Converse`/`InvokeModel`. Load-bearing fact for `ADR-010` |
 | Call recording | **disabled** |
 
-⚠ **The "12-month free tier" is largely gone.** AWS replaced it (15 Jul 2025) with $200 credits for 6 months
-on *new* accounts. Always-free tiers (Lambda 1M req, DynamoDB 25 GB, CloudWatch basics) persist. **Assume no
-credits on this account.** S3 Vectors has no free tier.
+⚠ **The "12-month free tier" is largely gone.** AWS's current framing (checked 2026-08-11): new accounts get
+"$100 in credits immediately... up to $200 over 6 months"; a separate, account-age-independent "30+ services
+always free within monthly usage limits" layer persists (Lambda 1M req + 400k GB-s, DynamoDB 25 GB storage
+only — **not** free RCU/WCU in on-demand mode, Step Functions 4,000 transitions, CloudWatch/SNS basics).
+**Assume no promotional credits on this account.** S3 Vectors has no free tier.
 
-⚠ **Telephony is ~92% of marginal cost per conversation (~$0.20).** Bedrock is noise by comparison. The call
-simulator is therefore the **primary cost control**, not a convenience — ~100 real calls would nearly exhaust
-the monthly budget on its own.
+⚠ **Telephony is the dominant marginal cost per conversation, ~$0.15–0.20 depending on which Connect tier
+applies (see above) — Bedrock is noise by comparison even before the Nova pricing correction, and more so
+after it.** The call simulator is therefore the **primary cost control**, not a convenience — ~100 real
+calls would still consume a meaningful share of the monthly budget even at the lower Customer Basic rate.
 
 ---
 
