@@ -174,9 +174,9 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 
 | # | Criterion | Notes |
 |---|---|---|
-| 1 | Synthetic policy wordings authored for all six intents' coverage needs, **internally consistent** (same policy numbers/limits/deductibles referenced consistently across documents) | Primary groundedness eval target (`CoverageQuestion`) depends on this; inconsistency reads as model failure per the Phase 0 finding |
-| 2 | Rental/towing entitlement sections authored from scratch, consistent with the rest of the corpus | Resolves `R5` — genuinely zero prior art across all eight source repos |
-| 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | Resolves `Q5`. KABCO scale (harvested Phase 0) is the grounding for injury severity |
+| 1 | Synthetic policy wordings authored for all six intents' coverage needs, **internally consistent** (same policy numbers/limits/deductibles referenced consistently across documents) | ✅ `data/synthetic/policy/example-mutual-oap-policy-wording.md` — anchored to **Ontario** specifically (OAP 1 section structure, SABS, DCPD), not generic NA boilerplate, per Marco's explicit steer. Grounding in `docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` |
+| 2 | Rental/towing entitlement sections authored from scratch, consistent with the rest of the corpus | ✅ Resolves `R5` — `data/synthetic/policy/endorsements.md`. Rental modeled on real OPCF 20 ($50/day, 20-day/$1,000 cap); towing modeled as a bundled $150/incident allowance inside the DCPD/Collision claim itself, not a separate OPCF 35 roadside product — scope decision named, not silent |
+| 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | ✅ Resolves `Q5` — `data/synthetic/policy/coverage-logic.md`. Total-loss threshold stated as Example Mutual's explicit 80%-of-ACV policy rule (Ontario sets no single legislated %). KABCO (scene severity) and SABS's MIG/non-cat/catastrophic tiers kept as two distinct axes, never conflated — the agent never performs the clinical severity determination |
 | 4 | Claim-number format finalized and documented | ✅ Resolves `Q3` — `docs/phase3/DATA-CONTRACTS.md`: `CLM-YYMM-NNNNN-C`, Luhn mod-10, worked example `CLM-2608-00042-4` |
 | 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | |
 | 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | Do-not-propagate list, `CLAUDE.md` |
@@ -241,7 +241,7 @@ claim block**.
 | R2 | Canada DID rate unverified — pricing appendix 404s, Connect telephony usage types not exposed in the Pricing API | Unknown fixed monthly floor against a $25 ceiling | Read actuals from Cost Explorer in Phase 2, once ≥1 day of accrual exists |
 | R3 | The 12-month free tier no longer exists; **Lex V2 has no perpetual free tier** ($0.004/speech request from turn one) | Cost model cannot assume free Lex or credits | Cost model built on always-free tiers + pay-per-use only; simulator-first (D8) |
 | R4 | **Zero prior art in all eight repos** for barge-in, DTMF, no-input/no-match, timeouts, streaming, or interim audio fillers — the combined corpus contains only `MaxRetries: 2` | Constraint 14's 1,800 ms p95 must be engineered from docs, not adapted | Budget real time in Phase 4; measure cold-start impact in Phase 9 |
-| R5 | Two of the six intents (rental/towing entitlement) have **no source material anywhere** in the corpus | Intent 4 has no ground truth until authored | Phase 3 authors rental + towing coverage sections from scratch, internally consistent with the rest of the corpus |
+| ~~R5~~ | ~~Two of the six intents (rental/towing entitlement) have no source material anywhere in the corpus~~ | **RESOLVED** | `data/synthetic/policy/endorsements.md` — rental (OPCF 20-modeled) and towing (bundled DCPD/Collision allowance) both authored, grounded against real Ontario reference products |
 | R6 | Repo 7 — nominally the "richest agentic source" — **contains no Bedrock at all** (self-hosted Ollama on GPU Karpenter) and its LangGraph code is partly non-functional | The entire Bedrock, checkpointer, guardrails, RAG, eval, MCP and observability layer is greenfield | Accepted and planned for; only the *patterns* and domain model were harvested |
 
 [#42147]: https://github.com/hashicorp/terraform-provider-aws/issues/42147
@@ -258,7 +258,7 @@ claim block**.
 | Q2 | Does `us.anthropic.claude-haiku-4-5` earn its cost over `us.amazon.nova-lite` on the generation node? | Phase 6 | Decided by evals, not preference. `ADR-004` fixes the mechanism (feature-flagged) and prunes Claude 3 Haiku from the matrix, but **does not pre-decide the winner** — still open, as intended |
 | ~~Q3~~ | ~~Claim-number format~~ | **RESOLVED** by `docs/phase3/DATA-CONTRACTS.md` | `CLM-YYMM-NNNNN-C`, digits-only (not the Phase 0 draft's alphanumeric idea — refined for DTMF-fallback compatibility), Luhn mod-10 check digit. Worked example: `CLM-2608-00042-4` |
 | ~~Q4~~ | ~~Vector store choice~~ | **RESOLVED** by `ADR-002` | DynamoDB + in-process brute-force cosine similarity, not S3 Vectors, not FAISS-in-Lambda — with an explicit corpus-size threshold for revisiting |
-| Q5 | Deductible logic, total-loss threshold and injury-severity→coverage mapping (BI/PIP/MedPay) have no prior art | Phase 3 | Author from the KABCO scale harvested in Phase 0 |
+| ~~Q5~~ | ~~Deductible logic, total-loss threshold and injury-severity→coverage mapping have no prior art~~ | **RESOLVED** by `data/synthetic/policy/coverage-logic.md` | Deductible formula, 80%-of-ACV total-loss rule (stated explicitly, not implied), and the KABCO-vs-SABS severity-track boundary, all with worked examples |
 | ~~Q6~~ | ~~Lexical injury detection will miss novel phrasings~~ | **RESOLVED** by D15 | Layered L1+L2+L3 detection committed as an architectural requirement; recall gate split into a labelled-set GATE and a held-out OBSERVED measure |
 | Q7 | Does the reranker earn its latency against the 1,800 ms budget? | Phase 6 | Measured, not assumed — recall@5 gain vs added p95 |
 | ~~Q8~~ | ~~Where does the safety pre-node sit relative to Guardrails input filtering?~~ | **RESOLVED** by `ADR-010` | Verified: `ApplyGuardrail`/`InvokeGuardrailChecks` run decoupled from model invocation — L1 sequenced first by never attaching `guardrailIdentifier` to a model call |
@@ -468,3 +468,42 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   knowledge base) is now **in progress**. Phase status table and header updated accordingly.
 - No application code yet written this entry; no Terraform apply; no billable resource created beyond what
   was already approved (the $5 Bedrock standing cap, untouched so far). $0.00 new spend.
+
+### 2026-08-11 — Ontario-specific policy corpus authored; resolves Q5, R5
+
+- **Marco redirected the policy corpus from generic North American to Ontario-specific**, before coverage
+  values were locked: OAP 1 structure, Accident Benefits as a distinct mandatory coverage, DCPD, $500/$1,000
+  deductibles, an explicit stated total-loss rule, and rental as an optional endorsement with a daily cap and
+  day limit. Explicit instruction: where Ontario specifics complicate the six intents, name the simplification
+  rather than silently generalizing.
+- **Researched live rather than from memory** (multiple `WebSearch`/`WebFetch` passes): OAP 1's six-section
+  structure (3 Liability, 4 Accident Benefits, 5 Uninsured Auto, 6 DCPD, 7 Loss or Damage, 8 Statutory
+  Conditions); SABS benefit caps (MIG $3,500, non-catastrophic $65,000, catastrophic $1,000,000; IRB 70%/
+  max $400/week/104 weeks); Ontario Fault Determination Rules (O. Reg. 668, fixed 0/25/50/75/100% bands);
+  real OPCF 20 (rental) and OPCF 35 (roadside) reference terms; Ontario's insurer-discretion total-loss
+  threshold (no single legislated %, typically 70–80% ACV).
+- **Caught a live regulatory change memory would have missed**: Ontario's SABS reform took effect
+  **2026-07-01** — five weeks before this session — making Income Replacement, Caregiver, Housekeeping/Home
+  Maintenance, Dependent Care, Death & Funeral, and Indexation benefits **optional elections** rather than
+  automatically bundled. Corroborated across multiple independent sources (FSRA's own page 403'd on direct
+  fetch, corroborated via RIBO, law firms, insurance-broker publications). Reflected as the corpus's current
+  state, not the pre-reform assumption a training-data-only answer would have given.
+- **Named three deliberate simplifications explicitly, per Marco's instruction not to smooth them over**:
+  (1) fault-percentage apportionment (O. Reg. 668) is never computed by the agent — intake, not adjudication;
+  (2) no synthetic policyholder has opted out of DCPD (OPCF 49); (3) intent 4's "towing" is the accident-scene
+  allowance bundled into the DCPD/Collision claim itself, not OPCF 35's separate non-accident roadside product
+  — named, not built.
+- **Created:**
+  - `docs/phase3/ONTARIO-INSURANCE-REFERENCE.md` — verified grounding, citations, all named simplifications
+  - `data/synthetic/policy/example-mutual-oap-policy-wording.md` — the OAP-structured policy wording (main
+    `CoverageQuestion` RAG corpus), explicitly labeled as original synthetic wording, not a reproduction of
+    FSRA's copyrighted OAP 1 form
+  - `data/synthetic/policy/coverage-logic.md` — resolves `Q5`: deductible arithmetic, 80%-of-ACV total-loss
+    formula (Example Mutual's own stated rule, since Ontario sets no single legislated %), and the KABCO-
+    vs-SABS injury-severity boundary (scene severity vs. clinical benefit-eligibility tier — kept distinct,
+    with an explicit statement that the agent never performs the clinical determination)
+  - `data/synthetic/policy/endorsements.md` — resolves `R5`: rental (OPCF-20-modeled, $50/day, 20-day/$1,000
+    cap, with a worked days-remaining example anchoring intent 4's compound RAG+tool case) and towing (bundled
+    $150/incident allowance, not a separate endorsement)
+- No application/agent code written (data-engineering/content authoring only, per Phase 3's own exit
+  criterion 10). No billable resource created. $0.00 new spend.
