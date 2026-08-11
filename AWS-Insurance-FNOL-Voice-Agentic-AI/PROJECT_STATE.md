@@ -11,8 +11,9 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 0 — **✅ SIGNED OFF** (`APPROVED: Phase 0`, 2026-08-11)
-**Next phase:** Phase 1 — Problem framing and success criteria — **open**
+**Current phase:** Phase 1 — complete, awaiting sign-off
+**Last signed off:** Phase 0 (`APPROVED: Phase 0`, 2026-08-11)
+**Next phase:** Phase 2 — Architecture and ADRs (blocked on Phase 1 sign-off)
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -23,8 +24,8 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 
 | Ph | Name | Status |
 |---|---|---|
-| 0 | Repo archaeology, workspace setup, merge strategy | ✅ Complete — awaiting sign-off |
-| 1 | Problem framing and success criteria | ⬜ Not started |
+| 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
+| 1 | Problem framing and success criteria | ✅ Complete — awaiting sign-off |
 | 2 | Architecture and ADRs | ⬜ Not started |
 | 3 | Data engineering and knowledge base | ⬜ Not started |
 | 4 | Conversation design | ⬜ Not started |
@@ -99,6 +100,32 @@ to go quiet about its *scope*. This produced decision **D9** below.
 
 ---
 
+## Phase 1 exit criteria — for sign-off
+
+**No code written. No billable resource created. $0.00 new spend.** Artifacts only.
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Business domain scenario defined | ✅ `docs/phase1/PROBLEM-FRAMING.md` — fictional carrier "Example Mutual", P&C personal auto only |
+| 2 | **Exactly six** intents specified, no additions | ✅ Six, each with slots, success criteria and failure definitions. Additions listed as explicitly deferred future work |
+| 3 | Containment target defined | ✅ ≥65% of **non-mandatory** calls, with mandatory escalations excluded from the denominator |
+| 4 | Escalation policy defined | ✅ Four routes in priority order; human reachable from every state; never gated behind slot filling |
+| 5 | Non-goals defined | ✅ Anchored on the authority matrix: $0 settlement authority, cannot deny, never adjudicates |
+| 6 | AI use-case card written | ✅ `docs/phase1/AI-USE-CASE-CARD.md` — intended use, users, out-of-scope uses, 12 failure modes, human oversight model, and what oversight is *absent* |
+| 7 | Metrics defined **before** building | ✅ `docs/phase1/SUCCESS-METRICS.md` — 60+ measures across safety/component/conversation/latency/cost/reliability, each labelled GATE, TARGET or OBSERVED |
+| 8 | Containment shown to be non-gameable | ✅ Three structural guards plus an explicit anti-gaming table covering six gaming routes |
+| 9 | No invented metrics (constraint 13) | ✅ Every threshold labelled a target or gate, never a result; a "not yet measurable" section states four gaps openly |
+
+### Key Phase 1 design decisions
+
+- **Injury escalation is not a classifier decision.** Detection runs as a deterministic pre-node on every turn, before the model sees the input, and is not overridable downstream. This makes intent 6 a property of the graph rather than a behaviour the model is asked to exhibit.
+- **Correct abstention scores as success.** "I don't have that in your policy — let me get you to someone who does" is a win, not a containment failure.
+- **Escalation recall is a gate; escalation precision is not.** A wasted transfer costs a human minute; a missed injury escalation is the failure this system must not have. False-escalation rate keeps the bias from becoming useless behaviour, but does not trade against recall.
+- **Intent 4 fails if answered from the policy alone**, even when the coverage statement is true — the compound case requires both sources.
+- **A silent partial write on contact update is a critical defect**, not a missed target: 0 occurrences, gated.
+
+---
+
 ## Decisions to date
 
 | # | Decision | Rationale | Date |
@@ -113,6 +140,10 @@ to go quiet about its *scope*. This produced decision **D9** below.
 | D8 | **Simulator-first**; real calls reserved for demo/verification | Telephony is ~92% of the ~$0.20 marginal cost per conversation; ~100 real calls would nearly exhaust the $25 budget | 2026-08-11 |
 | D9 | **Out-of-`PROJECT_ROOT` scope rule** — reproduced verbatim in `CLAUDE.md` | Shared monorepo files affect ~15 sibling projects, so blast radius exceeds the project being worked on. Being in the same git repo does not make a file in scope | 2026-08-11 |
 | D10 | Commit `210b875` stands; item 1 recorded as knowingly violated rather than marked passed | The change is correct and necessary for the Definition of Done; reverting it to satisfy a too-narrowly-written criterion is the wrong trade | 2026-08-11 |
+| D11 | Fictional carrier named **"Example Mutual"** | Deliberately synthetic so the public portfolio artifact cannot be confused with, or mistaken for, a real insurer. Upstream repo 5 used "AnyInsurance"; a plausible-sounding invented name risks colliding with a real carrier | 2026-08-11 |
+| D12 | Injury detection is a **deterministic pre-node**, not an intent classified by the model | Makes intent 6 a property of the graph rather than a model behaviour, so 100% recall is structurally achievable and not overridable downstream | 2026-08-11 |
+| D13 | Mandatory escalations excluded from the containment denominator; safety recall a separate 100% gate | Naive containment rewards refusing to escalate. Prevents the metric creating pressure against the behaviour the system exists to guarantee | 2026-08-11 |
+| D14 | **Loss date/time is NOT redacted**, contrary to the inherited PII taxonomy; VIN/plate/policy/claim number added | Loss date/time is the most important field captured — blanket-redacting it would destroy the record the system exists to create | 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -165,6 +196,9 @@ claim block**.
 | Q3 | Claim-number format — needs designing. No repo supplies a usable one: repo 5's `PY1234-123450` **embeds the OTP secret**, repo 6 uses an unspeakable bare UUID, repo 8's `CLM-001` is 3 digits | Phase 3 data contracts | Proposal: `CLM-YYMM-XXXXX` + check character |
 | Q4 | Vector store choice — S3 Vectors (now GA in us-west-2) vs FAISS/sqlite-vec baked into the Lambda package vs DynamoDB + in-memory cosine | Phase 2 ADR | Trade-off table required before choosing. **Not** OpenSearch Serverless |
 | Q5 | Deductible logic, total-loss threshold and injury-severity→coverage mapping (BI/PIP/MedPay) have no prior art | Phase 3 | Author from the KABCO scale harvested in Phase 0 |
+| Q6 | **Lexical injury detection will miss novel phrasings** ("my neck feels funny"). Named the system's most serious residual risk in the use-case card | Phase 7 red-team | Layered approach likely: deterministic lexical pre-node **plus** a cheap classifier as a second detector, since recall is a 100% gate and one detector cannot carry it |
+| Q7 | Does the reranker earn its latency against the 1,800 ms budget? | Phase 6 | Measured, not assumed — recall@5 gain vs added p95 |
+| Q8 | Where does the safety pre-node sit relative to Guardrails input filtering? | Phase 2 ADR | A guardrail blocking a graphic injury description before the safety node sees it would be a **critical ordering bug**. Safety detection must run first |
 
 ---
 
@@ -179,3 +213,14 @@ claim block**.
 - Scaffolded workspace: `CLAUDE.md`, `PROJECT_STATE.md`, `.claude/settings.json`, `docs/phase0/*`, `.gitignore`, `CHANGELOG.md`, `README.md`.
 - **No application code written. No billable resource created. $0.00 new spend.**
 - Marco re-tagged the DID to `Project=AWS-Insurance-FNOL-Voice-Agentic-AI`, `Owner=marcos`, `Protected=true`; recorded above and wired into the Phase 8 import guard.
+- Marco ruled that commit `210b875` stands and that verification item 1 be recorded as knowingly violated rather than marked passed (D10). Added the out-of-`PROJECT_ROOT` scope rule to `CLAUDE.md` (D9) — three known future instances, **none pre-approved**.
+- **`APPROVED: Phase 0`.**
+
+### 2026-08-11 — Phase 1
+- Wrote `docs/phase1/{PROBLEM-FRAMING,AI-USE-CASE-CARD,SUCCESS-METRICS}.md`. **No code, no spend.**
+- Specified exactly six intents with slots, success criteria and explicit failure definitions. `FileAutoClaim` carries 11 slots and one conditional; safety precedes collection.
+- Defined containment so it cannot be gamed (D13) and recorded an anti-gaming table covering six routes by which this metric set could be satisfied while the system got worse.
+- Made injury detection a deterministic pre-node rather than a classified intent (D12), which is what makes a 100% recall gate structurally achievable.
+- Anchored non-goals on the Phase 0 authority matrix: $0 settlement authority, cannot deny, never adjudicates. **AI advises; a licensed human decides.**
+- Surfaced Q6–Q8, including an **ordering constraint discovered while writing the metrics**: a Guardrails input filter that blocks a graphic injury description *before* the safety node sees it would be a critical bug. Safety detection must run first — this now binds the Phase 2 architecture.
+- Named the system's most serious residual risk plainly in the use-case card (lexical injury detection missing novel phrasings) rather than implying it is solved.
