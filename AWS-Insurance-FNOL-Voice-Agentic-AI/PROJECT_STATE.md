@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 1 — **✅ SIGNED OFF** (`APPROVED: Phase 1`, 2026-08-11) with two corrections applied
-**Next phase:** Phase 2 — Architecture and ADRs — **open**
+**Current phase:** Phase 2 — Architecture and ADRs — **in progress** (documentation/artifacts only; no `APPROVED: Phase 2` typed, no billable resource created)
+**Progress:** ADR-007 (IaC tool selection) and ADR-008 (region selection) accepted. Nine ADRs remain (ADR-001–006, 009–011), plus Mermaid diagram, full cost model, threat model.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -148,9 +148,7 @@ to go quiet about its *scope*. This produced decision **D9** below.
 
 ### Proposed, pending Phase 2 ADR
 
-| # | Proposal | Status |
-|---|---|---|
-| P1 | Define the Lex V2 bot as a **single CloudFormation `AWS::Lex::Bot` resource** wrapped by Terraform's `aws_cloudformation_stack`; everything else native Terraform | Proposed — becomes the IaC ADR. Rationale under "Risks" below |
+P1 is **resolved** — accepted as `docs/adr/ADR-007-iac-tool-selection.md` (2026-08-11). Nothing pending here.
 
 ---
 
@@ -175,7 +173,7 @@ claim block**.
 
 | # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| R1 | **Terraform `aws_lexv2models_*` resources are known-broken exactly where we need them** — `prompt_specification` updates silently dropped ([#42147]), `prompt_attempts_specification` / `message_selection_strategy` "inconsistent result after apply" ([#36845]), **intent↔slot circular dependency via `slot_priority`** ([#39948]) | Hits the barge-in/DTMF config (constraint 14) and the 9-slot FNOL intent (the showcase) | P1 above: single nested CFN `AWS::Lex::Bot` resource structurally cannot hit the cycle. Formal ADR in Phase 2 |
+| R1 | **Terraform `aws_lexv2models_*` resources are known-broken exactly where we need them** — `prompt_specification` updates silently dropped ([#42147], confirmed **still open** 2026-08-11), `prompt_attempts_specification` / `message_selection_strategy` "inconsistent result after apply" ([#36845], confirmed **fixed** in provider v5.66.0), **intent↔slot circular dependency via `slot_priority`** ([#39948], confirmed **still open** 2026-08-11 — structural, not a pending patch) | Hits the barge-in/DTMF config (constraint 14) and the 9-slot FNOL intent (the showcase) | **Resolved by ADR-007** (accepted 2026-08-11): single nested CFN `AWS::Lex::Bot` resource, structurally immune to the cycle. Residual gap (unconfirmed `PromptAttemptsSpecification` behavior under CFN for multi-slot intents) carried forward as a mandatory Phase 8 proof-of-concept, not asserted as resolved |
 | R2 | Canada DID rate unverified — pricing appendix 404s, Connect telephony usage types not exposed in the Pricing API | Unknown fixed monthly floor against a $25 ceiling | Read actuals from Cost Explorer in Phase 2, once ≥1 day of accrual exists |
 | R3 | The 12-month free tier no longer exists; **Lex V2 has no perpetual free tier** ($0.004/speech request from turn one) | Cost model cannot assume free Lex or credits | Cost model built on always-free tiers + pay-per-use only; simulator-first (D8) |
 | R4 | **Zero prior art in all eight repos** for barge-in, DTMF, no-input/no-match, timeouts, streaming, or interim audio fillers — the combined corpus contains only `MaxRetries: 2` | Constraint 14's 1,800 ms p95 must be engineered from docs, not adapted | Budget real time in Phase 4; measure cold-start impact in Phase 9 |
@@ -218,8 +216,8 @@ never edit.
 | ADR-004 | Model tier and router strategy | Must account for L2's per-turn safety classifier as non-optional (Q10) |
 | ADR-005 | State persistence — DynamoDB checkpointer keyed on Connect contact ID | No official `langgraph-checkpoint-dynamodb` exists; we write a `BaseCheckpointSaver` |
 | ADR-006 | Sync vs. async post-call pipeline | |
-| **ADR-007** | **IaC tool selection — a THREE-way comparison**, not two: native `aws_lexv2models_*` · nested CFN `AWS::Lex::Bot` wrapped by Terraform · CDK (Python) | Resolves R1. All three options assessed on merit; the recommendation is not pre-decided by the Phase 0 proposal |
-| ADR-008 | Region selection | Connect/Lex co-location, AgentCore four-region limit, cross-region inference, and what would force a move to `ca-central-1` for data residency. **Exists to prevent a repeat of a prior project's full teardown after hitting a regional capability wall** |
+| **ADR-007** | ✅ **Accepted** 2026-08-11 — `docs/adr/ADR-007-iac-tool-selection.md`. Nested CFN `AWS::Lex::Bot` wrapped by Terraform's `aws_cloudformation_stack`; native `aws_lexv2models_*` and CDK both rejected, on the merits, with sourced current findings | Resolves R1. Two of three previously-flagged provider bugs confirmed still open (#42147, #39948); one confirmed fixed (#36845). CDK rejected both by existing constraint and on the merits (no L2 construct for Lex V2). Mandatory Phase 8 POC carried forward for the one unconfirmed gap |
+| ADR-008 | ✅ **Accepted** 2026-08-11 — `docs/adr/ADR-008-region-selection.md`. `us-west-2` retained; `ca-central-1` and AgentCore formally rejected; **residency caveat on `us.*` cross-region inference documented and accepted, not glossed over** | Verified live: `us.*` profiles called from `us-west-2` can process in `us-east-1`; CA DID is a telephony attribute, not a residency driver; AgentCore's "4-region" limit is full-parity-only, narrower tiers exist including a reduced Canada presence |
 | ADR-009 | Cold-start vs. latency budget | How the 1,800 ms p95 survives Lambda cold starts, and what it would cost not to |
 | **ADR-010** | **Safety-detection ordering: L1 runs before Guardrails input filtering** | Promoted from Q8 at Marco's instruction. Safety-critical ordering constraint — an input filter blocking a graphic injury description before L1 sees it defeats the detector. Must be visible in the architecture, not buried in code |
 | ADR-011 | PII redaction boundary — which store holds which field | Formalises D16: the quasi-identifier analysis and the structured-record-vs-transcript split |
@@ -238,7 +236,7 @@ never edit.
 ## Session log
 
 ### 2026-08-11 — Phase 0
-- Read all eight source repos via three parallel archaeology agents. Produced merge matrix (84% discard, justified per row), dependency conflict report, domain artifact inventory, security findings, target layout.
+- Read all eight source repos via three parallel archaeology agents. Produced merge matrix (100 modules: 20 KEEP / 22 REFACTOR / 5 REWRITE / 53 DISCARD — 53% by module count, 58% counting REWRITE, ~97% by LOC — both framings reported and justified per row), dependency conflict report, domain artifact inventory, security findings, target layout.
 - Verified live environment rather than trusting the brief: confirmed the Connect instance and, notably, that **the DID is Canadian (`CountryCode: CA`), not US** — the assumed US rates do not apply.
 - Extracted the **modern recording-block ground truth** from the instance's own `Sample recording behavior` flow: the 2019-10-30 schema has no `RecordingBehaviorOption`; recording state is the `RecordedParticipants` array, empty = off. The constraint-18 CI check is now written against verified JSON rather than a guess.
 - Confirmed Bedrock inference profiles and that `amazon.nova-micro-v1:0` is **`INFERENCE_PROFILE`-only**, making constraint 17's `us.*` rule mandatory rather than stylistic.
@@ -258,8 +256,16 @@ never edit.
 - Surfaced Q6–Q8, including an **ordering constraint discovered while writing the metrics**: a Guardrails input filter that blocks a graphic injury description *before* the safety node sees it would be a critical bug. Safety detection must run first — this now binds the Phase 2 architecture.
 - Named the system's most serious residual risk plainly in the use-case card (lexical injury detection missing novel phrasings) rather than implying it is solved.
 - **`APPROVED: Phase 1`**, with two corrections applied the same day:
-  1. **Q6 resolved rather than deferred (D15).** The unqualified "100% recall" gate was unachievable and therefore dishonest. Split into a labelled-set GATE (achievable by construction, so a failure is now a *code defect*) and a held-out novel-phrasing measure reported with no threshold. Layered L1+L2+L3 detection with union semantics committed as an architectural requirement.
+  1. **Q6 resolved rather than deferred (D15).** The unqualified "100% recall" gate was unachievable and therefore dishonest. Split into a labelled-set GATE — enforceable to zero via fix-and-re-run because detection is deterministic, which makes a labelled failure a debuggable *code defect* rather than a stochastic shortfall, **not** a claim that the mechanism is infallible — and a held-out novel-phrasing measure reported with no threshold. Layered L1+L2+L3 detection with union semantics committed as an architectural requirement.
   2. **D14 superseded by D16.** The exemption had only a utility argument. Adding the re-identification argument changed the design: date + time + location is a quasi-identifier close to uniquely identifying, so **both** fields now get identical treatment — retained in the structured claim record, redacted from transcripts and logs. Splitting a quasi-identifier across two policies protects nothing.
 - Q8 promoted from an open question to **required ADR-010** at Marco's instruction — safety-detection ordering is architecture, not an implementation note.
 - Recorded the Phase 2 ADR list (11 ADRs) and Phase 2 requirements, incl. a **three-way** IaC comparison (ADR-007) so the Phase 0 proposal is not pre-decided, a zero-free-tier cost model, and rental/towing reframed as **core scope rather than a gap**.
 - ⚠ Flagged to Marco that three items he referred to as "sent earlier" (zero-free-tier cost model, three-way Lex IaC ADR, rental/towing not a gap) do **not** appear anywhere in this session's history. Proceeding on a stated reconstruction rather than pretending receipt; awaiting correction.
+
+### 2026-08-11 — Phase 2 (in progress)
+- Marco confirmed all three reconstructed items were correct, and separately corrected the framing of D15/Q6's labelled recall gate: "achievable by construction" overclaimed — deterministic detection makes a labelled failure *debuggable and fixable*, not *impossible*, since an incomplete lexicon can still miss a labelled case. Corrected in `SUCCESS-METRICS.md` (×2), `AI-USE-CASE-CARD.md` (F1 row), and this file's own Phase 1 log entry — commit `dae2de5` plus this session's edits. Precise claim now stated: enforceable-to-zero-on-a-closed-set via fix-and-re-run, not infallible-on-first-write.
+- Corrected a stale "84% discard" figure in this file's own Phase 0 log entry (line 241) that had already been superseded elsewhere in the same document but never fixed at that specific line — now reads the same 53%/58%/97% figures as the exit-criteria table above it.
+- **Marco instructed: "Proceed with Phase 2, ADR-008 and ADR-007 first."** Launched two parallel background research agents rather than relying on memory (per `CLAUDE.md`'s "verify against current AWS sources, never from memory" rule) — one for region-selection facts (AgentCore region tiers, `us.*` cross-region routing/residency, `ca-central-1` support matrix), one for Terraform Lex V2 provider bug status (issues #42147/#36845/#39948, provider version, CDK L1-vs-L2 support, CFN `AWS::Lex::Bot` known limitations). Both completed with sourced, dated findings.
+- **Accepted `docs/adr/ADR-007-iac-tool-selection.md`.** Nested CFN `AWS::Lex::Bot` wrapped by Terraform's `aws_cloudformation_stack`, chosen over native `aws_lexv2models_*` (two of three provider bugs confirmed still open, including a structural intent↔slot cycle with no fix in sight) and over CDK (forbidden by existing constraint, and on the merits has no L2 construct for Lex V2 — functionally identical to CFN authorship). Disclosed openly that the chosen option's advantage rests on *absence of a confirmed defect*, not positive confirmation, and carried a mandatory Phase 8 proof-of-concept forward to close that gap before real provisioning.
+- **Accepted `docs/adr/ADR-008-region-selection.md`.** `us-west-2` retained for Connect/Lex/Lambda/DynamoDB/S3/Step Functions; Bedrock via `us.*` unchanged. Documented, rather than glossed over, that a `us.*` profile called from `us-west-2` can be processed in `us-east-1` per AWS's own docs — accepted because the data is synthetic and audited via CloudTrail's `inferenceRegion` field, not eliminated. Formally rejected `ca-central-1` (no technical gap, but the CA DID is a telephony attribute, not a residency driver — no requirement exists to justify moving) and Bedrock AgentCore (region-tiered feature fragmentation, corroborating the existing LangGraph-over-AgentCore choice).
+- **No application code, no Terraform, no billable resource created. $0.00 new spend.** Remaining Phase 2 work: ADR-001 through ADR-006, ADR-009 through ADR-011; Mermaid architecture diagram; full zero-free-tier cost model with teardown-risk column; threat model (prompt injection, tool abuse, PII leakage, toll fraud, denial-of-wallet).
