@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 3 — Data engineering and knowledge base — **approved, starting** (`APPROVED: Phase 3` typed by Marco 2026-08-11).
-**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified (screenshot + console confirmation) same day — this is now the live billing tier. Phase 3 exit criteria are in place below; work begins from here.
+**Current phase:** Phase 3 — Data engineering and knowledge base — **all content complete, presented for Marco's closing sign-off** (not yet self-marked closed — same discipline as Phases 0–2). Note: the exit-criteria table's item 12 was worded as "approval to begin," already satisfied by `APPROVED: Phase 3` (2026-08-11) before work started; that's a table-wording gap from this table being drafted before the phase began, not a claim that the phase is closed. A closing sign-off is still open, exactly like Phase 2's item 12 was.
+**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested, $0 spent) all complete. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -26,7 +26,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
-| 3 | Data engineering and knowledge base | 🔵 **In progress** — `APPROVED: Phase 3` typed 2026-08-11 |
+| 3 | Data engineering and knowledge base | 🟡 **Content complete, pending closing sign-off** |
 | 4 | Conversation design | ⬜ Not started |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
@@ -180,12 +180,12 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 | 4 | Claim-number format finalized and documented | ✅ Resolves `Q3` — `docs/phase3/DATA-CONTRACTS.md`: `CLM-YYMM-NNNNN-C`, Luhn mod-10, worked example `CLM-2608-00042-4` |
 | 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | ✅ `data/synthetic/{policyholders,vehicles,claims}/*.json` — 6 policyholders, 7 vehicles, 8 claims, machine-validated against `docs/phase3/DATA-CONTRACTS.md` and `coverage-logic.md`'s formulas by `scripts/validate_synthetic_records.py` (checked in, re-runnable, not a one-off manual check). Deliberate variation in optional-benefit elections and Section 7 selections per Marco's instruction, so `CoverageQuestion` has real ground truth to evaluate in Phase 6 |
 | 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | ✅ All 7 synthetic VINs use WMI `9SY` (unassigned) with a position-9 check digit machine-verified as deliberately wrong, not accidentally valid |
-| 7 | Ingestion pipeline: chunks corpus, embeds via Titan Embed v2, writes to DynamoDB per `ADR-002`'s schema | Exercises the $5 Bedrock standing cap only if run against AWS; local/LocalStack path preferred for iteration |
+| 7 | Ingestion pipeline: chunks corpus, embeds via Titan Embed v2, writes to DynamoDB per `ADR-002`'s schema | ✅ `src/fnol_voice_agent/knowledge/ingest.py` + `tests/unit/test_ingest.py` (8/8 passing) + `Makefile`'s `ingest` target. Section-based chunking (21 chunks/3 files), Marco-required MANIFEST (`data/synthetic/.ingest-manifest.json`, gitignored — generated artifact), idempotent via a `STATE#<file>` hash check. Ran end-to-end against the real corpus with `--embeddings mock --vector-store local` (the safe defaults) — **no real Bedrock/AWS call made**, `$0.00` logged in new `COSTS.md` |
 | 8 | Data card written: what's synthetic, what's derived from real regulatory/domain sources (KABCO, NHTSA MMUCC), what's authored with no external grounding at all (rental/towing, deductible logic) | ✅ `docs/phase3/DATA-CARD.md` — as-of-date warning carried prominently at the top per Marco's instruction; provenance graded per-document, with the corpus-construction-choice reframing (§3, Marco's own language) restated here too, not just upstream |
 | 9 | No real customer/policy PII introduced; no images vendored from any source repo | ✅ All names/phones/emails/addresses fabricated (555 exchange, `@example.com`, generic Ontario streets); no images anywhere in Phase 3 output |
-| 10 | No application/agent code written (Phase 5's scope, not this one) | |
-| 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | Provisioned resources remain individually gated regardless |
-| 12 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ **Pending** — type `APPROVED: Phase 3` if this scope is right, or redirect before work starts |
+| 10 | No application/agent code written (Phase 5's scope, not this one) | ✅ The ingestion pipeline is data-engineering (chunk/embed/write), not agent/orchestration code — no LangGraph, no tool-calling, no conversation state anywhere in `src/`. This distinction was scoped explicitly before writing any code, not asserted after the fact |
+| 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | ✅ `COSTS.md` created; **$0.00 of $5.00 consumed** — every run this phase used mock embeddings and a local moto-backed table, never real Bedrock or a real DynamoDB table (which doesn't exist yet — Phase 8 not approved) |
+| 12 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 3`, typed 2026-08-11 |
 
 ---
 
@@ -601,3 +601,58 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   `ONTARIO-INSURANCE-REFERENCE.md` §8 as the authoritative source for that.
 - Exit criterion 8 (Phase 3 exit-criteria table) marked done.
 - No application/agent code written. No billable resource created. $0.00 new spend.
+
+### 2026-08-11 — Ingestion pipeline: first application code in the repo
+
+- **Marco's one requirement above defaults**: the pipeline must emit a MANIFEST per run (corpus file hashes,
+  chunk count per document, embedding model ID and dimension, corpus as-of date), and `make ingest` must be
+  idempotent — unchanged file hash means no re-embed, so re-running costs nothing. Also: the as-of date
+  travels as chunk metadata and is retrievable, but the pipeline enforces nothing based on it — expiry
+  behavior is explicitly Phase 13, not this phase.
+- **Bootstrapped the Python project for the first time**: `pyproject.toml` (deps pinned: `boto3`, dev-only
+  `pytest`/`moto`/`ruff`/`black`/`mypy`/`boto3-stubs`, each justified in a one-line comment per `CLAUDE.md`'s
+  rule), `src/fnol_voice_agent/knowledge/` package, `tests/unit/`. **System Python was 3.13; `CLAUDE.md`
+  requires `>=3.12,<3.13`** — found `pyenv`-managed 3.12.10 already on the machine and built the venv against
+  that explicitly, rather than loosening the pin.
+- **`src/fnol_voice_agent/knowledge/ingest.py`** — chunks the policy corpus, embeds it, writes to DynamoDB
+  per `ADR-002`'s schema (single table, `CHUNK#<file>#<index>` and `STATE#<file>` items, no new AWS service).
+  **Chunking strategy, documented in the module docstring as asked**: markdown section-based (split on `## `
+  headings), with a secondary paragraph-boundary split for any section over 4,000 characters. Chosen over
+  fixed-size sliding-window chunking because the corpus's own sections (Third Party Liability, Accident
+  Benefits, DCPD...) are already the right retrieval granularity for `CoverageQuestion` — a fixed window
+  risks splitting a table or a worked example in half. Verified live that AWS's own Titan Embed V2 guidance
+  recommends exactly this ("logical segments, such as paragraphs or sections"), rather than assuming it.
+  Rejected sentence-level chunking as too granular for this corpus's document size.
+- **Two independent safety axes, both defaulting to zero-cost/zero-AWS**: `--embeddings {mock,bedrock}` and
+  `--vector-store {local,aws}`. `make ingest` runs mock+local — deterministic fake vectors, an in-memory
+  `moto` DynamoDB table, no credentials, no network. Real Bedrock/real DynamoDB require explicit flags and
+  were **not** invoked this session — real DynamoDB would fail today regardless, since that table is Phase 8
+  scope and doesn't exist yet.
+- **Idempotency**: a `STATE#<relative_path>` item per source file stores its last-ingested SHA-256; a run
+  recomputes each file's current hash and skips (no embed calls, no writes) any unchanged file. Documented
+  one honest limitation: the default `moto` backend is in-memory and doesn't persist across separate CLI
+  invocations, so cross-run skipping is only observable end-to-end against a persistent backend (`aws`, once
+  provisioned) — the skip *logic* itself is fully exercised and tested within a single run regardless.
+- **`MANIFEST` (Marco's requirement)**: written to `data/synthetic/.ingest-manifest.json` (gitignored — a
+  generated artifact, never committed, per `CLAUDE.md`). Contains exactly the four required fields
+  (per-file SHA-256 + chunk count, embedding model ID + dimension, corpus as-of date) plus run timestamp and
+  backend label. Verified live: Titan Embed V2's default output dimension is 1024 (256/512 also available),
+  cited rather than assumed.
+- **TDD, for real this time**: wrote `tests/unit/test_ingest.py` alongside the implementation; one test
+  (`test_chunk_markdown_drops_empty_chunks`) **failed on first run and caught a real bug** — a heading-only
+  section (no body) wasn't actually empty text, because the heading line itself was still part of the
+  chunk's text. Fixed by stripping the heading line into `section_title` only, not duplicating it into the
+  chunk body (also saves embedding tokens on every chunk). All 8 tests pass after the fix.
+  `ruff`/`black`/`mypy --strict` all clean (two real mypy findings fixed: untyped `dict` → `dict[str, Any]`,
+  `boto3` stubs added as a dev dependency rather than suppressing the import-untyped error).
+- **Ran the full pipeline against the real corpus**: 21 chunks across 3 files, correct hashes, correct
+  as-of-date pulled from a new single-source-of-truth file (`data/synthetic/policy/corpus-metadata.json`).
+  **Zero real AWS calls made** — created `COSTS.md` and logged this explicitly: $0.00 of the $5.00 Bedrock
+  standing cap consumed. A real Titan Embed V2 run over this corpus would cost a small fraction of a cent
+  (`$0.02/1M tokens`), but wasn't triggered without Marco's explicit go-ahead to spend real money, even
+  pre-approved money.
+- **`Makefile` created** — only genuinely functional targets (`ingest`, `test`, `lint`, `format`,
+  `typecheck`); the Definition of Done's other canonical targets are deliberately absent until the phases
+  that build what they need, rather than stubbed and labeled as if they work.
+- All 12 Phase 3 exit-criteria rows now checked (see caveat above about item 12's wording). **Phase 3 content
+  is complete — presented for Marco's closing sign-off, not self-marked closed.**

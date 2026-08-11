@@ -1,0 +1,6 @@
+{
+  "_comment": "Single source of truth for the policy corpus's as-of date. The ingestion pipeline (src/fnol_voice_agent/knowledge/ingest.py) reads this file and stamps it onto every chunk's metadata and into the run manifest -- update this file, not the pipeline, when the corpus is refreshed against newer Ontario regulatory guidance.",
+  "as_of_date": "2026-08-11",
+  "source_of_truth": "docs/phase3/ONTARIO-INSURANCE-REFERENCE.md",
+  "staleness_note": "The as-of date travels as chunk metadata and is retrievable at query time. The ingestion pipeline does not enforce anything based on it (no expiry check, no refusal to serve stale chunks) -- that is explicitly out of scope here, deferred to Phase 13 (continuous improvement design), per Marco's instruction 2026-08-11."
+}

@@ -73,6 +73,8 @@ evals/reports/
 redteam/reports/
 docs/evidence/*.json
 *.log
+data/synthetic/.ingest-manifest.json
+data/synthetic/.ingest/
 
 # Claude Code local overrides
 .claude/settings.local.json

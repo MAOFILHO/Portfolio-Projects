@@ -1,0 +1,55 @@
+[project]
+name = "fnol-voice-agent"
+version = "0.1.0"
+description = "Agentic, voice-first FNOL intake for P&C personal auto insurance (Amazon Connect + Lex V2 + Bedrock + LangGraph). Portfolio prototype."
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+license = { text = "MIT-0" }
+
+dependencies = [
+    # boto3: the only runtime dependency the Phase 3 ingestion pipeline needs -- Bedrock (embeddings)
+    # and DynamoDB (vector storage, ADR-002) are both reached through it. Pinned to a known-good release
+    # rather than left floating, per CLAUDE.md's "pin exact versions" rule.
+    "boto3==1.35.99",
+]
+
+[project.optional-dependencies]
+dev = [
+    # pytest: test runner -- TDD discipline (CLAUDE.md "How to work here").
+    "pytest==8.3.4",
+    # moto: in-memory AWS mocks for DynamoDB -- lets the ingestion pipeline's tests and its default
+    # `--vector-store local` mode run with zero AWS credentials and zero spend, per the project's
+    # "everything runs locally without AWS" constraint.
+    "moto[dynamodb]==5.0.28",
+    # ruff: lint, per CLAUDE.md's stated toolchain.
+    "ruff==0.9.4",
+    # black: format, per CLAUDE.md's stated toolchain.
+    "black==25.1.0",
+    # mypy: strict type checking, per CLAUDE.md's `make typecheck`.
+    "mypy==1.14.1",
+    # boto3-stubs: type stubs for the two boto3 clients this project uses so far -- keeps `mypy strict`
+    # honest instead of suppressing the untyped-import error for boto3 wholesale.
+    "boto3-stubs[dynamodb,bedrock-runtime]==1.35.99",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
