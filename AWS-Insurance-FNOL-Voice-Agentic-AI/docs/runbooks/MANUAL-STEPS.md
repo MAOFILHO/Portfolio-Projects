@@ -48,25 +48,33 @@ named approval.
   for the recalculated worst-case cost this switch creates.
 - **Approval:** Marco approved this switch by name, 2026-08-11 ("Approved — switch the instance to Connect
   Customer Basic via the console").
-- **Console path** (from the AWS doc above, "How to switch to Customer Basic"):
+- **Console path** — ⚠ **corrected 2026-08-11 against Marco's actual screenshot; the AWS doc page cited
+  above uses different labels than the live console.** Two corrections: the left-nav item reads **"Customer"**,
+  not "Connect Customer"; the action is a **"Change"** button on a **"Confirm Amazon Connect Customer"** card,
+  not a "Disable" button. Confirmed path:
   1. Log in to the AWS Management Console.
-  2. In the console search box, type **Connect Customer**. Choose **Connect Customer**.
+  2. In the console search box, type **Connect Customer**. Choose **Connect Customer** (this part matched —
+     it's the landing search, not an in-instance label).
   3. On the **Connect Customer virtual contact center instances** page, choose the instance alias
      **`marcos-ivr-demo`**.
-  4. In the navigation pane, choose **Connect Customer**.
-  5. In the **Enable Connect Customer across your entire instance** section, confirm the status is
-     **enabled** (it is — this is the current default state).
-  6. Choose **Disable**.
-  7. A confirmation dialog appears asking to confirm the switch to Customer Basic. Choose **Disable** to
-     confirm.
-- **Rollback:** the same page's toggle re-enables Connect Customer (**Enable** button) if this needs to be
-  reversed — no data loss expected either direction since this project's flows never reference any
-  Connect-Customer-only feature (`ADR-001`), so the documented "may encounter runtime errors if these
-  features are configured in contact flows" warning does not apply here.
-- **Post-switch verification:** confirm the instance's Connect Customer status reads "Not enabled" /
-  Customer Basic in the console, and place one test call through the existing sample flow to confirm inbound
-  calls and Lex association still function unchanged (the switch only removes bundled-AI capabilities this
-  project never wired in).
+  4. In the left navigation pane, choose **Customer** (breadcrumb reads *Amazon Connect › marcos-ivr-demo ›
+     Customer*).
+  5. On the **Customer** page, scroll to the **Confirm Amazon Connect Customer** card.
+  6. Choose **Change**.
+  7. *(Not directly observed — the post-switch screenshot doesn't show this step. Expect a tier-selection
+     prompt at this point; select **Amazon Connect Customer Basic** and confirm.)*
+  8. Confirmed done: the page now shows a green banner — **"This instance is now Amazon Connect Customer
+     Basic - some capabilities may no longer be available"** — and the **Confirm Amazon Connect Customer**
+     card shows **Amazon Connect Customer Basic** selected.
+- **Rollback:** the same **Change** button on the **Confirm Amazon Connect Customer** card should offer the
+  reverse selection if this needs to be undone — not directly observed either, same caveat as step 7 above.
+  No data loss expected either direction since this project's flows never reference any Connect-Customer-only
+  feature (`ADR-001`), so the documented "may encounter runtime errors if these features are configured in
+  contact flows" warning does not apply here.
+- **Post-switch verification:** ✅ the green confirmation banner and the card's selected state are the
+  console's own verification, both captured in Marco's screenshot. Placing one test call through the sample
+  flow to confirm inbound calls and Lex association still function unchanged is optional additional
+  verification, not yet separately done.
 
 ## Executing this step
 
@@ -74,3 +82,13 @@ I (Claude Code) do not have AWS Management Console/browser access — no MCP too
 interactive console UI actions, only the SigV4 API surface via `aws-mcp`, which (per `docs/phase2/COST-MODEL.md`'s
 research) does not expose this particular toggle. **Marco needs to perform the six console steps above
 directly.** This is consistent with Marco's own stated preference to "do it myself on a protected resource."
+
+### ✅ Done — 2026-08-11
+
+Marco performed the switch via the console and confirmed with a screenshot: the instance's Customer page
+shows the banner **"This instance is now Amazon Connect Customer Basic - some capabilities may no longer be
+available"** and the **Confirm Amazon Connect Customer** section shows **Amazon Connect Customer Basic**
+selected, on the `marcos-ivr-demo` instance. No contact-flow runtime errors expected or reported — this
+project's flows never reference a Connect-Customer-only feature (`ADR-001`), consistent with the pre-switch
+assessment. Post-switch verification (one test call through the sample flow) not yet separately confirmed —
+note if that's still outstanding.

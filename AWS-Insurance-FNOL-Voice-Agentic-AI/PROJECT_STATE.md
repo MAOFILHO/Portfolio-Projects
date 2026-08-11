@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 2 — Architecture and ADRs — **signed off** (`APPROVED: Phase 2` typed by Marco 2026-08-11). Phase 3 not yet started — no exit criteria written, no approval given for it.
-**Progress:** All 11 required ADRs accepted; Mermaid architecture diagram, full cost model, and threat model all delivered and signed off. Post-sign-off follow-ups (Q11 mechanism research, cost-ceiling verdict) resolved same day — see below.
+**Current phase:** Phase 3 — Data engineering and knowledge base — **approved, starting** (`APPROVED: Phase 3` typed by Marco 2026-08-11).
+**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified (screenshot + console confirmation) same day — this is now the live billing tier. Phase 3 exit criteria are in place below; work begins from here.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -26,7 +26,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
-| 3 | Data engineering and knowledge base | ⬜ Exit criteria proposed 2026-08-11, pending approval to begin |
+| 3 | Data engineering and knowledge base | 🔵 **In progress** — `APPROVED: Phase 3` typed 2026-08-11 |
 | 4 | Conversation design | ⬜ Not started |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
@@ -162,7 +162,7 @@ every deliverable below is documentation/ADRs, verified against live sources rat
 
 ---
 
-## Phase 3 exit criteria — proposed 2026-08-11, **pending Marco's approval to begin**
+## Phase 3 exit criteria — proposed 2026-08-11, **approved same day (`APPROVED: Phase 3`)**
 
 Per the STOP CONDITIONS, no Phase 3 work starts until this table is approved. Scope, per the Phase 0 roadmap
 and the open items it already named as Phase 3's: a synthetic policy corpus internally consistent enough
@@ -264,7 +264,7 @@ claim block**.
 | ~~Q8~~ | ~~Where does the safety pre-node sit relative to Guardrails input filtering?~~ | **RESOLVED** by `ADR-010` | Verified: `ApplyGuardrail`/`InvokeGuardrailChecks` run decoupled from model invocation — L1 sequenced first by never attaching `guardrailIdentifier` to a model call |
 | Q9 | Free-text location redaction is genuinely hard — "right outside my kids' school on Maple" embeds a location a location-entity redactor may miss | Phase 7 | Reported as a limitation, not claimed as solved. Bounded by the fact that structured capture already holds the authoritative value. Restated in `ADR-011` |
 | ~~Q10~~ | ~~L2's per-turn classifier must not be switchable off by the model-tier feature flag~~ | **RESOLVED** by `ADR-004` | L2 is merged into the fixed-tier routing call (Nova Micro, never flag-controlled); the generation-tier flag lives in a separate namespace with no code path to the safety call |
-| ~~Q11~~ | ~~Should the Connect instance switch from "Connect Customer" to "Connect Customer Basic"?~~ | **RESOLVED — approved 2026-08-11.** Mechanism confirmed via AWS docs: instance-level toggle, not fixed at creation, no DID risk; console-only (no IaC path). Recorded as the fourth CLAUDE.md-permitted manual step, `docs/runbooks/MANUAL-STEPS.md`. **Execution pending — Marco performs the six console steps directly** (Claude has no console access this session). Post-switch worst case ≈$14–16/mo at 100 calls/month vs. ≈$21–23/mo pre-switch — this is what converts the ceiling margin from thin to real |
+| ~~Q11~~ | ~~Should the Connect instance switch from "Connect Customer" to "Connect Customer Basic"?~~ | **RESOLVED AND DONE — 2026-08-11.** Instance-level toggle, not fixed at creation, no DID risk, console-only (no IaC path); recorded as the fourth CLAUDE.md-permitted manual step, `docs/runbooks/MANUAL-STEPS.md`. **Marco executed the switch via the console and confirmed by screenshot** — `marcos-ivr-demo` now runs Connect Customer Basic. The documented console path was corrected against the actual screenshot (nav item is "Customer" not "Connect Customer"; action is a "Change" button on the "Confirm Amazon Connect Customer" card, not "Disable"). Live worst case is now ≈$14–16/mo at 100 calls/month vs. ≈$21–23/mo pre-switch — the ceiling margin is real, not thin |
 
 ---
 
@@ -445,3 +445,26 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   `APPROVED: Phase 3`, per the STOP CONDITIONS, same as every prior phase.
 - No application code, no Terraform apply, no billable resource created, no console action taken by Claude.
   $0.00 new spend.
+
+### 2026-08-11 — Tier switch confirmed done; runbook corrected against real console; `APPROVED: Phase 3`
+
+- **Marco executed the Connect Customer Basic switch and confirmed it with a screenshot**: the instance
+  `marcos-ivr-demo`'s Customer page shows the banner *"This instance is now Amazon Connect Customer Basic -
+  some capabilities may no longer be available"* and the **Confirm Amazon Connect Customer** card shows
+  **Amazon Connect Customer Basic** selected. Marked done in `docs/runbooks/MANUAL-STEPS.md`, `PROJECT_STATE.md`
+  Q11, and `docs/phase2/COST-MODEL.md`.
+- **Corrected the documented console path against the real UI**, per Marco's explicit instruction not to let
+  the predicted path stand uncorrected: the left-nav item is **"Customer"**, not "Connect Customer" as the
+  cited AWS doc page's own labels implied; the action is a **"Change"** button on a **"Confirm Amazon Connect
+  Customer"** card, not the "Disable" button the doc page described. `docs/runbooks/MANUAL-STEPS.md` now
+  carries the corrected path, with the one still-unobserved step (the tier-selection prompt after "Change")
+  explicitly labeled as inferred, not confirmed — not papered over as fact.
+- **`docs/phase2/COST-MODEL.md` updated to make the Basic-tier figures the active/live numbers** throughout
+  (per-conversation cost, scenario table, ceiling verdict), with Customer-tier figures relabeled as
+  historical-only. Live worst case: **≈$14–16/mo at 100 calls/month, ≈$9–11 headroom** under the $25 ceiling —
+  roughly 3x the pre-switch margin, resolving Marco's "not comfortable" concern about the pre-switch $2–4
+  headroom against Q1 still being open.
+- **Marco typed `APPROVED: Phase 3`** — the exact STOP CONDITIONS phrase. Phase 3 (data engineering and
+  knowledge base) is now **in progress**. Phase status table and header updated accordingly.
+- No application code yet written this entry; no Terraform apply; no billable resource created beyond what
+  was already approved (the $5 Bedrock standing cap, untouched so far). $0.00 new spend.
