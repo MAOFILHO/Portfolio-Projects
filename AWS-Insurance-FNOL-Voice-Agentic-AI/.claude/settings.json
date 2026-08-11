@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status:*)",
+      "Bash(git diff)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch)",
+      "Bash(git branch --list:*)",
+      "Bash(pytest)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format --check:*)",
+      "Bash(mypy)",
+      "Bash(mypy:*)",
+      "Bash(black --check:*)",
+      "Bash(terraform fmt -check -recursive)",
+      "Bash(terraform fmt -recursive)",
+      "Bash(terraform validate)",
+      "Bash(terraform plan)",
+      "Bash(terraform plan:*)",
+      "Bash(terraform providers)",
+      "Bash(terraform version)",
+      "Bash(terraform show -json)",
+      "Bash(tflint:*)",
+      "Bash(make lint)",
+      "Bash(make typecheck)",
+      "Bash(make test-unit)",
+      "Bash(make verify-billable)"
+    ],
+    "deny": []
+  }
+}

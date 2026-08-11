@@ -20,3 +20,14 @@ frontend/dist/
 # Claude Code local config
 .claude/
 .playwright-mcp/
+
+# Exception: AWS-Insurance-FNOL-Voice-Agentic-AI ships its Claude config as a
+# project artifact (constraint 15 / Definition of Done — a fresh clone must get
+# .claude/mcp.json so the local MCP servers are invocable without extra setup).
+# settings.local.json stays ignored. Scoped deliberately so sibling projects,
+# which keep .claude local-only, are unaffected.
+!AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/
+AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/*
+!AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/settings.json
+!AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/mcp.json
+!AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/skills/
