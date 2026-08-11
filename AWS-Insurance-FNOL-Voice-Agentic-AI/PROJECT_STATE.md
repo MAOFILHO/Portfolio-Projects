@@ -11,7 +11,7 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 3 — Data engineering and knowledge base — **signed off** (`APPROVED: Phase 3` typed by Marco 2026-08-11, followed same day by one closing verification: a real Bedrock round-trip, also completed). Phase 4 not yet started — no exit criteria written, no approval given for it.
+**Current phase:** Phase 3 — Data engineering and knowledge base — **signed off** (`APPROVED: Phase 3` typed by Marco 2026-08-11, followed same day by one closing verification: a real Bedrock round-trip, also completed). **Phase 4 exit criteria proposed below, awaiting `APPROVED: Phase 4` — not started.**
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -27,7 +27,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
-| 4 | Conversation design | ⬜ Not started |
+| 4 | Conversation design | ⬜ Exit criteria proposed 2026-08-11, awaiting approval |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
@@ -186,6 +186,57 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 | 10 | No application/agent code written (Phase 5's scope, not this one) | ✅ The ingestion pipeline is data-engineering (chunk/embed/write), not agent/orchestration code — no LangGraph, no tool-calling, no conversation state anywhere in `src/`. This distinction was scoped explicitly before writing any code, not asserted after the fact |
 | 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | ✅ `COSTS.md` created; **$0.00 of $5.00 consumed** — every run this phase used mock embeddings and a local moto-backed table, never real Bedrock or a real DynamoDB table (which doesn't exist yet — Phase 8 not approved) |
 | 12 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 3`, typed 2026-08-11 |
+
+---
+
+## Phase 4 exit criteria — proposed 2026-08-11, awaiting `APPROVED: Phase 4`
+
+Per the STOP CONDITIONS, no Phase 4 work starts until this table is approved. Scope, per the Phase 0 roadmap:
+taxonomy, slots, utterances (incl. adversarial), prompt registry, dialogue policies, barge-in/repair, persona,
+escalation triggers — flagged at Phase 0 as having **zero prior art in any of the eight source repos** (R4:
+no `AllowInterrupt`, no `PromptAttemptsSpecification`, no `DTMFSpecification`, no `WaitAndContinueSpecification`,
+no streaming/interim-audio pattern anywhere in the corpus). This is design/artifact work only — no LangGraph
+graph, no MCP servers, no tool implementations (that's Phase 5). No billable resource beyond an optional,
+separately cost-gated closing verification (see criterion 12), mirroring how Phase 3 closed.
+
+Five deliverables, mapped to the eight roadmap components:
+
+| File | Roadmap components covered |
+|---|---|
+| `docs/phase4/INTENT-TAXONOMY.md` | taxonomy; utterances incl. adversarial |
+| `docs/phase4/SLOT-DESIGN.md` | slots |
+| `docs/phase4/DIALOGUE-POLICIES.md` | dialogue policies; barge-in/repair; escalation triggers |
+| `docs/phase4/PROMPT-REGISTRY.md` | prompt registry |
+| `docs/phase4/PERSONA.md` | persona |
+
+| # | Criterion | Notes |
+|---|---|---|
+| 1 | Intent taxonomy finalized for all **six** intents (no additions), each with a canonical utterance set plus adversarial/ambiguous phrasings (multi-intent in one turn, out-of-scope requests, low-confidence phrasing) and a stated disambiguation policy | `docs/phase4/INTENT-TAXONOMY.md`. Adversarial set doubles as raw material for Phase 6 evals and Phase 7 red-team — authored once, reused, not duplicated |
+| 2 | Full slot specification for every slot-bearing intent — `FileAutoClaim`'s ~11 slots and `UpdateContactInfo` — covering elicitation prompt, validation rule, confirmation requirement, retry/reprompt ladder, and DTMF fallback grammar for digit-bearing slots (claim/policy number, matching `DATA-CONTRACTS.md`'s digits-only formats) | `docs/phase4/SLOT-DESIGN.md`. Slot priority ordering specified here even though CFN authorship (`ADR-007`) defers the implementation detail to Phase 8 — the *order* is a conversation-design decision, not an infra one |
+| 3 | **CoverageQuestion (intent 3) dialogue policy authored per `coverage-logic.md` §4's question-type split** — an explicit decision path showing how the dialogue manager distinguishes election-fact sub-questions (mandatory: pure RAG; optional: RAG + a policyholder-election lookup) from eligibility/amount sub-questions (always deflected to a human) *before* generating a response, not after. Names the tool surface this requires (a `GetPolicyholderElections`-shaped call) as a forward requirement for Phase 5, not built here | `docs/phase4/DIALOGUE-POLICIES.md`. **Marco's requirement — designed now, not discovered in Phase 5** |
+| 4 | Rental/towing (intent 4) dialogue policy authored, consistent with `endorsements.md`'s existing RAG+tool compound shape | `docs/phase4/DIALOGUE-POLICIES.md` |
+| 5 | Injury/fatality (intent 6) hard-escalation dialogue behavior specified: exact scripted language, preemption from any state, and its relationship to the deterministic pre-node (D12/D15) made explicit at the dialogue-design level, not just the architecture level | `docs/phase4/DIALOGUE-POLICIES.md` |
+| 6 | Barge-in and repair policy: explicit "agent" barge-in intent reachable from every state (constraint on human escalation); no-input/no-match retry ladder with a stated max-retry count and escalation-on-exhaustion, not an infinite loop | `docs/phase4/DIALOGUE-POLICIES.md`. Addresses R4 directly — first design artifact against a gap with zero prior art |
+| 7 | Write-path confirmation policy for `UpdateContactInfo` — explicit read-back-and-confirm step required before any write, per the original constraint that this intent "requires an explicit confirmation policy" | `docs/phase4/DIALOGUE-POLICIES.md` |
+| 8 | Prompt registry drafted for every model-calling node (the merged Nova Micro router+L2 call per `ADR-004`; the generation node; any safety-adjacent prompt) | `docs/phase4/PROMPT-REGISTRY.md` |
+| 9 | **Response-length discipline made an explicit, structured part of every prompt spec** — a per-intent/per-turn-type tolerance table distinguishing tight turns (slot elicitation, slot confirmation, yes/no checks — minimal padding, short declarative form) from relaxed turns (coverage explanation, claim-status summary — allowed to run longer because the caller asked for substantive information), each tied back to the 1,800ms p95 turn-latency budget (constraint: voice turn-latency). Documents the concrete motivating case: Nova Micro padding a one-word answer into a full sentence during pre-flight testing, and states the enforcement mechanism (explicit length instruction in-prompt; a stop-sequence or max-token cap where the model supports one; a length check added as a Phase 6 eval dimension, not just a hopeful instruction) | `docs/phase4/PROMPT-REGISTRY.md`. **Marco's requirement — explicit, not left as an implicit prompting habit** |
+| 10 | AI disclosure script for the greeting, and persona/tone spec (formality, empathy phrase bank — refactored from repo 6 per the Phase 0 merge matrix) | `docs/phase4/PERSONA.md` |
+| 11 | Full escalation-trigger enumeration — every trigger (injury/fatality, explicit "agent" request, no-match exhaustion, out-of-scope request, low routing confidence) mapped to a specific routing action, cross-checked against Phase 1's four escalation routes so nothing is added or dropped silently | `docs/phase4/DIALOGUE-POLICIES.md` |
+| 12 | No application/agent code written — the LangGraph graph, MCP servers, and tool implementations are Phase 5's scope, not this one. No billable resource created; $0.00 new spend, **except** an optional closing verification (same pattern as Phase 3's real-embedding check): a small number of real Bedrock calls against the drafted prompts to confirm the length-discipline instructions actually hold empirically, cost-gated separately at close, not assumed here | |
+| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | Pending — this table is the request for it |
+
+### Carried-forward risks and open items this phase must respect, not resolve
+
+- **R4** (zero prior art for barge-in/DTMF/timeouts/streaming) is what this phase exists to close at the
+  design level — Phase 9 still measures the real cold-start/latency numbers against it.
+- **R1's residual gap** (unconfirmed `PromptAttemptsSpecification` behavior under nested CFN for multi-slot
+  intents) stays a Phase 8 proof-of-concept; Phase 4 only fixes the *policy* (retry counts, ladder shape), not
+  the CFN mechanics.
+- **Q7** (does a reranker earn its latency) and **Q9** (free-text location redaction is hard) remain open,
+  owned by Phase 6/7 respectively — not blocking Phase 4 sign-off.
+- Phase 1's non-gameable containment definition and escalation-recall-as-gate (D13) constrain how the
+  escalation-trigger table in criterion 11 may be written — a trigger that quietly narrows recall to improve
+  containment optics would violate D13, not just be bad design.
 
 ---
 
@@ -684,3 +735,28 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   spend. Bedrock standing-approval cap consumption: **$0.0000103 of $5.00**.
 - **Phase 3 is now signed off.** Phase 4 has not begun — no exit criteria written, no approval given, per the
   STOP CONDITIONS.
+
+### 2026-08-11 — Phase 4 exit criteria proposed
+
+- **Marco asked Phase 4 be scoped with exit criteria**, with two things made explicit in the plan rather than
+  discovered later:
+  1. The `coverage-logic.md` §4 finding that `CoverageQuestion` is not pure-RAG for every sub-question
+     (mandatory-benefit election facts: pure RAG; optional-benefit election facts: RAG+tool; eligibility/amount
+     questions: always deflect) changes intent 3's dialogue policy and must be designed in Phase 4, not
+     discovered while building Phase 5.
+  2. The prompt library needs an explicit response-length discipline for voice: Nova Micro padded a one-word
+     answer into a full sentence during Marco's own pre-flight testing, and every unnecessary clause spends
+     Polly synthesis time against the 1,800ms p95 turn-latency budget. Length constraints must be a named part
+     of the prompt spec, with tight-vs-relaxed turns distinguished by intent (slot confirmation vs. coverage
+     explanation), not left as an implicit prompting habit.
+- **Proposed exit-criteria table added above** (5 deliverables — `docs/phase4/{INTENT-TAXONOMY,SLOT-DESIGN,
+  DIALOGUE-POLICIES,PROMPT-REGISTRY,PERSONA}.md` — mapped against all eight roadmap components: taxonomy,
+  slots, utterances incl. adversarial, prompt registry, dialogue policies, barge-in/repair, persona,
+  escalation triggers). Both of Marco's requirements are load-bearing criteria (3 and 9), not folded quietly
+  into general scope. Carried forward, not re-litigated: R4 (zero prior art for barge-in/DTMF — this phase
+  exists to close the design gap, Phase 9 still measures the real numbers), R1's residual CFN gap (stays
+  Phase 8's), Q7/Q9 (stay Phase 6/7's), and D13 (escalation recall is a gate — the escalation-trigger table
+  may not quietly narrow recall to improve containment optics).
+- **No application/agent code written this entry** — the table itself is the only artifact. No billable
+  resource created. $0.00 new spend. **Phase 4 has not started** — presented for Marco's `APPROVED: Phase 4`,
+  per the STOP CONDITIONS, same as every prior phase.
