@@ -40,7 +40,8 @@ If a gate fails, the system is not working, regardless of how good the other num
 
 | Metric | Kind | Threshold | Measurement |
 |---|---|---|---|
-| **Safety-critical escalation recall** | **GATE** | **100%** | Of golden conversations containing a KABCO **K** or **A** indication, the fraction where escalation fired within one turn. Denominator includes adversarial phrasings and mid-slot-filling mentions |
+| **Safety-critical escalation recall, labelled set** | **GATE** | **100%** | Of golden conversations containing a KABCO **K** or **A** indication, the fraction where escalation fired within one turn. Denominator includes adversarial phrasings and mid-slot-filling mentions. **100% here is achievable by construction** — see below |
+| **Safety-critical escalation recall, held-out novel phrasings** | OBSERVED → TARGET once baselined | **No threshold at first.** Reported as a number, never rounded up, never omitted | A held-out set of injury phrasings **not** used to build either detector, refreshed each red-team cycle. This is the honest measure of real-world recall |
 | Escalation latency | **GATE** | ≤ 1 turn | Turns between the trigger utterance and transfer initiation |
 | Safety guidance given before transfer | **GATE** | 100% | The 911 instruction precedes the transfer on every route-1 escalation |
 | Agent-request honoured | **GATE** | 100% | Every "agent"/"human" barge-in reaches a human without gatekeeping, from any state |
@@ -53,6 +54,44 @@ If a gate fails, the system is not working, regardless of how good the other num
 escalation is the failure this system must not have. The bias is toward over-escalation, and
 false-escalation rate (§4) exists to keep that bias from becoming useless behaviour — not to trade against
 recall.
+
+### Why the recall gate is split in two
+
+The original single "100% recall" gate was **not achievable and therefore dishonest**. No detector achieves
+100% recall against unbounded natural language; a caller can always say something like *"my neck feels
+funny"* that no rule anticipated. A gate everyone knows is unachievable gets quietly excepted the first time
+it fails, which is worse than not having it.
+
+The split fixes this without weakening the commitment:
+
+- **On the labelled safety set, 100% is achievable by construction**, because detection is a deterministic pre-node (D12). If a labelled phrasing fails, that is a **code defect with a known fix**, not a model-quality shortfall. Gating it is meaningful and enforceable.
+- **On held-out novel phrasings, the number is reported, not gated.** A threshold would be a guess, and a guessed threshold on a safety metric is exactly the kind of invented number constraint 13 forbids. It becomes a TARGET only once a real baseline exists, and it is **never omitted from a report because it looks bad** — that is the whole reason it is measured separately.
+
+**This is the honest framing, not a relaxation.** The labelled gate got stricter (a failure is now a defect,
+not a tuning problem) and a previously hidden weakness became a standing reported metric.
+
+### The layered detector is an architectural requirement, not a mitigation
+
+Committed now rather than deferred, because a single detector demonstrably cannot carry this:
+
+| Layer | Mechanism | Purpose |
+|---|---|---|
+| **L1** | Deterministic lexical/pattern pre-node, runs **before the model sees the input** and before Guardrails input filtering | High precision, near-zero latency and cost, fully testable. Carries the labelled gate |
+| **L2** | Cheap dedicated classifier (Nova Micro tier), single-purpose binary "injury indicated?" call on every turn | Catches phrasings L1 has no rule for. Recall-biased: **an ambiguous case escalates** |
+| **L3** | Caller-request route — the hard "agent" barge-in, always available | The caller's own override when both detectors miss |
+
+**Union semantics: any layer firing escalates.** No layer can veto another, and nothing downstream —
+including the main graph and Guardrails — can suppress the result.
+
+L2's cost is deliberate and small: one Nova Micro classification per turn is a fraction of a cent per
+conversation against telephony's ~92% share of marginal cost. **Paying it is not a budget question.** L2's
+latency sits inside the 1,800 ms budget as a parallel call, not a serial one, and Phase 9 measures that
+rather than assuming it.
+
+Consequences that now bind Phase 2: **L1 must precede Guardrails input filtering** (an input filter blocking a
+graphic injury description before L1 sees it defeats the whole mechanism — this becomes its own ADR), and L2's
+per-turn invocation must survive the model-tier feature flag, i.e. **it cannot be switched off by a config
+change** that was only meant to change the generation tier.
 
 ---
 

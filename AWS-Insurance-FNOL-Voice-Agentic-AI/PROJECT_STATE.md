@@ -11,9 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 1 — complete, awaiting sign-off
-**Last signed off:** Phase 0 (`APPROVED: Phase 0`, 2026-08-11)
-**Next phase:** Phase 2 — Architecture and ADRs (blocked on Phase 1 sign-off)
+**Current phase:** Phase 1 — **✅ SIGNED OFF** (`APPROVED: Phase 1`, 2026-08-11) with two corrections applied
+**Next phase:** Phase 2 — Architecture and ADRs — **open**
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -25,7 +24,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | Ph | Name | Status |
 |---|---|---|
 | 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
-| 1 | Problem framing and success criteria | ✅ Complete — awaiting sign-off |
+| 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ⬜ Not started |
 | 3 | Data engineering and knowledge base | ⬜ Not started |
 | 4 | Conversation design | ⬜ Not started |
@@ -143,7 +142,9 @@ to go quiet about its *scope*. This produced decision **D9** below.
 | D11 | Fictional carrier named **"Example Mutual"** | Deliberately synthetic so the public portfolio artifact cannot be confused with, or mistaken for, a real insurer. Upstream repo 5 used "AnyInsurance"; a plausible-sounding invented name risks colliding with a real carrier | 2026-08-11 |
 | D12 | Injury detection is a **deterministic pre-node**, not an intent classified by the model | Makes intent 6 a property of the graph rather than a model behaviour, so 100% recall is structurally achievable and not overridable downstream | 2026-08-11 |
 | D13 | Mandatory escalations excluded from the containment denominator; safety recall a separate 100% gate | Naive containment rewards refusing to escalate. Prevents the metric creating pressure against the behaviour the system exists to guarantee | 2026-08-11 |
-| D14 | **Loss date/time is NOT redacted**, contrary to the inherited PII taxonomy; VIN/plate/policy/claim number added | Loss date/time is the most important field captured — blanket-redacting it would destroy the record the system exists to create | 2026-08-11 |
+| ~~D14~~ | ~~**Loss date/time is NOT redacted**~~ — **SUPERSEDED by D16** | Original rationale was a utility argument only, which was insufficient and produced the wrong design | 2026-08-11 |
+| D15 | **Layered injury detection (L1+L2+L3) is an architectural requirement**, and the recall gate is split: 100% GATE on the labelled safety set, held-out novel phrasings reported with no threshold | Resolves Q6 instead of deferring it. A single detector cannot achieve 100% recall against unbounded natural language, and a gate known to be unachievable gets quietly excepted the first time it fails. The labelled gate got *stricter* (a failure is now a code defect, not a tuning problem) and a hidden weakness became a standing reported metric | 2026-08-11 |
+| D16 | **Loss date/time and loss location get identical treatment: both retained in the structured claim record, both redacted from transcripts and logs.** VIN/plate/policy/claim number added as redaction targets | Date + time + location is a **quasi-identifier close to uniquely identifying**, because a collision at a given place and time is often externally recorded (police reports, news, traffic/roadside logs). Redacting `NAME`/`PHONE` while keeping the tuple is not de-identification. Splitting a quasi-identifier across two policies protects nothing. The utility need is met by the structured record, so utility and privacy only conflicted while both lived in the same store | 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -196,9 +197,41 @@ claim block**.
 | Q3 | Claim-number format — needs designing. No repo supplies a usable one: repo 5's `PY1234-123450` **embeds the OTP secret**, repo 6 uses an unspeakable bare UUID, repo 8's `CLM-001` is 3 digits | Phase 3 data contracts | Proposal: `CLM-YYMM-XXXXX` + check character |
 | Q4 | Vector store choice — S3 Vectors (now GA in us-west-2) vs FAISS/sqlite-vec baked into the Lambda package vs DynamoDB + in-memory cosine | Phase 2 ADR | Trade-off table required before choosing. **Not** OpenSearch Serverless |
 | Q5 | Deductible logic, total-loss threshold and injury-severity→coverage mapping (BI/PIP/MedPay) have no prior art | Phase 3 | Author from the KABCO scale harvested in Phase 0 |
-| Q6 | **Lexical injury detection will miss novel phrasings** ("my neck feels funny"). Named the system's most serious residual risk in the use-case card | Phase 7 red-team | Layered approach likely: deterministic lexical pre-node **plus** a cheap classifier as a second detector, since recall is a 100% gate and one detector cannot carry it |
+| ~~Q6~~ | ~~Lexical injury detection will miss novel phrasings~~ | **RESOLVED** by D15 | Layered L1+L2+L3 detection committed as an architectural requirement; recall gate split into a labelled-set GATE and a held-out OBSERVED measure |
 | Q7 | Does the reranker earn its latency against the 1,800 ms budget? | Phase 6 | Measured, not assumed — recall@5 gain vs added p95 |
-| Q8 | Where does the safety pre-node sit relative to Guardrails input filtering? | Phase 2 ADR | A guardrail blocking a graphic injury description before the safety node sees it would be a **critical ordering bug**. Safety detection must run first |
+| ~~Q8~~ | ~~Where does the safety pre-node sit relative to Guardrails input filtering?~~ | **PROMOTED** to a required Phase 2 ADR (ADR-010) | No longer an open question or an implementation note — it is a safety-critical ordering constraint that must be visible to anyone reading the architecture |
+| Q9 | Free-text location redaction is genuinely hard — "right outside my kids' school on Maple" embeds a location a location-entity redactor may miss | Phase 7 | Reported as a limitation, not claimed as solved. Bounded by the fact that structured capture already holds the authoritative value |
+| Q10 | L2's per-turn classifier must not be switchable off by the model-tier feature flag | Phase 5 | A config change meant to alter the generation tier must not be able to disable a safety detector. Needs an explicit test |
+
+---
+
+## Phase 2 — required ADRs
+
+Carried in from Phase 1 and from Marco's Phase 1 sign-off. ADRs are immutable once accepted; supersede,
+never edit.
+
+| ADR | Decision | Notes |
+|---|---|---|
+| ADR-001 | Lex as turn-manager vs. direct Bedrock streaming | |
+| ADR-002 | Vector store choice (cost-driven) | Q4. Trade-off table required. **Not** OpenSearch Serverless. S3 Vectors is now GA in us-west-2 |
+| ADR-003 | LangGraph vs. Bedrock Agents vs. AgentCore | |
+| ADR-004 | Model tier and router strategy | Must account for L2's per-turn safety classifier as non-optional (Q10) |
+| ADR-005 | State persistence — DynamoDB checkpointer keyed on Connect contact ID | No official `langgraph-checkpoint-dynamodb` exists; we write a `BaseCheckpointSaver` |
+| ADR-006 | Sync vs. async post-call pipeline | |
+| **ADR-007** | **IaC tool selection — a THREE-way comparison**, not two: native `aws_lexv2models_*` · nested CFN `AWS::Lex::Bot` wrapped by Terraform · CDK (Python) | Resolves R1. All three options assessed on merit; the recommendation is not pre-decided by the Phase 0 proposal |
+| ADR-008 | Region selection | Connect/Lex co-location, AgentCore four-region limit, cross-region inference, and what would force a move to `ca-central-1` for data residency. **Exists to prevent a repeat of a prior project's full teardown after hitting a regional capability wall** |
+| ADR-009 | Cold-start vs. latency budget | How the 1,800 ms p95 survives Lambda cold starts, and what it would cost not to |
+| **ADR-010** | **Safety-detection ordering: L1 runs before Guardrails input filtering** | Promoted from Q8 at Marco's instruction. Safety-critical ordering constraint — an input filter blocking a graphic injury description before L1 sees it defeats the detector. Must be visible in the architecture, not buried in code |
+| ADR-011 | PII redaction boundary — which store holds which field | Formalises D16: the quasi-identifier analysis and the structured-record-vs-transcript split |
+
+### Other Phase 2 requirements
+
+- **Cost model assumes zero free tier and zero credits** — always-free tiers plus pay-per-use only. The 12-month free tier was replaced (Jul 2025) and Lex V2 has no perpetual free tier.
+- **Rental/towing is core scope, not a gap.** It is 2 of the 6 intents; Phase 0 recorded "no prior art in the corpus", which is a statement about the *sources*, not a shortfall in this project. Phase 3 authors both coverage sections as first-class deliverables with unambiguous ground truth.
+- Mermaid architecture diagram, in-repo.
+- Full cost model with the free-tier table and a per-resource teardown-risk column.
+- Threat model covering prompt injection, tool abuse, PII leakage, toll fraud and denial-of-wallet, seeded by the observed failure modes in `docs/phase0/SECURITY-FINDINGS.md`.
+- Propose `.claude/skills/ai-sdlc-phase-gate/SKILL.md` from friction actually encountered in Phases 0–2, and **wait for approval** before writing it.
 
 ---
 
@@ -224,3 +257,9 @@ claim block**.
 - Anchored non-goals on the Phase 0 authority matrix: $0 settlement authority, cannot deny, never adjudicates. **AI advises; a licensed human decides.**
 - Surfaced Q6–Q8, including an **ordering constraint discovered while writing the metrics**: a Guardrails input filter that blocks a graphic injury description *before* the safety node sees it would be a critical bug. Safety detection must run first — this now binds the Phase 2 architecture.
 - Named the system's most serious residual risk plainly in the use-case card (lexical injury detection missing novel phrasings) rather than implying it is solved.
+- **`APPROVED: Phase 1`**, with two corrections applied the same day:
+  1. **Q6 resolved rather than deferred (D15).** The unqualified "100% recall" gate was unachievable and therefore dishonest. Split into a labelled-set GATE (achievable by construction, so a failure is now a *code defect*) and a held-out novel-phrasing measure reported with no threshold. Layered L1+L2+L3 detection with union semantics committed as an architectural requirement.
+  2. **D14 superseded by D16.** The exemption had only a utility argument. Adding the re-identification argument changed the design: date + time + location is a quasi-identifier close to uniquely identifying, so **both** fields now get identical treatment — retained in the structured claim record, redacted from transcripts and logs. Splitting a quasi-identifier across two policies protects nothing.
+- Q8 promoted from an open question to **required ADR-010** at Marco's instruction — safety-detection ordering is architecture, not an implementation note.
+- Recorded the Phase 2 ADR list (11 ADRs) and Phase 2 requirements, incl. a **three-way** IaC comparison (ADR-007) so the Phase 0 proposal is not pre-decided, a zero-free-tier cost model, and rental/towing reframed as **core scope rather than a gap**.
+- ⚠ Flagged to Marco that three items he referred to as "sent earlier" (zero-free-tier cost model, three-way Lex IaC ADR, rental/towing not a gap) do **not** appear anywhere in this session's history. Proceeding on a stated reconstruction rather than pretending receipt; awaiting correction.

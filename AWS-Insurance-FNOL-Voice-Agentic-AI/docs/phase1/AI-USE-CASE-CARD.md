@@ -57,9 +57,44 @@ Caller audio is transcribed by Lex. **Call recording is disabled** and enforced 
 are PII-redacted **before** persistence or logging — the unredacted transcript is never written anywhere,
 not even transiently.
 
-One deliberate deviation from the inherited PII taxonomy: **loss date and time are not redacted.** They are
-the single most important field the system captures, and blanket-redacting them would destroy the record the
-system exists to create. VIN, licence plate, policy number and claim number are *added* as redaction targets.
+VIN, licence plate, policy number and claim number are *added* as redaction targets, none being present in
+the inherited Comprehend taxonomy.
+
+### Loss date/time and loss location — the re-identification analysis
+
+The Phase 1 draft exempted loss date/time from redaction on a **utility** argument alone ("it is the most
+important field we capture"). That argument is true and insufficient, and taken alone it produced the wrong
+design. The corrected reasoning:
+
+**The re-identification risk is real and it comes from the combination.** Loss date, loss time and loss
+location are each weak identifiers alone. Together they are a **quasi-identifier that is close to uniquely
+identifying**, because a vehicle collision at a given place and time is frequently a matter of external
+record — police accident reports, insurance databases, local news, traffic camera and roadside-assistance
+logs. An adversary holding any of those can link the tuple to a named individual without needing a name in
+our data at all. Redacting `NAME` and `PHONE` while retaining date + time + location is therefore **not**
+de-identification; it is the classic mistake of removing direct identifiers and treating the result as
+anonymous.
+
+**So the question was framed wrongly.** It is not "redact loss date/time, yes or no?" — it is **which store
+each field belongs in**. Utility and privacy conflict only if both live in the same place:
+
+| Store | `loss_datetime` | `loss_location` | Rationale |
+|---|---|---|---|
+| **Structured claim record** (DynamoDB) | **Retained** | **Retained** | This is the business record; the fields *are* the payload. Encrypted at rest, access-controlled, TTL'd, never emitted to logs |
+| **Persisted transcript** | **Redacted** | **Redacted** | Already captured structurally. The free-text narrative has **no** operational need for them, so retaining them there is pure added risk |
+| **Application logs / traces / metrics** | **Redacted** | **Redacted** | No operational need whatsoever. Only the correlation ID and non-identifying counters are logged |
+| **Eval / red-team fixtures** | Synthetic values only | Synthetic values only | Never derived from a real call |
+
+**Revised position, replacing the Phase 1 draft:** loss date/time and loss location receive **identical**
+treatment, and **both are redacted from transcripts and logs**. Treating them differently was the error —
+splitting a quasi-identifier across two policies protects nothing, since either half plus external data
+narrows the field almost as well as the whole. The utility argument is satisfied by the structured record,
+which is where the data is actually used.
+
+Two honest caveats:
+
+- **This system's own exposure is nil**, because all policies and policyholders are synthetic and the only real callers are the author and invited reviewers. The analysis above is about whether the *design* would be sound with real data — which is the standard this project holds itself to, since a design that only works because the data is fake is not architecturally honest.
+- **Redaction in the narrative is imperfect by nature.** A caller saying "it happened right outside my kids' school on Maple" embeds a location in prose that a location-entity redactor may not catch. Free-text location redaction is genuinely hard, and is reported as a limitation rather than claimed as solved.
 
 ---
 
@@ -69,7 +104,7 @@ Known and expected. Ordered by severity, with the mitigation and the residual ri
 
 | # | Failure mode | Severity | Mitigation | Residual risk |
 |---|---|---|---|---|
-| F1 | **Missed injury escalation** — injury mentioned, escalation does not fire | **Critical** | Deterministic pre-node on every turn, before the model sees input; not overridable downstream; 100% recall is a hard CI gate | Novel phrasings ("my neck feels funny") may evade lexical detection. **This is the system's most serious residual risk and is stated as such rather than resolved.** Phase 7 red-teams it directly |
+| F1 | **Missed injury escalation** — injury mentioned, escalation does not fire | **Critical** | **Three-layer detection with union semantics** (any layer fires ⇒ escalate, no layer can veto): L1 deterministic pre-node before the model and before Guardrails input filtering; L2 cheap recall-biased classifier on every turn; L3 caller-request barge-in. 100% is gated on the **labelled** safety set, where it is achievable by construction | Novel phrasings may still evade L1 **and** L2. Recall on **held-out** novel phrasings is reported as a standing metric with no threshold, rather than asserted. **This remains the system's most serious residual risk**, now bounded by layering and measured honestly instead of covered by an unachievable gate. Phase 7 red-teams it directly |
 | F2 | **Silent partial write** on contact update — record half-changed | **Critical** | Mandatory read-back, write only on unambiguous confirmation, single atomic write | Treated as a defect class, not a tuning target |
 | F3 | **Hallucinated coverage** — a limit, deductible or entitlement not in the policy | High | RAG with groundedness check; Guardrails contextual grounding; decline-and-transfer preferred over answering | Judge-based groundedness scoring is a **proxy, not ground truth**. Some ungrounded answers will pass |
 | F4 | **Confident wrong answer on an out-of-corpus question** | High | Explicit "not in your policy" path; abstention is scored as success | Over-abstention degrades usefulness; the trade-off is tuned against evals, not assumed |
