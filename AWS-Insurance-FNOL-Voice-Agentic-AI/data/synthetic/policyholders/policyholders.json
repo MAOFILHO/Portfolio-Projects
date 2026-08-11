@@ -1,0 +1,146 @@
+{
+  "_comment": "Synthetic Example Mutual policyholders, Ontario OAP-structured policies. Formats per docs/phase3/DATA-CONTRACTS.md. Coverage semantics per data/synthetic/policy/{example-mutual-oap-policy-wording,coverage-logic}.md. Deliberate variation in optional (2026-07-01 SABS reform) elections and Section 7 selections, per Marco's instruction, so CoverageQuestion has real ground-truth variation to be evaluated against in Phase 6. All PII is fabricated: names are placeholder-style, phones use the 555 reserved exchange, emails are @example.com, addresses are generic Ontario city + non-specific street, per the Phase 0 PII-safe convention.",
+  "_schema_note": "third_party_liability_limit is 1000000 for every policyholder (docs/phase3/ONTARIO-INSURANCE-REFERENCE.md §2). dcpd.opted_out and dcpd.has_optional_deductible are false for every policyholder in this corpus by construction (stated simplifications, ONTARIO-INSURANCE-REFERENCE.md §7 items 2-3) -- fields are still present, not omitted, so the 'always false here, not universally true' distinction stays visible in the data itself.",
+  "policyholders": [
+    {
+      "policy_number": "PY4821",
+      "first_name": "Priya",
+      "last_name": "Nakamura",
+      "phone": "555-0142",
+      "email": "priya.nakamura@example.com",
+      "address": "48 Birchwood Crescent, Mississauga, ON",
+      "drivers_license": "N45871023",
+      "policy_effective_date": "2026-01-15",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": true,
+        "caregiver_benefit": true,
+        "housekeeping_home_maintenance_benefit": false,
+        "dependent_care_benefit": false,
+        "death_funeral_benefits": false,
+        "indexation_benefit": true
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": "Collision", "deductible": 500 },
+      "rental_endorsement": { "elected": true, "daily_cap": 50, "max_days": 20, "total_cap": 1000 },
+      "vehicles": ["9SYAB1239G1000101", "9SYNP3452H2000501"],
+      "_note": "Two-vehicle policy -- deliberate variety case, and the second vehicle carries claim CLM-2608-00055-6 (injury/DCPD), keeping it separate from the first vehicle's own claim history rather than reusing a vehicle across unrelated losses."
+    },
+    {
+      "policy_number": "PY1103",
+      "first_name": "Marc-Andre",
+      "last_name": "Tremblay",
+      "phone": "555-0187",
+      "email": "ma.tremblay@example.com",
+      "address": "12 Rue des Erables, Ottawa, ON",
+      "drivers_license": "T98123456",
+      "policy_effective_date": "2026-02-01",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": false,
+        "caregiver_benefit": false,
+        "housekeeping_home_maintenance_benefit": false,
+        "dependent_care_benefit": false,
+        "death_funeral_benefits": false,
+        "indexation_benefit": false
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": null, "deductible": null },
+      "rental_endorsement": { "elected": false, "daily_cap": null, "max_days": null, "total_cap": null },
+      "vehicles": ["9SYCD4568G1000102"],
+      "_note": "Minimum-coverage policyholder: no optional SABS elections, no Section 7 (Loss or Damage) purchased at all -- liability-only above the mandatory floor. Deliberate contrast case for CoverageQuestion's 'is X part of my coverage' -> a clean 'no' for every optional item."
+    },
+    {
+      "policy_number": "PY6650",
+      "first_name": "Devon",
+      "last_name": "Whitfield",
+      "phone": "555-0219",
+      "email": "d.whitfield@example.com",
+      "address": "301 Lakeshore Blvd, Hamilton, ON",
+      "drivers_license": "W67234891",
+      "policy_effective_date": "2025-11-20",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": true,
+        "caregiver_benefit": false,
+        "housekeeping_home_maintenance_benefit": false,
+        "dependent_care_benefit": false,
+        "death_funeral_benefits": false,
+        "indexation_benefit": false
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": "All Perils", "deductible": 1000 },
+      "rental_endorsement": { "elected": true, "daily_cap": 50, "max_days": 20, "total_cap": 1000 },
+      "vehicles": ["9SYEF7892H2000201"]
+    },
+    {
+      "policy_number": "PY2977",
+      "first_name": "Aisha",
+      "last_name": "Okonkwo",
+      "phone": "555-0334",
+      "email": "aisha.okonkwo@example.com",
+      "address": "77 Fennell Ave, Kitchener, ON",
+      "drivers_license": "O12987345",
+      "policy_effective_date": "2026-03-05",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": false,
+        "caregiver_benefit": false,
+        "housekeeping_home_maintenance_benefit": true,
+        "dependent_care_benefit": true,
+        "death_funeral_benefits": false,
+        "indexation_benefit": false
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": "Collision", "deductible": 1000 },
+      "rental_endorsement": { "elected": false, "daily_cap": null, "max_days": null, "total_cap": null },
+      "vehicles": ["9SYGH2342H2000202"]
+    },
+    {
+      "policy_number": "PY3348",
+      "first_name": "Robert",
+      "last_name": "Falconi",
+      "phone": "555-0456",
+      "email": "r.falconi@example.com",
+      "address": "9 Wellington Row, London, ON",
+      "drivers_license": "F55678234",
+      "policy_effective_date": "2025-09-10",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": false,
+        "caregiver_benefit": false,
+        "housekeeping_home_maintenance_benefit": false,
+        "dependent_care_benefit": false,
+        "death_funeral_benefits": true,
+        "indexation_benefit": true
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": "Comprehensive", "deductible": 500 },
+      "rental_endorsement": { "elected": true, "daily_cap": 50, "max_days": 20, "total_cap": 1000 },
+      "vehicles": ["9SYJK5672F1000301"]
+    },
+    {
+      "policy_number": "PY9012",
+      "first_name": "Yulia",
+      "last_name": "Petrenko",
+      "phone": "555-0578",
+      "email": "y.petrenko@example.com",
+      "address": "220 Danforth Ave, Toronto, ON",
+      "drivers_license": "P34456712",
+      "policy_effective_date": "2026-04-22",
+      "third_party_liability_limit": 1000000,
+      "accident_benefits_elections": {
+        "income_replacement_benefit": false,
+        "caregiver_benefit": true,
+        "housekeeping_home_maintenance_benefit": false,
+        "dependent_care_benefit": false,
+        "death_funeral_benefits": false,
+        "indexation_benefit": false
+      },
+      "dcpd": { "opted_out": false, "has_optional_deductible": false },
+      "loss_or_damage_coverage": { "type": "Comprehensive", "deductible": 1000 },
+      "rental_endorsement": { "elected": false, "daily_cap": null, "max_days": null, "total_cap": null },
+      "vehicles": ["9SYLM8906J3000401"]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "_comment": "Synthetic vehicles. Every VIN has a deliberately incorrect position-9 check digit, generated per docs/phase3/DATA-CONTRACTS.md §3 (NHTSA weighted-sum-mod-11 algorithm, correct digit computed then advanced by one position in the 0-9,X alphabet). WMI '9SY' is not assigned to any real manufacturer as of the Phase 0/3 research pass -- re-verify before this becomes load-bearing beyond flavor text. actual_cash_value_cad is the value used in coverage-logic.md's total-loss formula (80% of ACV threshold) for any claim against that vehicle.",
+  "vehicles": [
+    {
+      "vin": "9SYAB1239G1000101",
+      "vin_check_digit_note": "correct NHTSA check digit would be 8; this VIN uses 9 (deliberately invalid, by design)",
+      "policy_number": "PY4821",
+      "year": 2022,
+      "make": "Example Motors",
+      "model": "Meridian",
+      "plate": "KJH-4523",
+      "actual_cash_value_cad": 22000
+    },
+    {
+      "vin": "9SYNP3452H2000501",
+      "vin_check_digit_note": "correct would be 1; uses 2",
+      "policy_number": "PY4821",
+      "year": 2024,
+      "make": "Harborline",
+      "model": "Skiff",
+      "plate": "TVN-2258",
+      "actual_cash_value_cad": 27500
+    },
+    {
+      "vin": "9SYCD4568G1000102",
+      "vin_check_digit_note": "correct would be 7; uses 8",
+      "policy_number": "PY1103",
+      "year": 2019,
+      "make": "Example Motors",
+      "model": "Comet",
+      "plate": "RTL-8890",
+      "actual_cash_value_cad": 11500
+    },
+    {
+      "vin": "9SYEF7892H2000201",
+      "vin_check_digit_note": "correct would be 1; uses 2",
+      "policy_number": "PY6650",
+      "year": 2023,
+      "make": "Northbridge Auto",
+      "model": "Talon",
+      "plate": "WQD-1147",
+      "actual_cash_value_cad": 18000
+    },
+    {
+      "vin": "9SYGH2342H2000202",
+      "vin_check_digit_note": "correct would be 1; uses 2",
+      "policy_number": "PY2977",
+      "year": 2020,
+      "make": "Northbridge Auto",
+      "model": "Talon",
+      "plate": "MZP-6602",
+      "actual_cash_value_cad": 15200
+    },
+    {
+      "vin": "9SYJK5672F1000301",
+      "vin_check_digit_note": "correct would be 1; uses 2",
+      "policy_number": "PY3348",
+      "year": 2021,
+      "make": "Example Motors",
+      "model": "Meridian",
+      "plate": "BXF-3391",
+      "actual_cash_value_cad": 19500
+    },
+    {
+      "vin": "9SYLM8906J3000401",
+      "vin_check_digit_note": "correct would be 5; uses 6",
+      "policy_number": "PY9012",
+      "year": 2018,
+      "make": "Harborline",
+      "model": "Skiff",
+      "plate": "DGN-7714",
+      "actual_cash_value_cad": 9800
+    }
+  ]
+}

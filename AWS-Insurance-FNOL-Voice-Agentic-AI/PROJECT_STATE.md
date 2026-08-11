@@ -178,11 +178,11 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 | 2 | Rental/towing entitlement sections authored from scratch, consistent with the rest of the corpus | ✅ Resolves `R5` — `data/synthetic/policy/endorsements.md`. Rental modeled on real OPCF 20 ($50/day, 20-day/$1,000 cap); towing modeled as a bundled $150/incident allowance inside the DCPD/Collision claim itself, not a separate OPCF 35 roadside product — scope decision named, not silent |
 | 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | ✅ Resolves `Q5` — `data/synthetic/policy/coverage-logic.md`. Total-loss threshold stated as Example Mutual's explicit 80%-of-ACV policy rule (Ontario sets no single legislated %). KABCO (scene severity) and SABS's MIG/non-cat/catastrophic tiers kept as two distinct axes, never conflated. §4 (new) decides how "am I entitled to X" is answered for the SABS optional elections: by question type (election-fact vs. eligibility-determination), not benefit type |
 | 4 | Claim-number format finalized and documented | ✅ Resolves `Q3` — `docs/phase3/DATA-CONTRACTS.md`: `CLM-YYMM-NNNNN-C`, Luhn mod-10, worked example `CLM-2608-00042-4` |
-| 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | |
-| 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | Do-not-propagate list, `CLAUDE.md` |
+| 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | ✅ `data/synthetic/{policyholders,vehicles,claims}/*.json` — 6 policyholders, 7 vehicles, 8 claims, machine-validated against `docs/phase3/DATA-CONTRACTS.md` and `coverage-logic.md`'s formulas by `scripts/validate_synthetic_records.py` (checked in, re-runnable, not a one-off manual check). Deliberate variation in optional-benefit elections and Section 7 selections per Marco's instruction, so `CoverageQuestion` has real ground truth to evaluate in Phase 6 |
+| 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | ✅ All 7 synthetic VINs use WMI `9SY` (unassigned) with a position-9 check digit machine-verified as deliberately wrong, not accidentally valid |
 | 7 | Ingestion pipeline: chunks corpus, embeds via Titan Embed v2, writes to DynamoDB per `ADR-002`'s schema | Exercises the $5 Bedrock standing cap only if run against AWS; local/LocalStack path preferred for iteration |
 | 8 | Data card written: what's synthetic, what's derived from real regulatory/domain sources (KABCO, NHTSA MMUCC), what's authored with no external grounding at all (rental/towing, deductible logic) | No invented-metrics-or-capabilities discipline extends to data provenance — label what's asserted vs. synthesized |
-| 9 | No real customer/policy PII introduced; no images vendored from any source repo | Continuation of Phase 0's cleared PII gate and blanket no-images rule |
+| 9 | No real customer/policy PII introduced; no images vendored from any source repo | ✅ All names/phones/emails/addresses fabricated (555 exchange, `@example.com`, generic Ontario streets); no images anywhere in Phase 3 output |
 | 10 | No application/agent code written (Phase 5's scope, not this one) | |
 | 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | Provisioned resources remain individually gated regardless |
 | 12 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ **Pending** — type `APPROVED: Phase 3` if this scope is right, or redirect before work starts |
@@ -560,3 +560,33 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   can't back — ground truth for Phase 6 evals is the corpus's own internal consistency, not an assertion that
   every dollar figure matches current Ontario regulation exactly.
 - No application/agent code written. No billable resource created. $0.00 new spend.
+
+### 2026-08-11 — Synthetic policyholder/vehicle/claim records generated and machine-validated
+
+- **6 policyholders, 7 vehicles, 8 claims** in `data/synthetic/{policyholders,vehicles,claims}/*.json`.
+  Deliberate variation in the six 2026-07-01 optional SABS elections and the Section 7 (Loss-or-Damage)
+  selection across policyholders — one has elected almost nothing beyond mandatory coverage (`PY1103`), one
+  has multiple elections plus two vehicles (`PY4821`) — so `CoverageQuestion`'s election-fact-lookup path
+  (`coverage-logic.md` §4) has real, differing ground truth for Phase 6 evals, not a uniform corpus.
+- **Claims cover the full status range** (`Reported` not used yet, `UnderReview`, `RepairInProgress`,
+  `Settled`, `Closed`) and the fault/coverage space (pure DCPD at 0% fault, mixed DCPD+Collision at 75%,
+  single-vehicle 100%-at-fault total loss, single-vehicle 100%-at-fault repairable, two Comprehensive perils
+  with no fault question at all). One claim (`CLM-2608-00042-4`) is built to exactly match
+  `endorsements.md`'s rental worked example (12 of 20 days used, $400 of $1,000 remaining); one
+  (`CLM-2607-00042-5`) exactly matches `coverage-logic.md`'s total-loss worked example ($16,000/$18,000 =
+  88.9%, settlement $17,000).
+- **Wrote and ran `scripts/validate_synthetic_records.py`** rather than hand-checking arithmetic — verifies
+  every claim number's Luhn check digit, every VIN's check digit is deliberately (not accidentally) invalid,
+  full referential integrity across the three files, and every claim's total-loss flag and settlement amount
+  against `coverage-logic.md`'s formulas exactly. **All checks passed on the first fully-corrected run** —
+  one dataset design error was caught and fixed *during* this process (an early draft reused a just-totaled
+  vehicle for a second claim; fixed by giving that policyholder a second vehicle instead, which is now also
+  a deliberate two-vehicle-policy test case). Script is checked into the repo, re-runnable, intended as a
+  Phase 9/10 CI fixture check, not a one-off.
+- No fatal/K-tier KABCO claims included as live scenarios — noted explicitly in the file header that L1
+  hard-escalation fixtures belong to Phase 6/7's eval and red-team suites, not this baseline corpus. One
+  KABCO A (suspected serious, non-fatal) claim included as a historical-record field only.
+- All PII fabricated (555-exchange phones, `@example.com` emails, generic Ontario street addresses,
+  placeholder-style names); no images. WMI `9SY` used for every VIN, unassigned per Phase 0/3 research.
+- No application/agent code written (data generation + a standalone validation script, no agent/orchestration
+  logic). No billable resource created. $0.00 new spend.
