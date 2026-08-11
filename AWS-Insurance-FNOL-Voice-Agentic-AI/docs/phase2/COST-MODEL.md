@@ -24,12 +24,26 @@ Amazon Connect now ships as two priced products, confirmed live today:
 makes **Connect Customer Basic the pricing tier that matches actual usage**, at roughly **half** the per-minute
 rate the project's earlier cost estimates assumed.
 
-**This is flagged, not executed.** Whether the existing (already-provisioned, protected-per-`CLAUDE.md`)
-instance can be switched to Customer Basic via Terraform/API, or only via a manual console toggle (the
-documented "How to switch to Customer Basic" procedure is console-driven), and whether Marco wants to make
-that switch given it changes the billing behavior of a pre-provisioned resource, **is an open decision for
-Marco, not something executed here.** Both tiers are carried in the tables below so the cost model is
-correct either way until that decision is made.
+**This is flagged, not executed.** Two questions raised at Phase 2 sign-off are resolved here:
+
+1. **Is the tier fixed at instance creation, forcing a new instance (and DID re-claim) to switch?** **No.**
+   Confirmed live against `docs.aws.amazon.com/connect/latest/adminguide/enable-nextgeneration-amazonconnect.html`:
+   the tier is an **instance-level toggle** — "Enable Connect Customer across your entire instance" section,
+   with an **Enable**/**Disable** action, on the existing instance's own settings page. Switching to Customer
+   Basic does **not** require creating a new instance and therefore carries **no DID release/re-claim risk** —
+   the 180-day claim block does not enter into this decision.
+2. **Is it IaC-expressible?** **No — console-only, as of 2026-08-11.** The `UpdateInstanceAttribute` API's
+   documented attribute types (`INBOUND_CALLS`, `OUTBOUND_CALLS`, `CONTACTFLOW_LOGS`, `CONTACT_LENS`,
+   `AUTO_RESOLVE_BEST_VOICES`, `USE_CUSTOM_TTS_VOICES`, `EARLY_MEDIA`, `MULTI_PARTY_CONFERENCE`,
+   `HIGH_VOLUME_OUTBOUND`, `ENHANCED_CONTACT_MONITORING`, `ENHANCED_CHAT_MONITORING`,
+   `MULTI_PARTY_CHAT_CONFERENCE`, `MESSAGE_STREAMING`) include nothing for the Connect Customer/Basic split,
+   and Terraform's `aws_connect_instance` resource covers the same attribute set — no argument reaches this
+   toggle either. **This makes the switch a new manual-step candidate outside the three CLAUDE.md-permitted
+   manual steps** (the pre-provisioned instance, admin user, and DID). It would need its own named approval
+   and a runbook entry, consistent with how this project treats any change to a protected pre-existing
+   resource — not executed as part of this cost model.
+
+Both tiers are carried in the tables below so the cost model is correct either way until Marco decides.
 
 ---
 
@@ -98,6 +112,20 @@ pricing correction (Nova Micro/Lite both came in materially cheaper than the ear
 
 Both scenarios stay under the **$25/month hard ceiling**, and the simulator (zero AWS spend, per `D8`) remains
 the primary tool for anything beyond verification-scale real-call volume.
+
+### ⚠ Does the $25/month ceiling survive the zero-free-tier rebuild? **Yes — stated plainly, not deferred.**
+
+Every figure in this cost model was built under the zero-credits/zero-promotional-free-tier assumption from
+the first line of this document — there is no separate "real" number waiting to be discovered in Phase 8.
+Worst case in the tables above is **100 real calls/month on the Connect Customer tier: ≈$21–23/mo**, roughly
+**$2–4 of headroom** under the $25 ceiling. The Basic tier (≈$14–16/mo at 100 calls) carries far more margin.
+At the project's actual expected usage — simulator-first, ~20 verification/demo calls/month — both tiers sit
+at **$5–7/mo or less**, nowhere near the ceiling. **The one figure genuinely still open is Q1** (the exact
+Canada DID per-minute/per-day rate, pending ≥1 day of Cost Explorer accrual) — but even the unverified
+placeholder in the per-conversation table above is a few cents per call, not enough to move the 100-call
+scenario past $25 on its own. **Verdict: the ceiling holds under current information, on both pricing tiers,
+at both modeled volumes.** If Q1's real rate comes back materially higher than the placeholder, that is the
+one input that could change this verdict — flagged here so it isn't a surprise later.
 
 ---
 

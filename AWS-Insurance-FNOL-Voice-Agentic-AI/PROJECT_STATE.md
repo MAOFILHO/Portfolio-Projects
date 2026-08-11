@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 2 — Architecture and ADRs — **complete, pending Marco's sign-off** (documentation/artifacts only; no `APPROVED: Phase 2` typed, no billable resource created)
-**Progress:** All 11 required ADRs accepted; Mermaid architecture diagram, full cost model, and threat model all delivered. See "Phase 2 exit criteria" below for the sign-off table.
+**Current phase:** Phase 2 — Architecture and ADRs — **signed off** (`APPROVED: Phase 2` typed by Marco 2026-08-11). Phase 3 not yet started — no exit criteria written, no approval given for it.
+**Progress:** All 11 required ADRs accepted; Mermaid architecture diagram, full cost model, and threat model all delivered and signed off. Post-sign-off follow-ups (Q11 mechanism research, cost-ceiling verdict) resolved same day — see below.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
@@ -125,7 +125,7 @@ to go quiet about its *scope*. This produced decision **D9** below.
 
 ---
 
-## Phase 2 exit criteria — for Marco's sign-off (not yet signed off)
+## Phase 2 exit criteria — **signed off 2026-08-11**
 
 **No application code, no Terraform apply, no billable resource created. $0.00 new spend.** Artifacts only —
 every deliverable below is documentation/ADRs, verified against live sources rather than memory throughout.
@@ -143,7 +143,7 @@ every deliverable below is documentation/ADRs, verified against live sources rat
 | 9 | No invented metrics or capabilities (constraint 13, extended to engineering claims) | ✅ Every unverified figure explicitly labelled ("unconfirmed," "engineering estimate pending benchmark") rather than asserted — e.g. `ADR-009`'s cold-start latency, `ADR-002`'s cosine-similarity latency |
 | 10 | Pricing verified against current sources, never memory | ✅ Three parallel research passes (region/IaC facts; Bedrock/Guardrails/Agents facts; full pricing sweep), all cited with URLs and fetch date; corrected two carried-forward errors (Nova Micro/Lite pricing in `CLAUDE.md`; the "no DynamoDB checkpointer exists" assumption in `ADR-005`) |
 | 11 | No billable resource created; $0.00 new spend | ✅ Documentation and artifacts only throughout |
-| 12 | **Marco's explicit sign-off** | ⬜ **Pending.** Presented here for review — type `APPROVED: Phase 2` if satisfied, per the STOP CONDITIONS |
+| 12 | **Marco's explicit sign-off** | ✅ **`APPROVED: Phase 2`, typed 2026-08-11**, with two follow-up asks resolved same day: Q11's tier-switch mechanism, and an explicit $25-ceiling verdict (see session log below) |
 
 ### Key Phase 2 findings worth flagging explicitly at sign-off
 
@@ -237,7 +237,7 @@ claim block**.
 | ~~Q8~~ | ~~Where does the safety pre-node sit relative to Guardrails input filtering?~~ | **RESOLVED** by `ADR-010` | Verified: `ApplyGuardrail`/`InvokeGuardrailChecks` run decoupled from model invocation — L1 sequenced first by never attaching `guardrailIdentifier` to a model call |
 | Q9 | Free-text location redaction is genuinely hard — "right outside my kids' school on Maple" embeds a location a location-entity redactor may miss | Phase 7 | Reported as a limitation, not claimed as solved. Bounded by the fact that structured capture already holds the authoritative value. Restated in `ADR-011` |
 | ~~Q10~~ | ~~L2's per-turn classifier must not be switchable off by the model-tier feature flag~~ | **RESOLVED** by `ADR-004` | L2 is merged into the fixed-tier routing call (Nova Micro, never flag-controlled); the generation-tier flag lives in a separate namespace with no code path to the safety call |
-| **Q11** | **Should the Connect instance switch from "Connect Customer" ($0.038/min) to "Connect Customer Basic" (~$0.0202/min)?** This project uses none of Connect Customer's bundled AI, so Basic matches actual usage and roughly halves telephony cost — the dominant cost driver | Before Phase 8 provisioning, ideally | **Marco's decision, not executed.** Also unresolved: whether the switch is IaC-expressible or only a manual console toggle on the existing (protected) instance — see `docs/phase2/COST-MODEL.md` |
+| **Q11** | **Should the Connect instance switch from "Connect Customer" ($0.038/min) to "Connect Customer Basic" (~$0.0202/min)?** This project uses none of Connect Customer's bundled AI, so Basic matches actual usage and roughly halves telephony cost — the dominant cost driver | Before Phase 8 provisioning, ideally | **Mechanism resolved 2026-08-11; the switch itself is still Marco's decision, not executed.** Confirmed via AWS docs (`enable-nextgeneration-amazonconnect.html`): the tier is an **instance-level toggle** ("Enable Connect Customer across your entire instance" → Enable/Disable), **not fixed at creation** — switching does **not** require a new instance and does **not** touch the DID. However, it is **console-only**: the `UpdateInstanceAttribute` API's documented attribute types (`INBOUND_CALLS`, `OUTBOUND_CALLS`, `CONTACTFLOW_LOGS`, `CONTACT_LENS`, `AUTO_RESOLVE_BEST_VOICES`, `USE_CUSTOM_TTS_VOICES`, `EARLY_MEDIA`, `MULTI_PARTY_CONFERENCE`, `HIGH_VOLUME_OUTBOUND`, `ENHANCED_CONTACT_MONITORING`, `ENHANCED_CHAT_MONITORING`, `MULTI_PARTY_CHAT_CONFERENCE`, `MESSAGE_STREAMING`) include no Connect-Customer-tier attribute, and no Terraform `aws_connect_instance` argument covers it either — there is no IaC path today. This is therefore a **new manual-step candidate outside the CLAUDE.md-permitted set** (instance/admin-user/DID only) and needs its own named approval before being flipped, same discipline as any protected-resource change. See `docs/phase2/COST-MODEL.md` for full detail |
 
 ---
 
@@ -359,3 +359,31 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   clarifying question had noted was missing. **Not self-marked as signed off** — presented for Marco's
   explicit `APPROVED: Phase 2`, consistent with the STOP CONDITIONS restated at the top of every session.
 - **No application code, no Terraform apply, no billable resource created. $0.00 new spend throughout.**
+
+### 2026-08-11 — Phase 2 signed off; Q11 mechanism resolved; cost-ceiling verdict stated
+
+- **Marco typed `APPROVED: Phase 2`** — the exact STOP CONDITIONS phrase this time. Phase 2 exit-criteria
+  item 12 marked ✅. Phase 2 is complete. **Phase 3 has not begun** — no exit criteria written for it, no
+  approval given; nothing beyond this entry proceeds without that.
+- Alongside sign-off, Marco gave two explicit conditions before any Q11 action: **research the tier-switch
+  mechanism from AWS documentation first**, and **do not change the tier on the protected instance without
+  explicit approval by name.** Both honored — no console or API action taken against the live instance.
+- **Q11 mechanism resolved**, via a live fetch of
+  `docs.aws.amazon.com/connect/latest/adminguide/enable-nextgeneration-amazonconnect.html`: the Connect
+  Customer / Customer Basic tier is an **instance-level toggle** ("Enable Connect Customer across your
+  entire instance" → Enable/Disable), **not fixed at creation**. Switching does **not** require a new
+  instance and carries **no DID release/re-claim risk** — Marco's stated blocking concern does not apply.
+  However, it **is console-only**: neither the `UpdateInstanceAttribute` API's documented attribute types
+  nor Terraform's `aws_connect_instance` resource cover this toggle. This makes the switch a **new
+  manual-step candidate outside the three CLAUDE.md-permitted manual steps** (instance, admin user, DID) —
+  named explicitly rather than treated as a routine config change, since it touches the protected instance.
+  Recorded in `PROJECT_STATE.md` Q11 and `docs/phase2/COST-MODEL.md`. **The switch itself remains
+  unexecuted, pending Marco's named approval of this specific console action.**
+- **$25 ceiling verdict stated plainly in `docs/phase2/COST-MODEL.md`**, not left implicit in the scenario
+  tables: the ceiling **holds** under the zero-free-tier assumption already baked into the cost model from
+  its first line, on both pricing tiers, at both modeled volumes (20 and 100 calls/month) — worst case is
+  ≈$21–23/mo (Customer tier, 100 calls), ≈$2–4 of headroom. The one still-open input that could move this
+  (Q1, the exact Canada DID rate, pending Cost Explorer accrual) is called out by name as the one thing that
+  could change the verdict, rather than leaving that caveat buried in a table.
+- No application code, no Terraform apply, no billable resource created, no console action taken. $0.00 new
+  spend.
