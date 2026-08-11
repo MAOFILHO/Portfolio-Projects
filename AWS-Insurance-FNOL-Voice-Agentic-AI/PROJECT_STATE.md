@@ -25,8 +25,8 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 |---|---|---|
 | 0 | Repo archaeology, workspace setup, merge strategy | ✅ **Signed off** 2026-08-11 |
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
-| 2 | Architecture and ADRs | ⬜ Not started |
-| 3 | Data engineering and knowledge base | ⬜ Not started |
+| 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
+| 3 | Data engineering and knowledge base | ⬜ Exit criteria proposed 2026-08-11, pending approval to begin |
 | 4 | Conversation design | ⬜ Not started |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
@@ -162,6 +162,33 @@ every deliverable below is documentation/ADRs, verified against live sources rat
 
 ---
 
+## Phase 3 exit criteria — proposed 2026-08-11, **pending Marco's approval to begin**
+
+Per the STOP CONDITIONS, no Phase 3 work starts until this table is approved. Scope, per the Phase 0 roadmap
+and the open items it already named as Phase 3's: a synthetic policy corpus internally consistent enough
+that groundedness evals mean something, the two intents with **zero prior art anywhere in the source corpus**
+(rental/towing entitlement, `R5`), policyholder/vehicle/claim records, an ingestion pipeline into the
+DynamoDB vector store (`ADR-002`), and a data card. No application/agent code (that's Phase 5); no billable
+resource beyond the already-approved $5 Bedrock standing cap if embeddings generation is exercised here
+(`ADR-002`'s Titan Embed v2, on-demand, effectively free at this corpus size).
+
+| # | Criterion | Notes |
+|---|---|---|
+| 1 | Synthetic policy wordings authored for all six intents' coverage needs, **internally consistent** (same policy numbers/limits/deductibles referenced consistently across documents) | Primary groundedness eval target (`CoverageQuestion`) depends on this; inconsistency reads as model failure per the Phase 0 finding |
+| 2 | Rental/towing entitlement sections authored from scratch, consistent with the rest of the corpus | Resolves `R5` — genuinely zero prior art across all eight source repos |
+| 3 | Deductible logic, total-loss threshold, and injury-severity→coverage mapping (BI/PIP/MedPay) authored | Resolves `Q5`. KABCO scale (harvested Phase 0) is the grounding for injury severity |
+| 4 | Claim-number format finalized and documented | Resolves `Q3`. Proposal on record: `CLM-YYMM-XXXXX` + check character — confirm or revise here |
+| 5 | Synthetic policyholder, vehicle, and claim records created, matching the ID formats and PII taxonomy corrections from Phase 0 (VIN/plate/policy#/claim# added; `DATE_TIME` **not** exempted per `ADR-011`'s reversal) | |
+| 6 | Deliberately invalid VIN check digit used throughout — never the structurally-valid VIN flagged in Phase 0 archaeology | Do-not-propagate list, `CLAUDE.md` |
+| 7 | Ingestion pipeline: chunks corpus, embeds via Titan Embed v2, writes to DynamoDB per `ADR-002`'s schema | Exercises the $5 Bedrock standing cap only if run against AWS; local/LocalStack path preferred for iteration |
+| 8 | Data card written: what's synthetic, what's derived from real regulatory/domain sources (KABCO, NHTSA MMUCC), what's authored with no external grounding at all (rental/towing, deductible logic) | No invented-metrics-or-capabilities discipline extends to data provenance — label what's asserted vs. synthesized |
+| 9 | No real customer/policy PII introduced; no images vendored from any source repo | Continuation of Phase 0's cleared PII gate and blanket no-images rule |
+| 10 | No application/agent code written (Phase 5's scope, not this one) | |
+| 11 | No billable resource created beyond exercising the already-approved $5 Bedrock standing cap (Phases 3–7), logged per-run in `COSTS.md` | Provisioned resources remain individually gated regardless |
+| 12 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ **Pending** — type `APPROVED: Phase 3` if this scope is right, or redirect before work starts |
+
+---
+
 ## Decisions to date
 
 | # | Decision | Rationale | Date |
@@ -237,7 +264,7 @@ claim block**.
 | ~~Q8~~ | ~~Where does the safety pre-node sit relative to Guardrails input filtering?~~ | **RESOLVED** by `ADR-010` | Verified: `ApplyGuardrail`/`InvokeGuardrailChecks` run decoupled from model invocation — L1 sequenced first by never attaching `guardrailIdentifier` to a model call |
 | Q9 | Free-text location redaction is genuinely hard — "right outside my kids' school on Maple" embeds a location a location-entity redactor may miss | Phase 7 | Reported as a limitation, not claimed as solved. Bounded by the fact that structured capture already holds the authoritative value. Restated in `ADR-011` |
 | ~~Q10~~ | ~~L2's per-turn classifier must not be switchable off by the model-tier feature flag~~ | **RESOLVED** by `ADR-004` | L2 is merged into the fixed-tier routing call (Nova Micro, never flag-controlled); the generation-tier flag lives in a separate namespace with no code path to the safety call |
-| **Q11** | **Should the Connect instance switch from "Connect Customer" ($0.038/min) to "Connect Customer Basic" (~$0.0202/min)?** This project uses none of Connect Customer's bundled AI, so Basic matches actual usage and roughly halves telephony cost — the dominant cost driver | Before Phase 8 provisioning, ideally | **Mechanism resolved 2026-08-11; the switch itself is still Marco's decision, not executed.** Confirmed via AWS docs (`enable-nextgeneration-amazonconnect.html`): the tier is an **instance-level toggle** ("Enable Connect Customer across your entire instance" → Enable/Disable), **not fixed at creation** — switching does **not** require a new instance and does **not** touch the DID. However, it is **console-only**: the `UpdateInstanceAttribute` API's documented attribute types (`INBOUND_CALLS`, `OUTBOUND_CALLS`, `CONTACTFLOW_LOGS`, `CONTACT_LENS`, `AUTO_RESOLVE_BEST_VOICES`, `USE_CUSTOM_TTS_VOICES`, `EARLY_MEDIA`, `MULTI_PARTY_CONFERENCE`, `HIGH_VOLUME_OUTBOUND`, `ENHANCED_CONTACT_MONITORING`, `ENHANCED_CHAT_MONITORING`, `MULTI_PARTY_CHAT_CONFERENCE`, `MESSAGE_STREAMING`) include no Connect-Customer-tier attribute, and no Terraform `aws_connect_instance` argument covers it either — there is no IaC path today. This is therefore a **new manual-step candidate outside the CLAUDE.md-permitted set** (instance/admin-user/DID only) and needs its own named approval before being flipped, same discipline as any protected-resource change. See `docs/phase2/COST-MODEL.md` for full detail |
+| ~~Q11~~ | ~~Should the Connect instance switch from "Connect Customer" to "Connect Customer Basic"?~~ | **RESOLVED — approved 2026-08-11.** Mechanism confirmed via AWS docs: instance-level toggle, not fixed at creation, no DID risk; console-only (no IaC path). Recorded as the fourth CLAUDE.md-permitted manual step, `docs/runbooks/MANUAL-STEPS.md`. **Execution pending — Marco performs the six console steps directly** (Claude has no console access this session). Post-switch worst case ≈$14–16/mo at 100 calls/month vs. ≈$21–23/mo pre-switch — this is what converts the ceiling margin from thin to real |
 
 ---
 
@@ -387,3 +414,34 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   could change the verdict, rather than leaving that caveat buried in a table.
 - No application code, no Terraform apply, no billable resource created, no console action taken. $0.00 new
   spend.
+
+### 2026-08-11 — Q11 approved and documented as 4th manual step; cost-ceiling re-stated post-switch; Phase 3 exit criteria proposed
+
+- **Marco approved the Connect Customer Basic switch by name**, to be done via the console, and asked it be
+  documented as a **fourth permitted manual step** with the `ADR-001` reasoning (this project deliberately
+  doesn't use Connect Customer's bundled AI, so Basic matches actual usage) — and asked the cost model note
+  explicitly that the pre-switch Customer tier was the unexamined instance-creation default, not a choice
+  this project made.
+- **Created `docs/runbooks/MANUAL-STEPS.md`** (the runbook `CLAUDE.md` already referenced but that didn't
+  yet exist) — all four permitted manual steps in one place: instance, admin user, DID (all pre-existing,
+  no action), and the new tier switch with its exact six-step console path, rollback note, and post-switch
+  verification step. **Updated `CLAUDE.md`'s "Only permitted manual steps" line** to name the fourth step
+  and point at the runbook, keeping the constraint document and the procedure doc in sync.
+- **Claude does not have AWS console/browser access in this session** — no MCP tool here provides
+  interactive console UI actions, and the API surface (`aws-mcp`) doesn't expose this toggle either (same
+  finding as Q11's original research). Stated this plainly in the runbook rather than attempting a workaround;
+  **Marco performs the six console steps directly**, matching his stated preference on a protected resource.
+  **The switch has not been executed by either party as of this entry** — runbook and cost model describe it
+  as approved and ready, not as done.
+- **Cost model updated**: the pre-switch Customer-tier figures are now labeled explicitly as reflecting an
+  unexamined default rather than a decision. Added the recalculated post-switch worst case (**≈$14–16/mo at
+  100 calls/month, ≈$9–11 of headroom**, roughly 3x the pre-switch ≈$2–4) as the number that actually creates
+  usable margin against Q1 (Canada DID rate) still being open — matching Marco's instruction to treat the
+  switch as margin-creating, not a nice-to-have.
+- **Proposed Phase 3 exit criteria** (see table above) — data engineering and knowledge base scope: synthetic
+  policy corpus, rental/towing sections with zero prior art (`R5`), deductible/total-loss/injury-severity
+  logic (`Q5`), claim-number format (`Q3`), policyholder/vehicle/claim records, ingestion pipeline into
+  `ADR-002`'s DynamoDB vector store, and a data card. **Not started** — presented for Marco's
+  `APPROVED: Phase 3`, per the STOP CONDITIONS, same as every prior phase.
+- No application code, no Terraform apply, no billable resource created, no console action taken by Claude.
+  $0.00 new spend.

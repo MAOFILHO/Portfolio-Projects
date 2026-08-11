@@ -24,7 +24,8 @@ Amazon Connect now ships as two priced products, confirmed live today:
 makes **Connect Customer Basic the pricing tier that matches actual usage**, at roughly **half** the per-minute
 rate the project's earlier cost estimates assumed.
 
-**This is flagged, not executed.** Two questions raised at Phase 2 sign-off are resolved here:
+**Status: approved, execution pending.** Marco approved the switch by name on 2026-08-11. Two questions
+raised at Phase 2 sign-off are resolved:
 
 1. **Is the tier fixed at instance creation, forcing a new instance (and DID re-claim) to switch?** **No.**
    Confirmed live against `docs.aws.amazon.com/connect/latest/adminguide/enable-nextgeneration-amazonconnect.html`:
@@ -38,12 +39,18 @@ rate the project's earlier cost estimates assumed.
    `HIGH_VOLUME_OUTBOUND`, `ENHANCED_CONTACT_MONITORING`, `ENHANCED_CHAT_MONITORING`,
    `MULTI_PARTY_CHAT_CONFERENCE`, `MESSAGE_STREAMING`) include nothing for the Connect Customer/Basic split,
    and Terraform's `aws_connect_instance` resource covers the same attribute set — no argument reaches this
-   toggle either. **This makes the switch a new manual-step candidate outside the three CLAUDE.md-permitted
-   manual steps** (the pre-provisioned instance, admin user, and DID). It would need its own named approval
-   and a runbook entry, consistent with how this project treats any change to a protected pre-existing
-   resource — not executed as part of this cost model.
+   toggle either. Recorded as the fourth CLAUDE.md-permitted manual step in `docs/runbooks/MANUAL-STEPS.md`,
+   which carries the exact console path. **Claude has no console/browser access in this session — Marco
+   performs the switch directly**, consistent with his stated preference on a protected resource.
 
-Both tiers are carried in the tables below so the cost model is correct either way until Marco decides.
+**The pre-switch Connect Customer tier was never a deliberate choice — it is simply what a newly created
+Connect instance ships with by default** ("all new instances are Connect Customer instances," per AWS's own
+docs). Every cost figure computed against the Customer tier anywhere in this document, including the ones
+still shown below for the historical record, reflects that unexamined default, not a decision this project
+made. Connect Customer Basic is the tier `ADR-001` actually calls for.
+
+Both tiers are carried in the tables below — Customer tier retained for the historical record and as the
+figure that applies until the switch is actually executed, Basic tier as the target state.
 
 ---
 
@@ -113,19 +120,29 @@ pricing correction (Nova Micro/Lite both came in materially cheaper than the ear
 Both scenarios stay under the **$25/month hard ceiling**, and the simulator (zero AWS spend, per `D8`) remains
 the primary tool for anything beyond verification-scale real-call volume.
 
-### ⚠ Does the $25/month ceiling survive the zero-free-tier rebuild? **Yes — stated plainly, not deferred.**
+### ⚠ Does the $25/month ceiling survive the zero-free-tier rebuild? **Yes on both tiers — but the pre-switch margin was not comfortable.**
 
 Every figure in this cost model was built under the zero-credits/zero-promotional-free-tier assumption from
 the first line of this document — there is no separate "real" number waiting to be discovered in Phase 8.
-Worst case in the tables above is **100 real calls/month on the Connect Customer tier: ≈$21–23/mo**, roughly
-**$2–4 of headroom** under the $25 ceiling. The Basic tier (≈$14–16/mo at 100 calls) carries far more margin.
-At the project's actual expected usage — simulator-first, ~20 verification/demo calls/month — both tiers sit
-at **$5–7/mo or less**, nowhere near the ceiling. **The one figure genuinely still open is Q1** (the exact
-Canada DID per-minute/per-day rate, pending ≥1 day of Cost Explorer accrual) — but even the unverified
-placeholder in the per-conversation table above is a few cents per call, not enough to move the 100-call
-scenario past $25 on its own. **Verdict: the ceiling holds under current information, on both pricing tiers,
-at both modeled volumes.** If Q1's real rate comes back materially higher than the placeholder, that is the
-one input that could change this verdict — flagged here so it isn't a surprise later.
+
+**Pre-switch (Connect Customer, the unexamined default):** worst case is **100 real calls/month ≈$21–23/mo**,
+roughly **$2–4 of headroom** under the $25 ceiling — thin enough that Marco flagged it as not comfortable
+given Q1 (the exact Canada DID rate) is still open. That flag is correct: $2–4 leaves effectively no room for
+Q1 to land above its placeholder, a Canada-telco add-on to be re-verified, or any modest usage growth beyond
+the modeled 100 calls.
+
+**Post-switch (Connect Customer Basic — the recalculated real number, not a nice-to-have):** worst case
+becomes **100 real calls/month ≈$14–16/mo**, **≈$9–11 of headroom** under the $25 ceiling — roughly **3x the
+pre-switch margin**. This is the number that actually creates working room against Q1 and against normal
+estimate noise, which is why the switch is treated here as margin-creating, not cosmetic. At the project's
+actual expected usage — simulator-first, ~20 verification/demo calls/month — the Basic tier sits at
+**$3.60–5.60/mo**, with essentially the whole budget unused.
+
+**The one figure genuinely still open is Q1** (the exact Canada DID per-minute/per-day rate, pending ≥1 day
+of Cost Explorer accrual). Against the post-switch ≈$9–11 headroom, Q1 landing meaningfully above its
+placeholder no longer threatens the ceiling the way it would have pre-switch. **Verdict: the ceiling holds on
+both tiers at both modeled volumes; the Basic-tier switch is what converts that from a thin pass into a real
+margin, and is the reason this switch is being executed now rather than deferred to Phase 8.**
 
 ---
 

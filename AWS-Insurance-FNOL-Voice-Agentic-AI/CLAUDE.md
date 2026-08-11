@@ -43,7 +43,7 @@ Health and life claims are explicitly out of scope. Scope is P&C auto only.
 - **Hard ceiling: $25/month.** Not a target.
 
 ### Engineering
-- **Zero portal clicks.** 100% IaC. Only permitted manual steps: the pre-provisioned Connect instance, admin user, and DID — all documented in the runbook.
+- **Zero portal clicks.** 100% IaC. Only permitted manual steps: the pre-provisioned Connect instance, admin user, and DID, plus (added 2026-08-11, Marco-approved) the one-time Connect Customer → Connect Customer Basic instance-tier switch — no IaC path exists for it. All four documented in `docs/runbooks/MANUAL-STEPS.md`.
 - Python 3.12 backend (`>=3.12,<3.13`), React + TypeScript + Vite frontend. **Terraform ≥1.9** (ADR in Phase 2). Mixing Terraform and CDK is forbidden.
 - No secrets in code, ever. SSM standard parameters preferred (free) or Secrets Manager. `.env.example` only.
 - Everything runs locally without AWS: LocalStack/moto, plus a call simulator that replays audio/text turns through the agent.
