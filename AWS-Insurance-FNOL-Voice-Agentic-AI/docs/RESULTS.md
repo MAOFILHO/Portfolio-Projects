@@ -533,6 +533,55 @@ Two substantive findings survive the non-result:
   `max(t₁, t₂)`, not the sum. The pre-committed fallback (if concurrency measured near the sum, prefer B)
   does not trigger.
 
+## 3.6.1 It is not a 2.5% drop rate — it is a deterministic schema failure on one input class
+
+Reporting the split's dropped `intent_confidence` as **"2.53% of calls"** was the wrong frame, and the
+frame hid the finding. A rate implies a random process with a tail you could shorten by retrying. This is
+not that.
+
+**Measured, on the seven items that fail:**
+
+| | merged 4-field schema | split 3-field schema |
+|---|---|---|
+| `what's my deductible if i need to make a claim` | ✅ | **DROP** |
+| `will this raise my premiums if i go through insurance` | ✅ | **DROP** |
+| `does dcpd cover the damage to my own vehicle here in ontario` | ✅ | **DROP** |
+| `Do I have income replacement benefits?` | ✅ | **DROP** |
+| `Am I covered for housekeeping help while I recover?` | ✅ | **DROP** |
+| `Do I have income replacement if I can't work?` | ✅ | **DROP** |
+| the prompt-injection turn (`adv-*`, quoted policy text) | ✅ | **DROP** |
+
+**7 of 7.** Deterministic — 20 of 20 retries at temperature 0.0 reproduced the failure exactly. Retry-immune
+by construction, which is why the pre-registration's *preferred* remedy is unusable (§3.8).
+
+Three things this frame makes visible that a rate does not:
+
+1. **The failing inputs are one class.** All seven are coverage/policy questions — the turns where
+   `coverage_question_type` applies. The model fills `intent` and `coverage_question_type` and omits
+   `intent_confidence`. It is not failing at random; it is failing wherever it has a third field to
+   populate.
+2. **The merged schema does not have this gap.** Rungs A and B made 1,580 calls over the same 158 items
+   with zero drops, and the direct head-to-head above confirms it item by item. **The defect is a property
+   of the split, not of Nova Micro or of forced tool use.**
+3. **It was caused by removing a field.** The merged schema is `{safety_flag, intent, intent_confidence,
+   coverage_question_type}`; the split classifier is the same minus `safety_flag`. Deleting one required
+   field made a *different* required field start disappearing. That is not an intuitive failure mode, and
+   it is the strongest single piece of evidence in this phase that **schema shape is a behavioural input,
+   not just a validation contract.**
+
+The corrected reading of the ladder: C's effective macro-F1 of 0.326 is not a classification-quality
+result. Its raw macro-F1 is 0.497 against A's 0.518 — a wash — and the gap is 5 golden turns scored as
+misses because a coverage question returned nothing. **C fails `ADR-014` §4 criterion 2 on a schema defect
+wearing a quality metric's clothing.** That does not rescue C: the pre-registered availability band blocks
+the split regardless, and the defect is real whatever its cause. It does mean the ladder never got a clean
+reading of what the split does to intent quality.
+
+**Not fixed in Phase 7.** The only remedies that could work change the schema, the prompt, or the sampling
+temperature. The schema option — making `intent_confidence` optional and routing its absence to the
+ambiguity clarifier — is a **dialogue-policy decision touching `D18`**, and Marco's ruling was that making
+a Phase 4 policy call under pressure to rescue a Phase 7 rung *"is exactly the move that reads badly
+later."* Carried to Phase 13 as `Q13` with this diagnostic attached.
+
 ## 3.7 Two pre-registered rules were written against outcome shapes that did not occur
 
 Pre-registration has done real work in this phase — it is why the dropped-`safety_flag` threshold could not
@@ -582,6 +631,42 @@ number, which this project has watched go wrong. It is an argument for two speci
    temptation at that moment is to apply the rule's *spirit*, which is indistinguishable from choosing
    after the fact. Both failures above were surfaced to the project owner as failures, and the decision
    went back to him.
+
+## 3.8 A good decision, made later, silently invalidated an earlier rule that nobody revisited
+
+The phase's fourth instrument lesson, and unlike §3.5's it is not about a guard checking the wrong layer.
+It is about a **correct** change quietly removing the ground an earlier rule stood on.
+
+`D27` pinned the router to temperature 0.0. That decision was right, well-measured, and is the reason
+every number in §3.6 is reproducible. It also broke two things written before it, neither of which was
+re-examined when it landed:
+
+| Written earlier | What it assumed | What `D27` did to it |
+|---|---|---|
+| `ADR-014` §4's **"≥ 2 sd"** tolerance | that measured sd is nonzero | sd became **0.000**; two sd is zero, so the bar admits any difference at all |
+| The dropped-field pre-registration's **preferred remedy: a bounded retry** | that drops are stochastic, so a retry samples again | drops became **deterministic**; 20 of 20 retries reproduced the failure exactly |
+
+Both rules were written carefully. Both were invalidated by an improvement, not by a mistake. And in both
+cases the invalidation was **silent** — nothing failed, no test went red, and each rule went on looking
+applicable right up to the moment it was applied and produced nonsense.
+
+**The generalisable form: when a change makes a system more deterministic, more reliable, or otherwise
+better-behaved, it can invalidate rules that were written to cope with the old behaviour — and those rules
+do not announce themselves.** A tolerance calibrated to noise, a retry calibrated to transience, a timeout
+calibrated to a slow path, a sampled monitor calibrated to a flaky one: all become vacuous or useless the
+moment the thing they compensate for goes away. Removing variance is progress; every rule that *depended*
+on that variance is now silently wrong.
+
+The habit that follows, and the reason this is recorded rather than fixed twice: **a change that alters a
+system's failure distribution should carry a check of what was written against the old distribution.**
+`D27`'s decision record should have listed the sd-based tolerance and the retry remedy as dependents. It
+did not, and both were rediscovered the hard way inside the same phase — one when a bar evaluated to zero,
+the other when a remedy was measured before being built.
+
+This is the same shape as `D28` (six phases of "lint clean" about an unstated scope) and `D29`'s
+re-baseline consequence: **a claim that was true when written, left standing after the thing that made it
+true changed.** Four instances now — §3.5's three guards checked the wrong layer; these two rules were
+checked against the wrong world.
 
 ---
 
