@@ -1,4 +1,4 @@
-.PHONY: ingest test lint format typecheck
+.PHONY: ingest test lint format typecheck eval
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -13,6 +13,15 @@ VENV := .venv/bin
 # standing-approval cap — never triggered by this target alone.
 ingest:
 	$(VENV)/python -m fnol_voice_agent.knowledge.ingest $(ARGS)
+
+# Evaluation harness. Tier A only today: deterministic, no model calls, no AWS credentials, $0.00.
+# Exits non-zero on any Tier A gate breach, which is what makes it usable as a CI gate.
+#
+# Tier B (real Bedrock calls, cost-gated against the $5 standing cap and the $1.00 Phase 6 sub-budget)
+# lands at Stage 6 and will be opt-in behind an explicit flag — never the default, so this target cannot
+# spend money by accident. Same posture as `ingest`: the free path is what you get for typing the name.
+eval:
+	$(VENV)/python -m evals.report $(ARGS)
 
 # Run the unit test suite. No AWS credentials required — moto covers every AWS call in tests.
 test:
