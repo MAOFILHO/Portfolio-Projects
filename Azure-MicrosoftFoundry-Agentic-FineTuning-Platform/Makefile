@@ -15,7 +15,7 @@ ifneq (,$(wildcard .env))
   export
 endif
 
-.PHONY: help setup run provision hosting-role teardown test test-unit smoke-pre smoke-post-provision \
+.PHONY: help setup run provision hosting-role github-oidc teardown test test-unit smoke-pre smoke-post-provision \
         smoke-post-run smoke-post-teardown api frontend mcp-list fmt clean
 
 help: ## Show this help
@@ -64,6 +64,11 @@ provision: smoke-pre ## Provision Azure infra (budget alert created FIRST)
 hosting-role: ## One-time: create the least-privilege custom role the hosting OIDC identity assumes (must run before the first `make provision` that includes hosting.tf)
 	@az role definition create --role-definition @infra/foundry-deployer-role.json
 	@echo "✅ 'Foundry Platform Deployer' role created — safe to re-run (az updates in place)."
+
+github-oidc: ## One-time: create the GitHub Actions OIDC identity in its own Terraform state (infra/terraform-identity/) — survives `make teardown`, unlike main.tf/hosting.tf's own resources
+	@terraform -chdir=infra/terraform-identity init -input=false
+	@terraform -chdir=infra/terraform-identity apply -auto-approve
+	@echo "✅ identity ready. If its client_id changed, update the FOUNDRY_AZURE_CLIENT_ID GitHub Actions variable and infra/terraform/variables.tf's github_oidc_client_id default."
 
 teardown: ## Destroy ALL tagged resources, at every suffix
 	@$(PY) infra/terraform/scripts/sweep_orphans.py --tag foundry-agentic-platform --dry-run

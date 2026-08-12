@@ -10,19 +10,15 @@ name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Teardown
 # (AADSTS700016 — the Entra ID app registration behind FOUNDRY_AZURE_CLIENT_ID
 # had been deleted, because it lived in the same Terraform state/config as
 # the AI infra and a local `terraform destroy` took it down too). Fixed
-# 2026-08-12 by recreating just the OIDC identity chain (targeted apply:
-# azuread_application.github_oidc + its service principal + federated
-# credential + role assignment) and updating the FOUNDRY_AZURE_CLIENT_ID
-# GitHub repo variable — verified with a manual run (workflow_dispatch),
-# green end to end including the post-teardown smoke test.
-#
-# Residual risk: a future *local* `make teardown` (a full `terraform
-# destroy` against this same state/config) will delete the OIDC identity
-# again, same as before — this fix restores it, it doesn't decouple its
-# lifecycle from the AI infra's. CI's own nightly sweep can't cause this
-# again, since it runs against an empty ephemeral state (no backend
-# configured) and only ever deletes tagged ARM resources — Entra ID app
-# registrations aren't tagged and aren't touched by it.
+# 2026-08-12 in two steps: first recreated the identity in place (restored
+# the failing workflow immediately), then moved it into its own Terraform
+# root — infra/terraform-identity/, see that config's header comment — so
+# infra/terraform/'s own `terraform destroy` (what `make teardown` runs,
+# locally or here) can structurally never reach it again. hosting.tf now
+# only looks the identity up by client_id and grants it a role assignment,
+# never creates or destroys it. Verified with a manual run
+# (workflow_dispatch), green end to end including the post-teardown smoke
+# test.
 on:
   workflow_dispatch: {}
   schedule:
@@ -82,7 +78,10 @@ jobs:
 
       - name: terraform destroy
         working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
-        run: terraform destroy -auto-approve -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}"
+        run: |
+          terraform destroy -auto-approve \
+            -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}" \
+            -var="github_oidc_client_id=${{ vars.FOUNDRY_AZURE_CLIENT_ID }}"
         continue-on-error: true # state may be empty/missing; the sweep below is authoritative
 
       - name: Post-destroy sweep (catches anything destroy missed)

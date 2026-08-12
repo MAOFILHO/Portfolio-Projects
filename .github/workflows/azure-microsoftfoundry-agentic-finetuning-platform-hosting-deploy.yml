@@ -69,7 +69,8 @@ jobs:
           terraform apply -auto-approve \
             -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}" \
             -var="backend_image_tag=${IMAGE_TAG}" \
-            -var="budget_contact_emails=${{ vars.BUDGET_ALERT_EMAILS || '[]' }}"
+            -var="budget_contact_emails=${{ vars.BUDGET_ALERT_EMAILS || '[]' }}" \
+            -var="github_oidc_client_id=${{ vars.FOUNDRY_AZURE_CLIENT_ID }}"
 
       - name: Read Terraform outputs for the frontend build
         id: tf_outputs

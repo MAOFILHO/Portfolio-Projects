@@ -78,10 +78,10 @@ variable "backend_image_tag" {
   default     = "latest"
 }
 
-variable "github_repo" {
-  description = "owner/repo of the monorepo this project lives in, for the GitHub OIDC federated credential's subject claim."
+variable "github_oidc_client_id" {
+  description = "Client ID of the GitHub Actions OIDC identity, managed separately in ../terraform-identity/ (its `client_id` output) — looked up here via a data source, never created or destroyed by this config. Same value as the FOUNDRY_AZURE_CLIENT_ID GitHub Actions variable. Defaulted to the current real value so `make provision` needs no extra flag; override if the identity is ever re-created."
   type        = string
-  default     = "MAOFILHO/Portfolio-Projects"
+  default     = "adf281a0-ad5f-4d77-b8f1-be5a6898238f"
 }
 
 variable "enable_next_suffix_probe" {

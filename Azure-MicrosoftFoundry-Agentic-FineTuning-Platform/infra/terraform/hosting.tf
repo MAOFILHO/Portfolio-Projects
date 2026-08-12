@@ -11,7 +11,7 @@
 # resolve it, and the very first `terraform apply` here still needs to run
 # with your own elevated local credentials (same as every apply so far in
 # this project) — only *subsequent* deploys can use the narrower OIDC
-# identity this file creates.
+# identity looked up below.
 
 data "azurerm_client_config" "current" {}
 data "azuread_client_config" "current" {}
@@ -36,31 +36,27 @@ locals {
   entra_audience = "api://${data.azuread_client_config.current.tenant_id}/${local.name_prefix}-signin"
 }
 
-# --- GitHub Actions OIDC identity (no stored secrets) --------------------
-resource "azuread_application" "github_oidc" {
-  display_name = "${local.name_prefix}-github-oidc"
-}
-
-resource "azuread_service_principal" "github_oidc" {
-  client_id = azuread_application.github_oidc.client_id
-}
-
-resource "azuread_application_federated_identity_credential" "github_actions" {
-  application_id = azuread_application.github_oidc.id
-  display_name   = "github-actions-main"
-  description    = "GitHub Actions workflow_dispatch runs on main authenticate as this app via OIDC — no stored client secret."
-  audiences      = ["api://AzureADTokenExchange"]
-  issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_repo}:ref:refs/heads/main"
+# --- GitHub Actions OIDC identity (looked up, not managed here) ------------
+# The app registration + service principal + federated credential live in
+# ../terraform-identity/, a deliberately separate Terraform root/state — see
+# that config's header comment for why. This config only looks the identity
+# up (by client_id) and grants it access; it can never destroy it, even via
+# a full `terraform destroy` (what `make teardown` runs).
+data "azuread_service_principal" "github_oidc" {
+  client_id = var.github_oidc_client_id
 }
 
 # Scoped to this project's resource group only, not the whole subscription —
 # the role definition's AssignableScopes is subscription-wide (matches the
 # sibling project's pattern), but the actual assignment here is narrowed.
+# Re-created every provision/teardown cycle along with the resource group
+# it's scoped to — that churn is fine, and expected: only the identity
+# itself (../terraform-identity/) needs to survive teardown, not any
+# particular grant of access.
 resource "azurerm_role_assignment" "github_oidc_deployer" {
   scope              = azurerm_resource_group.this.id
   role_definition_id = data.azurerm_role_definition.foundry_deployer.id
-  principal_id       = azuread_service_principal.github_oidc.object_id
+  principal_id       = data.azuread_service_principal.github_oidc.object_id
 }
 
 # --- Container Apps Environment (reuses existing Log Analytics) ----------

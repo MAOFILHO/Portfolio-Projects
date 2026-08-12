@@ -2,11 +2,12 @@ name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Deploy (provision A
 
 # Manual only — provisions real, billing Azure resources (the Foundry
 # account, base model deployments). Never runs on push/PR. Uses OIDC
-# (no stored secret) against a dedicated app registration + a least-privilege
-# custom role scoped to only this project's resource group (see
-# infra/foundry-deployer-role.json) — created by a one-time local
-# `terraform apply` with elevated credentials (see hosting.tf's header
-# comment), not by this workflow.
+# (no stored secret) against a dedicated app registration (managed in its
+# own Terraform root, infra/terraform-identity/ — see that config's header
+# comment for why it's separate) + a least-privilege custom role scoped to
+# only this project's resource group (see infra/foundry-deployer-role.json)
+# — both created by a one-time local apply with elevated credentials, not
+# by this workflow.
 #
 # FOUNDRY_AZURE_* variable names, not the plain AZURE_* names other projects'
 # deploy workflows in this repo use — this repo's GitHub Variables are
@@ -87,7 +88,8 @@ jobs:
           terraform apply -auto-approve \
             -var="enable_next_suffix_probe=true" \
             -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}" \
-            -var="budget_contact_emails=${{ vars.BUDGET_ALERT_EMAILS || '[]' }}"
+            -var="budget_contact_emails=${{ vars.BUDGET_ALERT_EMAILS || '[]' }}" \
+            -var="github_oidc_client_id=${{ vars.FOUNDRY_AZURE_CLIENT_ID }}"
 
       - name: Post-provision smoke tests (every resource live + approved SKU)
         run: pytest tests/smoke_post_provision -v

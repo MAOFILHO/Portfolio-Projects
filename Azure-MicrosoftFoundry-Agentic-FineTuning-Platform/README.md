@@ -669,9 +669,20 @@ touches Azure at all.
 **Authentication is OIDC, not a stored client secret** — `azure/login@v2`
 exchanges a short-lived GitHub-issued token for an Azure one via a
 federated identity credential
-(`azuread_application_federated_identity_credential` in `hosting.tf`),
-scoped to `repo:MAOFILHO/Portfolio-Projects:ref:refs/heads/main`. Nothing
-long-lived to leak, rotate, or accidentally commit.
+(`azuread_application_federated_identity_credential` in
+`infra/terraform-identity/`), scoped to
+`repo:MAOFILHO/Portfolio-Projects:ref:refs/heads/main`. Nothing long-lived
+to leak, rotate, or accidentally commit.
+
+**The OIDC identity is a separate Terraform root from everything else it
+authenticates against** (`infra/terraform-identity/`, not part of
+`infra/terraform/`) — deliberately, after finding out the hard way that it
+wasn't always: this identity used to live in `hosting.tf`, in the same
+state as the AI infra and hosting stack it deploys/tears down, so a
+`terraform destroy` there took the identity down too — breaking every
+workflow's own ability to authenticate, including the one meant to notice
+and fix it. `infra/terraform/hosting.tf` now only looks the identity up by
+client_id and grants it access; it can no longer destroy it.
 
 **GitHub *Variables*, not *Secrets*, for the OIDC identifiers** —
 `FOUNDRY_AZURE_CLIENT_ID` / `_TENANT_ID` / `_SUBSCRIPTION_ID` aren't secret
@@ -857,6 +868,8 @@ Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/
 │
 ├── infra/
 │   ├── foundry-deployer-role.json     # Least-privilege custom RBAC role for CI's OIDC identity
+│   ├── terraform-identity/            # GitHub Actions OIDC identity — its OWN Terraform state,
+│   │   └── main.tf                    #   deliberately separate so `terraform destroy` in ../terraform/ can never reach it
 │   └── terraform/
 │       ├── main.tf                    # Budget → Foundry account/project → base model deployments
 │       ├── hosting.tf                 # Container App + Static Web App + Entra sign-in app

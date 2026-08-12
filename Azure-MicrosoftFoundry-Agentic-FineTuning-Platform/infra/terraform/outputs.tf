@@ -69,6 +69,6 @@ output "entra_tenant_id" {
 }
 
 output "github_oidc_client_id" {
-  description = "Set as the FOUNDRY_AZURE_CLIENT_ID GitHub Actions variable."
-  value       = azuread_application.github_oidc.client_id
+  description = "Passthrough of the input variable of the same name (the identity itself is managed in ../terraform-identity/, not here) — kept as an output for convenience, so scripts that read Terraform outputs don't need to know which config actually owns it."
+  value       = var.github_oidc_client_id
 }
