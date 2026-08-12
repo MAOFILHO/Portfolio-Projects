@@ -2,6 +2,7 @@
 and adversarial injury-phrasing sets (§1's InjuryEscalation examples and §2.4's harder cases) -- these are
 not invented fixtures, they're the taxonomy's own test material, exercised here for the first time.
 """
+
 from __future__ import annotations
 
 import pytest

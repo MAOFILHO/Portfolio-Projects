@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from fnol_voice_agent.agents.retry_ladder import RETRY_CEILING, ceiling_reached, record_attempt, reset_attempts
+from fnol_voice_agent.agents.retry_ladder import (
+    RETRY_CEILING,
+    ceiling_reached,
+    record_attempt,
+    reset_attempts,
+)
 
 
 def test_record_attempt_increments_and_does_not_mutate_input() -> None:
@@ -45,4 +50,6 @@ def test_mixed_trigger_types_share_the_same_counter() -> None:
     assert ceiling_reached(counts, "police_report_number") is False
     counts = record_attempt(counts, "police_report_number")  # e.g. a barge-in-inconclusive event
     assert ceiling_reached(counts, "police_report_number") is True
-    assert counts["police_report_number"] == 2  # one counter, two attempts -- not two counters at one each
+    assert (
+        counts["police_report_number"] == 2
+    )  # one counter, two attempts -- not two counters at one each

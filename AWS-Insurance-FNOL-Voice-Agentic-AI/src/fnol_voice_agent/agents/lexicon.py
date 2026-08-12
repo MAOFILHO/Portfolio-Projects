@@ -17,6 +17,7 @@ as this system's most serious residual risk, measured (not solved) via a held-ou
 Phase 6/7 -- this module's job is to make the *labelled* set enforceable to zero via fix-and-re-run
 (`D15`), not to claim unbounded natural-language coverage.
 """
+
 from __future__ import annotations
 
 import re
@@ -97,7 +98,7 @@ _CONTRASTIVE_OTHER_PARTY_PATTERN = re.compile(
 def detect_safety_trigger(text: str) -> tuple[bool, str | None]:
     """Returns `(fired, matched_term)`. `matched_term` is the exact keyword/pattern text that fired,
     logged into `AgentState.l1_matched_term` so a missed-then-fixed case in Phase 6/7 traces back to
-    exactly which lexicon entry was added, not just "L1 now catches this.\""""
+    exactly which lexicon entry was added, not just "L1 now catches this.\" """
     lowered = f" {text.lower()} "
 
     for keyword in _STRONG_KEYWORDS + _THIRD_PARTY_KEYWORDS:
