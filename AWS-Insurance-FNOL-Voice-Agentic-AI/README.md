@@ -363,8 +363,10 @@ cp .env.example .env        # no secrets; SSM standard parameters are preferred 
 
 ## Quickstart
 
-Only the targets that **actually run today** are listed. The rest are wired but land in Phases 8–11, and
-are marked as such in the Makefile rather than failing silently.
+This is the complete list of targets that exist today. The canonical names in
+[`CLAUDE.md`](CLAUDE.md) — `bootstrap`, `deploy`, `destroy`, `simulate`, `redteam`, `verify-billable` —
+are **not in the Makefile yet** and will report *"No rule to make target"* until the phase that builds
+them lands. They are named in advance as a contract, not shipped as stubs.
 
 ```bash
 make test        # 259 unit tests, no AWS credentials, no network
@@ -381,14 +383,13 @@ intended behaviour of a harness reporting three real failures.
 make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGET degradation
 ```
 
-### Not yet runnable
+### Named but not yet built
 
 | Target | Lands in |
 |---|---|
-| `make bootstrap` · `make deploy` · `make destroy` | Phase 8 |
-| `make simulate` | Phase 8 (needs the Lex bot) |
-| `make redteam` | Phase 7 |
-| `make verify-billable` | Phase 8 |
+| `make redteam` | Phase 7 (in progress) |
+| `make bootstrap` · `make deploy` · `make destroy` · `make verify-billable` | Phase 8 |
+| `make simulate` | Phase 8 — needs the Lex bot to replay turns against |
 
 ## Teardown
 
