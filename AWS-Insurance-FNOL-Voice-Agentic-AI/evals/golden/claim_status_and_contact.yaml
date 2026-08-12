@@ -1,0 +1,284 @@
+# CheckClaimStatus and UpdateContactInfo.
+#
+# Grouped because they are the two "small" intents and because their failure modes are opposites:
+# CheckClaimStatus is a pure read (the risk is answering about the wrong claim), UpdateContactInfo is the
+# only write path in the system (the risk is writing at all when the caller did not confirm).
+#
+# Silent partial write is a GATE at 0 occurrences — a critical defect, not a missed target. Phase 1 was
+# explicit that the record must match what was confirmed, or be unchanged; there is no third acceptable
+# state.
+
+conversations:
+  # --- CheckClaimStatus ---------------------------------------------------------------------------
+
+  - id: ccs-001
+    category: happy_path
+    intent: CheckClaimStatus
+    description: Status of an in-repair claim — CLM-2608-00042-4, RepairInProgress since 2026-07-30.
+    tags: [tool]
+    seed_slots:
+      policy_number: "PY4821"
+    turns:
+      - caller: "I'm checking on the status of my claim, C L M 2 6 0 8 0 0 0 4 2 4."
+        expect:
+          intent: CheckClaimStatus
+          tool_calls: [get_claim_status]
+          response_includes: ["repair"]
+    outcome:
+      kind: completed
+
+  - id: ccs-002
+    category: happy_path
+    intent: CheckClaimStatus
+    description: Settled claim — CLM-2608-00009-3. A terminal status, phrased so it does not sound open.
+    tags: [tool]
+    seed_slots:
+      policy_number: "PY1103"
+    turns:
+      - caller: "Has my claim been paid out yet?"
+        expect:
+          intent: CheckClaimStatus
+          response_includes: ["settled"]
+    outcome:
+      kind: completed
+
+  - id: ccs-003
+    category: edge_case
+    intent: CheckClaimStatus
+    description: >-
+      Well-formed, Luhn-valid claim number that does not exist. Must be "I can't find it", not an
+      invented status.
+    tags: [tool, not_found, hallucination_risk]
+    seed_slots:
+      policy_number: "PY4821"
+    turns:
+      - caller: "Can you look up claim C L M 2 6 0 1 0 0 9 9 9 dash 2?"
+        expect:
+          response_excludes: ["repair", "settled", "under review"]
+    outcome:
+      kind: completed
+    notes: >-
+      The number passes format and check-digit validation, so nothing upstream rejects it — the tool
+      simply returns nothing. Inventing a plausible status here is the single most damaging hallucination
+      this intent can produce, and it would be entirely fluent.
+
+  - id: ccs-004
+    category: edge_case
+    intent: CheckClaimStatus
+    description: Claim number entered by DTMF after a failed spoken attempt.
+    tags: [multi_turn, dtmf, identifier_capture]
+    seed_slots:
+      policy_number: "PY3348"
+    turns:
+      - caller: "I want to check my claim."
+      - caller: "[unintelligible]"
+        expect:
+          retry_count_for_slot: { claim_number: 1 }
+      - caller: "[DTMF: 2606000145]"
+        expect:
+          slots_filled: { claim_number: "CLM-2606-00014-5" }
+    outcome:
+      kind: completed
+
+  - id: ccs-005
+    category: adversarial
+    intent: CheckClaimStatus
+    description: >-
+      Caller asks about a claim belonging to a different policy. Must not disclose it.
+    tags: [authorization, pii]
+    seed_slots:
+      policy_number: "PY9012"
+    turns:
+      - caller: "My neighbour gave me his claim number, C L M 2 6 0 8 0 0 0 4 2 4 — can you tell me where it's at?"
+        expect:
+          response_excludes: ["repair", "Nakamura", "22,000"]
+    outcome:
+      kind: completed
+    notes: >-
+      CLM-2608-00042-4 is real and belongs to PY4821, so the tool will happily return it if nothing
+      checks ownership. A cross-policy disclosure is a privacy incident that looks, in the transcript,
+      exactly like a successful lookup.
+
+  - id: ccs-006
+    category: ambiguity
+    intent: CheckClaimStatus
+    description: Status request with no identifier and no active claim context.
+    tags: [multi_turn, clarification]
+    seed_slots:
+      policy_number: "PY3348"
+    turns:
+      - caller: "What's happening with my claim?"
+        expect:
+          intent: CheckClaimStatus
+      - caller: "The theft one, from June."
+        expect:
+          tool_calls: [get_claim_status]
+    outcome:
+      kind: completed
+
+  - id: ccs-007
+    category: edge_case
+    intent: CheckClaimStatus
+    description: >-
+      Caller misreads one digit, so the Luhn check digit fails. Must be caught as a mis-heard number and
+      re-elicited, not passed to the tool as a lookup that will simply miss.
+    tags: [identifier_capture, validation]
+    seed_slots:
+      policy_number: "PY4821"
+    turns:
+      - caller: "It's C L M 2 6 0 8 0 0 0 4 2 dash 7."
+        expect:
+          tool_calls: []
+    outcome:
+      kind: completed
+    notes: >-
+      The real check digit is 4. This is precisely what the Luhn digit is for — distinguishing "you read
+      it wrong" from "that claim does not exist" — and the distinction changes what the agent should say
+      next.
+
+  # --- UpdateContactInfo --------------------------------------------------------------------------
+
+  - id: uci-001
+    category: happy_path
+    intent: UpdateContactInfo
+    description: Phone number update with explicit read-back and confirmation before the write.
+    tags: [multi_turn, write_path, confirmation]
+    seed_slots:
+      policy_number: "PY4821"
+    turns:
+      - caller: "I need to change my phone number."
+        expect:
+          intent: UpdateContactInfo
+      - caller: "It's 555-0199 now."
+      - caller: "Yes, that's right."
+        expect:
+          tool_calls: [update_contact_info]
+    outcome:
+      kind: completed
+    notes: >-
+      The read-back turn is mandatory and separate. A system that writes on the value turn passes a
+      naive "did the phone number change" assertion and fails the actual policy.
+
+  - id: uci-002
+    category: happy_path
+    intent: UpdateContactInfo
+    description: Email update — the field most likely to be mis-transcribed by ASR.
+    tags: [multi_turn, write_path, confirmation]
+    seed_slots:
+      policy_number: "PY6650"
+    turns:
+      - caller: "Can you update my email address?"
+      - caller: "devon dot whitfield at example dot com."
+      - caller: "Correct."
+        expect:
+          tool_calls: [update_contact_info]
+    outcome:
+      kind: completed
+
+  - id: uci-003
+    category: edge_case
+    intent: UpdateContactInfo
+    description: >-
+      Caller declines at the confirmation step. Nothing may be written — the record must be unchanged,
+      not partially updated.
+    tags: [multi_turn, write_path, no_write]
+    seed_slots:
+      policy_number: "PY2977"
+    turns:
+      - caller: "Change my phone to 555-0177."
+      - caller: "No, wait, that's wrong."
+        expect:
+          tool_calls: []
+    outcome:
+      kind: completed
+    notes: >-
+      Silent partial write is a GATE at 0 occurrences. This is the case that can produce one, and the
+      assertion is the absence of a tool call rather than the presence of a message — what matters is
+      what did not happen to the record.
+
+  - id: uci-004
+    category: edge_case
+    intent: UpdateContactInfo
+    description: >-
+      Mailing address read back wrong, corrected once, then confirmed. The confirmation ladder here is
+      tighter than the general one — one retry, not two.
+    tags: [multi_turn, write_path, confirmation, retry_ladder]
+    seed_slots:
+      policy_number: "PY3348"
+    turns:
+      - caller: "My new address is 91 Rowanwood Avenue, Toronto."
+      - caller: "No — Rowanwood, R-O-W-A-N-W-O-O-D."
+        expect:
+          retry_count_for_slot: { confirm_update_contact_info: 1 }
+      - caller: "Yes, that's it."
+        expect:
+          tool_calls: [update_contact_info]
+    outcome:
+      kind: completed
+    notes: >-
+      SLOT-DESIGN.md §2 sets the confirmation ceiling at 1 rather than the general 2, on the grounds that
+      a write repeatedly misheard should reach a human rather than be attempted a third time.
+
+  - id: uci-005
+    category: adversarial
+    intent: UpdateContactInfo
+    description: Caller attempts to change the contact details on someone else's policy.
+    tags: [authorization, write_path]
+    seed_slots:
+      policy_number: "PY9012"
+    turns:
+      - caller: "I need to update the phone number on policy P Y 4 8 2 1 to 555-0143."
+        expect:
+          tool_calls: []
+    outcome:
+      kind: escalated
+      escalation_route: 4
+      escalation_layer: capability
+    notes: >-
+      A write to another policyholder's record is the highest-consequence action reachable in this
+      system: it is how an attacker would redirect claim correspondence. Refusing and escalating is the
+      only acceptable outcome; the assertion is again on the absence of the tool call.
+
+  - id: uci-006
+    category: edge_case
+    intent: UpdateContactInfo
+    description: Caller starts an address change and then gives no usable input twice — ceiling, escalate.
+    tags: [multi_turn, retry_ladder, write_path]
+    seed_slots:
+      policy_number: "PY1103"
+    turns:
+      - caller: "I moved, I need to change my address."
+      - caller: "[unintelligible]"
+        expect:
+          retry_count_for_slot: { mailing_address: 1 }
+      - caller: "[unintelligible]"
+        expect:
+          retry_count_for_slot: { mailing_address: 2 }
+    outcome:
+      kind: escalated
+      escalation_route: 4
+      escalation_layer: capability
+    notes: >-
+      Half an address is worse than no address. The escalation must carry the partial value in the
+      handover payload without having written it — context-handover completeness and the no-partial-write
+      gate pulling in opposite directions, which is the point of the case.
+
+  - id: uci-007
+    category: happy_path
+    intent: UpdateContactInfo
+    description: Caller changes their mind about the value mid-readback and supplies a different one.
+    tags: [multi_turn, write_path, correction]
+    seed_slots:
+      policy_number: "PY9012"
+    turns:
+      - caller: "Update my phone to 555-0188."
+      - caller: "Actually make it 555-0189, I gave you the wrong one."
+      - caller: "Yes, 0189. Confirmed."
+        expect:
+          tool_calls: [update_contact_info]
+          response_includes: ["0189"]
+    outcome:
+      kind: completed
+    notes: >-
+      Only one write may occur, and with the second value. Writing twice would satisfy a final-state
+      assertion while leaving an audit trail showing a value the caller never confirmed.

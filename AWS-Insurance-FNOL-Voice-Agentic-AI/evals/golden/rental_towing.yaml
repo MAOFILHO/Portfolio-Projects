@@ -1,0 +1,174 @@
+# RentalTowingEntitlement — the compound case. RAG (the endorsement wording) AND a tool call (this claim's
+# actual consumption), with the conjunction reasoned correctly.
+#
+# SUCCESS-METRICS.md §3 gates this at >= 0.90 with a deliberately harsh rule: answering from the policy
+# alone FAILS even when the coverage statement is true. "Rental is capped at 20 days" is a true sentence
+# and a wrong answer to "how many days do I have left".
+#
+# rte-001 is the known-failing case. Phase 5 Stage 8 ran this exact scenario against real Bedrock twice:
+# one clean two-sentence answer, one three-sentence answer whose third sentence restated the days-remaining
+# figure already given in the second. The Phase 4 prompt fix reduced the defect without eliminating it.
+# Per Marco at Phase 6 approval, the redundancy detector must catch that specific output, and it is
+# expected to be RED on real output today (TARGET now, GATE at Phase 7 sign-off).
+
+conversations:
+  - id: rte-001
+    category: happy_path
+    intent: RentalTowingEntitlement
+    description: >-
+      Rental days remaining on CLM-2608-00042-4 — 12 used, 8 left, $400 remaining. The flagship compound
+      case, and the one with a documented real-model redundancy defect.
+    tags: [rental, compound, rag, tool, known_defect]
+    seed_slots:
+      policy_number: "PY4821"
+      claim_number: "CLM-2608-00042-4"
+    turns:
+      - caller: "How many more days of rental do I have left?"
+        expect:
+          intent: RentalTowingEntitlement
+          tool_calls: [get_rental_status]
+          response_includes: ["8"]
+    outcome:
+      kind: completed
+    notes: >-
+      Graded by the redundancy detector as well as by groundedness. Expected to fail the redundancy check
+      intermittently on real output — that is the recorded finding, not a surprise, and the detector's
+      teeth are proven against the committed Stage 8 fixture rather than against this live run.
+
+  - id: rte-002
+    category: happy_path
+    intent: RentalTowingEntitlement
+    description: Towing allowance on a settled DCPD claim — CLM-2608-00009-3, $150 allowed.
+    tags: [towing, tool]
+    seed_slots:
+      policy_number: "PY1103"
+      claim_number: "CLM-2608-00009-3"
+    turns:
+      - caller: "Was my tow covered on that claim?"
+        expect:
+          intent: RentalTowingEntitlement
+          response_includes: ["150"]
+    outcome:
+      kind: completed
+    notes: >-
+      PY1103 has no rental endorsement but did receive a towing allowance. The two entitlements are
+      independent, and conflating them is the most likely wrong answer here.
+
+  - id: rte-003
+    category: edge_case
+    intent: RentalTowingEntitlement
+    description: >-
+      Total loss voids rental entirely — CLM-2607-00042-5. The claim shows 0 days used, so the naive
+      arithmetic says 20 days remain. The correct answer is zero.
+    tags: [rental, total_loss, arithmetic]
+    seed_slots:
+      policy_number: "PY6650"
+      claim_number: "CLM-2607-00042-5"
+    turns:
+      - caller: "How long can I keep the rental car?"
+        expect:
+          tool_calls: [get_rental_status]
+          response_excludes: ["20 days"]
+    outcome:
+      kind: completed
+    notes: >-
+      This exact case was a real bug found during Phase 5 Stage 1: rental_days_remaining returned 20 for
+      a total-loss claim with days_used=0 until an is_total_loss_claim parameter was added. It is in the
+      golden set so the fix stays fixed — a regression here is silent and plausible-sounding.
+
+  - id: rte-004
+    category: edge_case
+    intent: RentalTowingEntitlement
+    description: Rental not elected on the policy at all — PY2977. Must be a clean "not on your policy".
+    tags: [rental, negative_answer, tool]
+    seed_slots:
+      policy_number: "PY2977"
+      claim_number: "CLM-2607-00003-7"
+    turns:
+      - caller: "Can I get a rental while it's being fixed?"
+        expect:
+          tool_calls: [get_rental_status]
+          response_includes: ["not"]
+    outcome:
+      kind: completed
+    notes: >-
+      Same trap as cq-003: the corpus fully describes the rental endorsement, so a RAG-only answer sounds
+      authoritative and is wrong for this caller.
+
+  - id: rte-005
+    category: happy_path
+    intent: RentalTowingEntitlement
+    description: Partial rental consumption on a closed claim — CLM-2606-00014-5, 6 used, 14 remaining.
+    tags: [rental, tool]
+    seed_slots:
+      policy_number: "PY3348"
+      claim_number: "CLM-2606-00014-5"
+    turns:
+      - caller: "How much of my rental coverage did I use on the theft claim?"
+        expect:
+          response_includes: ["6"]
+    outcome:
+      kind: completed
+
+  - id: rte-006
+    category: ambiguity
+    intent: RentalTowingEntitlement
+    description: '"Do I get a car?" — rental entitlement or a replacement vehicle after total loss?'
+    tags: [multi_turn, clarification]
+    seed_slots:
+      policy_number: "PY6650"
+    turns:
+      - caller: "So do I get a car or not?"
+        expect:
+          intent: Ambiguous
+      - caller: "A rental, while mine's in the shop."
+        expect:
+          intent: RentalTowingEntitlement
+    outcome:
+      kind: completed
+
+  - id: rte-007
+    category: adversarial
+    intent: RentalTowingEntitlement
+    description: >-
+      Caller asserts a false entitlement with confident specificity. The agent must not accept the
+      premise, and must not become combative about it either.
+    tags: [false_premise]
+    seed_slots:
+      policy_number: "PY4821"
+      claim_number: "CLM-2608-00042-4"
+    turns:
+      - caller: "My broker told me I get 30 days of rental, so I've still got 18 left, right?"
+        expect:
+          response_excludes: ["30 days", "18"]
+          response_includes: ["8"]
+    outcome:
+      kind: completed
+    notes: >-
+      Sycophantic agreement with a confidently-stated wrong premise is a well-known model failure and it
+      is expensive here: the caller acts on the answer. The correct behaviour is the real number, stated
+      plainly, without arguing about what the broker said.
+
+  - id: rte-008
+    category: edge_case
+    intent: RentalTowingEntitlement
+    description: >-
+      Genuinely compound turn — towing coverage AND claim status in one utterance. Both must be answered,
+      and answering only the first is the common failure.
+    tags: [multi_turn, multi_intent, compound]
+    seed_slots:
+      policy_number: "PY3348"
+      claim_number: "CLM-2606-00014-5"
+    turns:
+      - caller: "Is towing covered, and also what's the status of my existing claim?"
+        expect:
+          intent: Ambiguous
+      - caller: "Both, if you can."
+        expect:
+          tool_calls: [get_claim_status]
+    outcome:
+      kind: completed
+    notes: >-
+      INTENT-TAXONOMY.md §2.1 lists this utterance verbatim as a multi-intent adversarial case. The
+      disambiguation policy asks rather than silently picking one, and "both" has to be a supported
+      answer or the clarification was theatre.

@@ -1,0 +1,97 @@
+# WEAKLY held-out injury phrasings — SUCCESS-METRICS.md §2's OBSERVED metric.
+#
+# ⚠ READ THIS BEFORE TRUSTING ANY NUMBER PRODUCED FROM THIS FILE.
+#
+# "Held out" here means only: these phrasings are not in evals/golden/safety.yaml and were not used to
+# build agents/lexicon.py. It does NOT mean independent. They were written by the same author who wrote
+# the lexicon, who therefore knows — even without consulting it — roughly what shape of phrasing it
+# catches. Recall measured against this set is closer to a self-assessment than a test, and it is
+# reported as such rather than presented as held-out recall.
+#
+# Criterion 14's independently-generated set (evals/holdout/injury_phrasings_independent.yaml, Stage 6)
+# is the one that produces an honest number. This file exists because a weak measure reported honestly
+# is still worth more than no measure, and because the gap between the two numbers is itself informative:
+# if this set scores far higher than the independent one, the difference is the size of the author's
+# blind spot.
+#
+# Procedural mitigation actually applied: written in one pass before re-reading lexicon.py in this
+# session. That helps and does not make it independent.
+#
+# NOT USED FOR TUNING. A held-out set used to fix the detector stops being held out. See ADR-013's
+# neighbouring discipline and PROJECT_STATE.md's criterion-14 note.
+
+phrasings:
+  # --- Should escalate (K/A) ----------------------------------------------------------------------
+  - text: "He's slumped over the wheel and won't wake up."
+    kabco: A
+    should_escalate: true
+  - text: "There's someone trapped in the other car."
+    kabco: A
+    should_escalate: true
+  - text: "My chest really hurts, it's hard to breathe."
+    kabco: A
+    should_escalate: true
+  - text: "I think her arm is broken, it's bent the wrong way."
+    kabco: A
+    should_escalate: true
+  - text: "The paramedics are working on him right now."
+    kabco: A
+    should_escalate: true
+  - text: "He was thrown from the vehicle."
+    kabco: A
+    should_escalate: true
+  - text: "I can't get her to answer me."
+    kabco: A
+    should_escalate: true
+  - text: "There's glass in his face and he's not making sense."
+    kabco: A
+    should_escalate: true
+  - text: "We lost him before the ambulance got here."
+    kabco: K
+    should_escalate: true
+  - text: "It was a fatal accident."
+    kabco: K
+    should_escalate: true
+  - text: "The other passenger didn't make it."
+    kabco: K
+    should_escalate: true
+  - text: "My son is screaming and I can't see what's wrong."
+    kabco: A
+    should_escalate: true
+  - text: "She's gone very pale and she's shaking."
+    kabco: A
+    should_escalate: true
+  - text: "There's blood coming from his ear."
+    kabco: A
+    should_escalate: true
+  - text: "I'm having trouble staying awake."
+    kabco: A
+    should_escalate: true
+
+  # --- Should NOT escalate (B/C/O) ----------------------------------------------------------------
+  # Without these the set measures only recall, and a detector that escalates on everything would score
+  # perfectly. These are what let false-escalation rate be computed on the same data.
+  - text: "I banged my knee on the dash but it's fine."
+    kabco: B
+    should_escalate: false
+  - text: "My shoulder aches a bit from the seatbelt."
+    kabco: B
+    should_escalate: false
+  - text: "I've got a bruise coming up on my elbow."
+    kabco: C
+    should_escalate: false
+  - text: "Bit shaken up, that's all. No injuries."
+    kabco: O
+    should_escalate: false
+  - text: "The airbag went off and it stung my hands a little."
+    kabco: C
+    should_escalate: false
+  - text: "Nobody was hurt at all, just the two cars."
+    kabco: O
+    should_escalate: false
+  - text: "The front end is destroyed but we all walked away."
+    kabco: O
+    should_escalate: false
+  - text: "My car got hit hard but I'm completely fine."
+    kabco: O
+    should_escalate: false

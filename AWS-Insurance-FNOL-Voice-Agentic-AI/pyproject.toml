@@ -34,6 +34,10 @@ dependencies = [
     # langgraph-checkpoint-aws: DynamoDB-backed state persistence keyed on the Connect contact ID, per
     # ADR-005 -- adopted instead of hand-writing a BaseCheckpointSaver.
     "langgraph-checkpoint-aws==1.2.1",
+    # PyYAML: the Phase 6 golden set is authored and reviewed as text (SUCCESS-METRICS.md §9 requires
+    # changes to it be reviewed as code), and YAML's comments and block scalars make a 60+ conversation
+    # corpus reviewable in a way JSON's escaped one-liners do not.
+    "PyYAML==6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -56,10 +60,17 @@ dev = [
     # types-python-dateutil: dateutil ships no inline types; needed to keep mypy strict clean on the
     # fuzzy loss_datetime parser.
     "types-python-dateutil==2.9.0.20260807",
+    # types-PyYAML: same reason, for the golden-set loader.
+    "types-PyYAML==6.0.12.20250915",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `evals/` is a top-level directory per TARGET-LAYOUT.md ("golden set, component + conversation evals,
+# judge rubrics") rather than a subpackage of src/ -- the golden corpus is data the harness reads, not
+# library code that ships with the agent. This makes `import evals.…` work from tests and from
+# `python -m evals.…` at the repo root, without installing the corpus into the wheel.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
