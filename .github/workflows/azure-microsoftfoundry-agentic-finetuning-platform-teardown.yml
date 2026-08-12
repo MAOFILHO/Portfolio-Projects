@@ -1,16 +1,27 @@
 name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Teardown
 
-# Manual trigger any time, plus a nightly scheduled safety-net sweep — the
-# mitigation for the auto-increment naming risk documented in PLAN.md /
-# next_suffix.py: if a suffix ever drifted, this still finds and removes
-# anything orphaned outside Terraform's current state, by tag, on a
+# Manual trigger any time, plus (normally) a nightly scheduled safety-net
+# sweep — the mitigation for the auto-increment naming risk documented in
+# PLAN.md / next_suffix.py: if a suffix ever drifted, this still finds and
+# removes anything orphaned outside Terraform's current state, by tag, on a
 # schedule, without anyone having to remember to run it manually.
+#
+# PAUSED as of 2026-08-12: the `azure/login` OIDC step fails every run
+# (AADSTS700016 — the Entra ID app registration behind FOUNDRY_AZURE_CLIENT_ID
+# no longer exists; it lived in the same Terraform state as the AI infra it
+# authenticates against, so a prior `terraform destroy` took it down too).
+# No live resources currently exist for this project, so there's nothing
+# actually at risk from pausing. Re-enable the `schedule:` trigger once the
+# OIDC identity is recreated (one-time local `terraform apply` against
+# hosting.tf with elevated credentials, then update the
+# FOUNDRY_AZURE_CLIENT_ID GitHub repo variable) — see hosting.tf's header
+# comment for the bootstrap steps.
 on:
   workflow_dispatch: {}
-  schedule:
-    # 23 UTC nightly — off-the-hour, staggered from sibling projects'
-    # teardown schedules in this same repo to avoid a thundering herd.
-    - cron: "23 3 * * *"
+  # schedule:
+  #   # 23 UTC nightly — off-the-hour, staggered from sibling projects'
+  #   # teardown schedules in this same repo to avoid a thundering herd.
+  #   - cron: "23 3 * * *"
 
 env:
   RUN_LIVE_SMOKE: "1"
