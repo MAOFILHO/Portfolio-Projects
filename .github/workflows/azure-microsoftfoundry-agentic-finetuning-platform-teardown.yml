@@ -1,27 +1,34 @@
 name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Teardown
 
-# Manual trigger any time, plus (normally) a nightly scheduled safety-net
-# sweep — the mitigation for the auto-increment naming risk documented in
-# PLAN.md / next_suffix.py: if a suffix ever drifted, this still finds and
-# removes anything orphaned outside Terraform's current state, by tag, on a
+# Manual trigger any time, plus a nightly scheduled safety-net sweep — the
+# mitigation for the auto-increment naming risk documented in PLAN.md /
+# next_suffix.py: if a suffix ever drifted, this still finds and removes
+# anything orphaned outside Terraform's current state, by tag, on a
 # schedule, without anyone having to remember to run it manually.
 #
-# PAUSED as of 2026-08-12: the `azure/login` OIDC step fails every run
+# Was broken 2026-08-10/11: the `azure/login` OIDC step failed every run
 # (AADSTS700016 — the Entra ID app registration behind FOUNDRY_AZURE_CLIENT_ID
-# no longer exists; it lived in the same Terraform state as the AI infra it
-# authenticates against, so a prior `terraform destroy` took it down too).
-# No live resources currently exist for this project, so there's nothing
-# actually at risk from pausing. Re-enable the `schedule:` trigger once the
-# OIDC identity is recreated (one-time local `terraform apply` against
-# hosting.tf with elevated credentials, then update the
-# FOUNDRY_AZURE_CLIENT_ID GitHub repo variable) — see hosting.tf's header
-# comment for the bootstrap steps.
+# had been deleted, because it lived in the same Terraform state/config as
+# the AI infra and a local `terraform destroy` took it down too). Fixed
+# 2026-08-12 by recreating just the OIDC identity chain (targeted apply:
+# azuread_application.github_oidc + its service principal + federated
+# credential + role assignment) and updating the FOUNDRY_AZURE_CLIENT_ID
+# GitHub repo variable — verified with a manual run (workflow_dispatch),
+# green end to end including the post-teardown smoke test.
+#
+# Residual risk: a future *local* `make teardown` (a full `terraform
+# destroy` against this same state/config) will delete the OIDC identity
+# again, same as before — this fix restores it, it doesn't decouple its
+# lifecycle from the AI infra's. CI's own nightly sweep can't cause this
+# again, since it runs against an empty ephemeral state (no backend
+# configured) and only ever deletes tagged ARM resources — Entra ID app
+# registrations aren't tagged and aren't touched by it.
 on:
   workflow_dispatch: {}
-  # schedule:
-  #   # 23 UTC nightly — off-the-hour, staggered from sibling projects'
-  #   # teardown schedules in this same repo to avoid a thundering herd.
-  #   - cron: "23 3 * * *"
+  schedule:
+    # 23 UTC nightly — off-the-hour, staggered from sibling projects'
+    # teardown schedules in this same repo to avoid a thundering herd.
+    - cron: "23 3 * * *"
 
 env:
   RUN_LIVE_SMOKE: "1"
