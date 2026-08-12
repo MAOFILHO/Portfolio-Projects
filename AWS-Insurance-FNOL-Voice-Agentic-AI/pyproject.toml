@@ -7,10 +7,26 @@ readme = "README.md"
 license = { text = "MIT-0" }
 
 dependencies = [
-    # boto3: the only runtime dependency the Phase 3 ingestion pipeline needs -- Bedrock (embeddings)
-    # and DynamoDB (vector storage, ADR-002) are both reached through it. Pinned to a known-good release
-    # rather than left floating, per CLAUDE.md's "pin exact versions" rule.
+    # boto3: Bedrock (embeddings, model calls) and DynamoDB (vector storage, ADR-002; checkpointer, ADR-005)
+    # are both reached through it. Pinned to a known-good release, per CLAUDE.md's "pin exact versions" rule.
     "boto3==1.35.99",
+    # pydantic: typed FNOL/claim/policy/vehicle/event schemas (Phase 5 models/) -- industry-standard runtime
+    # validation, already assumed by TARGET-LAYOUT.md's "adapted Pydantic v2" mapping from repo 6.
+    "pydantic==2.13.4",
+    # python-dateutil: fuzzy loss_datetime parsing ("yesterday about 5:30") -- SLOT-DESIGN.md names
+    # dateutil-class parsing explicitly as the mechanism for this slot.
+    "python-dateutil==2.9.0.post0",
+    # openfeature-sdk: the generation-tier kill-switch flag (ADR-004) and the broader kill-switch model
+    # AI-USE-CASE-CARD.md commits to ("OpenFeature flags gate model tier... each taking effect on the next
+    # turn"). Uses the in-memory provider -- zero external service, zero cost.
+    "openfeature-sdk==0.10.0",
+    # numpy: brute-force cosine similarity over the corpus's embedding vectors, per ADR-002's chosen
+    # retrieval mechanism (a single vectorized operation, not a new AWS service).
+    "numpy==2.5.2",
+    # mcp: the official Model Context Protocol SDK. Needed for exactly one thing -- ADR-012's falsifiable
+    # test that the same tool handlers are servable over the real wire protocol without modification. Not
+    # used on the runtime hot path (ADR-012 keeps that in-process).
+    "mcp==2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -27,9 +43,12 @@ dev = [
     "black==25.1.0",
     # mypy: strict type checking, per CLAUDE.md's `make typecheck`.
     "mypy==1.14.1",
-    # boto3-stubs: type stubs for the two boto3 clients this project uses so far -- keeps `mypy strict`
+    # boto3-stubs: type stubs for the boto3 clients this project uses -- keeps `mypy strict`
     # honest instead of suppressing the untyped-import error for boto3 wholesale.
     "boto3-stubs[dynamodb,bedrock-runtime]==1.35.99",
+    # types-python-dateutil: dateutil ships no inline types; needed to keep mypy strict clean on the
+    # fuzzy loss_datetime parser.
+    "types-python-dateutil==2.9.0.20260807",
 ]
 
 [tool.pytest.ini_options]

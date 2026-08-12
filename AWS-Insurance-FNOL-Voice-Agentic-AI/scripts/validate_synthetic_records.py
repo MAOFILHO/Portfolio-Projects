@@ -12,6 +12,9 @@ Checks, each tied to a specific Phase 3 spec document:
 Exit code 0 and a summary line on success; a non-zero exit code and an itemized list on failure.
 Run standalone: `python3 scripts/validate_synthetic_records.py`. No AWS dependency, no network access --
 pure local computation, safe to run in CI (Phase 10) without any billable resource.
+
+Luhn/VIN check-digit logic lives in `fnol_voice_agent.validation.identifiers` (Phase 5) -- imported here
+rather than duplicated, so there is exactly one implementation of each algorithm.
 """
 from __future__ import annotations
 
@@ -20,44 +23,14 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from fnol_voice_agent.validation.identifiers import (  # noqa: E402
+    luhn_check_digit,
+    vin_correct_check_digit,
+)
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "synthetic"
-
-# --- docs/phase3/DATA-CONTRACTS.md §1: claim-number Luhn check digit ---
-
-def luhn_check_digit(payload_digits: str) -> int:
-    digits = [int(d) for d in payload_digits]
-    total = 0
-    n = len(digits)
-    for i, d in enumerate(digits):
-        pos_from_right = n - i
-        if pos_from_right % 2 == 1:  # double every other digit, starting from the rightmost
-            d2 = d * 2
-            if d2 > 9:
-                d2 -= 9
-            total += d2
-        else:
-            total += d
-    return (10 - (total % 10)) % 10
-
-
-# --- docs/phase3/DATA-CONTRACTS.md §3: NHTSA VIN check digit ---
-
-_TRANSLIT = {
-    "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8,
-    "J": 1, "K": 2, "L": 3, "M": 4, "N": 5, "P": 7, "R": 9,
-    "S": 2, "T": 3, "U": 4, "V": 5, "W": 6, "X": 7, "Y": 8, "Z": 9,
-}
-_WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
-
-
-def _char_value(c: str) -> int:
-    return int(c) if c.isdigit() else _TRANSLIT[c]
-
-
-def vin_correct_check_digit(vin_with_zero_placeholder: str) -> str:
-    total = sum(_char_value(c) * _WEIGHTS[i] for i, c in enumerate(vin_with_zero_placeholder))
-    remainder = total % 11
-    return "X" if remainder == 10 else str(remainder)
 
 
 def main() -> int:
@@ -83,8 +56,7 @@ def main() -> int:
         if len(vin) != 17:
             errors.append(f"VIN wrong length: {vin}")
             continue
-        placeholder = vin[:8] + "0" + vin[9:]
-        correct = vin_correct_check_digit(placeholder)
+        correct = vin_correct_check_digit(vin)
         if vin[8] == correct:
             errors.append(f"VIN {vin}: check digit is ACCIDENTALLY VALID ({vin[8]}) -- must be deliberately wrong")
 
