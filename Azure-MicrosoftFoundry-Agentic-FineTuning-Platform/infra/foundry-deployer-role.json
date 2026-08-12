@@ -1,6 +1,6 @@
 {
   "Name": "Foundry Platform Deployer",
-  "Description": "Least-privilege role for the Azure-Foundry-Agentic-FineTuning-Platform deploy/teardown/hosting-deploy GitHub Actions workflows: resource groups, Cognitive Services (Foundry account + model/fine-tuned deployments), Container Apps, Static Web Apps, Log Analytics/App Insights, consumption budgets, and role assignments scoped narrowly to granting the Container App's own Managed Identity access to this project's Foundry account. No Storage/Key Vault/other-project Cognitive Services access, so it can't touch other projects' resources or manage IAM outside this project's resource group.",
+  "Description": "Least-privilege role for the Azure-MicrosoftFoundry-Agentic-FineTuning-Platform deploy/teardown/hosting-deploy GitHub Actions workflows: resource groups, Cognitive Services (Foundry account + model/fine-tuned deployments), Container Apps, Static Web Apps, Log Analytics/App Insights, consumption budgets, and role assignments scoped narrowly to granting the Container App's own Managed Identity access to this project's Foundry account. No Storage/Key Vault/other-project Cognitive Services access, so it can't touch other projects' resources or manage IAM outside this project's resource group.",
   "Actions": [
     "Microsoft.Resources/subscriptions/resourceGroups/read",
     "Microsoft.Resources/subscriptions/resourceGroups/write",

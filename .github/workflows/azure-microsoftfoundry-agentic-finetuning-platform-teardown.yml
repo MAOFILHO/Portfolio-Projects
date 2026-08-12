@@ -1,4 +1,4 @@
-name: Azure-Foundry-Agentic-FineTuning-Platform — Teardown
+name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Teardown
 
 # Manual trigger any time, plus a nightly scheduled safety-net sweep — the
 # mitigation for the auto-increment naming risk documented in PLAN.md /
@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-azure-foundry-agentic-finetuning-platform
+  group: deploy-azure-microsoftfoundry-agentic-finetuning-platform
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform
     steps:
       - uses: actions/checkout@v7
 
@@ -58,12 +58,12 @@ jobs:
           python infra/terraform/scripts/sweep_orphans.py --tag foundry-agentic-platform || true
 
       - name: terraform init
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: terraform init -input=false
         continue-on-error: true # no state yet is a valid "nothing to tear down" outcome
 
       - name: terraform destroy
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: terraform destroy -auto-approve -var="dockerhub_username=${{ vars.DOCKERHUB_USERNAME }}"
         continue-on-error: true # state may be empty/missing; the sweep below is authoritative
 

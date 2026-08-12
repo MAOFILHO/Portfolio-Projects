@@ -12,7 +12,7 @@
 ![Azure](https://img.shields.io/badge/Azure-AI_Foundry-0078D4?style=flat&logo=microsoftazure&logoColor=white&labelColor=1a1a2e)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white&labelColor=1a1a2e)
 
-[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-foundry-agentic-finetuning-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-foundry-agentic-finetuning-platform-ci.yml)
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-microsoftfoundry-agentic-finetuning-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-microsoftfoundry-agentic-finetuning-platform-ci.yml)
 
 **Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
 
@@ -614,7 +614,7 @@ projects' pipelines without collisions.
 
 <img width="100%" alt="Docker Desktop's Images tab, showing the backend image pushed to Docker Hub alongside the locally-built frontend/backend images" src="docs/file14.png" />
 <p><em>What <code>hosting-deploy.yml</code>'s image build step produces —
-<code>maofilho/azure-foundry-agentic-finetuning-platform-backend</code>,
+<code>maofilho/azure-microsoftfoundry-agentic-finetuning-platform-backend</code>,
 pushed to a public Docker Hub repo (no Azure Container Registry needed, see
 <a href="#live-deployment">Live deployment</a>), sitting alongside the
 locally-built frontend/backend images from <code>docker compose up</code>
@@ -800,7 +800,7 @@ each side.
 ## Project Structure
 
 ```
-Azure-Foundry-Agentic-FineTuning-Platform/
+Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/
 ├── README.md                          # This file
 ├── PLAN.md, TASKS.md, COSTS.md         # Build record — architecture decisions, cost approval, phase gates
 ├── CHANGELOG.md                       # What shipped when
@@ -879,7 +879,7 @@ Azure-Foundry-Agentic-FineTuning-Platform/
     └── file1.png … file15.png         # Web app, CI/CD, provisioning, and Docker screenshots
 
 (GitHub Actions workflows live at the monorepo root .github/workflows/,
- prefixed azure-foundry-agentic-finetuning-platform-* — see GitHub Actions CI/CD)
+ prefixed azure-microsoftfoundry-agentic-finetuning-platform-* — see GitHub Actions CI/CD)
 ```
 
 ---

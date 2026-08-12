@@ -169,7 +169,7 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = "docker.io/${var.dockerhub_username}/azure-foundry-agentic-finetuning-platform-backend:${var.backend_image_tag}"
+      image  = "docker.io/${var.dockerhub_username}/azure-microsoftfoundry-agentic-finetuning-platform-backend:${var.backend_image_tag}"
       cpu    = 0.5
       memory = "1Gi"
 

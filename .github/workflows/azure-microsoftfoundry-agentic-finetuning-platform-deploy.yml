@@ -1,4 +1,4 @@
-name: Azure-Foundry-Agentic-FineTuning-Platform — Deploy (provision AI infra + live run)
+name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Deploy (provision AI infra + live run)
 
 # Manual only — provisions real, billing Azure resources (the Foundry
 # account, base model deployments). Never runs on push/PR. Uses OIDC
@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-azure-foundry-agentic-finetuning-platform
+  group: deploy-azure-microsoftfoundry-agentic-finetuning-platform
   cancel-in-progress: false
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform
     steps:
       - uses: actions/checkout@v7
 
@@ -78,11 +78,11 @@ jobs:
         run: pytest tests/smoke_pre -v
 
       - name: terraform init
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: terraform init -input=false
 
       - name: terraform apply (budget alert created before anything billable)
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: |
           terraform apply -auto-approve \
             -var="enable_next_suffix_probe=true" \
@@ -112,4 +112,4 @@ jobs:
         if: always()
         with:
           name: live-run-outputs
-          path: Azure-Foundry-Agentic-FineTuning-Platform/outputs/
+          path: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/outputs/

@@ -1,20 +1,20 @@
-name: Azure-Foundry-Agentic-FineTuning-Platform CI
+name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform CI
 
 # Runs on every push/PR touching this project's folder only — path-scoped so
 # it never fires on an unrelated sibling project's changes, and never fires
 # on unrelated projects touching theirs. Everything here runs in
 # DEMO_MODE=mock at $0 cost, no Azure credentials needed. See
-# azure-foundry-agentic-finetuning-platform-deploy.yml for the workflow that
-# actually touches Azure.
+# azure-microsoftfoundry-agentic-finetuning-platform-deploy.yml for the
+# workflow that actually touches Azure.
 on:
   push:
     branches: ["main"]
     paths:
-      - "Azure-Foundry-Agentic-FineTuning-Platform/**"
+      - "Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/**"
   pull_request:
     branches: ["main"]
     paths:
-      - "Azure-Foundry-Agentic-FineTuning-Platform/**"
+      - "Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/**"
 
 env:
   DEMO_MODE: mock
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform
     steps:
       - uses: actions/checkout@v7
 
@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-          cache-dependency-path: Azure-Foundry-Agentic-FineTuning-Platform/requirements.txt
+          cache-dependency-path: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/frontend
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/frontend
     steps:
       - uses: actions/checkout@v7
 
@@ -82,7 +82,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: Azure-Foundry-Agentic-FineTuning-Platform/frontend/package-lock.json
+          cache-dependency-path: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/frontend/package-lock.json
 
       - run: npm ci
       - run: npx tsc --noEmit -p tsconfig.app.json
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
     steps:
       - uses: actions/checkout@v7
 
@@ -111,7 +111,7 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: next_suffix.py unit tests (Terraform external-provider contract)
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt

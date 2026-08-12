@@ -1,4 +1,4 @@
-name: Azure-Foundry-Agentic-FineTuning-Platform — Deploy app (backend image + frontend)
+name: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform — Deploy app (backend image + frontend)
 
 # Manual only. Separate from the infra-only deploy workflow above on
 # purpose: re-provisioning the AI infra (Foundry account, model
@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-azure-foundry-agentic-finetuning-platform
+  group: deploy-azure-microsoftfoundry-agentic-finetuning-platform
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform
     outputs:
       container_app_fqdn: ${{ steps.tf_outputs.outputs.container_app_fqdn }}
       entra_client_id: ${{ steps.tf_outputs.outputs.entra_client_id }}
@@ -46,10 +46,10 @@ jobs:
       - name: Build and push
         run: |
           TAG="gha-${{ github.run_number }}"
-          docker build -t ${{ vars.DOCKERHUB_USERNAME }}/azure-foundry-agentic-finetuning-platform-backend:$TAG \
-                       -t ${{ vars.DOCKERHUB_USERNAME }}/azure-foundry-agentic-finetuning-platform-backend:latest .
-          docker push ${{ vars.DOCKERHUB_USERNAME }}/azure-foundry-agentic-finetuning-platform-backend:$TAG
-          docker push ${{ vars.DOCKERHUB_USERNAME }}/azure-foundry-agentic-finetuning-platform-backend:latest
+          docker build -t ${{ vars.DOCKERHUB_USERNAME }}/azure-microsoftfoundry-agentic-finetuning-platform-backend:$TAG \
+                       -t ${{ vars.DOCKERHUB_USERNAME }}/azure-microsoftfoundry-agentic-finetuning-platform-backend:latest .
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/azure-microsoftfoundry-agentic-finetuning-platform-backend:$TAG
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/azure-microsoftfoundry-agentic-finetuning-platform-backend:latest
           echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
 
       - uses: azure/login@v2
@@ -63,7 +63,7 @@ jobs:
           terraform_version: "1.9.8"
 
       - name: terraform apply (rolls the Container App to the new image tag)
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: |
           terraform init -input=false
           terraform apply -auto-approve \
@@ -73,7 +73,7 @@ jobs:
 
       - name: Read Terraform outputs for the frontend build
         id: tf_outputs
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/infra/terraform
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/infra/terraform
         run: |
           echo "container_app_fqdn=$(terraform output -raw container_app_fqdn)" >> "$GITHUB_OUTPUT"
           echo "entra_client_id=$(terraform output -raw entra_signin_client_id)" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Azure-Foundry-Agentic-FineTuning-Platform/frontend
+        working-directory: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/frontend
     steps:
       - uses: actions/checkout@v7
 
@@ -94,7 +94,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: Azure-Foundry-Agentic-FineTuning-Platform/frontend/package-lock.json
+          cache-dependency-path: Azure-MicrosoftFoundry-Agentic-FineTuning-Platform/frontend/package-lock.json
 
       - run: npm ci
 
