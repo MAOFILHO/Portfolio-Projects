@@ -3,7 +3,7 @@
 ## Layout
 
 Follows the conventions established by the sibling project
-`AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` in the same monorepo.
+`AWS-Bedrock-Agentic-FineTuning-Platform` in the same monorepo.
 
 ```
 AWS-Insurance-FNOL-Voice-Agentic-AI/

@@ -164,7 +164,7 @@ project folder is silently ignored — no error, no warning. Workflows are there
 setting `working-directory`, and copied to the monorepo root on install. Repo variables are prefixed
 (`FNOL_*`) so they cannot collide with a sibling project's settings.
 
-Layout follows the sibling project `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform`:
+Layout follows the sibling project `AWS-Bedrock-Agentic-FineTuning-Platform`:
 `src/<pkg>/`, `infra/terraform/`, lifecycle-phased `tests/{unit,pre_provision,post_provision,post_run,post_teardown}`,
 `docs/{COST-ACTUALS,RESULTS,LESSONS-LEARNED,INCIDENT-LOG}.md`.
 
