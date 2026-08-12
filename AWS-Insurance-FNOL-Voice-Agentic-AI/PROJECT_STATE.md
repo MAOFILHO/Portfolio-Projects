@@ -11,11 +11,10 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 4 — Conversation design — **signed off** (`APPROVED: Phase 4` typed by Marco
-2026-08-11, twice: first authorizing the phase to begin, then again as the closing sign-off after all five
-deliverables were complete — same two-approval pattern Phase 3 used). **Phase 5 exit criteria proposed below
-(`docs/phase5/BUILD-PLAN.md`), awaiting `APPROVED: Phase 5` — not started.**
-**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
+**Current phase:** Phase 5 — Agent implementation — **in progress, Stages 1–5 of 8 complete, gated here at
+Marco's explicit instruction** (Stages 6–7 are the LangGraph wiring; hitting that with clean context rather
+than mid-compact was the point of the gate). Phase 4 signed off 2026-08-11.
+**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread, integrated, 145/145 tests green, ruff/black/mypy strict clean, zero real AWS calls across all five stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
@@ -31,7 +30,7 @@ Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
-| 5 | Agent implementation | ⬜ Exit criteria proposed 2026-08-11, awaiting approval |
+| 5 | Agent implementation | 🟡 In progress — Stages 1–5/8 complete, gated 2026-08-11 |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
@@ -252,28 +251,32 @@ Five deliverables, mapped to the eight roadmap components:
 
 ---
 
-## Phase 5 exit criteria — proposed 2026-08-11, awaiting `APPROVED: Phase 5`
+## Phase 5 exit criteria — approved 2026-08-11 to begin; **Stages 1–5 complete, gated here per Marco's instruction**
 
-Per the STOP CONDITIONS, no Phase 5 work starts until this table is approved. **The first phase with
-substantial application code** — Marco asked for two things visible before approving: the build order and
-dependency sequence (so a mid-phase gate is possible if context pressure shows up), and exactly where the
-cost gate applies. Both are answered in full in `docs/phase5/BUILD-PLAN.md`; this table is the checklist.
+`APPROVED: Phase 5` authorized the phase to begin, with Marco's requested build order/dependency sequence and
+per-component cost gate answered in `docs/phase5/BUILD-PLAN.md`. Marco also directed: subagents for Stages
+1–5, main thread as integrator for Stages 6–7, and **an explicit gate after Stage 5** — Stages 6–7 are the
+wiring, to be hit with clean context rather than mid-compact. That gate is where this table now stands.
 
-| # | Criterion | Notes |
+| # | Criterion | Status |
 |---|---|---|
-| 1 | Build order specified as dependency-ordered stages, each a clean gate point, with an explicit note on which stages could be delegated to isolated subagents vs. which need the main thread as integrator | `docs/phase5/BUILD-PLAN.md` §1 — 8 stages, foundations → MCP servers → knowledge retrieval → Bedrock router+fake-LLM harness → guardrails → nodes → graph assembly+checkpointer → optional real-call verification |
-| 2 | MCP transport (in-process vs. wire protocol) resolved as a short ADR **before** the MCP servers are built, not left implicit | `ADR-012`, first task of Stage 1 — not drafted yet, this table only commits to producing it early |
-| 3 | Foundational typed contracts: `models/` (FNOL/claim/policy/vehicle/event Pydantic schemas), `validation/` (slot validators, business-rule arithmetic from `coverage-logic.md`, authority limits from Phase 1's non-goals) | Stage 1 |
-| 4 | MCP servers, one per backend domain (policy, claims, contact, escalation), wrapping Phase 3's synthetic records as typed tool calls; `.claude/mcp.json` registered | Stage 2. Names `GetPolicyholderElections` concretely — `DIALOGUE-POLICIES.md` §2's forward requirement from Phase 4 |
-| 5 | Knowledge retrieval — the read half of `ADR-002`'s design (Phase 3 built only the write half) | Stage 3 |
-| 6 | Bedrock router implementing `PROMPT-REGISTRY.md` §1's two call paths; fake-LLM harness so nothing downstream needs real Bedrock by default | Stage 4 |
-| 7 | Guardrails + PII redaction module (`ADR-010`, `ADR-011`), built and tested against a mocked `ApplyGuardrail` client | Stage 5 |
-| 8 | LangGraph nodes for all six intents plus the L1 safety pre-node, each wired to its Stage 1–5 dependencies per `DIALOGUE-POLICIES.md` | Stage 6 |
-| 9 | Graph assembly implementing the full per-turn pipeline (`DIALOGUE-POLICIES.md` §1), the escalation-trigger table (§8), and the retry ceiling (§7) as graph-level control flow; DynamoDB checkpointer (`ADR-005`) keyed on Connect contact ID; integration tests covering all six intents, injury preemption, a barge-in scenario, and a retry-ceiling-exhaustion scenario | Stage 7 |
-| 10 | **Cost gate named per component, not just in general** — which stages ever touch real AWS, and which two things (a real DynamoDB table, a real Guardrail resource) are explicitly *not* created in this phase regardless of the standing cap, deferred to Phase 8 by name | `docs/phase5/BUILD-PLAN.md` §2 |
-| 11 | Mock-by-default holds for every stage — same two-axis pattern Phase 3 established; TDD (test first, watch it fail, implement) per `CLAUDE.md`'s standing instruction | All stages |
-| 12 | No billable resource created; $0.00 new spend for the phase's own exit criteria, **except** an optional Stage 8 closing verification against real Bedrock, cost-gated separately at close under the existing $5 standing cap, same pattern as Phases 3–4 | |
-| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | Pending — this table is the request for it |
+| 1 | Build order specified as dependency-ordered stages, each a clean gate point, with an explicit note on which stages could be delegated to isolated subagents vs. which need the main thread as integrator | ✅ `docs/phase5/BUILD-PLAN.md` §1 |
+| 2 | MCP transport (in-process vs. wire protocol) resolved as a short ADR **before** the MCP servers are built, not left implicit | ✅ `ADR-012` — in-process at runtime, wire protocol proven servable via a falsifiable test, not assumed |
+| 3 | Foundational typed contracts: `models/`, `validation/`, `config/` | ✅ Stage 1 — validated directly against the real Phase 3 corpus; caught and fixed 3 real schema mismatches plus a real gap in the rental total-loss exception |
+| 4 | MCP servers, one per backend domain, wrapping Phase 3's synthetic records as typed tool calls; `.claude/mcp.json` registered | ✅ Stage 2 — **`ADR-012`'s falsifiable test passes for all four servers**, not just the required minimum: real subprocess, real `mcp` SDK client, wire-protocol result matches the in-process call exactly, no handler modified to make it work |
+| 5 | Knowledge retrieval — the read half of `ADR-002`'s design | ✅ Stage 3 — real measured cosine-similarity latency: **0.036 ms** average over 1,000 calls against the real 21-chunk corpus, confirming (not just estimating) `ADR-002`'s "negligible against the 1,800 ms budget" claim |
+| 6 | Bedrock router implementing `PROMPT-REGISTRY.md` §1's two call paths; fake-LLM harness | ✅ Stage 4 — `ADR-004`/Q10's structural separation is now a passing assertion (flip the generation flag, prove the router's requested model ID never moves), not a docstring claim |
+| 7 | Guardrails + PII redaction module, built and tested against a mocked `ApplyGuardrail` client | ✅ Stage 5 — honest about limits: no name detection (assigned to Bedrock Guardrails, per `ADR-011`), date/time and location redaction catch plain phrasing only, creative phrasing (`ADR-011`'s own example) is a named, un-closed gap |
+| 8 | LangGraph nodes for all six intents plus the L1 safety pre-node | ⬜ Stage 6 — **not started, per the Stage 5 gate** |
+| 9 | Graph assembly, DynamoDB checkpointer, integration tests | ⬜ Stage 7 — **not started, per the Stage 5 gate** |
+| 10 | Cost gate named per component | ✅ `docs/phase5/BUILD-PLAN.md` §2 — and now empirically confirmed, not just planned: **zero real AWS calls across all five stages** |
+| 11 | Mock-by-default holds for every stage | ✅ Stages 1–5, confirmed by 145/145 passing tests with no real AWS credentials touched |
+| 12 | No billable resource created; $0.00 new spend | ✅ $0.00 across Stages 1–5. Stage 8's optional real-Bedrock verification remains unexercised, pending its own separate cost-gate approval when Stages 6–7 are done |
+| 13 | Marco's explicit approval to begin | ✅ `APPROVED: Phase 5`, typed 2026-08-11 |
+
+**Phase 5 is not signed off — it is mid-phase, at the requested gate.** Stages 6–7 (LangGraph nodes, graph
+assembly, checkpointer) have not started. No exit criteria beyond this table exist for them yet; per the
+STOP CONDITIONS, that work does not begin without Marco's separate go-ahead.
 
 ---
 
@@ -936,3 +939,65 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   `BUILD-PLAN.md`'s stages. **Not started** — presented for Marco's `APPROVED: Phase 5`, per the STOP
   CONDITIONS, same as every prior phase. No code written this entry. No billable resource created. $0.00 new
   spend.
+
+### 2026-08-11 — Phase 5 Stages 1–5 built; gate reached per Marco's instruction
+
+- **Marco typed `APPROVED: Phase 5`**, approved `ADR-012` with one added requirement — the ADR must state a
+  falsifiable test (same tool schemas servable over the wire without modifying the handlers; no shared state
+  reaching around the interface; schemas defined separately from handlers) rather than just asserting the
+  in-process decision is honest — and directed that Stage 2 *prove* it via a working `.claude/mcp.json`
+  round trip, not assert it. Approved subagents for Stages 1–5, main thread as integrator for Stages 6–7, and
+  an explicit gate after Stage 5, reasoning that Stages 6–7 are the wiring and should be hit with clean
+  context rather than mid-compact.
+- **Wrote `docs/adr/ADR-012-mcp-transport.md`** with Marco's falsifiable test as the ADR's own accept/reject
+  criterion, stated in its own words: if the test can't be written without touching handler internals, the
+  correct fix is renaming the modules away from the MCP claim, not forcing the test to pass.
+- **Built Stage 1 directly** (foundations: `models/`, `validation/`, `config/`) rather than delegating it,
+  since it sets the shared contracts every other stage depends on. Validating the real Phase 3 synthetic
+  corpus against the new Pydantic models — not a synthetic test fixture — caught three genuine schema
+  mismatches (`claim_type` is a free-text claims-processing label, not `FileAutoClaimSlots`' `loss_type`
+  enum; rental usage fields are `None` together when the endorsement wasn't elected; `fault_percentage_insured`
+  is `None` on pure-Comprehensive claims) and one real arithmetic gap (`rental_days_remaining` didn't encode
+  `endorsements.md`'s total-loss exception — a total-loss claim's rental entitlement is zero regardless of
+  days used, caught against real claim `CLM-2607-00042-5`, not invented). All fixed, not worked around.
+- **Launched four parallel subagents for Stages 2–5**, each scoped to disjoint files, given the exact source
+  documents to build from, instructed not to touch `pyproject.toml` or each other's directories, and required
+  to run the full test suite (not just their own new tests) before committing. All four landed clean:
+  - **Stage 2 (MCP servers)** — `ADR-012`'s falsifiable test **passes for all four domains**, not just the
+    required minimum: a real subprocess per server, driven by the real `mcp` SDK client over real stdio,
+    result matches the in-process handler call exactly. No handler needed modification to be servable over
+    the wire, and no shared state crosses the boundary — confirmed by the wire test and by an automated check
+    that no handler module imports `mcp` at all. Caught a real naming mismatch (`ContactField.MAILING_ADDRESS`
+    vs. `Policyholder.address`), mapped explicitly rather than silently reconciled, and verified
+    `get_claim_status`'s "most recent open claim" resolution against the real multi-claim policyholder
+    `PY4821` and the no-open-claim edge case `PY9012`.
+  - **Stage 3 (knowledge retrieval)** — the read half of `ADR-002`. Measured, not estimated, the cosine
+    similarity computation's real latency: **0.036 ms average over 1,000 calls** against the real 21-chunk
+    corpus, confirming `ADR-002`'s "negligible against the 1,800 ms budget" engineering judgment with an
+    actual number. Flagged (not fixed, correctly out of its own scope) that `knowledge/__init__.py`'s
+    docstring was now stale — fixed directly by the integrator afterward (commit `c0a2bd1`).
+  - **Stage 4 (Bedrock router + fake-LLM harness)** — `ADR-004`/Q10's structural separation (the generation-
+    tier flag must have no code path to the fixed router+L2 call) is now a passing assertion — flip the flag,
+    prove the router's requested model ID never moves while the generation call's does — not just a
+    docstring claim. Proved Q10's "not silently omittable" requirement the same way: a canned tool response
+    missing `safety_flag` raises a real `pydantic.ValidationError`, not a silent default.
+  - **Stage 5 (guardrails + PII redaction)** — built against a mocked `ApplyGuardrail` client throughout, per
+    the plan (no real Guardrail resource exists). Honest about limits, matching `ADR-011`'s own stated
+    boundary rather than overclaiming: no name detection at all (assigned to Bedrock Guardrails, not this
+    module); date/time and location redaction catch plainly-phrased mentions only, `ADR-011`'s own named
+    example ("right outside my kids' school on Maple") is explicitly still uncaught. Proved `ADR-010`'s
+    ordering by grep-level assertion — no `guardrailIdentifier` anywhere near a model call in this module —
+    plus a full 4-step sequencing test.
+- **Integration verification, run by the main thread against the merged state of all five stages**:
+  `pytest tests/unit -q` → **145/145 passed**, `ruff check` clean, `black --check` clean, `mypy src --strict`
+  → **clean across all 34 source files** (one file-specific issue Stage 5 flagged mid-build in Stage 2's
+  `escalation_server.py` was already resolved by Stage 2's own completion — confirmed clean at integration,
+  not just trusted from an intermediate report). Fixed one small integration-time item (`knowledge/__init__.py`'s
+  stale docstring, commit `c0a2bd1`) that no single stage's scope covered.
+- **Zero real AWS calls across all five stages — $0.00 new spend**, confirmed empirically (every test run
+  used mock/local backends only), not merely planned in `BUILD-PLAN.md`.
+- **Phase 5 exit-criteria table updated**: rows 1–7, 10–13 checked; rows 8–9 (LangGraph nodes, graph assembly
+  + checkpointer) explicitly left unchecked. **Phase 5 is not signed off — Stages 6–7 have not started**,
+  per Marco's own gate instruction. No exit criteria for Stages 6–7 exist yet beyond `BUILD-PLAN.md`'s
+  existing stage descriptions; per the STOP CONDITIONS, that work does not begin without Marco's separate
+  go-ahead.
