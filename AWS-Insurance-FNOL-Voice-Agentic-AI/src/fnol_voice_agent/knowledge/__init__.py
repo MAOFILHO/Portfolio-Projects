@@ -1,6 +1,6 @@
 """Knowledge corpus ingestion and retrieval — the CoverageQuestion / RentalTowingEntitlement RAG layer.
 
-Retrieval itself (DynamoDB + in-process brute-force cosine similarity, per ADR-002) is Phase 5 scope. This
-package currently holds only the Phase 3 ingestion pipeline (`ingest.py`) — chunking the policy corpus,
-embedding it, and loading it into the vector store ADR-002 defines.
+`ingest.py` (Phase 3): chunks the policy corpus, embeds it, loads it into the DynamoDB vector store ADR-002
+defines. `retrieve.py` (Phase 5, Stage 3): the read half — brute-force cosine similarity search over those
+same chunks, in-process, per ADR-002.
 """
