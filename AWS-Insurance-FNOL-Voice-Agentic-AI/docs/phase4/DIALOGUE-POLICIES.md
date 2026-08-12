@@ -253,6 +253,7 @@ routes, so nothing here adds a route or a trigger silently.
 | Ambiguity unresolved after one repair attempt | 3 — Capability | `INTENT-TAXONOMY.md` §3 |
 | Two consecutive no-input/no-match on the same slot/question | 3 — Capability | §7 |
 | `CoverageQuestion` eligibility/amount sub-question | 3 — Capability (immediate, no attempt at generation) | §2 step 4 |
+| Output-side authority check fires on generated speech | 3 — Capability | `ADR-015`, added 2026-08-12 — **the row above, enforced a second time.** Not a new trigger: the same §2 step 4 policy, at the output boundary instead of the routing boundary, for the case where the caller's question was benign and the forbidden assertion entered through retrieved context or a tool response. Recorded here explicitly because this table says nothing may be added to it silently |
 | `UpdateContactInfo` confirmation failed twice | 3 — Capability (tighter ladder, one retry not two) | §4, `SLOT-DESIGN.md` §2 |
 | Sustained low ASR/intent confidence across turns | 4 — Confidence | `PROBLEM-FRAMING.md` |
 | Groundedness self-check failure on a coverage answer | 4 — Confidence | `PROBLEM-FRAMING.md`, `AI-USE-CASE-CARD.md` F3 |

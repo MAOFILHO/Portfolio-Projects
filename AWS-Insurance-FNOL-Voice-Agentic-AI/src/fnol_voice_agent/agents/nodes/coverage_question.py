@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from fnol_voice_agent.agents.authority import ELIGIBILITY_DEFLECTION
 from fnol_voice_agent.agents.state import AgentState, NodeFn
 from fnol_voice_agent.aws.bedrock_router import BedrockConverseCaller, generate_response
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, Embedder
@@ -25,10 +26,13 @@ _ABSTENTION = "I don't have that in your policy -- let me get you to someone who
 
 # DIALOGUE-POLICIES.md §2 step 4: fixed, never generated -- an eligibility/amount question is deflected
 # before generation is ever invoked, not answered and then checked.
-_ELIGIBILITY_DEFLECTION = (
-    "That depends on a few things I can't determine from here -- let me get you to someone who can "
-    "walk through your specific claim."
-)
+#
+# The string itself now lives in `agents/authority.py`, because Phase 7 added a second enforcement point
+# for this same policy on the output side (`ADR-015`) and two enforcement points speaking two different
+# sentences would be a defect a caller could hear. This branch is still the primary one -- routing-time
+# deflection is what "escalate-before-generate" means, and the output check is a backstop for the case
+# where the router had no reason to deflect because the caller's question was benign.
+_ELIGIBILITY_DEFLECTION = ELIGIBILITY_DEFLECTION
 
 # PROMPT-REGISTRY.md §3.1, verbatim.
 _COVERAGE_SYSTEM_PROMPT = (

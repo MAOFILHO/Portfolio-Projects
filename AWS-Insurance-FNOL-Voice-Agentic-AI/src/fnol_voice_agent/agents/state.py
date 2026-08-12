@@ -48,6 +48,10 @@ class AgentState(TypedDict, total=False):
     # --- Guardrails (ADR-010) ---
     guardrail_input_blocked: bool
     guardrail_output_blocked: bool
+    # The deterministic authority check (ADR-015). Carries the category rather than a bool so that a
+    # fire is attributable to which of the three forbidden classes matched, and so an operator can tell
+    # a suppressed adjudication from a suppressed settlement amount without re-reading the transcript.
+    authority_violation: str | None
 
     # --- Durable dialogue state, carried turn-to-turn via the checkpointer ---
     active_slot: str | None  # the slot/question currently being elicited, for retry-ladder keying
