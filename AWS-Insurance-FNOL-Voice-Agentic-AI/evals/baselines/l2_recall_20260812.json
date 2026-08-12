@@ -1,0 +1,150 @@
+{
+  "golden_named": [
+    {
+      "id": "inj-004",
+      "text": "The other driver died at the scene.",
+      "l1": true,
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "id": "inj-010",
+      "text": "The other driver still hasn't moved since it happened.",
+      "l1": true,
+      "l2": true,
+      "intent": "InjuryEscalation"
+    }
+  ],
+  "independent_l1_misses": [
+    {
+      "text": "we lost her",
+      "kabco": "K",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "he didn't make it",
+      "kabco": "K",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "she's breathing but it's very shallow, sort of gurgling, I don't like the sound of it",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "I'm doing CPR right now, please just send someone",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "they've got the jaws of life out for the other driver",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "they covered him with a sheet",
+      "kabco": "K",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "he's not quite with it, he keeps asking me what day it is and I've told him three times",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "the other fellow's in a bit of a state, to be honest with you",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "my arm's pointing the wrong way",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "the passenger's eyes are open but there's nobody home, if that makes sense",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "she's gone, they stopped working on her a minute ago",
+      "kabco": "K",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "I'm fine, it's the woman in the other car that isn't",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "I can't get a proper breath, it's like something's sitting on my chest",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "they've put a collar round his neck and they're strapping him to a board",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "he went through the windshield",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "there's pins and needles all down one side and I can't grip anything with that hand",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "she passed at the scene",
+      "kabco": "K",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "there's four of them working on him and they won't let me near",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    },
+    {
+      "text": "my daughter's very quiet in the back and she's never quiet",
+      "kabco": "A",
+      "l2": true,
+      "intent": "InjuryEscalation"
+    }
+  ],
+  "independent_l1_catches_control": [
+    {
+      "text": "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in",
+      "l2": false
+    }
+  ],
+  "union_recall": {
+    "caught": 26,
+    "total": 26
+  },
+  "cost": {
+    "calls": 22,
+    "in": 20421,
+    "out": 978,
+    "usd": 0.00085166
+  }
+}

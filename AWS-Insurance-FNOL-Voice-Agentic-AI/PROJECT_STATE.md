@@ -11,12 +11,11 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; Stages 1–4 of 8 complete, gated
-at Stage 4 per the build plan.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
+**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; Stages 1–6 of 8 complete.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
-Bedrock standing-approval budget consumed: **≈$0.00037 of $5.00**.
+Bedrock standing-approval budget consumed: **≈$0.00122 of $5.00**; Phase 6 sub-budget ≈$0.00085 of $1.00.
 
 ---
 
@@ -30,7 +29,7 @@ Bedrock standing-approval budget consumed: **≈$0.00037 of $5.00**.
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
-| 6 | Evaluation harness | 🟡 Approved 2026-08-12 — Stages 1–4 of 8 complete, gated at Stage 4 |
+| 6 | Evaluation harness | 🟡 Approved 2026-08-12 — Stages 1–6 of 8 complete |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
@@ -375,7 +374,7 @@ of them can be discovered as a convenient surprise later:
 | 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | ⬜ Stage 8 |
 | 12 | **Spend inside the proposed $1.00 sub-budget**, every run logged in `COSTS.md`, stop-and-report at $0.75. **No provisioned resource created** — no DynamoDB table, no Bedrock Guardrail, no Connect/Lex/Lambda resource; all remain Phase 8's with their own approvals, since the standing cap covers inference, not provisioning | ⬜ |
 | 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 6`, typed 2026-08-12, with criterion 14 added before work began |
-| 14 | **A genuinely independent injury-phrasing set**, generated before Stage 7 without reference to `agents/lexicon.py`, covering indirect and euphemistic phrasings — not just clean keyword variants. **L1 and L2 recall reported separately against it**, and separately again from the weakly-held-out set of criterion 3 | ⬜ Stage 6. **Marco's addition at approval** |
+| 14 | **A genuinely independent injury-phrasing set**, generated before Stage 7 without reference to `agents/lexicon.py`, covering indirect and euphemistic phrasings — not just clean keyword variants. **L1 and L2 recall reported separately against it**, and separately again from the weakly-held-out set of criterion 3 | ✅ Stage 6 — 43 phrasings by an isolated agent. **L1 0.192 (uncontaminated, sealed before the fix); L2 19/19 on L1's misses; union 26/26.** Reported separately, never blended |
 
 ### The two decisions, settled at approval
 
@@ -1426,3 +1425,47 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   ordering of the lexicon fix relative to criterion 14's independent-set generation load-bearing rather
   than incidental.
 - **$0.00 spent.** Bedrock cap still ≈$0.00037 of $5.00; Phase 6 sub-budget untouched.
+
+### 2026-08-12 — Independent set generated, L1 fixed, L2 measured: the layered design is vindicated
+
+Marco's ordering, followed exactly: independent set **first**, before `lexicon.py` was touched.
+
+- **Criterion 14 discharged.** `evals/holdout/injury_phrasings_independent.yaml` — 43 phrasings, 26
+  positive / 17 negative, generated by an isolated agent whose only read was `evals/holdout.py`. It never
+  opened `agents/lexicon.py`, `INTENT-TAXONOMY.md` §2.4, or either existing labelled set.
+- **The uncontaminated reading, sealed before any fix**: L1 recall **0.192 (5/26)**, false-escalation
+  **0.412 (7/17)**. Committed immutably as `evals/baselines/l1_before_fix_20260812.json` with a README
+  saying not to regenerate it — it cannot be reproduced once the lexicon changes, and regenerating it
+  would silently replace the honest number with a flattering one.
+- **`D22` — the finding of the project so far, and it is a positive one.** L2 caught **19 of 19** of the
+  phrasings L1 missed, including four of five fatality euphemisms, and correctly declined on the one L1
+  false positive that survived. **Union recall 26/26 = 1.000** on the independent set. `SUCCESS-METRICS.md`
+  §2's claim that "a single detector demonstrably cannot carry this" was an assertion when written; it is
+  now measured — a lexicon-only detector would have missed 19 of 26 real injury reports.
+- **`D23` — precision generalises, recall does not.** The polarity fix dropped false-escalation
+  0.412 → 0.059 on data it was never shown, because the seven false positives were **one class**, not
+  seven mistakes. Recall moved only 0.192 → 0.269 over the same fix. The asymmetry is structural:
+  precision defects in a lexicon are rule-shaped and transfer; recall defects are vocabulary-shaped and
+  cannot. **Consequence for the architecture: adding lexicon entries in response to missed cases is a
+  treadmill. L1 carries precision, latency and determinism; L2 carries recall.**
+- **The threat to validity, stated with the result rather than beneath it**: the held-out set was written
+  by a language model and classified by a language model. It is independent of *the detector* but not of
+  *language models in general*, and agent-authored euphemism may be more model-legible than what a
+  panicking human actually says. A real-world recall claim needs human-authored phrasings, which this
+  project does not have.
+- **One false positive deliberately left unfixed**: the negation sits to the right of the trigger
+  ("the ambulance did come out but... they said there was no need"), and `_is_negated` scopes backwards
+  only. Right-scoped all-clear assertions are a real second category whose only evidence is in the
+  held-out set — building it would spend the one uncontaminated measurement this phase has. Named as an
+  open gap in `RESULTS.md` and in `lexicon.py`'s docstring.
+- **Two instances of the same regex hazard**, found independently: `\b` matches nothing immediately
+  before an apostrophe-t contraction, so `\bn't\b` never fires inside "isn't" or "don't". In the negation
+  cues this meant **no `-n't` contraction registered as negation at all**. Reads as correct on review,
+  fails silently in the safe-looking direction.
+- **Three tests inverted** from asserting the pre-fix state. That inversion is the mechanism working:
+  they broke, which forced the before/after numbers into `RESULTS.md` instead of letting an improvement
+  pass unremarked.
+- **`docs/RESULTS.md` written** with the real numbers, contaminated figures marked ⚠, and the weak set
+  closed at 0.400 per Marco's instruction, not re-reported.
+- **Cost: $0.000852** for 22 real calls. Phase 6 sub-budget ≈$0.00085 of $1.00; standing cap ≈$0.00122 of
+  $5.00.
