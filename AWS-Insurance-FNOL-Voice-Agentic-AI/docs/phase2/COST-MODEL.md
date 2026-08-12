@@ -111,6 +111,20 @@ in this table goes to exactly $0.00 on teardown.
 confirming the project's existing finding that Bedrock is noise by comparison, now more so after the Nova
 pricing correction (Nova Micro/Lite both came in materially cheaper than the earlier estimate once re-verified).
 
+**⚠ Known discrepancy, flagged 2026-08-11 (Phase 4), not rebuilt into the table above:** the "~6k in / 1k out"
+assumption behind both Bedrock rows implicitly treated generation as happening at that scale on every
+conversation. Phase 4's `docs/phase4/PROMPT-REGISTRY.md` (`D17`, `PROJECT_STATE.md`) establishes that the
+generation node is invoked for **exactly two** of the six intents (`CoverageQuestion`, `RentalTowingEntitlement`)
+— every other intent completes with zero generation calls, using only the fixed merged router+L2 call and
+fixed/templated speech. A real closing verification (five `Converse` calls, logged in `COSTS.md`) measured
+actual output token counts of **13–42 tokens per call**, roughly 3–4% of the ~1k-output assumption, and
+confirmed most call types (`FileAutoClaim`, `CheckClaimStatus`, `UpdateContactInfo`) never invoke the
+generation row at all. Net effect: **both Bedrock rows above are conservative upper bounds, not corrected
+here** — the true per-conversation Bedrock cost is likely on the order of **10–20× lower** than the ~$0.001
+figure for a typical call, directionally, not to false precision. **This does not change the $25 ceiling
+verdict** (Bedrock was already ~0.5–1% of per-conversation cost against telephony's 75–90%, i.e. already
+noise before this correction) — recorded as a directional note per Marco's instruction, not a model rebuild.
+
 ---
 
 ## Scenario costs at demo volume (simulator-first per `D8`; real calls reserved for demo/verification)

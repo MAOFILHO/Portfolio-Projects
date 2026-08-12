@@ -11,15 +11,14 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 4 — Conversation design — **content complete, presented for closing sign-off.**
-`APPROVED: Phase 4` (typed by Marco 2026-08-11) authorized the phase to *begin*, same pattern as Phase 3's
-opening approval — all five deliverables are now written; Marco's **closing** sign-off is a separate,
-still-pending step, named explicitly rather than left ambiguous (Phase 3's own session log flagged this
-exact wording gap once already — not repeating it here).
+**Current phase:** Phase 4 — Conversation design — **signed off** (`APPROVED: Phase 4` typed by Marco
+2026-08-11, twice: first authorizing the phase to begin, then again as the closing sign-off after all five
+deliverables were complete — same two-approval pattern Phase 3 used). Phase 5 not yet started — no exit
+criteria written, no approval given for it.
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
-Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
+Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
 
 ---
 
@@ -31,7 +30,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
-| 4 | Conversation design | 🟡 `APPROVED: Phase 4` given; content complete, awaiting closing sign-off |
+| 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
@@ -276,6 +275,14 @@ Five deliverables, mapped to the eight roadmap components:
 | D17 | **The generation node (feature-flagged tier, `ADR-004`) is invoked for exactly two cases** — `CoverageQuestion` election-fact synthesis and `RentalTowingEntitlement` compound synthesis. Every other spoken line (elicitation, confirmation, retry, escalation, greeting) is a fixed string or a deterministic template substitution, never free generation | This is the primary mechanism behind the voice length-discipline requirement: a line that was never generative cannot pad itself. It also narrows the generation-tier feature flag's real blast radius to two prompts, both fully specified in `docs/phase4/PROMPT-REGISTRY.md` | 2026-08-11 |
 | D18 | **No-input/no-match retry ceiling fixed at 2 consecutive attempts per slot/question; the terminal state is always escalation (route 3), never a hang-up** | Makes concrete what `PROBLEM-FRAMING.md`'s escalation route 3 already numbered but didn't operationalize. Stated as an explicit negative rule ("hang-up is never a fallback state") because a missing terminal branch is exactly the kind of defect that's easy to leave implicit and hard to notice until a real call falls through it | 2026-08-11 |
 | D19 | **Barge-in reuses the identical per-turn pipeline as any other turn — no `is_barge_in` branch anywhere.** An inconclusive barge-in (no safety trigger detected, including one cut off mid-word) triggers exactly one open re-prompt, drawn from the *same* retry ladder as D18, not a separate uncounted loop | Marco's addition, given R4's zero prior art. Keeps the barge-in-ordering question answerable by pointing at `ADR-010`'s existing mechanism (L1 runs first on raw input, unconditionally) rather than inventing new ordering machinery for the interruption path specifically. Prevents the repair mechanism itself from becoming the unbounded-loop failure mode it exists to close | 2026-08-11 |
+| D20 | **"The majority of this system's spoken output is deterministic and cannot hallucinate" is a stated architectural claim**, not just an implementation detail of `D17` — checkable because `PROMPT-REGISTRY.md` §1 names the entire generative surface area (exactly two prompts). Elevated to Phase 12's README as a claim to make explicitly, not left buried under D17 | Marco: "D17 is more consequential than its placement suggests." A structural absence-of-hallucination-surface property is a stronger and more honest claim than a tuned mitigation, and belongs in the portfolio narrative once Phase 12 exists to state it | 2026-08-11 |
+
+### Carried forward to future phases — named now so they aren't rediscovered later
+
+| # | Item | Owner phase | Source |
+|---|---|---|---|
+| CF1 | State explicitly in the README: only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | Phase 12 | `D20`, `docs/phase4/PROMPT-REGISTRY.md` |
+| CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency | Phase 9 | Marco, 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -826,3 +833,49 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   optional closing verification named in criterion 12 (a small number of real Bedrock calls to empirically
   check the length-discipline prompts) was **not run** — it remains available but was not exercised without a
   separate cost-gate approval, same discipline as every other real-spend decision this project has made.
+
+### 2026-08-11 — Phase 4 signed off; D17 elevated; closing Bedrock verification run
+
+- **Marco typed `APPROVED: Phase 4`** a second time, this one the closing sign-off (content was already
+  complete). Three follow-ons given alongside it:
+  1. **D17 elevated** — "only two paths invoke generation" is a stated architectural claim (the majority of
+     spoken output is structurally incapable of hallucinating, not just unlikely to), to be carried into
+     Phase 12's README explicitly. Added to `PROMPT-REGISTRY.md`'s opening section and recorded as `D20`;
+     tracked as `CF1` in the new "Carried forward to future phases" table rather than written into a README
+     that doesn't exist yet.
+  2. **Phase 9 load-testing note** — concentrate effort on the two generation paths, not distributed
+     uniformly across all six intents, since every other intent's latency is fixed-string/template latency.
+     Tracked as `CF2`.
+  3. **Phase 2 cost-model discrepancy** — `docs/phase2/COST-MODEL.md`'s per-conversation Bedrock rows
+     implicitly assumed generation-scale output (~1k tokens) on every turn; `D17` establishes that only two of
+     six intents ever reach the generation node. **Not rebuilt** (per Marco's explicit instruction) — a
+     discrepancy note added directly under the per-conversation table stating the existing ~$0.001 figure is
+     a conservative upper bound, directionally overstated by roughly 10–20× for a typical call, with the real
+     token counts from the closing verification (next item) cited as the basis for that range. Restates that
+     this doesn't move the $25 ceiling verdict — Bedrock was already noise-level before this correction.
+- **Ran the approved closing verification**: five real `Converse` calls (`us-west-2`) against
+  `PROMPT-REGISTRY.md`'s exact prompts, using real corpus content — the DCPD passage, the IRB optional-benefit
+  passage plus policyholder `PY4821`'s real election (`income_replacement_benefit: true`), and claim
+  `CLM-2608-00042-4`'s real rental figures (8 days / $400 remaining). Verification script kept in the session
+  scratchpad, not the repo, so Phase 4's "no application code" claim stays accurate.
+  - **Nova Micro, forced tool-use (`classify_turn`)**: `toolChoice: {"tool": {...}}` confirmed supported by
+    Nova Micro via Converse (not assumed). Output was the tool-use block only — no accompanying prose. The
+    padding tendency did not leak around a schema-forced call.
+  - **Nova Micro, unconstrained tight-turn generation (the ambiguity clarifier, §3.3)** — the closest real
+    replication of the pre-flight scenario that originally motivated this whole requirement: one sentence, 20
+    words, no restated question. **The padding behavior did not reproduce in this trial** with the
+    prompt-registry-style explicit length instruction in place — reported as a single data point, not a claim
+    that the underlying tendency is solved.
+  - **Nova Lite, `CoverageQuestion` mandatory and optional**: both within the 1–2 sentence target, both
+    correctly grounded against the real retrieved text and (for the optional case) the real election record.
+  - **Nova Lite, `RentalTowingEntitlement` compound**: within the 2–3 sentence target, but **a real minor
+    defect was caught**: the second sentence restated the "8 days remaining" fact in different words instead
+    of adding the dollar figure the tool result also carried — sentence-count discipline held, content-level
+    redundancy didn't. **Fixed directly in `PROMPT-REGISTRY.md` §3.2's prompt** (added an explicit
+    do-not-restate instruction) in response to the observed output, not asserted as fixed pre-emptively.
+  - All five results, and the fix, written into `PROMPT-REGISTRY.md` §4 ("Verified against real Bedrock
+    calls") rather than left only in this log — the design document now carries its own verification record.
+- **Cost**: 1,606 input / 153 output tokens across the five calls, $0.0001058, logged in `COSTS.md` with a
+  full per-call breakdown. **Running Bedrock standing-cap total: $0.0001161 of $5.00.**
+- **Phase 4 is now signed off.** Phase 5 has not begun — no exit criteria written, no approval given, per the
+  STOP CONDITIONS.

@@ -9,6 +9,15 @@ discipline, because a line that was never generative in the first place cannot p
 
 **Two model-calling nodes exist. This registry covers both, and nothing else calls a model.**
 
+**Design claim worth stating explicitly (Marco, 2026-08-11 — elevated from a passing note under `D17`):**
+because only two of the six intents ever route through generation, **the majority of this system's spoken
+output is deterministic and cannot hallucinate** — not "unlikely to," structurally cannot, since it was never
+produced by a model call in the first place. This is a real, checkable property of the design (§1 names
+exactly which two prompts are the entire generative surface area), not a marketing claim, and it belongs in
+Phase 12's README as a stated architectural property when that phase is reached — **carried forward
+explicitly, not written now**, since Phase 12 hasn't opened (`PROJECT_STATE.md` tracks this as a forward
+item rather than letting it wait to be rediscovered).
+
 ---
 
 ## 1. Nodes
@@ -160,8 +169,9 @@ two-sentence spoken answer — validation is criterion 12's optional closing ste
 > only one of them is wrong even if it sounds correct. State whether the entitlement applies, then state the
 > concrete number that matters to the caller right now (days/dollars remaining for rental; covered or not for
 > towing). Two to three sentences. Do not explain the endorsement's general mechanics beyond what answers this
-> caller's situation — they asked about their claim, not the product in the abstract. If the claim status
-> tool call did not return a resolvable claim, say so plainly and state the policy terms only, without
+> caller's situation — they asked about their claim, not the product in the abstract. Do not restate the same
+> fact in a second sentence using different words — each sentence must add new information. If the claim
+> status tool call did not return a resolvable claim, say so plainly and state the policy terms only, without
 > implying the entitlement is currently active.
 
 **Suggested cap:** `max_tokens` ≈ 200 (engineering target, same validation status as §3.1).
@@ -180,7 +190,34 @@ two-sentence spoken answer — validation is criterion 12's optional closing ste
 
 ---
 
-## 4. What this registry deliberately does not contain
+## 4. Verified against real Bedrock calls — 2026-08-11
+
+Cost-gate approved by Marco as Phase 4's closing verification, same pattern as Phase 3's real-embedding
+check: five real `Converse` calls (`us-west-2`), logged in `COSTS.md` ($0.0001058, running standing-cap total
+$0.0001161 of $5.00), against the exact prompts above and real corpus content (the DCPD passage, the IRB
+optional-benefit passage with policyholder `PY4821`'s real election, and claim `CLM-2608-00042-4`'s real
+rental figures). Reported here as what was actually observed, not re-asserted as fact from the specs alone —
+each finding is a single trial, not a statistically robust measurement; that's Phase 6's job once the eval
+harness exists.
+
+| Test | Result |
+|---|---|
+| **§1.1, Nova Micro, forced tool-use** | `toolChoice: {"tool": {"name": ...}}` is supported by Nova Micro via Converse (not assumed — confirmed live; no fallback to `auto` was needed). Output was **only** the tool-use block, no accompanying prose — the padding tendency did not leak around a schema-forced call in this trial |
+| **§3.3, Nova Micro, unconstrained tight-turn generation** (the closest replication of Marco's pre-flight scenario — same model, no tool forcing, an explicit brevity instruction) | One sentence, 20 words, no restated question, no filler. **The padding behavior did not reproduce in this trial** with the prompt-registry-style explicit length instruction in place. This is one data point, not a claim that Nova Micro's padding tendency is solved — Phase 6 turns this into a repeated, measured check |
+| **§3.1, Nova Lite, mandatory coverage (DCPD)** | One sentence, 9 words, correctly grounded ("Yes, DCPD is mandatory on every Example Mutual policy") — within the 1–2 sentence target, tighter than required |
+| **§3.1, Nova Lite, optional coverage (IRB, `PY4821` elected)** | One sentence, 21 words, correctly grounded against both the policy text and the election record (states 70%/$400/week/104 weeks, matches the real passage) — within target |
+| **§3.2, Nova Lite, rental compound** | Two sentences, 30 words — within the 2–3 sentence target, **but the second sentence restated the same "8 days" fact in different words rather than adding the dollar figure the tool result also provided**. A real, minor instance of the exact padding-via-restatement failure mode this document exists to prevent, not exceeding the sentence-count budget but violating its spirit. **Fixed in §3.2's prompt above** (added an explicit "do not restate the same fact" instruction) in direct response to this observed output — not asserted as fixed without having produced the defect first |
+
+**Net finding:** explicit in-prompt length instructions held on four of five trials, including the specific
+Nova Micro case closest to what motivated this whole requirement. The one miss was subtler than the original
+pre-flight case — sentence-count discipline held, but content-level redundancy slipped through — which is
+exactly the kind of failure a token cap alone would not have caught, and why `PROMPT-REGISTRY.md` §2.2 layers
+an eval-harness length *and* redundancy check on top of the prompt instruction rather than trusting either
+alone.
+
+---
+
+## 5. What this registry deliberately does not contain
 
 No prompt for Guardrails — `ApplyGuardrail` is a classification API call, not a prompted generation
 (`ADR-010`); it has no prompt to register. No prompt for the injury escalation script, the barge-in
