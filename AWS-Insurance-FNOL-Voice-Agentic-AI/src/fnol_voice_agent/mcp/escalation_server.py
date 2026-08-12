@@ -19,18 +19,23 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
-# The three detection layers `DIALOGUE-POLICIES.md` names as escalation triggers (§5, §8): L1 (the
-# deterministic injury/fatality pre-node), L2 (the merged router's recall-biased safety classification),
-# L3 (the hard "agent"/"human" barge-in intent). `initiate_escalation` is reachable from any of them,
-# per §5 step 4 ("no graph node this pre-node cannot interrupt"), plus the capability/confidence routes
-# in §8 -- but "no LLM discretion" (§5) applies only to *L1's own* behavior; other routes in §8 still
-# call this same handler with their own layer label.
-TriggeringLayer = Literal["L1", "L2", "L3"]
+# DIALOGUE-POLICIES.md §8's full escalation-trigger table, not just the three safety-detection layers:
+# L1 (deterministic injury/fatality pre-node), L2 (merged router's recall-biased safety classification),
+# L3 (hard "agent"/"human" barge-in intent) are routes 1-2; "capability" (out-of-corpus, out-of-scope,
+# unresolved ambiguity, retry-ceiling exhaustion) is route 3; "confidence" (sustained low ASR/intent
+# confidence, a groundedness self-check failure) is route 4. Stage 6 found this module's original
+# Literal only listed L1/L2/L3 even though this very docstring already said "plus the capability/
+# confidence routes in §8" -- the type just hadn't been updated to match. Fixed here, not routed around
+# by mislabeling a capability escalation as L3 (which specifically means "the caller explicitly asked
+# for a human" -- a system-initiated capability escalation is a different fact and must not be recorded
+# as if the caller had asked).
+TriggeringLayer = Literal["L1", "L2", "L3", "capability", "confidence"]
 
 
 class InvalidEscalationRequestError(ValueError):
-    """Raised when `contact_id` is blank or `triggering_layer` isn't one of L1/L2/L3. Closes
-    `docs/phase2/THREAT-MODEL.md`'s "MCP argument validation not yet built" residual risk for this tool.
+    """Raised when `contact_id` is blank or `triggering_layer` isn't one of L1/L2/L3/capability/
+    confidence. Closes `docs/phase2/THREAT-MODEL.md`'s "MCP argument validation not yet built" residual
+    risk for this tool.
     """
 
 

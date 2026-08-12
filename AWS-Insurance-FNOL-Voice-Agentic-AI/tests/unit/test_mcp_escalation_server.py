@@ -32,6 +32,15 @@ def test_initiate_escalation_defaults_context_to_empty_dict() -> None:
     assert result.context == {}
 
 
+@pytest.mark.parametrize("layer", ["capability", "confidence"])
+def test_initiate_escalation_accepts_the_non_safety_dialogue_policies_routes(layer: str) -> None:
+    # DIALOGUE-POLICIES.md §8's routes 3-4 are system-initiated (retry-ceiling exhaustion, sustained low
+    # confidence), not one of the three safety-detection layers -- must be accepted as their own labels,
+    # not forced into L1/L2/L3 (which would misrecord a system-initiated escalation as caller-initiated).
+    result = initiate_escalation(contact_id="contact-1", triggering_layer=layer)
+    assert result.triggering_layer == layer
+
+
 def test_initiate_escalation_is_a_pure_function_of_its_input() -> None:
     # No timestamp, no generated ID -- calling twice with identical input yields identical output,
     # which is exactly the property test_mcp_wire_protocol.py's equality assertion depends on.
