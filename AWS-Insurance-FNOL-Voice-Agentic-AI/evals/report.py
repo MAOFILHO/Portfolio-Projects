@@ -146,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     report = run_tier_a(conversations)
     print(render(report))
     if args.json_out:
+        # Create the parent directory. Without this the write raises after the report has already been
+        # printed to stdout, which reads as a successful run with a stack trace after it -- and a
+        # baseline that was never written while the numbers scrolled past looking fine.
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(to_dict(report), indent=2) + "\n")
         print(f"\nwrote {args.json_out}")
     return 1 if gate_failures(report) else 0
