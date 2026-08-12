@@ -13,8 +13,8 @@
 **Last updated:** 2026-08-11
 **Current phase:** Phase 4 — Conversation design — **signed off** (`APPROVED: Phase 4` typed by Marco
 2026-08-11, twice: first authorizing the phase to begin, then again as the closing sign-off after all five
-deliverables were complete — same two-approval pattern Phase 3 used). Phase 5 not yet started — no exit
-criteria written, no approval given for it.
+deliverables were complete — same two-approval pattern Phase 3 used). **Phase 5 exit criteria proposed below
+(`docs/phase5/BUILD-PLAN.md`), awaiting `APPROVED: Phase 5` — not started.**
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -31,7 +31,7 @@ Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
-| 5 | Agent implementation | ⬜ Not started |
+| 5 | Agent implementation | ⬜ Exit criteria proposed 2026-08-11, awaiting approval |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
@@ -252,6 +252,31 @@ Five deliverables, mapped to the eight roadmap components:
 
 ---
 
+## Phase 5 exit criteria — proposed 2026-08-11, awaiting `APPROVED: Phase 5`
+
+Per the STOP CONDITIONS, no Phase 5 work starts until this table is approved. **The first phase with
+substantial application code** — Marco asked for two things visible before approving: the build order and
+dependency sequence (so a mid-phase gate is possible if context pressure shows up), and exactly where the
+cost gate applies. Both are answered in full in `docs/phase5/BUILD-PLAN.md`; this table is the checklist.
+
+| # | Criterion | Notes |
+|---|---|---|
+| 1 | Build order specified as dependency-ordered stages, each a clean gate point, with an explicit note on which stages could be delegated to isolated subagents vs. which need the main thread as integrator | `docs/phase5/BUILD-PLAN.md` §1 — 8 stages, foundations → MCP servers → knowledge retrieval → Bedrock router+fake-LLM harness → guardrails → nodes → graph assembly+checkpointer → optional real-call verification |
+| 2 | MCP transport (in-process vs. wire protocol) resolved as a short ADR **before** the MCP servers are built, not left implicit | `ADR-012`, first task of Stage 1 — not drafted yet, this table only commits to producing it early |
+| 3 | Foundational typed contracts: `models/` (FNOL/claim/policy/vehicle/event Pydantic schemas), `validation/` (slot validators, business-rule arithmetic from `coverage-logic.md`, authority limits from Phase 1's non-goals) | Stage 1 |
+| 4 | MCP servers, one per backend domain (policy, claims, contact, escalation), wrapping Phase 3's synthetic records as typed tool calls; `.claude/mcp.json` registered | Stage 2. Names `GetPolicyholderElections` concretely — `DIALOGUE-POLICIES.md` §2's forward requirement from Phase 4 |
+| 5 | Knowledge retrieval — the read half of `ADR-002`'s design (Phase 3 built only the write half) | Stage 3 |
+| 6 | Bedrock router implementing `PROMPT-REGISTRY.md` §1's two call paths; fake-LLM harness so nothing downstream needs real Bedrock by default | Stage 4 |
+| 7 | Guardrails + PII redaction module (`ADR-010`, `ADR-011`), built and tested against a mocked `ApplyGuardrail` client | Stage 5 |
+| 8 | LangGraph nodes for all six intents plus the L1 safety pre-node, each wired to its Stage 1–5 dependencies per `DIALOGUE-POLICIES.md` | Stage 6 |
+| 9 | Graph assembly implementing the full per-turn pipeline (`DIALOGUE-POLICIES.md` §1), the escalation-trigger table (§8), and the retry ceiling (§7) as graph-level control flow; DynamoDB checkpointer (`ADR-005`) keyed on Connect contact ID; integration tests covering all six intents, injury preemption, a barge-in scenario, and a retry-ceiling-exhaustion scenario | Stage 7 |
+| 10 | **Cost gate named per component, not just in general** — which stages ever touch real AWS, and which two things (a real DynamoDB table, a real Guardrail resource) are explicitly *not* created in this phase regardless of the standing cap, deferred to Phase 8 by name | `docs/phase5/BUILD-PLAN.md` §2 |
+| 11 | Mock-by-default holds for every stage — same two-axis pattern Phase 3 established; TDD (test first, watch it fail, implement) per `CLAUDE.md`'s standing instruction | All stages |
+| 12 | No billable resource created; $0.00 new spend for the phase's own exit criteria, **except** an optional Stage 8 closing verification against real Bedrock, cost-gated separately at close under the existing $5 standing cap, same pattern as Phases 3–4 | |
+| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | Pending — this table is the request for it |
+
+---
+
 ## Decisions to date
 
 | # | Decision | Rationale | Date |
@@ -283,6 +308,7 @@ Five deliverables, mapped to the eight roadmap components:
 |---|---|---|---|
 | CF1 | State explicitly in the README: only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | Phase 12 | `D20`, `docs/phase4/PROMPT-REGISTRY.md` |
 | CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency | Phase 9 | Marco, 2026-08-11 |
+| CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure | Phase 6 | Marco, 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -879,3 +905,34 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   full per-call breakdown. **Running Bedrock standing-cap total: $0.0001161 of $5.00.**
 - **Phase 4 is now signed off.** Phase 5 has not begun — no exit criteria written, no approval given, per the
   STOP CONDITIONS.
+
+### 2026-08-11 — Phase 5 exit criteria proposed
+
+- **Marco approved Phase 4's sign-off** and added `CF3`: the Nova Micro tight-turn result from the closing
+  verification is n=1, a smoke test, not evidence the pre-flight padding behaviour is absent — Phase 6's
+  length check must sample that path repeatedly, not once. Recorded in the carried-forward table.
+- **Asked Phase 5 be scoped with two things visible before approving**: the build order/dependency sequence
+  (so a mid-phase gate is possible under context pressure), and exactly where the cost gate applies, naming
+  which steps need real Bedrock or real DynamoDB.
+- **Wrote `docs/phase5/BUILD-PLAN.md`.** Eight dependency-ordered stages (foundations → MCP servers →
+  knowledge retrieval → Bedrock router+fake-LLM harness → guardrails → LangGraph nodes → graph assembly+
+  checkpointer → optional real-call verification), each a clean stop/resume point; stages 1–5 flagged as
+  independent enough to delegate to isolated subagents if useful, stages 6–7 kept on the main thread as
+  integrator per `CLAUDE.md`'s own guidance. **Named one open design decision explicitly rather than
+  deferring it implicitly**: MCP transport (in-process calls vs. the wire protocol) needs a short `ADR-012`
+  before the MCP servers are built, since it shapes their interface — not drafted yet, committed to as the
+  first task once Phase 5 is approved.
+- **Cost-gate answer, stated precisely**: mock-by-default holds for every stage; the *only* real spend in the
+  entire phase is an optional Stage 8 closing verification against real Bedrock, under the existing $5
+  standing cap. **Two things are explicitly never created in Phase 5 regardless of that cap**: a real
+  DynamoDB table and a real Bedrock Guardrail — both are provisioned, persistent resources the inference-only
+  standing cap doesn't cover, and both stay Phase 8's, with their own approval when that time comes. This
+  distinction (stateless inference call vs. persistent resource creation) is the actual answer to "where does
+  the cost gate apply," not just a restatement of "mock by default."
+- **Scope stated as broader than the original Phase 0 roadmap line** for Phase 5 — `models/`, `validation/`,
+  `config/`, `knowledge/retrieve.py`, and `guardrails/` are added as named prerequisites the one-line roadmap
+  description didn't spell out, said plainly rather than left to be discovered mid-build.
+- **Phase 5 exit-criteria table added to `PROJECT_STATE.md`** (above) — 13 rows, all pointing at
+  `BUILD-PLAN.md`'s stages. **Not started** — presented for Marco's `APPROVED: Phase 5`, per the STOP
+  CONDITIONS, same as every prior phase. No code written this entry. No billable resource created. $0.00 new
+  spend.
