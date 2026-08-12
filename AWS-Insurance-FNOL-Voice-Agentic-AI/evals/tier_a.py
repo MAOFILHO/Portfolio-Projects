@@ -28,6 +28,12 @@ from fnol_voice_agent.models.enums import KabcoCode
 
 from .holdout import HoldoutKind, HoldoutSetMissingError, load_holdout
 from .metrics import BinaryClassificationCounts, Rate
+from .retrieval import (
+    FixtureMissingError,
+    RetrievalReport,
+    evaluate_retrieval,
+    validate_gold_labels,
+)
 from .schema import Category, GoldenConversation, OutcomeKind, load_golden_set
 
 # KABCO K and A are the severities that must escalate (D12/D15). B/C/O must not auto-escalate.
@@ -58,6 +64,10 @@ class TierAReport:
     turn_count: int
     category_counts: dict[str, int]
     mandatory_escalation_count: int
+    # Real Titan vectors from the committed fixture -- genuinely real numbers, computed offline and free.
+    # None only when the fixture has not been generated (one cost-gated run).
+    retrieval: RetrievalReport | None = None
+    broken_gold_labels: list[str] = field(default_factory=list)
 
 
 def _first_turn_text(conversation: GoldenConversation) -> str:
@@ -133,6 +143,11 @@ def evaluate_l1_on_holdout(kind: HoldoutKind) -> L1Result | None:
 
 def run_tier_a(conversations: list[GoldenConversation] | None = None) -> TierAReport:
     conversations = conversations if conversations is not None else load_golden_set()
+    try:
+        retrieval: RetrievalReport | None = evaluate_retrieval()
+        broken = validate_gold_labels()
+    except FixtureMissingError:
+        retrieval, broken = None, []
     return TierAReport(
         l1_golden=evaluate_l1_on_golden(conversations),
         l1_holdout_weak=evaluate_l1_on_holdout(HoldoutKind.WEAK),
@@ -143,6 +158,8 @@ def run_tier_a(conversations: list[GoldenConversation] | None = None) -> TierARe
             cat.value: sum(1 for c in conversations if c.category is cat) for cat in Category
         },
         mandatory_escalation_count=sum(1 for c in conversations if c.mandatory_escalation),
+        retrieval=retrieval,
+        broken_gold_labels=broken,
     )
 
 
@@ -154,6 +171,23 @@ def gate_failures(report: TierAReport) -> list[str]:
     constraint 13 forbids, and it becomes a TARGET only once a real baseline exists.
     """
     failures: list[str] = []
+
+    # A broken gold label is not a model failure and must never be reported as one -- it is an instrument
+    # defect, and it fails the run outright rather than being folded into a retrieval score.
+    if report.broken_gold_labels:
+        failures.append(
+            f"INSTRUMENT: gold labels that match no chunk, so their queries can never succeed: "
+            f"{report.broken_gold_labels}"
+        )
+
+    if report.retrieval is not None:
+        r5 = report.retrieval.recall_at_5
+        if r5.value is not None and r5.value < 0.90:
+            failures.append(
+                f"GATE: retrieval recall@5 is {r5}, must be >= 0.90 (SUCCESS-METRICS.md 3). "
+                f"Per-query ranks: {report.retrieval.per_query_rank}"
+            )
+
     recall: Rate = report.l1_golden.counts.recall
     if recall.value is not None and recall.value < 1.0:
         failures.append(

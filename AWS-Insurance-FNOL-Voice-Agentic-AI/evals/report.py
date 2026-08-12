@@ -68,6 +68,20 @@ def render(report: TierAReport) -> str:
         gated=False,
     )
 
+    if report.retrieval is not None:
+        ret = report.retrieval
+        lines += [
+            "",
+            "-- Retrieval (real Titan vectors, committed fixture, $0.00 to re-run) " + "-" * 26,
+            f"  [GATE]     recall@5   {ret.recall_at_5}   (threshold 0.90)",
+            f"  [TARGET]   MRR        {ret.mrr:.3f}" if ret.mrr is not None else "  MRR n/a",
+            f"             model      {ret.model_id}",
+            "             per-query rank of the gold passage:",
+        ]
+        for qid, rank in ret.per_query_rank.items():
+            flag = "" if (rank is not None and rank <= 5) else "   <- outside top 5"
+            lines.append(f"               {qid:10} {rank}{flag}")
+
     lines += [
         "",
         "-- Corpus composition " + "-" * 73,
@@ -114,6 +128,21 @@ def to_dict(report: TierAReport) -> dict[str, Any]:
         "l1_golden": l1(report.l1_golden),
         "l1_holdout_weak": l1(report.l1_holdout_weak),
         "l1_holdout_independent": l1(report.l1_holdout_independent),
+        "retrieval": (
+            {
+                "recall_at_5": report.retrieval.recall_at_5.value,
+                "recall_at_5_counts": [
+                    report.retrieval.recall_at_5.numerator,
+                    report.retrieval.recall_at_5.denominator,
+                ],
+                "mrr": report.retrieval.mrr,
+                "per_query_rank": report.retrieval.per_query_rank,
+                "model_id": report.retrieval.model_id,
+            }
+            if report.retrieval is not None
+            else None
+        ),
+        "broken_gold_labels": report.broken_gold_labels,
         "conversation_count": report.conversation_count,
         "turn_count": report.turn_count,
         "category_counts": report.category_counts,

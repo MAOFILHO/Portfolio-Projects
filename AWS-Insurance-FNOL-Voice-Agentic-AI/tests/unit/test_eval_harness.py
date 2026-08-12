@@ -74,8 +74,13 @@ def test_the_l1_gate_passes_after_the_stage_5_lexicon_fix() -> None:
     That inversion is the mechanism working, not a test being loosened. The original assertion existed
     so that a later lexicon patch could not absorb the result silently -- it broke, which forced the
     before/after numbers into RESULTS.md instead of letting the improvement pass unremarked. The
-    pre-fix reading is preserved immutably in evals/baselines/l1_before_fix_20260812.json."""
-    assert gate_failures(run_tier_a()) == []
+    pre-fix reading is preserved immutably in evals/baselines/l1_before_fix_20260812.json.
+
+    Scoped to the L1 gate specifically. `gate_failures` is not empty overall -- the retrieval gate fails
+    at 0.800 -- and asserting emptiness here would couple an L1 assertion to an unrelated metric, so a
+    retrieval improvement would silently "fix" a test about the lexicon."""
+    l1_failures = [f for f in gate_failures(run_tier_a()) if "L1" in f]
+    assert l1_failures == []
 
 
 def test_the_gate_is_not_green_by_construction() -> None:
@@ -118,3 +123,50 @@ def test_independent_holdout_results_are_serialised_separately_from_the_weak_set
     assert (
         payload["l1_holdout_independent"]["recall"] != payload["l1_holdout_weak"]["recall"]
     ), "the two sets scoring identically would be surprising enough to warrant checking the loader"
+
+
+# --- Retrieval on real Titan vectors ---------------------------------------------------------------
+
+
+def test_every_gold_label_resolves_to_a_real_chunk() -> None:
+    """The third instrument bug of Phase 6, as a standing guard.
+
+    A gold label naming text that exists nowhere in the corpus yields `rank None`, which is
+    arithmetically identical to the retriever failing to find a passage that WAS there. Two of the first
+    ten graded queries were broken this way and would have been published as retrieval failures --
+    recall would have read 0.700 instead of 0.800, and the obvious next move ("improve retrieval") would
+    have been effort spent on a defect that did not exist."""
+    from evals.retrieval import validate_gold_labels
+
+    assert validate_gold_labels() == []
+
+
+def test_retrieval_runs_offline_from_the_committed_fixture() -> None:
+    """No credentials, no network, no cost -- the whole point of caching real vectors. Embeddings are a
+    deterministic function of unchanged text, so caching them loses nothing; caching a *generation* would
+    freeze a stochastic process and hide the variance Phase 6 exists to observe."""
+    from evals.retrieval import evaluate_retrieval
+
+    report = evaluate_retrieval()
+    assert report.model_id == "amazon.titan-embed-text-v2:0"
+    assert report.recall_at_5.denominator == 10
+
+
+def test_mrr_averages_over_all_queries_including_misses() -> None:
+    """A miss contributes 0, not exclusion. Averaging over hits only would report the mean rank of the
+    successes and quietly drop the failures out of the denominator."""
+    from evals.retrieval import evaluate_retrieval
+
+    report = evaluate_retrieval()
+    ranks = list(report.per_query_rank.values())
+    expected = sum(0.0 if r is None else 1.0 / r for r in ranks) / len(ranks)
+    assert report.mrr is not None
+    assert abs(report.mrr - expected) < 1e-9
+
+
+def test_retrieval_gate_fails_at_the_current_real_number() -> None:
+    """recall@5 is 0.800 against a 0.90 GATE. Asserted rather than left implicit so the failure cannot be
+    absorbed silently, and so a later improvement forces a re-report -- same mechanism as the L1 gate.
+    """
+    failures = gate_failures(run_tier_a())
+    assert any("retrieval recall@5" in f for f in failures)
