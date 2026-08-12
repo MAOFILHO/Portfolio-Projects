@@ -10,14 +10,17 @@ Persisted across turns by the DynamoDB checkpointer (`aws/checkpointer.py`, `ADR
 `contact_id` (the Connect contact ID) as the LangGraph thread ID -- this is what makes `retry_counts` and
 `filled_slots` durable turn-to-turn rather than reset on every invocation.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, TypedDict
 
 
 class EscalationRecord(TypedDict):
     """What gets handed to the human, per `DIALOGUE-POLICIES.md` §5 step 3 / §8's escalation-trigger
-    table -- which route fired, which layer/trigger caused it, and the full context captured so far."""
+    table -- which route fired, which layer/trigger caused it, and the full context captured so far.
+    """
 
     contact_id: str
     triggering_layer: str  # "L1" | "L2" | "L3" | "capability" | "confidence"
@@ -49,9 +52,17 @@ class AgentState(TypedDict, total=False):
     # --- Durable dialogue state, carried turn-to-turn via the checkpointer ---
     active_slot: str | None  # the slot/question currently being elicited, for retry-ladder keying
     filled_slots: dict[str, Any]  # accumulated slot values for the in-progress FileAutoClaim intake
-    retry_counts: dict[str, int]  # the ONE shared no-match/barge-in retry ladder (DIALOGUE-POLICIES.md §7)
+    retry_counts: dict[
+        str, int
+    ]  # the ONE shared no-match/barge-in retry ladder (DIALOGUE-POLICIES.md §7)
 
     # --- This turn's outcome ---
     response_text: str
     escalation: EscalationRecord | None
-    turn_log: list[str]  # thin structlog-style trace of node transitions (Stage 7's observability slice)
+    turn_log: list[
+        str
+    ]  # thin structlog-style trace of node transitions (Stage 7's observability slice)
+
+
+# The one signature every graph node satisfies: reads the accumulated state, returns a partial update.
+NodeFn = Callable[[AgentState], dict[str, Any]]
