@@ -28,15 +28,26 @@ test:
 	$(VENV)/python -m pytest tests/unit -v
 
 # ruff + black --check
+# Everything that is checked. `evals` and `scripts` were outside this list until Phase 7
+# Stage 0 -- the entire eval harness, i.e. the code that produces every published number, was
+# never linted or type-checked while the phase reported "ruff/black/mypy strict clean".
+CHECKED = src tests evals scripts
+# mypy --strict covers production + measurement code. `tests` is deliberately excluded and
+# the reason is stated rather than left implicit: langgraph's StateGraph.add_node/Pregel.invoke
+# overloads reject plain callables and dict payloads under strict mode. Those are third-party
+# stub friction, not defects in the tests, and silencing ~20 of them with `type: ignore` would
+# add noise without adding a single check. Revisit if langgraph's stubs improve.
+TYPED = src evals scripts
+
 lint:
-	$(VENV)/ruff check src tests
-	$(VENV)/black --check src tests
+	$(VENV)/ruff check $(CHECKED)
+	$(VENV)/black --check $(CHECKED)
 
 # ruff --fix + black
 format:
-	$(VENV)/ruff check --fix src tests
-	$(VENV)/black src tests
+	$(VENV)/ruff check --fix $(CHECKED)
+	$(VENV)/black $(CHECKED)
 
 # mypy --strict
 typecheck:
-	$(VENV)/mypy src
+	PYTHONPATH=. $(VENV)/mypy $(TYPED)

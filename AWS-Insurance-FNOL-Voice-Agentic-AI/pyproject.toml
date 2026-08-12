@@ -96,3 +96,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# PEP 561 marker. Without it, mypy resolves `fnol_voice_agent` from the editable install for anything
+# outside `src/` -- so `evals/` and `scripts/` type-checked against an untyped stub of the package while
+# reporting "clean". Found in Phase 7 Stage 0, alongside the discovery that neither directory was in
+# `make lint`/`make typecheck` at all.
+[tool.setuptools.package-data]
+fnol_voice_agent = ["py.typed"]

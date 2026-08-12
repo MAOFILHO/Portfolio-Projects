@@ -34,7 +34,9 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "synthetic"
 
 
 def main() -> int:
-    policyholders = json.loads((DATA_DIR / "policyholders" / "policyholders.json").read_text())["policyholders"]
+    policyholders = json.loads((DATA_DIR / "policyholders" / "policyholders.json").read_text())[
+        "policyholders"
+    ]
     vehicles = json.loads((DATA_DIR / "vehicles" / "vehicles.json").read_text())["vehicles"]
     claims = json.loads((DATA_DIR / "claims" / "claims.json").read_text())["claims"]
 
@@ -58,7 +60,9 @@ def main() -> int:
             continue
         correct = vin_correct_check_digit(vin)
         if vin[8] == correct:
-            errors.append(f"VIN {vin}: check digit is ACCIDENTALLY VALID ({vin[8]}) -- must be deliberately wrong")
+            errors.append(
+                f"VIN {vin}: check digit is ACCIDENTALLY VALID ({vin[8]}) -- must be deliberately wrong"
+            )
 
     veh_by_vin = {v["vin"]: v for v in vehicles}
     ph_by_policy = {p["policy_number"]: p for p in policyholders}
@@ -72,7 +76,9 @@ def main() -> int:
 
     for c in claims:
         if c["policy_number"] not in ph_by_policy:
-            errors.append(f"Claim {c['claim_number']} references missing policy {c['policy_number']}")
+            errors.append(
+                f"Claim {c['claim_number']} references missing policy {c['policy_number']}"
+            )
         veh = veh_by_vin.get(c["vin"])
         if veh is None:
             errors.append(f"Claim {c['claim_number']} references missing VIN {c['vin']}")
@@ -83,13 +89,23 @@ def main() -> int:
             errors.append(f"Claim {c['claim_number']}: ACV mismatch with vehicle record")
 
         # data/synthetic/policy/coverage-logic.md §§1-2
-        repair, acv, ded = c["repair_estimate_cad"], c["actual_cash_value_cad"], c["deductible_applied_cad"]
+        repair, acv, ded = (
+            c["repair_estimate_cad"],
+            c["actual_cash_value_cad"],
+            c["deductible_applied_cad"],
+        )
         tow = c.get("towing_allowance_cad") or 0
         is_total_loss = repair >= 0.80 * acv
         if is_total_loss != c["is_total_loss"]:
-            errors.append(f"Claim {c['claim_number']}: total-loss flag mismatch (repair/acv={repair / acv:.3f})")
+            errors.append(
+                f"Claim {c['claim_number']}: total-loss flag mismatch (repair/acv={repair / acv:.3f})"
+            )
         expected_settlement = (acv - ded) if c["is_total_loss"] else (min(repair, acv) - ded + tow)
-        actual = c["settlement_amount_cad"] if c["settlement_amount_cad"] is not None else c["estimated_settlement_cad"]
+        actual = (
+            c["settlement_amount_cad"]
+            if c["settlement_amount_cad"] is not None
+            else c["estimated_settlement_cad"]
+        )
         if actual != expected_settlement:
             errors.append(
                 f"Claim {c['claim_number']}: settlement mismatch, expected {expected_settlement}, got {actual}"
@@ -101,7 +117,9 @@ def main() -> int:
             print(f" - {e}", file=sys.stderr)
         return 1
 
-    print(f"All checks passed: {len(claims)} claims, {len(vehicles)} vehicles, {len(policyholders)} policyholders")
+    print(
+        f"All checks passed: {len(claims)} claims, {len(vehicles)} vehicles, {len(policyholders)} policyholders"
+    )
     return 0
 
 

@@ -68,13 +68,18 @@ def main() -> int:
             print(f"   REGRESSION  {r.metric}: {before} -> {after} ({r.detail})")
 
         blocked = bool(gates or regressions)
-        print(f"\n5. Would CI block this change?  {'YES' if blocked else 'NO -- GATE HAS NO TEETH'}")
+        print(
+            f"\n5. Would CI block this change?  {'YES' if blocked else 'NO -- GATE HAS NO TEETH'}"
+        )
 
         print("\n6. Graceful degradation: are the newly-missed phrasings still caught by L2?")
         print("   L2's measured behaviour on these exact phrasings is recorded in")
         print("   evals/baselines/l2_recall_20260812.json -- 19/19 on the phrasings L1 misses,")
         print("   which is what makes this a graceful degradation rather than a hole:")
-        for phrase in ("She's unconscious in the passenger seat.", "The other driver died at the scene."):
+        for phrase in (
+            "She's unconscious in the passenger seat.",
+            "The other driver died at the scene.",
+        ):
             l1_fires = lexicon.detect_safety_trigger(phrase)[0]
             print(f"     L1={l1_fires!s:5}  L2=True (measured)   {phrase!r}")
         print("\n   System-level escalation recall is UNCHANGED. Only L1's contribution collapsed.")

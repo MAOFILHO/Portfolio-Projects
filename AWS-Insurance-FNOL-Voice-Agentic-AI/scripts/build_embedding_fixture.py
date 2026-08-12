@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 from evals.queries import GRADED_QUERIES
 from evals.retrieval import FIXTURE_PATH, corpus_fingerprint
@@ -41,10 +40,10 @@ def main() -> int:
     print(f"chunking: {len(chunks)} chunks from {DEFAULT_CORPUS_DIR}")
 
     total_chars = 0
-    for chunk in chunks:
-        text = str(chunk["text"])
+    for record in chunks:
+        text = str(record["text"])
         total_chars += len(text)
-        chunk["embedding"] = embedder.embed(text)
+        record["embedding"] = embedder.embed(text)
 
     queries = []
     for case in GRADED_QUERIES:
@@ -76,8 +75,10 @@ def main() -> int:
     # approximation because the exact tokenisation is not exposed in the InvokeModel response.
     approx_tokens = total_chars / 4
     print(f"embedded {len(chunks)} chunks + {len(queries)} queries")
-    print(f"~{approx_tokens:,.0f} tokens (approx, from {total_chars:,} chars) -> "
-          f"~${approx_tokens * 0.02 / 1e6:.6f}")
+    print(
+        f"~{approx_tokens:,.0f} tokens (approx, from {total_chars:,} chars) -> "
+        f"~${approx_tokens * 0.02 / 1e6:.6f}"
+    )
     print(f"wrote {FIXTURE_PATH} ({size_mb:.1f} MB)")
     return 0
 

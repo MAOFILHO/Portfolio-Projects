@@ -11,7 +11,7 @@
 ---
 
 **Last updated:** 2026-08-12
-**Current phase:** Phase 7 — Responsible AI and red-teaming — **exit criteria proposed 2026-08-12, awaiting `APPROVED: Phase 7`.** Phase 6 signed off 2026-08-12 (`APPROVED: Phase 6`); Phase 5 signed off 2026-08-12.
+**Current phase:** Phase 7 — Responsible AI and red-teaming — **approved 2026-08-12 (`APPROVED: Phase 7`); Stage 0 complete, reported, paused for Marco's decision before the ablation rungs.** Phase 6 signed off 2026-08-12 (`APPROVED: Phase 6`); Phase 5 signed off 2026-08-12.
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -30,7 +30,7 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
 | 6 | Evaluation harness | ✅ **Signed off** 2026-08-12 — three GATEs failed at their real values, which is the specified outcome of a pre-tuning phase |
-| 7 | Responsible AI and red-teaming | 🟡 Exit criteria proposed 2026-08-12 — awaiting `APPROVED: Phase 7` |
+| 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
 | 10 | CI/CD and progressive delivery | ⬜ Not started |
@@ -362,7 +362,7 @@ of them can be discovered as a convenient surprise later:
 | # | Criterion | Status |
 |---|---|---|
 | 1 | **Mock-scope rule written and enforced** — `ADR-013` plus `docs/TESTING-CONVENTIONS.md`, generalising the Stage 8 moto false-verification bug into a standing rule: `mock_aws()` is process-wide for every service; no real-AWS call inside a mock scope; mixed tests state which backend each call reaches. **Enforcement mechanism attempted, and its actual strength stated honestly** — a runtime guard in the real client factories if moto exposes a version-stable way to detect it is patching, otherwise a documented convention plus a lexical CI check, described as partial rather than implied to be a guarantee | ✅ Stage 1 — `ADR-013`, `docs/TESTING-CONVENTIONS.md`, `aws/mock_guard.py`. **The runtime guard proved fully buildable**, so the planned convention-plus-grep fallback was not needed and was not built |
-| 2 | **Golden set of ≥60 labelled conversations** under `evals/golden/`, with a machine-checked schema and **per-category minimums** covering all six intents plus happy paths, edge cases, ambiguity, adversarial phrasings and out-of-scope — the composition rule `SUCCESS-METRICS.md` §9 requires so the set cannot be narrowed to easy cases. Seeded conceptually by the Phase 0 corpus's transcripts but **hand-authored**, per the blanket do-not-vendor rule | ✅ Stage 2 — 71 conversations, 134 turns, grounded in the real Phase 3 corpus. Minimums met with margin: happy 16/12, edge 19/10, ambiguity 7/6, adversarial 10/8, out-of-scope 5/5, safety 14/12 |
+| 2 | **Golden set of ≥60 labelled conversations** under `evals/golden/`, with a machine-checked schema and **per-category minimums** covering all six intents plus happy paths, edge cases, ambiguity, adversarial phrasings and out-of-scope — the composition rule `SUCCESS-METRICS.md` §9 requires so the set cannot be narrowed to easy cases. Seeded conceptually by the Phase 0 corpus's transcripts but **hand-authored**, per the blanket do-not-vendor rule | ✅ Stage 2 — **78 conversations, 141 turns** (this cell said "71 / 134" until Phase 7 Stage 0; see `RESULTS.md` §3), grounded in the real Phase 3 corpus. Minimums met with margin: happy 16/12, edge 19/10, ambiguity 7/6, adversarial 10/8, out-of-scope 5/5, safety 14/12 |
 | 3 | **Held-out injury-phrasing set stored separately** and not used to build either detector, per `SUCCESS-METRICS.md` §2's OBSERVED metric. Its independence is **weak — same author as `agents/lexicon.py`** — and that limitation is reported next to the number, with the procedural mitigation stated | ✅ Stage 2 — `evals/holdout/injury_phrasings_weak.yaml`, 23 phrasings with both polarities. `evals/holdout.py` requires a `kind` argument and deliberately exposes no function returning both sets blended |
 | 4 | **Tier A (deterministic) harness and `make eval`** — every metric computable with no live model: L1 safety recall on the labelled set, escalation routing and appropriateness, slot validation, the shared retry ladder, tool selection given a fixed classification, context-handover completeness, repeat-question rate, and the recording-flow static check. Runs at **$0.00 with no AWS credentials**, because this is the body of the CI gate | ✅ Stage 3 — `evals/tier_a.py`, `evals/report.py`, `make eval`. Exits non-zero on a gate breach |
 | 5 | **Response-length and redundancy detectors**, deterministic rather than judge-scored, with the **real Stage 8 known-bad `RentalTowingEntitlement` output committed as a fixture** and a passing unit test proving the detector flags it (and does not flag the known-good trial from the same session). Includes the separate "general mechanics leaked into a caller-specific answer" check | ✅ Stage 4 — three real Nova Lite outputs committed verbatim as fixtures (two defective, one clean). Deterministic, not judge-scored |
@@ -519,7 +519,7 @@ cannot be both."*
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | **`D25` tested at the item level before anything is built on it** — are the ten `InjuryEscalation` misclassifications the *same turns* as the false escalations, or two defects? $0.00, from data already paid for. **If `D25` is refuted, the plan changes before it is built** | ⬜ Stage 0 |
+| 1 | ✅ **Stage 0 complete.** `D25` **confirmed**: over all 78 first turns in one run, `safety_flag`→`intent=InjuryEscalation` 27/28, without it 3/50, Fisher p < 10⁻⁸. Marco's refutation condition is not met, so the rungs are green-lit — but Stage 0 found three instrument defects and one larger problem (`D27`) that changes the experimental design. **`D25` tested at the item level before anything is built on it** — are the ten `InjuryEscalation` misclassifications the *same turns* as the false escalations, or two defects? $0.00, from data already paid for. **If `D25` is refuted, the plan changes before it is built** | ⬜ Stage 0 |
 | 2 | **`ADR-014` written before any code**, superseding `ADR-004`'s merge decision or explicitly declining to. Must record that ADR-004's alternatives table rejected separate **sequential** calls and never evaluated separate **parallel** ones, while `SUCCESS-METRICS.md` §2 had already specified L2 as a parallel single-purpose call | ⬜ Stage 1 |
 | 3 | **A Phase 7 tuning set, isolated-author, frozen before rung A runs.** Same protocol as the Phase 6 independent set, different seed vocabulary, ~80 items both polarities, including the false-positive shapes L2 actually failed on. **All tuning happens against this set and nothing else** | ⬜ Stage 2 |
 | 4 | **C2 made structural, not remembered** — `load_holdout(INDEPENDENT)` raises outside a declared verification run; an **append-only fingerprint ledger** records every independent-set run with a config hash; `RESULTS.md` publishes the count of distinct fingerprints ever measured against the set. One is a verification, six is de-facto tuning, and the reader can see which without taking anyone's word | ⬜ Stage 2 |
@@ -536,7 +536,7 @@ cannot be both."*
 | 15 | **`docs/phase7/NOT-FIXED.md`** — everything left unfixed, each with the reason and the phase that owns it. The roadmap asks this phase to *"document what I did not fix"*; **a short register would be a bad sign, not a good one** | ⬜ Stage 8 |
 | 16 | **Spend inside the proposed $1.25 sub-budget**, stop-and-report at $0.90, every run logged in `COSTS.md`. **The Bedrock Guardrail is the only provisioned resource**, $0 at rest, and `make destroy` removes it | ⬜ |
 | 17 | **Retrieval gate — time-boxed and subordinate.** recall@5 0.800 (GATE 0.90) and MRR 0.663 (TARGET 0.75) are a different subsystem; expanding Phase 7 to cover them would dilute the central task. Run last, only if Stages 0–8 land inside budget; otherwise it goes to `NOT-FIXED.md` with a named owner phase. **A failing gate does not get to drift unowned** | ⬜ Stage R (conditional) |
-| 18 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ |
+| 18 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 7`, typed 2026-08-12, with both decisions settled as recommended and the guardrail named as an explicit exception to `D3` |
 
 ### The two decisions needing Marco's word at approval
 
@@ -586,6 +586,8 @@ cannot be both."*
 | D24 | **The layered design delivers the recall guarantee it was built for, at a false-escalation cost that makes the system as configured unusable as an IVR.** Union recall 1.000, union false-escalation **0.529** against a TARGET of ≤ 0.10. Supersedes `D22` | L2's recall was measured; its precision was not. Measuring it reversed the conclusion. L2 fires on *"I need to report an accident."* and on three descriptions of **vehicle** damage. Both halves of this decision are real and neither may be reported without the other | 2026-08-12 |
 | D25 | **The three failing Tier B gates are one finding, not three.** Intent macro-F1 0.623, out-of-scope detection 0.200 and false-escalation 0.529 share a single root: the merged router+L2 call (`ADR-004`) emits `safety_flag` and `intent` as **one structured object**, so the recall bias deliberately placed on `safety_flag` (*"when in doubt, true"*) propagates into `intent` — a model producing a structured object makes its fields mutually consistent | 27/73 misclassifications are not scattered: ten are benign turns read as `InjuryEscalation`. One prompt is being asked to be simultaneously paranoid and discriminating. Whether merging the two jobs was correct is now the central Phase 7 question, with data behind it | 2026-08-12 |
 | D26 | **The incomplete "vindicated" conclusion was written *and endorsed* on recall alone. Neither reader caught it; `SUCCESS-METRICS.md` §4's false-escalation TARGET did.** Recorded as evidence the metric design earned its keep, not as a footnote to `D24` | Marco, explicitly: *"I endorsed the incomplete conclusion on recall alone — the miss was mine as well as yours, and the anti-gaming metric caught both of us."* Two readers with the precision metric available in their own specification both failed to notice it had never been computed. A metric that only ever confirms what its authors already believe has not been tested; this one contradicted both of them on the phase's headline claim in the same session the claim was made. **Generalisable form: a favourable result on one half of a trade-off pair is not a result** — recall without precision, containment without escalation appropriateness, latency without cost. The pairing must be built into the harness in advance, because at the moment a good number lands neither author nor reviewer goes looking for its counterweight | 2026-08-12 |
+| D27 | **The router runs at Nova's default sampling temperature.** `classify_turn` sets `maxTokens` only; AWS documents the Converse defaults as **temperature 0.7, topP 0.9**. The judge sets `temperature: 0.0` explicitly — the classifier, whose output is a decision, does not. Identical code over identical inputs: intent macro-F1 **0.623 → 0.474** between two runs | **Every Tier B number in `RESULTS.md` is a single draw from a high-variance process, not an estimate**, including the 0.529 that `D24` rests on. Three consequences: the published figures are not stable to three decimals; the regression gate's 3-point TARGET tolerance cannot function against ~15-point run noise; and **the ablation ladder cannot be run at n=1**, because rung deltas would be dominated by sampling. Same class of error as `D26` — a number published as a guarantee that was only ever an n=1 observation — and found the same way, by checking something that already looked settled. n=2 establishes the variance is large; it does not establish the distribution | 2026-08-12 |
+| D28 | **`make lint` and `make typecheck` never covered `evals/` or `scripts/`** — the entire eval harness, i.e. the code that produces every published number, was outside the checked scope while six phases reported "ruff/black/mypy strict clean". Fixed: `CHECKED = src tests evals scripts`, plus a PEP 561 `py.typed` marker without which mypy silently resolved `fnol_voice_agent` from an untyped editable install for anything outside `src/` | Found in Phase 7 Stage 0 while adding the first new eval code of the phase. The claim was never false about `src` and `tests`; it was **true about a scope nobody had stated**, which is the more durable kind of error. `tests/` remains outside mypy and the reason is now written in the Makefile rather than implied: langgraph's `add_node`/`invoke` overloads reject plain callables under strict mode, and silencing ~20 stub-friction errors would add noise without adding a check | 2026-08-12 |
 
 ### Carried forward to future phases — named now so they aren't rediscovered later
 
@@ -1645,3 +1647,49 @@ valuable output is the correction, not the metrics."*
   approval covers on-demand *inference* and neither a provisioned resource nor `ApplyGuardrail` text units are
   literally that.
 - **No Phase 7 work has begun.** Awaiting `APPROVED: Phase 7`.
+
+### 2026-08-12 — `APPROVED: Phase 7`; Stage 0 complete; the ladder paused on a bigger finding
+
+`APPROVED: Phase 7`, both decisions as recommended (k=5 any-sample-miss with the merged baseline measured
+first; local Terraform state for the guardrail, migrating in Phase 8). **$1.25 sub-budget, stop-and-report
+at $0.90.** Bedrock Guardrail provisioning approved as a **named exception to `D3`** — Marco: *"it is a
+provisioned resource, not on-demand inference, and I want that distinction preserved rather than blurred."*
+`COSTS.md` now tags guardrail rows separately for that reason.
+
+**Stage 0 answered its question and then found something larger.**
+
+- **`D25` is confirmed, and more strongly than the aggregate numbers suggested.** Over all 78 golden first
+  turns in one run: `safety_flag` true → `intent = InjuryEscalation` **27 of 28 times**; false → 3 of 50.
+  Fisher exact p < 10⁻⁸. On the subset where Phase 6's two separate baselines overlap, p = 0.007. Marco's
+  refutation condition is **not** met — the misclassifications and the false escalations are the same
+  behaviour — so the ablation rungs are green-lit on that ground.
+- **`D27` — the router runs at Nova's default sampling temperature**, and this is the reason to pause.
+  `classify_turn` sets `maxTokens` only; AWS documents the Converse defaults as temperature 0.7 / topP 0.9.
+  The judge sets 0.0 explicitly; the classifier does not. Re-running identical code over identical inputs
+  moved intent macro-F1 **0.623 → 0.474** — a 0.149 swing, roughly **5× the regression gate's 3-point
+  tolerance**. **An ablation ladder cannot be read at n=1 against that.** Reported to Marco before building
+  rungs, per his Stage 0 instruction, because it changes the experimental design rather than the plan's
+  wording.
+- **Three instrument defects, all fixed or named:**
+  1. **The script that produced `0.529` was never in the repository.** It lived in a scratchpad; a clean
+     checkout could read the number but not reproduce it. Recovered from the session transcript — luck, not
+     process — and committed as `scripts/measure_l2_precision.py`. Its denominator also includes **8
+     hand-picked IDs**, so `0.529` is a real measurement over a partly hand-selected population. Committed
+     as it ran rather than retrofitted with a rule, which would change the number and break comparability.
+  2. **The Tier B harness stored half of a merged call's output.** `classify_turn` returns `safety_flag`
+     *and* `intent`; the intent run kept only `.intent`, and the false-escalation run then paid for 34 fresh
+     calls to recover part of what had already been returned and discarded. **The coupling was invisible
+     because no artifact ever held both fields for the same turn.**
+  3. **`D28` — `make lint` and `make typecheck` never covered `evals/` or `scripts/`.** Six phases reported
+     "strict clean" about a scope nobody had stated. Now `CHECKED = src tests evals scripts`, plus a
+     `py.typed` marker without which mypy resolved the package from an untyped editable install.
+- **Four write-up errors in `RESULTS.md` §3, corrected inline** rather than in a Phase 7 footnote, per
+  Marco's instruction that Phase 6 corrections belong in Phase 6's document: the corpus is **78/141**, not
+  73 (nor the "71/134" and "77/140" that also appeared); **twelve** of the 27 confusions were
+  `InjuryEscalation`, not ten; **four of six** out-of-scope conversations were misrouted, not "all five";
+  and *"Someone keyed my car in a parking lot"* was cited as an intent misclassification when it was a
+  `safety_flag` false positive with a correct intent — blurring precisely the distinction the phase exists
+  to examine.
+- **Cost: $0.00303 of the $1.25 sub-budget** (78 real Nova Micro calls). 259 tests, lint/typecheck clean at
+  the widened scope.
+- **No ablation rung has been built.** Paused for Marco's decision on how temperature is handled.

@@ -160,20 +160,96 @@ uncontaminated measurement this phase has. Named as an open gap instead; Marco c
 
 ## 3. Intent classification — GATE failed
 
-Real Nova Micro through the shipped `classify_turn` path, first turn of all 73 labelled conversations.
+> **Corrected 2026-08-12 by Phase 7 Stage 0.** Four write-up errors in this section, and one measurement
+> caveat that is more serious than any of them. Corrections are inline below; the caveat is §3.1. The two
+> harness-produced numbers in the table — 0.623 and 0.200 — are unchanged by the write-up corrections.
+
+Real Nova Micro through the shipped `classify_turn` path, first turn of all **78** labelled conversations.
+(This section previously said 73. The corpus is 78 conversations / 141 turns, and has been since before
+this run; the harness iterated all 78. Two other counts in this document's history — "71 conversations,
+134 turns" and "77 conversations, 140 turns" — were also wrong. **78 / 141 is the verified figure**, and
+`evals/baselines/tier_a_baseline.json` recorded it correctly the whole time while the prose did not.)
 
 | Metric | Kind | Threshold | **Measured** |
 |---|---|---|---|
 | Intent macro-F1 | GATE | ≥ 0.90 | **0.623** ❌ |
 | Out-of-scope detection | TARGET | ≥ 0.85 | **0.200** ❌ |
 
-27 of 73 misclassified, and the errors are not scattered — **they are dominated by the same
-over-triggering §0 measures.** Ten of the 27 are benign turns classified as `InjuryEscalation`, including
-*"I need to report an accident."* and *"Someone keyed my car in a parking lot."*
+27 of 78 misclassified, and the errors are not scattered — **they are dominated by the same
+over-triggering §0 measures.** **Twelve** of the 27 are benign turns classified as `InjuryEscalation`
+(previously stated as ten), including *"I need to report an accident."*
 
-Out-of-scope is the second cluster: all five out-of-scope conversations were misrouted, four into
-in-scope intents. A home-insurance claim reads as `InjuryEscalation`; a life-insurance question reads as
-`CoverageQuestion`. The router has no strong notion of the product boundary.
+*"Someone keyed my car in a parking lot."* was cited here as one of them. **It was not.** That turn
+(`fac-003`) was classified with the *correct* intent; what it triggered was L2's `safety_flag`. Citing a
+safety-flag false positive as an intent misclassification blurred the exact distinction §3.1 and Phase 7
+exist to examine, and it is the kind of error that makes a finding look tidier than it is.
+
+Out-of-scope is the second cluster: **four of the six** conversations whose expected intent is
+`OutOfScope` were misrouted, all four into in-scope intents. (Previously: *"all five … were misrouted,
+four into in-scope intents"* — wrong on both counts, and internally inconsistent with the 0.200 recall in
+the table above, which is 1/5.) The 5-vs-6 discrepancy is real and worth naming: **the out-of-scope metric
+counts by conversation *category* while the confusion list counts by expected *intent*, and the two
+definitions disagree** on `adv-004`, an adversarial conversation whose expected intent is `OutOfScope`.
+Neither definition is wrong; having both unlabelled in the same section was.
+
+A home-insurance claim reads as `InjuryEscalation`; a life-insurance question reads as `CoverageQuestion`.
+The router has no strong notion of the product boundary.
+
+### 3.1 These are n=1 samples from a high-variance process
+
+**The router runs at Nova's default sampling temperature.** `classify_turn` passes
+`inferenceConfig={"maxTokens": ...}` and sets neither `temperature` nor `topP`; AWS's Converse
+documentation gives the defaults as **temperature 0.7, topP 0.9**. The judge in `evals/tier_b.py` sets
+`temperature: 0.0` explicitly. The classifier — the component whose output is supposed to be a decision —
+does not.
+
+Re-running the identical code over the identical 78 turns on 2026-08-12 gives:
+
+| | Phase 6 run | Stage 0 re-run | Δ |
+|---|---|---|---|
+| Misclassified | 27 / 78 | **39 / 78** | +12 |
+| Accuracy | 0.654 | **0.500** | −0.154 |
+| Intent macro-F1 | 0.623 | **0.474** | **−0.149** |
+| Out-of-scope recall | 0.200 (1/5) | 0.167 (1/6) | — (different denominators, see above) |
+
+Only 25 of the two runs' confusion sets are shared; 2 cases were wrong only in Phase 6 and 14 only in the
+re-run.
+
+**A 0.149 swing on identical inputs is roughly five times the regression gate's 3-point TARGET
+tolerance.** Three consequences, stated plainly:
+
+1. **Every Tier B number in this document is a single draw**, not an estimate. That includes the
+   false-escalation 0.529 that §0 is built on. §0's *conclusion* does not depend on the exact value — the
+   rate is far above target under any reading, and the coupling in §3.2 is a within-run property — but
+   the specific figures are not stable to three decimal places and should never have been printed as
+   though they were.
+2. **The regression gate cannot function against this much noise.** A 3-point tolerance on a metric that
+   moves 15 points between runs will fire on luck and miss real regressions. The gate was demonstrated to
+   have teeth (§9); it does not yet have a usable threshold for the Tier B metrics.
+3. **n=2 establishes that the variance is large. It does not establish the distribution.** Two runs are
+   not a spread. Quantifying it — and deciding whether the router should run at temperature 0 at all — is
+   Phase 7 Stage 2 work, not a claim this section makes.
+
+This is the same class of error as §0's: **a number published as a guarantee that was only ever an n=1
+observation.** It was found by the same route — checking a thing that already looked settled.
+
+### 3.2 The merge is real, measured at the item level
+
+Phase 7 Stage 0 re-ran the merged call storing the **whole** `TurnClassification` rather than only
+`.intent`, over all 78 first turns in one run:
+
+| | `intent = InjuryEscalation` | other intent |
+|---|---|---|
+| `safety_flag` true | **27** | 1 |
+| `safety_flag` false | 3 | 47 |
+
+Given `safety_flag`, the intent is `InjuryEscalation` **27 times out of 28**. Without it, 3 times out of
+50. Fisher exact p < 10⁻⁸. Restricted to the cases where Phase 6's two separate baselines happen to
+overlap, the same association holds at p = 0.007.
+
+**The two fields are very nearly the same decision wearing two names**, which is exactly what `D25`
+predicted and what `ADR-004`'s merged structured output would produce. `RESULTS.md` §0's false-escalation
+rate and this section's macro-F1 are two views of one behaviour.
 
 **These are one finding, not three.** The router is a single Nova Micro call doing intent classification
 and L2 safety detection simultaneously (`ADR-004`'s merged call), and it is heavily biased toward
