@@ -53,7 +53,11 @@ class Claim(BaseModel):
     kabco: KabcoCode
     police_report_filed: bool
     police_report_number: str | None = Field(default=None, pattern=POLICE_REPORT_PATTERN)
-    repair_estimate_cad: int
+    # None only for a freshly-filed (REPORTED) claim -- caught while wiring Stage 6's file_new_claim
+    # handler: nothing has been assessed yet at the moment of intake, so there is no repair estimate to
+    # carry. Every record in the real corpus (all past REPORTED) still has one, confirmed by
+    # test_every_real_synthetic_claim_matches_settlement_arithmetic in test_coverage.py.
+    repair_estimate_cad: int | None = None
     actual_cash_value_cad: int
     is_total_loss: bool
     deductible_applied_cad: int
@@ -64,14 +68,28 @@ class Claim(BaseModel):
     settlement_amount_cad: int | None = None
 
     @model_validator(mode="after")
-    def _exactly_one_settlement_figure(self) -> "Claim":
-        # Confirmed as an invariant across every record in the real corpus: an open claim carries an
-        # estimate, a settled/closed claim carries an actual amount -- never both, never neither.
+    def _settlement_figures_match_status(self) -> "Claim":
         has_estimate = self.estimated_settlement_cad is not None
         has_actual = self.settlement_amount_cad is not None
+        if self.status is ClaimStatus.REPORTED:
+            # A freshly-filed claim carries neither -- nothing has been assessed yet. Also true of
+            # repair_estimate_cad, checked here rather than as a separate rule since both express the
+            # same "nothing assessed yet" fact.
+            if has_estimate or has_actual or self.repair_estimate_cad is not None:
+                raise ValueError(
+                    "a REPORTED claim must not yet carry a repair estimate or a settlement figure -- "
+                    "nothing has been assessed at intake time"
+                )
+            return self
+        # Past REPORTED: confirmed as an invariant across every record in the real corpus -- an open
+        # claim carries an estimate, a settled/closed claim carries an actual amount -- never both,
+        # never neither.
         if has_estimate == has_actual:
             raise ValueError(
-                "exactly one of estimated_settlement_cad/settlement_amount_cad must be set, "
-                f"got estimated={self.estimated_settlement_cad!r} actual={self.settlement_amount_cad!r}"
+                "exactly one of estimated_settlement_cad/settlement_amount_cad must be set once a claim "
+                f"is past REPORTED status, got estimated={self.estimated_settlement_cad!r} "
+                f"actual={self.settlement_amount_cad!r}"
             )
+        if self.repair_estimate_cad is None:
+            raise ValueError("repair_estimate_cad must be set once a claim is past REPORTED status")
         return self

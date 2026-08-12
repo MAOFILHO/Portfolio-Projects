@@ -9,7 +9,9 @@ license = { text = "MIT-0" }
 dependencies = [
     # boto3: Bedrock (embeddings, model calls) and DynamoDB (vector storage, ADR-002; checkpointer, ADR-005)
     # are both reached through it. Pinned to a known-good release, per CLAUDE.md's "pin exact versions" rule.
-    "boto3==1.35.99",
+    # Bumped from 1.35.99 (Phase 3) to satisfy langgraph-checkpoint-aws==1.2.1's boto3>=1.42.90 floor,
+    # discovered as a real dependency conflict when Stage 6/7 added that package -- not a proactive bump.
+    "boto3==1.43.69",
     # pydantic: typed FNOL/claim/policy/vehicle/event schemas (Phase 5 models/) -- industry-standard runtime
     # validation, already assumed by TARGET-LAYOUT.md's "adapted Pydantic v2" mapping from repo 6.
     "pydantic==2.13.4",
@@ -27,6 +29,11 @@ dependencies = [
     # test that the same tool handlers are servable over the real wire protocol without modification. Not
     # used on the runtime hot path (ADR-012 keeps that in-process).
     "mcp==2.0.0",
+    # langgraph: agent orchestration, per ADR-003. Stage 6/7's graph, nodes, and state schema.
+    "langgraph==1.2.11",
+    # langgraph-checkpoint-aws: DynamoDB-backed state persistence keyed on the Connect contact ID, per
+    # ADR-005 -- adopted instead of hand-writing a BaseCheckpointSaver.
+    "langgraph-checkpoint-aws==1.2.1",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +52,7 @@ dev = [
     "mypy==1.14.1",
     # boto3-stubs: type stubs for the boto3 clients this project uses -- keeps `mypy strict`
     # honest instead of suppressing the untyped-import error for boto3 wholesale.
-    "boto3-stubs[dynamodb,bedrock-runtime]==1.35.99",
+    "boto3-stubs[dynamodb,bedrock-runtime]==1.43.69",
     # types-python-dateutil: dateutil ships no inline types; needed to keep mypy strict clean on the
     # fuzzy loss_datetime parser.
     "types-python-dateutil==2.9.0.20260807",

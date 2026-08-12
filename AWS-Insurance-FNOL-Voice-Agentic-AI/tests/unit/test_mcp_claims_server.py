@@ -6,12 +6,96 @@ import pytest
 
 from fnol_voice_agent.mcp.claims_server import (
     ClaimNotFoundError,
+    InjuryPresentError,
     InvalidClaimLookupError,
+    InvalidNewClaimError,
     NoOpenClaimError,
+    PolicyNotFoundErrorForNewClaim,
     RentalStatusUnavailableError,
+    VehicleNotOnPolicyError,
+    file_new_claim,
     get_claim_status,
     get_rental_status,
 )
+
+_VALID_NEW_CLAIM_KWARGS: dict[str, object] = {
+    "policy_number": "PY4821",
+    "insured_vehicle_vin": "9SYAB1239G1000101",
+    "loss_datetime": "2026-08-11T09:00:00-04:00",
+    "loss_location": "Highway 401 near Milton, ON",
+    "loss_type": "Collision",
+    "damage_description": "Front bumper damage",
+    "driver_name": "Priya Nakamura",
+    "other_party_involved": False,
+    "police_report_filed": False,
+    "injuries_present": False,
+}
+
+
+def test_file_new_claim_produces_a_valid_reported_claim() -> None:
+    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    assert claim.status == "Reported"
+    assert claim.claim_number.startswith("CLM-2608-")
+    assert claim.kabco == "O"
+    assert claim.repair_estimate_cad is None
+    assert claim.estimated_settlement_cad is None
+    assert claim.settlement_amount_cad is None
+    # PY4821's real Section 7 deductible ($500) and 9SYAB1239G1000101's real ACV ($22,000), pulled from
+    # the actual synthetic corpus, not hardcoded.
+    assert claim.deductible_applied_cad == 500
+    assert claim.actual_cash_value_cad == 22000
+
+
+def test_file_new_claim_sequence_numbers_never_collide_with_the_real_corpus() -> None:
+    # The real corpus's highest August 2026 sequence is 00055 (CLM-2608-00055-6). A freshly-filed claim
+    # this same month must start above that, not restart at 00001.
+    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    _, _, seq, _ = claim.claim_number.split("-")
+    assert int(seq) > 55
+
+
+def test_file_new_claim_sequence_increments_across_calls_in_the_same_process() -> None:
+    first = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    second = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    first_seq = int(first.claim_number.split("-")[2])
+    second_seq = int(second.claim_number.split("-")[2])
+    assert second_seq == first_seq + 1
+
+
+def test_file_new_claim_rejects_injuries_present() -> None:
+    with pytest.raises(InjuryPresentError):
+        file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "injuries_present": True})  # type: ignore[arg-type]
+
+
+def test_file_new_claim_rejects_a_vin_not_on_the_policy() -> None:
+    # 9SYCD4568G1000102 belongs to PY1103, not PY4821.
+    with pytest.raises(VehicleNotOnPolicyError):
+        file_new_claim(
+            **{**_VALID_NEW_CLAIM_KWARGS, "insured_vehicle_vin": "9SYCD4568G1000102"}  # type: ignore[arg-type]
+        )
+
+
+def test_file_new_claim_rejects_an_unknown_policy_number() -> None:
+    with pytest.raises(PolicyNotFoundErrorForNewClaim):
+        file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "policy_number": "PY0000"})  # type: ignore[arg-type]
+
+
+def test_file_new_claim_rejects_a_police_report_filed_without_a_report_number() -> None:
+    with pytest.raises(InvalidNewClaimError):
+        file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "police_report_filed": True})  # type: ignore[arg-type]
+
+
+def test_file_new_claim_deductible_is_zero_for_a_dcpd_only_policyholder() -> None:
+    # PY1103 is liability-only -- no Section 7 coverage purchased at all (data card's own note).
+    claim = file_new_claim(
+        **{  # type: ignore[arg-type]
+            **_VALID_NEW_CLAIM_KWARGS,
+            "policy_number": "PY1103",
+            "insured_vehicle_vin": "9SYCD4568G1000102",
+            "loss_type": "Comprehensive",
+        }
+    )
+    assert claim.deductible_applied_cad == 0
 
 
 def test_get_claim_status_by_claim_number() -> None:
