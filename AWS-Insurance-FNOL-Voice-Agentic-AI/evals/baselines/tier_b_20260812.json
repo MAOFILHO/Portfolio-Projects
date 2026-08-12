@@ -1,0 +1,180 @@
+{
+  "intent": {
+    "macro_f1": 0.62325,
+    "confusions": [
+      "amb-001: expected Ambiguous, got InjuryEscalation",
+      "amb-002: expected Ambiguous, got FileAutoClaim",
+      "amb-003: expected Ambiguous, got InjuryEscalation",
+      "adv-003: expected FileAutoClaim, got OutOfScope",
+      "oos-001: expected OutOfScope, got InjuryEscalation",
+      "oos-002: expected OutOfScope, got CoverageQuestion",
+      "oos-003: expected OutOfScope, got InjuryEscalation",
+      "oos-004: expected OutOfScope, got CoverageQuestion",
+      "ccs-007: expected CheckClaimStatus, got OutOfScope",
+      "cq-004: expected CoverageQuestion, got InjuryEscalation",
+      "cq-007: expected CoverageQuestion, got Ambiguous",
+      "cq-009: expected Ambiguous, got CoverageQuestion",
+      "fac-001: expected FileAutoClaim, got InjuryEscalation",
+      "fac-002: expected FileAutoClaim, got InjuryEscalation",
+      "fac-007: expected FileAutoClaim, got Ambiguous",
+      "fac-008: expected FileAutoClaim, got UpdateContactInfo",
+      "fac-009: expected FileAutoClaim, got InjuryEscalation",
+      "fac-011: expected FileAutoClaim, got OutOfScope",
+      "rte-001: expected RentalTowingEntitlement, got Ambiguous",
+      "rte-002: expected RentalTowingEntitlement, got CoverageQuestion",
+      "rte-005: expected RentalTowingEntitlement, got CoverageQuestion",
+      "rte-006: expected Ambiguous, got CoverageQuestion",
+      "rte-007: expected RentalTowingEntitlement, got CheckClaimStatus",
+      "inj-007: expected FileAutoClaim, got InjuryEscalation",
+      "inj-008: expected FileAutoClaim, got InjuryEscalation",
+      "inj-009: expected FileAutoClaim, got InjuryEscalation",
+      "inj-012: expected FileAutoClaim, got InjuryEscalation"
+    ],
+    "oos_recall": 0.2,
+    "oos_precision": 0.2
+  },
+  "generation": {
+    "trials": 9,
+    "grounded": 9,
+    "relevant": 9,
+    "correct_for_caller": 9,
+    "redundant": 0,
+    "leaks_mechanics": 2,
+    "per_trial": [
+      {
+        "id": "cq-002#1",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer is supported by the policy text and the caller's record showing income_replacement_benefit = true, directly addresses the question asked, and accurately reflects this specific caller's coverage.",
+        "answer": "Yes, you have income replacement benefits as per your policy."
+      },
+      {
+        "id": "cq-002#2",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer is supported by the policy text (which describes the benefit), directly addresses the caller's question, and accurately reflects the caller's record showing income_replacement_benefit = true.",
+        "answer": "Yes, you have income replacement benefits."
+      },
+      {
+        "id": "cq-002#3",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer is fully supported by the policy text, directly addresses the caller's question, and accurately reflects that this specific caller has the benefit elected (income_replacement_benefit = true).",
+        "answer": "Yes, you have income replacement benefits at 70% of your gross weekly income, up to a maximum of $400/week, for up to 104 weeks."
+      },
+      {
+        "id": "cq-003#1",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer is supported by the policy text (which states the benefit only applies if elected) and the caller's record (which shows housekeeping_home_maintenance_benefit = false), making it both accurate and specific to this caller's coverage.",
+        "answer": "You are not covered for housekeeping help while you recover."
+      },
+      {
+        "id": "cq-003#2",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The agent correctly identified that this caller does not have the housekeeping benefit elected (housekeeping_home_maintenance_benefit = false) and accurately stated they are not covered, which is supported by the policy text stating optional benefits must be elected to be part of coverage.",
+        "answer": "You are not covered for housekeeping help while you recover -- let me get you to someone who does."
+      },
+      {
+        "id": "cq-003#3",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer is supported by the policy text (which states the benefit only applies if elected) and the caller's record (which shows housekeeping_home_maintenance_benefit = false), making it both accurate and specific to this caller's coverage.",
+        "answer": "You are not covered for housekeeping help while you recover."
+      },
+      {
+        "id": "rte-001#1",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The agent correctly states the caller has 8 days remaining based on the caller's specific record, accurately cites the 20-day maximum from policy text, and provides the remaining amount from the record.",
+        "answer": "Based on the Rental Reimbursement Endorsement, your entitlement for this claim allows up to 20 days in total. You have currently used 12 days, so you have 8 days of rental remaining. The amount remaining for your rental coverage is CAD 400."
+      },
+      {
+        "id": "rte-001#2",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer correctly states the caller has 8 days remaining based on their specific claim record, accurately cites the 20-day maximum from policy, and notes the 12 days already used.",
+        "answer": "Based on the Rental Reimbursement Endorsement policy terms and your claim status, your entitlement currently allows for a maximum of 20 days of rental vehicle reimbursement per covered loss, with 8 days remaining. You have already used 12 days for this claim."
+      },
+      {
+        "id": "rte-001#3",
+        "grounded": 1,
+        "relevant": 1,
+        "correct_for_caller": 1,
+        "reason": "The answer directly states the caller has 8 days remaining, which matches the caller-specific record (days_remaining=8), is supported by the policy text allowing up to 20 days per claim, and directly answers the question asked.",
+        "answer": "Based on the Rental Reimbursement Endorsement and the claim status, your entitlement applies and you have 8 more days of rental coverage remaining. The concrete number for your remaining rental days is 8."
+      }
+    ],
+    "redundancy_per_trial": [
+      {
+        "id": "cq-002#1",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "cq-002#2",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "cq-002#3",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "cq-003#1",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "cq-003#2",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "cq-003#3",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 1
+      },
+      {
+        "id": "rte-001#1",
+        "redundant": false,
+        "leaks": true,
+        "sentences": 3
+      },
+      {
+        "id": "rte-001#2",
+        "redundant": false,
+        "leaks": true,
+        "sentences": 2
+      },
+      {
+        "id": "rte-001#3",
+        "redundant": false,
+        "leaks": false,
+        "sentences": 2
+      }
+    ]
+  },
+  "cost": {
+    "calls": 96,
+    "input_tokens": 78256,
+    "output_tokens": 4561,
+    "usd": 0.01094524
+  }
+}

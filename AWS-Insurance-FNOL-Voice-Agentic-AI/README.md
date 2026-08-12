@@ -98,6 +98,52 @@ make test lint typecheck
 
 ---
 
+## Measured limitations
+
+Real numbers from `docs/RESULTS.md`, not caveats written in advance. Phase 6 was specified as
+**pre-tuning**: these are the values tuning starts from, reported as measured rather than adjusted to
+make a phase look finished.
+
+### The safety claim rests on phrasings no human wrote
+
+The injury detector's headline result — **100% escalation recall** across an independent held-out set —
+was measured against phrasings **written by a language model and classified by a language model**. The
+set is independent of *the detector* (an isolated agent generated it without ever reading `lexicon.py`
+or the taxonomy the lexicon was built from). It is **not** independent of language models in general.
+
+Agent-authored euphemism for injury may be systematically more model-legible than what a frightened
+person actually says at the roadside. The two systems may share an inductive bias a real caller does not.
+
+**No recall figure in this repository should be read as predicting real-world recall.** Establishing that
+needs human-authored phrasings from people who were not involved in building the detector, and this
+project has none. It is the single largest gap between what is measured here and what would be needed to
+run this on a real line.
+
+### The system escalates too much
+
+100% recall is bought at a **52.9% false-escalation rate** — more than half of the calls that should
+never be transferred are transferred, including *"I need to report an accident."* The target is ≤ 10%.
+The layered detector delivers the safety guarantee it was built for and is, in its current
+configuration, unusable as an IVR. Both halves are true and neither is presented without the other.
+
+### Three gates fail as of Phase 6
+
+| Metric | Threshold | Measured |
+|---|---|---|
+| Intent classification macro-F1 | ≥ 0.90 | **0.623** |
+| Retrieval recall@5 | ≥ 0.90 | **0.800** |
+| False-escalation rate | ≤ 0.10 | **0.529** |
+
+### Nothing here has taken a real call
+
+Every number in this repository comes from author-generated or agent-generated text. No real caller has
+spoken to this system. Real-world containment, satisfaction and abandonment cannot be estimated from it.
+
+Bias across name, accent and dialect variation, and accessibility for callers with speech differences,
+are **not assessed at all** — a genuine equity gap in a voice-only system, with no audit planned.
+
+---
+
 ## Repository context
 
 This project is one top-level folder in the [`MAOFILHO/Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects)

@@ -1,0 +1,86 @@
+{
+  "cases": 34,
+  "l1_fe": 0.029411764705882353,
+  "l2_fe": 0.5294117647058824,
+  "union_fe": 0.5294117647058824,
+  "l2_fires_on": [
+    [
+      "indep[O]",
+      "the car's totalled"
+    ],
+    [
+      "indep[B]",
+      "I've got a bit of a bruise on my knee where it hit the dash, nothing worth mentioning really"
+    ],
+    [
+      "indep[O]",
+      "the front end is completely destroyed"
+    ],
+    [
+      "indep[O]",
+      "she took a real beating, poor thing, I've had that car eleven years"
+    ],
+    [
+      "indep[B]",
+      "there's a scrape on my elbow, I've put a plaster on it, it's fine"
+    ],
+    [
+      "indep[C]",
+      "I'm a bit stiff in the shoulder this morning but that's about the size of it"
+    ],
+    [
+      "indep[O]",
+      "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in"
+    ],
+    [
+      "indep[O]",
+      "the driver's door is caved right in, it'll be a write-off"
+    ],
+    [
+      "indep[O]",
+      "I don't think anyone's hurt, we're all just a bit shaken up"
+    ],
+    [
+      "inj-007",
+      "My wrist is a bit sore but it's nothing, I don't need a doctor."
+    ],
+    [
+      "inj-008",
+      "I've got a small scratch on my arm from the glass, that's all."
+    ],
+    [
+      "inj-009",
+      "My neck is a little stiff, but honestly I'm fine."
+    ],
+    [
+      "inj-012",
+      "The headlight is broken and the bumper took a real beating."
+    ],
+    [
+      "neg-007",
+      "I don't think anyone's hurt, we're all just a bit shaken up."
+    ],
+    [
+      "fac-001",
+      "I need to report an accident."
+    ],
+    [
+      "fac-002",
+      "Someone rear-ended me yesterday and I need to file a claim."
+    ],
+    [
+      "fac-003",
+      "Someone keyed my car in a parking lot."
+    ],
+    [
+      "cq-001",
+      "If another driver hits me and it's their fault, am I covered for the damage?"
+    ]
+  ],
+  "cost": {
+    "calls": 34,
+    "input_tokens": 31582,
+    "output_tokens": 1573,
+    "usd": 0.00132559
+  }
+}
