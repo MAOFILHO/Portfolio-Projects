@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 5 — Agent implementation — **all 8 stages complete, presented for closing
-sign-off, not self-marked closed.** Phase 4 signed off 2026-08-11.
+**Current phase:** Phase 6 — Evaluation harness — **exit criteria proposed 2026-08-12, awaiting approval.**
+Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -29,8 +29,8 @@ Bedrock standing-approval budget consumed: **≈$0.00037 of $5.00**.
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
-| 5 | Agent implementation | 🟡 All 8 stages complete 2026-08-11 — presented for closing sign-off |
-| 6 | Evaluation harness | ⬜ Not started |
+| 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
+| 6 | Evaluation harness | 🟡 Exit criteria proposed 2026-08-12 — awaiting approval |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
@@ -250,7 +250,7 @@ Five deliverables, mapped to the eight roadmap components:
 
 ---
 
-## Phase 5 exit criteria — approved 2026-08-11 to begin; **Stages 1–7 of 8 complete, gated at Stage 7 per Marco's instruction**
+## Phase 5 exit criteria — approved 2026-08-11 to begin; all 8 stages complete; **signed off 2026-08-12**
 
 `APPROVED: Phase 5` authorized the phase to begin, with Marco's requested build order/dependency sequence and
 per-component cost gate answered in `docs/phase5/BUILD-PLAN.md`. Marco directed subagents for Stages 1–5, main
@@ -328,8 +328,76 @@ and by construction, since no other module in `agents/` ever calls `record_attem
   `test_file_auto_claim_full_multi_turn_happy_path`, not just smoke-tested by hand (though it was, first,
   interactively, before being formalized as a test).
 
-**Phase 5 is not signed off.** Stage 8 (optional real-Bedrock verification of the actual shipped router code)
-has not run — Marco asked to report here first. No code has touched real AWS anywhere in Stages 1–7.
+**Phase 5 signed off 2026-08-12** — Marco typed `APPROVED: Phase 5` after the Stage 8 report, and turned two
+of its findings into Phase 6 carry-ins rather than letting them close with the phase: the
+`RentalTowingEntitlement` redundancy defect is now a **known failing case with real evidence**, and the moto
+scoping bug **generalises** into a rule Phase 9's integration tests must carry. Both are written into Phase 6's
+scope below (`docs/phase6/BUILD-PLAN.md` §3) and the second is tracked as `CF4`.
+
+---
+
+## Phase 6 exit criteria — **proposed 2026-08-12, awaiting `APPROVED: Phase 6`**
+
+Per the STOP CONDITIONS, no Phase 6 work starts until this table is approved. Roadmap scope: eval harness
+**before tuning** — ≥60 golden conversations, component + conversation evals, judge + human sample, CI
+regression gate, cost and latency reported alongside quality. Build order, per-stage cost gate, judge-model
+recommendation and the two carry-ins are detailed in **`docs/phase6/BUILD-PLAN.md`**; this table is the
+checklist that points there.
+
+**Phase 1's `SUCCESS-METRICS.md` is the specification, not a starting point.** Phase 6 builds what produces
+those numbers; it does not get to add, drop or re-kind a metric. If a metric turns out to be unmeasurable as
+written, that is reported as such and the metric is amended by an explicit, argued edit — not quietly dropped.
+
+**Three things that make this phase different from every prior one**, each stated before work begins so none
+of them can be discovered as a convenient surprise later:
+
+1. **A failing GATE is a legitimate Phase 6 outcome.** This phase is explicitly pre-tuning. A gate that comes
+   in under threshold is reported at its real value; it is not relaxed, re-run to a good sample, or worked
+   around by narrowing the golden set. Phase 7 tunes.
+2. **This is the first phase to spend a meaningful share of the $5 standing cap.** Proposed sub-budget
+   **$1.00**, stop-and-report at $0.75, every run logged in `COSTS.md`. Cap consumed to date is ≈$0.00037.
+3. **Phase 6 publishes numbers**, which makes the caveats load-bearing. `BUILD-PLAN.md` §5 fixes them in
+   advance — in particular that the latency measured here is agent-internal and is **not** the 1,800 ms
+   Lex-to-Polly GATE, which only Phase 9 can measure.
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | **Mock-scope rule written and enforced** — `ADR-013` plus `docs/TESTING-CONVENTIONS.md`, generalising the Stage 8 moto false-verification bug into a standing rule: `mock_aws()` is process-wide for every service; no real-AWS call inside a mock scope; mixed tests state which backend each call reaches. **Enforcement mechanism attempted, and its actual strength stated honestly** — a runtime guard in the real client factories if moto exposes a version-stable way to detect it is patching, otherwise a documented convention plus a lexical CI check, described as partial rather than implied to be a guarantee | ⬜ Stage 1. **Marco's carry-in 2** |
+| 2 | **Golden set of ≥60 labelled conversations** under `evals/golden/`, with a machine-checked schema and **per-category minimums** covering all six intents plus happy paths, edge cases, ambiguity, adversarial phrasings and out-of-scope — the composition rule `SUCCESS-METRICS.md` §9 requires so the set cannot be narrowed to easy cases. Seeded conceptually by the Phase 0 corpus's transcripts but **hand-authored**, per the blanket do-not-vendor rule | ⬜ Stage 2 |
+| 3 | **Held-out injury-phrasing set stored separately** and not used to build either detector, per `SUCCESS-METRICS.md` §2's OBSERVED metric. Its independence is **weak — same author as `agents/lexicon.py`** — and that limitation is reported next to the number, with the procedural mitigation stated | ⬜ Stage 2 |
+| 4 | **Tier A (deterministic) harness and `make eval`** — every metric computable with no live model: L1 safety recall on the labelled set, escalation routing and appropriateness, slot validation, the shared retry ladder, tool selection given a fixed classification, context-handover completeness, repeat-question rate, and the recording-flow static check. Runs at **$0.00 with no AWS credentials**, because this is the body of the CI gate | ⬜ Stage 3 |
+| 5 | **Response-length and redundancy detectors**, deterministic rather than judge-scored, with the **real Stage 8 known-bad `RentalTowingEntitlement` output committed as a fixture** and a passing unit test proving the detector flags it (and does not flag the known-good trial from the same session). Includes the separate "general mechanics leaked into a caller-specific answer" check | ⬜ Stage 4. **Marco's carry-in 1** |
+| 6 | **`CF3` discharged** — the Nova Micro tight-turn path sampled repeatedly (n ≥ 20, not the n=1 Phase 4 left nor Stage 8's n=5) and reported as a **distribution**, since it is the one path with a known prior padding failure | ⬜ Stage 6 |
+| 7 | **Retrieval metrics computed on real Titan vectors** — one cost-gated embedding run whose vectors are committed to `evals/fixtures/`, making recall@5 and MRR genuinely real *and* reproducible offline at $0.00 thereafter. Fake hash vectors are explicitly not acceptable for these two metrics | ⬜ Stage 5 |
+| 8 | **Tier B (real-model) harness** covering every metric that needs a live model: intent macro-F1, out-of-scope detection, groundedness, answer relevance, abstention correctness, compound-case correctness, task success. **Cost and agent-internal latency reported on the same run as quality**, per `SUCCESS-METRICS.md` §9 | ⬜ Stage 6 |
+| 9 | **Judge implemented with a named, argued model choice** — recommended `us.anthropic.claude-haiku-4-5`, deliberately a different vendor and family from both models under test, because Nova Lite judging Nova Lite is a self-preference setup. **Every judge-scored metric carries a human-reviewed sample** with a defined sample size and a recorded review, per Phase 1's standing caveat | ⬜ Stage 6 |
+| 10 | **Baseline committed as a reviewed artifact** and **`docs/RESULTS.md`** written with the real numbers — including every gate and target that failed, at its real value, with the `BUILD-PLAN.md` §5 caveats attached rather than appended as fine print | ⬜ Stage 7 |
+| 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | ⬜ Stage 8 |
+| 12 | **Spend inside the proposed $1.00 sub-budget**, every run logged in `COSTS.md`, stop-and-report at $0.75. **No provisioned resource created** — no DynamoDB table, no Bedrock Guardrail, no Connect/Lex/Lambda resource; all remain Phase 8's with their own approvals, since the standing cap covers inference, not provisioning | ⬜ |
+| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ Awaiting `APPROVED: Phase 6` |
+
+### Two decisions this table asks Marco to make, not assume
+
+- **Judge model.** Recommending Claude Haiku 4.5 (≈$0.055/run) over Nova Lite (≈$0.003/run) — the $0.05 saving
+  costs the credibility of every judge-scored number. Recommendation, not a default already taken.
+- **When the redundancy check becomes a GATE.** Proposed as a **TARGET in Phase 6, promoted to GATE at Phase 7
+  sign-off**, because gating `main` red on a known-open defect for a whole phase teaches everyone to ignore a
+  red gate — the same argument `SUCCESS-METRICS.md` §2 made when splitting the recall gate. **Marco's to
+  overrule**; if he wants it gated on day one, it gates on day one. Either way the detector's teeth are proven
+  against the committed real known-bad output, so it cannot be green by construction.
+
+### Carried-forward items this phase owns or must respect
+
+- **`CF3`** (Nova Micro tight-turn sampling) is discharged here — criterion 6.
+- **`CF4`** (the mock-scope rule) is *written* here — criterion 1 — and *applied* in Phase 9.
+- **`CF2`** (load testing should concentrate on the two generation paths) is Phase 9's, but Phase 6's per-path
+  latency distribution is what will tell Phase 9 whether that instinct was right.
+- **`Q7`** (does a reranker earn its latency) is Phase 6's to answer with a measurement, not an opinion —
+  `SUCCESS-METRICS.md` §8 lists reranker contribution to recall as an OBSERVED measure precisely so the
+  question gets decided by a number.
+- **`D13`/Phase 1 §4**: the containment and escalation metrics must be implemented with the mandatory-escalation
+  exclusion and both-direction scoring intact. Implementing them naively would silently re-create the gaming
+  route Phase 1 designed them to close.
 
 ---
 
@@ -366,6 +434,8 @@ has not run — Marco asked to report here first. No code has touched real AWS a
 | CF1 | State explicitly in the README: only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | Phase 12 | `D20`, `docs/phase4/PROMPT-REGISTRY.md` |
 | CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency | Phase 9 | Marco, 2026-08-11 |
 | CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure | Phase 6 | Marco, 2026-08-11 |
+| CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's** | Phase 9 (rule authored Phase 6) | Marco, 2026-08-12 |
+| CF5 | `RentalTowingEntitlement`'s redundancy-by-restatement is a **known failing case with real evidence**, not a hypothetical — the Phase 4 prompt fix is probabilistic, and Stage 8's second real trial reproduced the defect. Phase 6's detector must catch **that specific output** and must be red on real output today; Phase 7 is where tuning gets its pass at it | Phase 7 (detector built Phase 6) | Marco, 2026-08-12 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -1189,3 +1259,45 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
 - **All 8 Phase 5 stages are now complete.** Exit-criteria table fully checked. **Phase 5 is not signed
   off** — content is presented for Marco's closing sign-off, not self-marked closed, per the pattern every
   prior phase has used.
+
+### 2026-08-12 — `APPROVED: Phase 5`; stray sibling-rename diff resolved; Phase 6 scoped
+
+- **Marco typed `APPROVED: Phase 5`.** Phase 5 closed with all 8 stages complete.
+- **The two unstaged files were resolved by inspection, not assumption.** `CLAUDE.md` and
+  `docs/phase0/TARGET-LAYOUT.md` carried a working-tree change neither Marco nor this session authored.
+  Marco asked to see the diff before anything committed it, and to commit only if it was purely a sibling
+  project name. It was: two lines, both
+  `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` → `AWS-Bedrock-Agentic-FineTuning-Platform`, and
+  the new name is the one that actually exists at the monorepo root (verified against `ls`, not assumed).
+  Committed as `c42e6c5` with the **provenance recorded in the commit message** — that the edit originated
+  outside this project and outside this session, almost certainly a monorepo-wide rename sweeping sibling
+  references. Recorded rather than silently absorbed. Both files are inside `PROJECT_ROOT`, so no scope-rule
+  approval was in play; the only question was provenance, and it is now written down.
+- **Marco turned two Stage 8 findings into Phase 6 carry-ins** rather than letting them close with Phase 5.
+  Both are now scoped explicitly, not noted:
+  - `CF5` — the `RentalTowingEntitlement` redundancy defect is a **known failing case with real evidence**.
+    The check must catch that specific output and **must be red today**. Designed in
+    `docs/phase6/BUILD-PLAN.md` §3.1: the real Stage 8 output is committed verbatim as a known-bad fixture,
+    the detector is deterministic rather than judge-scored (the defect is mechanically visible, and a judge
+    would make a cheap exact check both expensive and arguable), and a passing unit test against that fixture
+    proves the detector has teeth so it cannot be green by construction.
+  - `CF4` — the moto scoping bug **generalises**. The rule is authored in Phase 6 (`ADR-013`,
+    `docs/TESTING-CONVENTIONS.md`) and applied to the integration suite in Phase 9. The honest part of the
+    design: **it is not yet verified that moto exposes a version-stable way to detect that it is patching**,
+    so the criterion commits to attempting a real runtime guard and to *stating the enforcement's actual
+    strength* — falling back to convention plus a lexical CI check, described as partial, rather than
+    implying a guarantee that does not exist.
+- **Phase 6 exit criteria proposed** (13 criteria) with `docs/phase6/BUILD-PLAN.md` — eight stages, one
+  natural mid-phase gate after Stage 4 (everything deterministic done, $0.00 spent, before the money and the
+  judge-model decision). Three properties stated before work begins so none can arrive as a convenient
+  surprise: a failing GATE is a **legitimate Phase 6 outcome** (this phase is pre-tuning; Phase 7 tunes);
+  this is the **first phase to spend a meaningful share of the $5 cap** (proposed $1.00 sub-budget,
+  stop-and-report at $0.75); and the latency Phase 6 can measure is **agent-internal, not the 1,800 ms
+  Lex-to-Polly GATE**, which only Phase 9 can measure — a caveat fixed in advance rather than written after
+  the number exists.
+- **Two decisions handed to Marco rather than taken silently**: the judge model (recommending Claude Haiku
+  4.5 over Nova Lite — a $0.05/run saving is not worth Nova Lite judging Nova Lite's own output), and when
+  the redundancy check is promoted from TARGET to GATE (proposed at Phase 7 sign-off, because a gate that is
+  red for a whole phase on a known-open defect trains everyone to ignore red gates — the same argument
+  `SUCCESS-METRICS.md` §2 made when it split the recall gate; Marco's to overrule).
+- **No Phase 6 work has begun.** Scoping documents only, per the STOP CONDITIONS.
