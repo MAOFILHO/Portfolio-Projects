@@ -11,11 +11,11 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; Stages 1–6 of 8 complete.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
+**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; all 8 stages complete, presented for closing sign-off.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
-Bedrock standing-approval budget consumed: **≈$0.00122 of $5.00**; Phase 6 sub-budget ≈$0.00085 of $1.00.
+Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-budget **$0.0134 of $1.00**.
 
 ---
 
@@ -29,7 +29,7 @@ Bedrock standing-approval budget consumed: **≈$0.00122 of $5.00**; Phase 6 sub
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
-| 6 | Evaluation harness | 🟡 Approved 2026-08-12 — Stages 1–6 of 8 complete |
+| 6 | Evaluation harness | 🟡 All 8 stages complete 2026-08-12 — presented for closing sign-off |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
@@ -1469,3 +1469,53 @@ Marco's ordering, followed exactly: independent set **first**, before `lexicon.p
   closed at 0.400 per Marco's instruction, not re-reported.
 - **Cost: $0.000852** for 22 real calls. Phase 6 sub-budget ≈$0.00085 of $1.00; standing cap ≈$0.00122 of
   $5.00.
+
+### 2026-08-12 — Stages 5–8 complete; Phase 6 content done, presented for closing sign-off
+
+**A correction first, because it reverses a conclusion reported earlier in this session.** The Stage 6
+report that the layered safety design was "vindicated" was **incomplete, and the conclusion it supported
+was wrong**. L2's recall was measured (19/19); its precision was not. Measured:
+
+| | recall | false-escalation |
+|---|---|---|
+| L1 | 0.269 | 0.029 |
+| L2 | 1.000 on L1's misses | **0.529** |
+| Union — what a caller experiences | 1.000 | **0.529** |
+
+L2 fires on *"I need to report an accident."*, *"the car's totalled"*, and *"she took a real beating,
+poor thing, I've had that car eleven years"* (about a car). Target is ≤ 0.10. **`D24`: the layered design
+delivers the recall guarantee it was built for at a false-escalation cost that makes the system as
+configured unusable as an IVR.** Both halves are real. The second was found only because Phase 1's
+anti-gaming metric was actually implemented and run rather than assumed satisfied — which is the
+strongest vindication of §4's design that this project has produced.
+
+- **Stage 5 — real-Titan retrieval fixture.** recall@5 **0.800** (GATE 0.90, fails), MRR **0.663**
+  (TARGET 0.75, misses). Third instrument bug caught first: two of ten gold labels named text existing
+  nowhere in the corpus, producing `rank None` — arithmetically identical to a real retrieval failure.
+  Would have published 0.700 and sent Phase 7 chasing a defect that did not exist.
+  `validate_gold_labels()` is now a gate in its own right.
+- **Stage 6 — Tier B.** Intent macro-F1 **0.623** (GATE 0.90). Out-of-scope detection **0.200**
+  (TARGET 0.85). 27/73 misclassified, ten of them benign turns read as `InjuryEscalation`. **`D25`:
+  these are one finding, not three** — the merged router+L2 call (`ADR-004`) is heavily
+  `InjuryEscalation`-biased, which buys the safety recall and simultaneously pays for it in macro-F1,
+  out-of-scope detection and false escalation. Whether merging the two jobs into one call was correct is
+  now a live Phase 7 question with data behind it.
+- **Generation passed.** Groundedness 9/9, relevance 9/9, correct-for-this-caller 9/9, judged by
+  `us.anthropic.claude-haiku-4-5` — different vendor from the model under test, per the approved
+  decision. All nine answers read by hand; the judge matched human reading on all nine. `CF5`'s
+  redundancy did not reproduce in three trials, consistent with the defect being probabilistic; not a
+  retirement.
+- **Stage 7 — baselines committed** (`evals/baselines/`), Tier B files date-stamped rather than
+  overwritten since each costs money and records one model's behaviour on one day.
+- **Stage 8 — regression gate built and demonstrated.** Per Marco's instruction the bad change is a
+  lexicon regression L2 still catches: removing `"unconscious"` and `"died"` (both look redundant next
+  to `"unresponsive"` and `"fatal"`). L1 recall 1.000 → 0.818, gate blocks, **and system-level recall is
+  unchanged because L2 catches both.** A gate watching only the union would have seen nothing. That is
+  the argument for gating each layer on the metric it owns.
+- **Marco's three carry-ins, all applied**: rule-shaped/vocabulary-shaped is now `RESULTS.md` §1, its own
+  top-level section; the human-authored-phrasings gap is in the README's new "Measured limitations"
+  section; right-scoped all-clear stays unfixed and named.
+- **Scorecard: three GATEs fail, two TARGETs miss.** Per `SUCCESS-METRICS.md` §1 that means the system is
+  not working — and it is the correct description at the end of a phase specified as pre-tuning.
+- **Cost $0.0134 of the $1.00 sub-budget**; standing cap ≈$0.0138 of $5.00. 259 tests green.
+- **Phase 6 is not signed off** — presented for Marco's closing sign-off, not self-marked closed.

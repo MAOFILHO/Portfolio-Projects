@@ -268,7 +268,34 @@ reported at their real values rather than adjusted to make the phase look comple
 
 ---
 
-## 9. Not measured by Phase 6
+## 9. The regression gate, demonstrated
+
+`SUCCESS-METRICS.md` §9: "an untested gate is not a gate." `scripts/demonstrate_regression_gate.py`
+patches the lexicon in memory (never on disk) and shows the gate blocking the result.
+
+The bad change is deliberately **subtle and plausible**: removing `"unconscious"` and `"died"` from the
+presence keywords, both of which look redundant next to `"unresponsive"` and `"fatal"`. Nothing crashes.
+It reads like tidying.
+
+```
+before      L1 recall, labelled set   1.000
+after       L1 recall, labelled set   0.818
+GATE FAIL   must be 1.000. Missed: inj-002 "She's unconscious in the passenger seat."
+REGRESSION  1.000 -> 0.818 (degraded by 0.182, tolerance 0.03)
+Would CI block this change?  YES
+```
+
+**And the system degrades gracefully.** Both phrasings L1 stops catching are ones L2 catches (measured,
+`l2_recall_20260812.json`). System-level escalation recall is unchanged; only L1's contribution
+collapses. A gate watching *only* the union would have seen nothing wrong.
+
+That is the argument for gating each layer on the metric it owns rather than on the system's output: the
+architecture is designed to hide exactly this kind of single-layer failure, and hiding it from a caller
+is the point — hiding it from CI is not.
+
+---
+
+## 10. Not measured by Phase 6
 
 Task success, containment, repair rate, turns-to-completion, context-handover completeness — these need
 the full conversation harness driving multi-turn dialogues, which Phase 6 did not build.

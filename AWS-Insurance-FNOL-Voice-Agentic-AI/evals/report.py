@@ -160,6 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         "will be opt-in rather than the default, so `make eval` can never spend money by accident.",
     )
     parser.add_argument("--json-out", type=Path, default=None)
+    parser.add_argument(
+        "--check-regression",
+        action="store_true",
+        help="Compare against the committed baseline and fail on any GATE breach or any TARGET "
+        "degrading by more than 3 points. This is what CI runs.",
+    )
     args = parser.parse_args(argv)
 
     conversations = load_golden_set()
@@ -174,6 +180,21 @@ def main(argv: list[str] | None = None) -> int:
 
     report = run_tier_a(conversations)
     print(render(report))
+
+    regressed = False
+    if args.check_regression:
+        from .regression import compare, load_baseline
+
+        regressions = compare(load_baseline(), to_dict(report))
+        print("\n-- Regression vs committed baseline " + "-" * 59)
+        if regressions:
+            regressed = True
+            for r in regressions:
+                before = "n/a" if r.baseline is None else f"{r.baseline:.3f}"
+                after = "GONE" if r.current is None else f"{r.current:.3f}"
+                print(f"  REGRESSION  {r.metric}: {before} -> {after} ({r.detail})")
+        else:
+            print("  No regression against the committed baseline.")
     if args.json_out:
         # Create the parent directory. Without this the write raises after the report has already been
         # printed to stdout, which reads as a successful run with a stack trace after it -- and a
@@ -181,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(to_dict(report), indent=2) + "\n")
         print(f"\nwrote {args.json_out}")
-    return 1 if gate_failures(report) else 0
+    return 1 if (gate_failures(report) or regressed) else 0
 
 
 if __name__ == "__main__":

@@ -170,3 +170,65 @@ def test_retrieval_gate_fails_at_the_current_real_number() -> None:
     """
     failures = gate_failures(run_tier_a())
     assert any("retrieval recall@5" in f for f in failures)
+
+
+# --- Regression gate -------------------------------------------------------------------------------
+
+
+def test_regression_gate_catches_a_degraded_metric() -> None:
+    from evals.regression import compare
+
+    baseline = {"l1_golden": {"recall": 1.0}}
+    current = {"l1_golden": {"recall": 0.80}}
+    regressions = compare(baseline, current)
+    assert len(regressions) == 1
+    assert regressions[0].baseline == 1.0 and regressions[0].current == 0.80
+
+
+def test_regression_gate_never_blocks_an_improvement() -> None:
+    from evals.regression import compare
+
+    assert compare({"l1_golden": {"recall": 0.80}}, {"l1_golden": {"recall": 1.0}}) == []
+
+
+def test_a_lower_false_escalation_rate_is_an_improvement_not_a_regression() -> None:
+    """The comparison direction is inverted for rates where smaller is better. Getting this backwards
+    would build a gate that rewards escalating more often, which is the exact behaviour
+    SUCCESS-METRICS.md §4's target exists to discourage."""
+    from evals.regression import compare
+
+    better = compare(
+        {"l1_golden": {"false_escalation_rate": 0.40}},
+        {"l1_golden": {"false_escalation_rate": 0.05}},
+    )
+    worse = compare(
+        {"l1_golden": {"false_escalation_rate": 0.05}},
+        {"l1_golden": {"false_escalation_rate": 0.40}},
+    )
+    assert better == []
+    assert len(worse) == 1
+
+
+def test_a_disappearing_metric_is_a_breach_not_a_pass() -> None:
+    """Deleting a failing metric is the cheapest way to turn a gate green."""
+    from evals.regression import compare
+
+    regressions = compare({"retrieval": {"recall_at_5": 0.80}}, {"retrieval": {}})
+    assert len(regressions) == 1
+    assert regressions[0].current is None
+
+
+def test_baseline_freshness_flags_a_prompt_change_with_no_baseline_update() -> None:
+    from evals.regression import baseline_is_stale
+
+    assert baseline_is_stale(["src/fnol_voice_agent/agents/lexicon.py"], False) is not None
+    assert baseline_is_stale(["src/fnol_voice_agent/agents/lexicon.py"], True) is None
+    assert baseline_is_stale(["README.md"], False) is None
+
+
+def test_the_committed_baseline_matches_the_current_run() -> None:
+    """If this fails, either the system changed without a baseline update or the baseline was committed
+    from a different state. Both mean the baseline no longer describes what it claims to."""
+    from evals.regression import compare, load_baseline
+
+    assert compare(load_baseline(), to_dict(run_tier_a())) == []

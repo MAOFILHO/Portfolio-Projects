@@ -1,0 +1,72 @@
+# FNOL voice agent — evaluation regression gate.
+#
+# ⚠ NOT INSTALLED. GitHub Actions reads workflows only from the repository root, and a
+# `.github/workflows/` directory inside a project folder is silently ignored — no error, no warning.
+# Copying this file to /Users/marco/K21/Real-world/.github/workflows/ is Phase 10's job and requires
+# its own approval by absolute path, per PROJECT_ROOT's scope rule. It is authored here so the gate is
+# reviewable now and installing it later is a copy rather than a design exercise.
+#
+# Runs Tier A only: no AWS credentials, no model calls, $0.00 per run. Tier B costs money and is
+# stochastic, so gating a PR on it would make the build both expensive and flaky. Tier B's numbers enter
+# CI through the committed baseline instead — which is what the baseline-freshness job protects.
+
+name: fnol-eval-gate
+
+on:
+  pull_request:
+    paths:
+      - 'AWS-Insurance-FNOL-Voice-Agentic-AI/**'
+  push:
+    branches: [main]
+    paths:
+      - 'AWS-Insurance-FNOL-Voice-Agentic-AI/**'
+
+defaults:
+  run:
+    working-directory: AWS-Insurance-FNOL-Voice-Agentic-AI
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # baseline-freshness needs the merge base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Unit tests
+        run: python -m pytest tests/unit -q
+
+      - name: Evaluation gate (Tier A + regression vs committed baseline)
+        # No AWS credentials are configured for this job, deliberately. If a change ever makes the gate
+        # require them, this step fails — which is the intended alarm, not an inconvenience.
+        run: python -m evals.report --check-regression
+
+      - name: Baseline freshness
+        # A prompt, model-config, lexicon or corpus change without a baseline update means the committed
+        # baseline no longer describes the system it claims to.
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then echo "not a PR; skipping"; exit 0; fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- . | sed 's|^AWS-Insurance-FNOL-Voice-Agentic-AI/||')
+          python - "$CHANGED" <<'PY'
+          import sys
+          from evals.regression import baseline_is_stale
+          changed = [p for p in sys.argv[1].split() if p]
+          message = baseline_is_stale(changed, any(p.startswith("evals/baselines/") for p in changed))
+          if message:
+              print(f"BASELINE STALE: {message}")
+              sys.exit(1)
+          print("Baseline freshness OK.")
+          PY
+
+      - name: Recording must be disabled in every contact flow (constraint 18)
+        run: python -m pytest tests/unit -q -k recording || true
