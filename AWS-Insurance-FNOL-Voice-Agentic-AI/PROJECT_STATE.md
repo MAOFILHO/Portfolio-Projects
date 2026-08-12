@@ -586,8 +586,9 @@ cannot be both."*
 | D24 | **The layered design delivers the recall guarantee it was built for, at a false-escalation cost that makes the system as configured unusable as an IVR.** Union recall 1.000, union false-escalation **0.529** against a TARGET of ≤ 0.10. Supersedes `D22` | L2's recall was measured; its precision was not. Measuring it reversed the conclusion. L2 fires on *"I need to report an accident."* and on three descriptions of **vehicle** damage. Both halves of this decision are real and neither may be reported without the other | 2026-08-12 |
 | D25 | **The three failing Tier B gates are one finding, not three.** Intent macro-F1 0.623, out-of-scope detection 0.200 and false-escalation 0.529 share a single root: the merged router+L2 call (`ADR-004`) emits `safety_flag` and `intent` as **one structured object**, so the recall bias deliberately placed on `safety_flag` (*"when in doubt, true"*) propagates into `intent` — a model producing a structured object makes its fields mutually consistent | 27/73 misclassifications are not scattered: ten are benign turns read as `InjuryEscalation`. One prompt is being asked to be simultaneously paranoid and discriminating. Whether merging the two jobs was correct is now the central Phase 7 question, with data behind it | 2026-08-12 |
 | D26 | **The incomplete "vindicated" conclusion was written *and endorsed* on recall alone. Neither reader caught it; `SUCCESS-METRICS.md` §4's false-escalation TARGET did.** Recorded as evidence the metric design earned its keep, not as a footnote to `D24` | Marco, explicitly: *"I endorsed the incomplete conclusion on recall alone — the miss was mine as well as yours, and the anti-gaming metric caught both of us."* Two readers with the precision metric available in their own specification both failed to notice it had never been computed. A metric that only ever confirms what its authors already believe has not been tested; this one contradicted both of them on the phase's headline claim in the same session the claim was made. **Generalisable form: a favourable result on one half of a trade-off pair is not a result** — recall without precision, containment without escalation appropriateness, latency without cost. The pairing must be built into the harness in advance, because at the moment a good number lands neither author nor reviewer goes looking for its counterweight | 2026-08-12 |
-| D27 | **The router runs at Nova's default sampling temperature.** `classify_turn` sets `maxTokens` only; AWS documents the Converse defaults as **temperature 0.7, topP 0.9**. The judge sets `temperature: 0.0` explicitly — the classifier, whose output is a decision, does not. Identical code over identical inputs: intent macro-F1 **0.623 → 0.474** between two runs | **Every Tier B number in `RESULTS.md` is a single draw from a high-variance process, not an estimate**, including the 0.529 that `D24` rests on. Three consequences: the published figures are not stable to three decimals; the regression gate's 3-point TARGET tolerance cannot function against ~15-point run noise; and **the ablation ladder cannot be run at n=1**, because rung deltas would be dominated by sampling. Same class of error as `D26` — a number published as a guarantee that was only ever an n=1 observation — and found the same way, by checking something that already looked settled. n=2 establishes the variance is large; it does not establish the distribution | 2026-08-12 |
+| D27 | **The router ran at Nova's default sampling temperature (0.7); it is now pinned to 0.0.** Measured before fixing, per Marco: 5 runs × 78 turns at each setting. At 0.7, **35/78 turns produce an unstable intent and 13/78 a different `safety_flag` verdict between runs**; at 0.0, **0/78**, with macro-F1 identical to four decimals across five runs. **The fix buys reproducibility, not accuracy** — 0.518 sits inside the 0.7 range of 0.488–0.551 — and it will likely make false escalation slightly *worse*, since `safety_flag` fires on 39.7% of turns at 0.0 vs 34.1% at 0.7 | A safety detector that answers inconsistently on 17% of turns cannot be gated on, and every Phase 6 Tier B figure is one draw from that distribution. **The causal story attached to this decision when it was first written has been withdrawn:** temperature does *not* explain the 0.623 → 0.474 gap. The measured 0.7 spread is 0.063 and Phase 6's 0.623 is ~4.3 sd outside it, so Stage 0's re-run is the normal draw and Phase 6's number is the anomaly. Out-of-scope recall agrees — 0.200 in Phase 6, **0.000 in all ten runs since**. Code is byte-identical and the corpus unchanged; model-side drift and a heavy tail both fit and neither is testable from the client. **Left unexplained rather than attributed** — see `D29` | 2026-08-12 |
 | D28 | **`make lint` and `make typecheck` never covered `evals/` or `scripts/`** — the entire eval harness, i.e. the code that produces every published number, was outside the checked scope while six phases reported "ruff/black/mypy strict clean". Fixed: `CHECKED = src tests evals scripts`, plus a PEP 561 `py.typed` marker without which mypy silently resolved `fnol_voice_agent` from an untyped editable install for anything outside `src/` | Found in Phase 7 Stage 0 while adding the first new eval code of the phase. The claim was never false about `src` and `tests`; it was **true about a scope nobody had stated**, which is the more durable kind of error. `tests/` remains outside mypy and the reason is now written in the Makefile rather than implied: langgraph's `add_node`/`invoke` overloads reject plain callables under strict mode, and silencing ~20 stub-friction errors would add noise without adding a check | 2026-08-12 |
+| D29 | **An unexplained ~0.10 macro-F1 gap between Phase 6's Tier B run and every run since is carried openly rather than closed.** Two hypotheses fit — a Bedrock serving-side change in the seven hours between runs, or a tail heavier than five samples reveal — and **neither is testable from the client** | Attributing it to temperature was tempting and wrong, and this phase has already withdrawn two confident causal stories (`D24`, `D27`); a third invented explanation would be worse than an open residual. **The decision-relevant consequence:** if model-side drift is real, a 3-point regression tolerance is unsafe across days, and the gate needs a re-baseline discipline rather than a threshold. At temperature 0.0 the configuration is reproducible (sd 0.000 over 390 calls), so any future difference is a real change rather than a draw — which is what makes the question answerable later | 2026-08-12 |
 
 ### Carried forward to future phases — named now so they aren't rediscovered later
 
@@ -1714,3 +1715,49 @@ Phase 12 still owns final assembly (clone→live-call walkthrough, model/data ca
 change makes Phase 12 a fill-in rather than a rewrite, and it retires the stale
 *"Phase 0 of 13 complete — this README is a stub"* header that had been wrong since Phase 1.
 
+
+### 2026-08-12 — Stage 0.5: temperature measured, then fixed; two more attributions withdrawn
+
+Marco's Stage 0 decisions, both as recommended: **quantify then fix** the router temperature; fold the
+generation path into `CF5`'s Stage 8 tuning pass rather than changing it now. He also required the
+dropped-`safety_flag` threshold to be **decided before the number was seen**, with his reading that a
+dropped field counts against union recall: *"a turn that raises is a turn where the safety detector
+produced no verdict… Silence is not a pass."*
+
+- **Pre-registration written and committed before the result was opened**
+  (`docs/phase7/PRE-REGISTRATION-dropped-safety-flag.md`, commit `4bf67c7`). It establishes a structural
+  fact that makes Marco's reading exceptionless: `agents/graph.py` reaches the router **only** when L1 did
+  not fire, so every dropped-field event is by construction a turn where L2 was the sole remaining
+  detector. It fixes the scoring asymmetry (miss for recall, excluded from precision), sets the safety
+  threshold at zero as *entailed by C1 rather than chosen*, bands the availability thresholds, states an
+  expectation of 0.3–1%, and **rejects in advance** the tempting remedy of making `safety_flag` optional
+  with a fail-safe default — that would convert a loud failure into a silent one.
+- **Result: 0 dropped events in 780 attempts.** The pre-registered expectation was **wrong**. Including
+  the aborted first run the total is ~1 event in ~1,000 attempts, below the ~0.26% this design resolves,
+  so it is reported as a count and carried to `NOT-FIXED.md` rather than fixed on one occurrence. The
+  C1 rule stands **unused rather than relaxed**, and remains in force for every later measurement.
+- **What the run found instead is worse than what it was looking for.** At temperature 0.7, **13 of 78
+  turns returned a different `safety_flag` verdict between runs** and 35 of 78 an unstable intent. At 0.0:
+  zero, with macro-F1 identical to four decimals across five runs. A detector that answers inconsistently
+  is a more common failure than one that fails to answer, and it is invisible to any single-run
+  measurement — including every measurement Phase 6 published. All 13 are must-not-escalate cases, so **no
+  recall instability was observed**; the defect is entirely on the precision side.
+- **`D27` rewritten. The fix buys reproducibility, not accuracy** — 0.518 sits inside the 0.7 range — and
+  it will likely make false escalation slightly *worse*, because `safety_flag` fires on 39.7% of turns at
+  0.0 versus 34.1% at 0.7. Recorded now so the ablation cannot bank it as a gain. `ROUTER_TEMPERATURE = 0.0`
+  is now the shipped default; `temperature=None` stays reachable so the pre-fix behaviour is reproducible.
+- **`D29` — the causal story attached to `D27` has been withdrawn.** Temperature does *not* explain the
+  0.623 → 0.474 gap: the measured 0.7 spread is 0.063, and Phase 6's 0.623 is ~4.3 sd outside it, making
+  Stage 0's re-run the normal draw and **Phase 6's number the anomaly**. Out-of-scope recall agrees —
+  0.200 in Phase 6, **0.000 in all ten runs since**. Code is byte-identical, the corpus unchanged, and
+  Phase 6's stored macro-F1 reconstructs exactly from its own confusion list, so it measured something
+  real. Model-side drift and a heavy tail both fit; neither is testable from the client. **Left
+  unexplained rather than attributed** — this phase has now withdrawn three confident causal stories
+  (`D24`, `D27`, and the temperature attribution), and a fourth invented one would be worse than an open
+  residual.
+- **Decision-relevant consequence carried forward:** if model-side drift is real, a 3-point regression
+  tolerance is unsafe across days and the gate needs a **re-baseline discipline** rather than a threshold.
+  At temperature 0.0 the configuration is reproducible, which is what makes the question answerable later.
+- **Cost: $0.0303 this run**, ≈$0.0346 of the $1.25 Phase 7 sub-budget, ≈$0.048 of the $5.00 standing cap.
+  259 tests green, lint/typecheck clean.
+- **Still no ablation rung built.** Stage 1 (`ADR-014`) is next.

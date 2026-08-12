@@ -115,3 +115,39 @@ theoretical guard. Its Consequences section came close — *"a failure in that c
 safety classification simultaneously"* — and accepted the risk on the grounds that L1 and L3 remain
 independent. §1 above is why that mitigation is weaker than it reads: on the turns where L2 matters, L1
 has already been silent.
+
+---
+
+## 7. Outcome — appended after opening the result
+
+**Measured: 0 dropped-field events in 780 attempts** (390 per temperature setting).
+
+**My §4 expectation was wrong.** I predicted 0.3–1% at temperature 0.7 on the strength of one observed
+event. Including the aborted first run, the total observation across this phase is **1 event in roughly
+1,000 attempts at temperature 0.7** — approximately 0.1%, which is **below the ~0.26% this design can
+resolve**.
+
+Applying §3.2 as written, without adjustment:
+
+| | Pre-registered rule | Applied |
+|---|---|---|
+| Rate | below ~0.26% | **Report as a count, not a rate** |
+| Obligation | carry to `NOT-FIXED.md` with the observed count | **Carried.** Not fixed on the strength of one occurrence |
+| C1 | any drop on a must-escalate turn is a failure | **Not triggered** — no drop occurred on any turn in this run |
+
+**The C1 question did not arise, and the rule stands unused rather than relaxed.** It remains in force for
+every subsequent measurement in this phase: if a dropped-field event lands on a must-escalate turn, it is
+a union-recall miss and the configuration fails C1. Writing the rule down before the number came back is
+what makes it usable later — it was not shaped by a result.
+
+**What the run found instead was worse than what it was looking for.** At temperature 0.7 the merged call
+returned a *different* `safety_flag` verdict between runs on **13 of 78 turns**. A detector that answers
+inconsistently is a more common failure than one that fails to answer, and it is invisible to any
+single-run measurement — including every measurement Phase 6 published. All 13 are must-not-escalate
+cases, so no recall instability was observed; the defect is entirely on the precision side. See
+`RESULTS.md` §3.3.
+
+**§5's ranking stands unchanged and unearned.** The single-purpose detector remains the preferred remedy,
+but this run supplied **no** evidence for it — the field-dropping rate it was meant to weigh in on is
+below measurement resolution. Recording that the argument did not gain support is the point of having
+ranked the remedies in advance.

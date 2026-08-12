@@ -10,7 +10,7 @@
 ![Terraform](https://img.shields.io/badge/Terraform-≥1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
 ![pytest](https://img.shields.io/badge/pytest-259_passing-0A9EDC?style=flat&logo=pytest&logoColor=white&labelColor=1a1a2e)
 ![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2?style=flat&labelColor=1a1a2e)
-![Budget](https://img.shields.io/badge/Spend_to_date-$0.017_of_$25/mo-2ea043?style=flat&labelColor=1a1a2e)
+![Budget](https://img.shields.io/badge/Spend_to_date-$0.048_of_$25/mo-2ea043?style=flat&labelColor=1a1a2e)
 
 > **No CI badge yet, deliberately.** The workflows are authored in
 > `.github/workflows-for-monorepo-root/` but not installed — GitHub Actions reads workflows only from the
@@ -53,7 +53,7 @@ explicit confirmation policy), and injury or fatality — hard escalation, no sl
   deliberately bad change and showing it blocked.
 - **Cost control as a design constraint** — telephony is ~92% of the marginal cost per conversation, so
   the call simulator is the primary cost control rather than a convenience. Total spend to date is
-  **$0.017**.
+  **$0.048**.
 - **A written record of what did not work** — including two conclusions this project published and then
   had to reverse, both caught by metrics written before the code they judged.
 
@@ -126,12 +126,20 @@ measured. Measuring it gave 0.529 and reversed the conclusion. Neither reader ca
 false-escalation target written in Phase 1, *before any detector existed*, did.
 
 **An n=1 number published as a guarantee.** The router was found to be running at Nova's **default
-sampling temperature (0.7)** — `maxTokens` was set, `temperature` was not, while the eval judge next to
-it set `0.0` explicitly. Re-running identical code over identical inputs moved intent macro-F1
-**0.623 → 0.474**, a swing roughly five times the regression gate's tolerance. Every Tier B figure above
-is a single draw from a distribution nobody had measured.
+sampling temperature (0.7)** — `maxTokens` was set, `temperature` was not, while the eval judge next to it
+set `0.0` explicitly. Measured over 5 runs × 78 turns at each setting: at 0.7, **35 of 78 turns produce an
+unstable intent and 13 produce a different `safety_flag` verdict between runs**; at 0.0, zero. Every Tier B
+figure in the table above is a single draw from a distribution nobody had measured.
 
-Both were found the same way: by checking something that already looked settled.
+**And then the fix's own story had to be walked back.** The obvious conclusion — *temperature explains the
+15-point macro-F1 swing* — is **not supported**. The measured spread at 0.7 is 0.063, and the Phase 6
+figure of 0.623 falls about 4.3 standard deviations outside it. Temperature causes the instability; it does
+not account for that particular gap, which remains **unexplained** and is documented as unexplained rather
+than attributed to the nearest available cause. Setting temperature to 0 buys **reproducibility, not
+accuracy** — 0.518 sits inside the 0.7 range — and it will likely make false escalation slightly *worse*,
+because the detector fires on 39.7% of turns at 0.0 versus 34.1% at 0.7.
+
+All three were found the same way: by checking something that already looked settled.
 
 ### Honest caveats
 
@@ -240,8 +248,10 @@ Stated plainly so nothing here reads as more finished than it is. **14 phases, g
 
 1. **Three GATEs fail** — intent macro-F1, retrieval recall@5, and (as a TARGET) false-escalation. Phase 7
    owns the first and third; retrieval is time-boxed and subordinate within it.
-2. **The router samples at temperature 0.7**, so every model-dependent number is a single draw. Being
-   quantified now, before the fix, so the effect is measured rather than asserted.
+2. **A macro-F1 gap of ~0.10 between Phase 6's run and every run since is unexplained.** The router's
+   sampling temperature has been measured and fixed (0.7 → 0.0, giving sd 0.000 over 390 calls), but it
+   accounts for a 0.063 spread, not the gap. Model-side drift and a heavy tail are both consistent with
+   the data and neither is testable from the client. Carried openly.
 3. **`evals/` and `scripts/` were outside `make lint` and `make typecheck`** for six phases while every
    phase reported "strict clean". The claim was true about a scope nobody had stated. Fixed.
 
@@ -306,7 +316,7 @@ These are enforced, not aspirational.
 
 | Item | Estimated | **Actual to date** |
 |---|---:|---:|
-| Bedrock inference, Phases 3–7 (cap: $5.00) | — | **$0.0168** |
+| Bedrock inference, Phases 3–7 (cap: $5.00) | — | **$0.0483** |
 | Provisioned resources | $0.00 | **$0.00** |
 | Canada DID (pre-existing, protected) | $0.90–$3.00/mo | not yet read from Cost Explorer |
 | **Monthly ceiling** | | **$25.00** |

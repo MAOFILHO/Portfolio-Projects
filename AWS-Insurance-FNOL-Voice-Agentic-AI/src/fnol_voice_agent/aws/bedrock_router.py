@@ -35,7 +35,7 @@ from typing import Any, Protocol, cast
 import boto3
 
 from ..config.flags import get_generation_model_id
-from ..config.settings import DEFAULT_REGION, ROUTER_MODEL_ID
+from ..config.settings import DEFAULT_REGION, ROUTER_MODEL_ID, ROUTER_TEMPERATURE
 from ..models.routing import TurnClassification
 from .mock_guard import assert_real_aws_allowed
 
@@ -145,7 +145,7 @@ def classify_turn(
     *,
     caller: BedrockConverseCaller | None = None,
     max_tokens: int = DEFAULT_CLASSIFY_MAX_TOKENS,
-    temperature: float | None = None,
+    temperature: float | None = ROUTER_TEMPERATURE,
 ) -> TurnClassification:
     """The merged router + L2 safety-classification call (`ADR-004`, `PROMPT-REGISTRY.md`
     §1.1). Runs every turn L1's deterministic pre-node didn't already terminate.
@@ -167,16 +167,11 @@ def classify_turn(
     a missing safety-critical field must fail loudly, not silently produce a partial or
     wrong classification (Q10).
 
-    `temperature=None` sends no `temperature` key at all, which means Bedrock applies the
-    model's default -- **0.7 for Nova, per AWS's Converse documentation.** That was the
-    shipped behaviour through Phase 6 and it is `D27`: the component whose output is a
-    decision was sampling, while the eval judge next door set `temperature: 0.0`
-    explicitly. Re-running identical inputs moved intent macro-F1 0.623 -> 0.474.
-
-    The parameter exists so Phase 7 Stage 0.5 can **measure** both settings before
-    changing the default, rather than fixing the defect and asserting the fix mattered.
-    `None` is deliberately still the default here: `scripts/measure_temperature_variance.py`
-    has to be able to reproduce the pre-fix behaviour after the shipped default moves.
+    **Temperature defaults to `ROUTER_TEMPERATURE` (0.0), not to Bedrock's default.**
+    Through Phase 6 no `temperature` key was sent and Nova applied 0.7 (`D27`), which
+    left a safety detector whose verdict flipped between runs on 13 of 78 turns.
+    Passing `temperature=None` explicitly restores the pre-fix behaviour and is kept
+    reachable so `scripts/measure_temperature_variance.py` can still reproduce it.
     """
     bedrock = caller or get_bedrock_runtime_client()
     inference_config: dict[str, Any] = {"maxTokens": max_tokens}

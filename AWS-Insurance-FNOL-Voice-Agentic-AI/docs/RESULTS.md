@@ -215,6 +215,13 @@ Re-running the identical code over the identical 78 turns on 2026-08-12 gives:
 Only 25 of the two runs' confusion sets are shared; 2 cases were wrong only in Phase 6 and 14 only in the
 re-run.
 
+> **Corrected again, 2026-08-12, by the measurement described in §3.3.** The attribution below — that
+> temperature explains this swing — **is not supported by the data.** Five runs at each setting put the
+> temperature-0.7 spread at **0.063**, not 0.149, and Phase 6's 0.623 falls *outside* that distribution
+> entirely. The instability is real and temperature causes most of it; the size of *this particular gap*
+> is not accounted for. §3.3 has the measurement and the unexplained residual. The three consequences
+> below still hold, and the first two hold more strongly.
+
 **A 0.149 swing on identical inputs is roughly five times the regression gate's 3-point TARGET
 tolerance.** Three consequences, stated plainly:
 
@@ -250,6 +257,76 @@ overlap, the same association holds at p = 0.007.
 **The two fields are very nearly the same decision wearing two names**, which is exactly what `D25`
 predicted and what `ADR-004`'s merged structured output would produce. `RESULTS.md` §0's false-escalation
 rate and this section's macro-F1 are two views of one behaviour.
+
+### 3.3 Temperature, measured — and the part of §3.1 it does not explain
+
+**5 runs × 78 turns at each of two settings; 780 real Nova Micro calls, $0.0303.**
+`scripts/measure_temperature_variance.py`, raw data in
+`evals/baselines/temperature_variance_20260812.json`.
+
+| | temperature 0.7 (shipped through Phase 6) | temperature 0.0 |
+|---|---|---|
+| Intent macro-F1 | 0.488 – 0.551, **sd 0.024** | **0.518 on all five runs, sd 0.000** |
+| Accuracy | 0.513 – 0.551 | 0.526 on all five |
+| Out-of-scope recall | **0.000** on all five | **0.000** on all five |
+| `safety_flag` fire rate | 0.341 | **0.397** |
+| Turns whose **intent** flipped between runs | **35 of 78** | **0 of 78** |
+| Turns whose **`safety_flag`** flipped between runs | **13 of 78** | **0 of 78** |
+| `safety_flag` dropped from the response | **0 of 390** | **0 of 390** |
+
+**Four results, three of which contradict something previously written here.**
+
+**1. The instability is real, and per-item it is much worse than the aggregate suggested.** At 0.7, 35 of
+78 turns did not produce a stable intent across five runs, and **13 produced a different `safety_flag`
+verdict between runs.** A safety detector that changes its answer on 17% of turns is not something a gate
+can be written against. At 0.0 that number is zero, across 390 calls.
+
+**2. Temperature 0 buys reproducibility, not accuracy.** 0.518 sits *inside* the 0.7 range. The fix does
+not move quality at all — it makes quality measurable. That distinction matters, because "we set
+temperature to 0 and macro-F1 became 0.518" would read as an improvement and is not one.
+
+**3. It probably makes the false-escalation problem slightly worse.** `safety_flag` fires on **39.7%** of
+first turns at 0.0 versus 34.1% at 0.7. Some of the escapes that flattered the Phase 6 precision number
+were sampling noise, not discrimination. Recorded now so the Phase 7 ablation cannot bank it as a gain.
+
+**4. The dropped-`safety_flag` prediction was wrong.** [The pre-registration]
+(phase7/PRE-REGISTRATION-dropped-safety-flag.md), written before this result was opened, expected
+0.3–1% at temperature 0.7. Measured: **0 in 780 attempts.** Including the aborted first run, the total
+observation is **1 event in roughly 1,000 attempts at 0.7** — below the ~0.26% this design can resolve.
+Per the pre-registered rule that is reported as a count, not a rate, and carried to `NOT-FIXED.md`
+rather than fixed on the strength of one occurrence. **No recall instability was observed at all:** all
+13 flag-unstable turns are must-not-escalate cases, so every instance of it was a precision event.
+
+### What temperature does not explain
+
+Phase 6 measured **0.623**. Five runs at the same setting give **0.488–0.551**. That is roughly **4.3
+standard deviations above** the distribution the shipped configuration actually produces. Stage 0's
+0.474 is about 1.7 sd *below* the mean and is unremarkable.
+
+So the honest reading is not "temperature swings macro-F1 by 15 points." It is: **Stage 0's re-run is a
+normal draw, and Phase 6's number is the anomaly.** Out-of-scope recall says the same thing more starkly —
+0.200 in Phase 6, and **0.000 in every one of the ten runs measured since**, at both temperatures.
+
+Nothing in this repository accounts for it. The code is byte-identical (`git diff` across the Tier B
+commit touches only the new `temperature` parameter, a no-op when unset), the corpus has not changed
+since before that run, and Phase 6's stored macro-F1 reconstructs exactly from its own stored confusion
+list — so it was a real measurement of something.
+
+Two hypotheses remain and **neither can be tested from here**:
+
+- **Model-side change.** `us.amazon.nova-micro-v1:0` is served through a cross-region inference profile;
+  the seven hours between runs is ample for a serving-side update, and the client cannot observe one.
+- **A heavier tail than five samples reveal.** Possible, but 4.3 sd is a long way out.
+
+**This is left unexplained rather than attributed.** It is the second time in this phase that a
+confident causal story had to be withdrawn after measurement, and inventing a third would be worse than
+saying the residual is open.
+
+The practical consequence is the one that matters: **at temperature 0.0 the configuration is
+reproducible (sd 0.000 over 390 calls), so a future difference is a real change rather than a draw.**
+If model-side drift is the explanation, then even a 3-point regression tolerance is unsafe across days
+and the gate needs a re-baseline discipline rather than a threshold — an open question this phase now
+carries rather than one it can close.
 
 **These are one finding, not three.** The router is a single Nova Micro call doing intent classification
 and L2 safety detection simultaneously (`ADR-004`'s merged call), and it is heavily biased toward
