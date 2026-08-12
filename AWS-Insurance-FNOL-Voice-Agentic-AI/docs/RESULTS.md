@@ -28,6 +28,12 @@ The union catches every injury in the test set **and escalates more than half of
 never be escalated**, including *"I need to report an accident."* and *"If another driver hits me and
 it's their fault, am I covered for the damage?"* — the two most ordinary openings this system has.
 
+> **The 0.529 is not an artefact of which cases were chosen.** The obvious objection to it is that its
+> 34-case denominator included **eight ordinary openings picked by hand**, so the rate depends on the
+> picking. It was re-measured on a **complete, rule-based** population — every negative in the independent
+> held-out set, 17 of them, nothing selected — and came back at **0.529 (9/17)** against the original's
+> **0.529 (18/34)**. Two denominators built on different principles, same rate. §2.1 has the run.
+
 `SUCCESS-METRICS.md` §4 sets false-escalation at **TARGET ≤ 0.10**, and says in as many words why: it
 "exists so safety cannot be bought by transferring everything." That is precisely what the current
 configuration does. The measured rate is **5× the target**.
@@ -95,7 +101,7 @@ The dividing line is whether a model sampled anything to produce the number.
 | **All L1 figures** — §2's recall/false-escalation before and after, §9's gate demonstration | `lexicon.py`, deterministic Python, no model call | **Exactly.** Same input, same output, every time |
 | **Retrieval recall@5 0.800, MRR 0.663** (§5) | Titan embeddings + cosine over a fixed index | **By construction** — the embeddings call has no sampling parameter. Argued, not re-measured |
 | **Bedrock spend $0.0138** (§7) | Token accounting from the responses | **Exact.** It is a bill, not an estimate |
-| **L2 recall 19/19, false-escalation 0.529, union 0.529** (§0, §2) | Nova Micro @ 0.7, **one sample per item** | **Single draw.** §2 already says so for recall; it is equally true of the 0.529 |
+| **L2 recall 19/19, false-escalation 0.529, union 0.529** (§0, §2) | Nova Micro @ 0.7, **one sample per item** | **Single draw** as published. Since re-measured: **union recall holds at 1.000 under k=5**, and 0.529 reproduces on a complete rule-based denominator (§2.1) |
 | **Intent macro-F1 0.623, out-of-scope 0.200** (§3) | Nova Micro @ 0.7, one run | **Single draw — and the outlier.** See §3.3: 0.623 sits ~4.3 sd above the distribution five later runs describe |
 | **Groundedness 1.000 (9/9), answer relevance 1.000 (9/9)** (§4) | Claude Haiku 4.5 judge @ 0.0, judging **Nova Lite output generated @ 0.7** | **Single draw.** The judge is deterministic; what it judged was not. Also 9 items — a ceiling on nine |
 | **Redundancy defect 0/9, "known intermittent"** (§4, `CF5`) | Same path | **Single draw, and already labelled as one.** "Intermittent" was the right word and this is its mechanism |
@@ -205,6 +211,45 @@ covered him with a sheet"*, *"she passed at the scene"*. It also fired on *"the 
 front end is completely destroyed"*, and *"she took a real beating, poor thing, I've had that car eleven
 years"* — three descriptions of **vehicle** damage.
 
+### 2.1 Union recall 1.000 survives repetition — measured, not assumed (Phase 7 Stage 2)
+
+Phase 6's `1.000 (26/26)` was **one sample per item**, and `C1` then made it a non-tradeable constraint.
+Marco's instruction at Phase 7 approval: *"if the merged baseline does not hold 1.000 under repetition,
+report it as a correction to Phase 6 in RESULTS.md, not as a footnote in Phase 7."*
+
+Measured on the **unchanged merged configuration**, before any candidate existed to be flattered by the
+comparison — 43 items × k=5 = **215 real Nova Micro calls, $0.0083**
+(`scripts/measure_union_baseline.py`, `evals/baselines/union_baseline_k5_20260812.json`):
+
+| | k=5, any-sample-miss |
+|---|---|
+| **Union (L1 ∪ L2) escalation recall** | **1.000 (26/26)** — holds |
+| Union false-escalation, **rule-based** denominator | **0.529 (9/17)** |
+| L1 alone | recall 0.269, false-escalation 0.059 |
+| Items whose L2 verdict varied across five samples | **0 of 43** |
+
+**No correction is owed.** Phase 6's figure was an n=1 observation that happens to be right, which is worth
+distinguishing from an n=1 observation that is trusted — the first is luck, the second is method. `C1` now
+attaches to a number measured under a stated protocol.
+
+**Two things worth naming rather than banking:**
+
+1. **The 0.529 was not an artefact of a hand-picked denominator.** §0's rate came from 34 cases, eight of
+   them ordinary openings selected by ID (`measure_l2_precision.py` says so in its own docstring). This
+   run's 17 negatives are *every* negative in the independent set — a complete, rule-based population — and
+   it lands on the same rate. Two different denominators, same answer: the false-escalation finding is
+   about the detector, not about which cases were chosen.
+2. **k=5 verified determinism; it did not estimate a spread.** At temperature 0.0 five identical answers
+   was the expected outcome, and 0 of 43 items varied. This was stated as the reading *before* the run
+   (see the script's docstring), because "all five agreed" is otherwise easy to present as a stability
+   result the design earned rather than one it was pinned into. The useful part is that §3.3's determinism
+   was measured on the 78 golden first turns and has now held on a population it was never tested on.
+
+**Ledger:** `evals/holdout_ledger.json` — **1 distinct configuration fingerprint** measured against the
+independent set. One is an honest verification. That count is published here precisely because it can only
+ever embarrass us: it is the number that would reveal tuning against the verification set, and it is
+computed from the file rather than asserted.
+
 ### What these numbers do not establish
 
 - **The held-out set was written by a language model and classified by a language model.** It is
@@ -212,7 +257,9 @@ years"* — three descriptions of **vehicle** damage.
   euphemism may be more model-legible than what a panicking human says at the roadside. **A real-world
   recall claim requires human-authored phrasings, and this project has none.** Also recorded in the
   README, because anyone weighing the safety claim needs it without opening this file.
-- **n = 26 positives, one sample each.** L2 is stochastic. 26/26 on one run is not a rate.
+- ~~**n = 26 positives, one sample each.** L2 is stochastic. 26/26 on one run is not a rate.~~
+  **Addressed 2026-08-12** — §2.1 re-measured it at k=5 and the 1.000 holds. The caveat was correct when
+  written and the measurement is what retires it, not the passage of time.
 - **No real caller has ever spoken to this system.**
 
 ### One false positive deliberately left unfixed
@@ -504,8 +551,8 @@ moves 0.063 between identical runs, and must not be read to three decimals or us
 | Metric | Kind | Threshold | Measured | | Draw |
 |---|---|---|---|---|---|
 | L1 escalation recall, labelled set | GATE | 1.00 | 1.000 | ✅ | deterministic |
-| Union escalation recall, independent set | — | — | 1.000 | ✅ | **1×** |
-| **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**, verdict robust |
+| Union escalation recall, independent set | — | — | 1.000 | ✅ | **k=5** (§2.1) |
+| **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**; reproduced at 0.529 on a complete rule-based denominator (§2.1) |
 | **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ | **1×**, and ~4.3 sd high (§3.3) |
 | **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ | **1×**; 0.000 in all ten runs since |
 | **Retrieval recall@5** | **GATE** | **≥ 0.90** | **0.800** | ❌ | deterministic |
@@ -546,6 +593,45 @@ collapses. A gate watching *only* the union would have seen nothing wrong.
 That is the argument for gating each layer on the metric it owns rather than on the system's output: the
 architecture is designed to hide exactly this kind of single-layer failure, and hiding it from a caller
 is the point — hiding it from CI is not.
+
+### 9.1 The gate then caught a real change, by its own author, for a reason nobody anticipated
+
+§9 above is a *demonstration* — a deliberately bad change, introduced to show the gate blocking it. On
+2026-08-12 the gate blocked a change nobody had staged as a test.
+
+Phase 7 Stage 2 implemented Marco's `C2` constraint by locking the independent held-out set behind a
+declared verification run. `make test` failed immediately, on a rule written in Phase 6 for an entirely
+different purpose:
+
+```
+Regression(metric='L1 recall, independent held-out set', baseline=0.269, current=None,
+  detail='metric disappeared from the current run — deleting a metric is the cheapest way
+          to make a gate green, so it counts as a breach rather than a pass')
+```
+
+**The gate was right and the change was wrong.** Locking the set had removed a metric from the Tier A
+baseline as a side effect. That L1 number is already spent for tuning purposes (`C2` says so explicitly),
+but it is deterministic, free to recompute, and a live check on the lexicon — so the change would have
+traded away a working regression check to satisfy a rule aimed at something else entirely. The guard was
+rebuilt to fire on the *pair* — reading the set **and** constructing a real Bedrock client, in either
+order — which protects the model-based measurement that actually needed protecting and leaves the
+deterministic read alone (`D33`).
+
+Three things make this worth more than §9's demonstration:
+
+1. **The author was the one caught.** Not a synthetic bad PR — a change made in good faith, by whoever was
+   holding the pen, in service of a constraint the project owner had set.
+2. **The rule fired for a reason it was not written for.** *"Deleting a metric is the cheapest way to make
+   a gate green"* was written against the case of someone quietly dropping an inconvenient number. It
+   caught an accidental deletion instead, which is the more common failure and the one nobody writes a rule
+   for.
+3. **It cost minutes.** The alternative was a silently narrower eval suite, which is exactly the class of
+   defect `D28` found six phases late.
+
+This is the second time in this project that a Phase 1 metric decision has caught something its authors
+missed — §0's false-escalation TARGET was the first. Both were written before there was anything to
+measure, and both were the sort of item that is easy to argue out of a spec on the grounds that it is
+obvious and nobody would do the thing it forbids.
 
 ---
 

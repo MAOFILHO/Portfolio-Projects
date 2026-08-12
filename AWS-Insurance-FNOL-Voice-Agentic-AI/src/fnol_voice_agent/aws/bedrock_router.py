@@ -35,7 +35,12 @@ from typing import Any, Protocol, cast
 import boto3
 
 from ..config.flags import get_generation_model_id
-from ..config.settings import DEFAULT_REGION, ROUTER_MODEL_ID, ROUTER_TEMPERATURE
+from ..config.settings import (
+    DEFAULT_REGION,
+    GENERATION_TEMPERATURE,
+    ROUTER_MODEL_ID,
+    ROUTER_TEMPERATURE,
+)
 from ..models.routing import TurnClassification
 from .mock_guard import assert_real_aws_allowed
 
@@ -146,6 +151,7 @@ def classify_turn(
     caller: BedrockConverseCaller | None = None,
     max_tokens: int = DEFAULT_CLASSIFY_MAX_TOKENS,
     temperature: float | None = ROUTER_TEMPERATURE,
+    tool_spec: dict[str, Any] | None = None,
 ) -> TurnClassification:
     """The merged router + L2 safety-classification call (`ADR-004`, `PROMPT-REGISTRY.md`
     §1.1). Runs every turn L1's deterministic pre-node didn't already terminate.
@@ -172,6 +178,12 @@ def classify_turn(
     left a safety detector whose verdict flipped between runs on 13 of 78 turns.
     Passing `temperature=None` explicitly restores the pre-fix behaviour and is kept
     reachable so `scripts/measure_temperature_variance.py` can still reproduce it.
+
+    **`tool_spec` is for the Phase 7 ablation ladder and nothing else.** Rung B is the merged
+    call with `InjuryEscalation` removed from the classifier's output enum, and the honest way
+    to measure that is to run the *shipped* function with one input changed -- not a script that
+    reimplements this call and might differ from it in some other way. Production passes nothing
+    and gets `build_classify_turn_tool_spec()`.
     """
     bedrock = caller or get_bedrock_runtime_client()
     inference_config: dict[str, Any] = {"maxTokens": max_tokens}
@@ -182,7 +194,7 @@ def classify_turn(
         messages=list(messages),
         system=[{"text": _CLASSIFY_TURN_SYSTEM_PROMPT}],
         toolConfig={
-            "tools": [build_classify_turn_tool_spec()],
+            "tools": [tool_spec or build_classify_turn_tool_spec()],
             "toolChoice": {"tool": {"name": CLASSIFY_TURN_TOOL_NAME}},
         },
         inferenceConfig=inference_config,
@@ -224,6 +236,7 @@ def generate_response(
     *,
     caller: BedrockConverseCaller | None = None,
     max_tokens: int = 200,
+    temperature: float | None = GENERATION_TEMPERATURE,
 ) -> str:
     """The feature-flagged generation call (`ADR-004` §2, `PROMPT-REGISTRY.md` §1.2/§3).
     Invoked for exactly two intents today -- `CoverageQuestion` election-fact synthesis
@@ -239,13 +252,23 @@ def generate_response(
     `system_prompt` is one of `PROMPT-REGISTRY.md` §3's three prompts, supplied by the
     caller (Stage 6's generation node) -- this function does not choose or hardcode one,
     since which prompt applies depends on which intent is generating.
+
+    **Temperature defaults to `GENERATION_TEMPERATURE` (0.0), not to Bedrock's default.**
+    Through Phase 7 Stage 1 this call sent no `temperature` and Nova Lite applied 0.7,
+    which made every Phase 6 generation figure a single draw and is the likely mechanism
+    behind `CF5`'s intermittent redundancy defect (`Q12`). As with `classify_turn`,
+    `temperature=None` restores the pre-fix behaviour and is kept reachable so the
+    difference can be measured rather than asserted.
     """
     bedrock = caller or get_bedrock_runtime_client()
+    inference_config: dict[str, Any] = {"maxTokens": max_tokens}
+    if temperature is not None:
+        inference_config["temperature"] = temperature
     response = bedrock.converse(
         modelId=get_generation_model_id(),
         messages=[{"role": "user", "content": [{"text": user_message}]}],
         system=[{"text": system_prompt}],
-        inferenceConfig={"maxTokens": max_tokens},
+        inferenceConfig=inference_config,
     )
     return _parse_generation_response(response)
 

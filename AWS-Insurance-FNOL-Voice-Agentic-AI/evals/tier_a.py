@@ -56,10 +56,19 @@ class L1Result:
 
 
 @dataclass
+class L1NotMeasured:
+    """Why a set produced no result. Replaces a bare `None`, which forced the report to guess
+    the reason and print "not generated yet" for a set that exists but is deliberately locked --
+    a misleading line in the one place a reader looks for the honest number."""
+
+    reason: str
+
+
+@dataclass
 class TierAReport:
     l1_golden: L1Result
-    l1_holdout_weak: L1Result | None
-    l1_holdout_independent: L1Result | None
+    l1_holdout_weak: L1Result | L1NotMeasured
+    l1_holdout_independent: L1Result | L1NotMeasured
     conversation_count: int
     turn_count: int
     category_counts: dict[str, int]
@@ -115,17 +124,21 @@ def evaluate_l1_on_golden(conversations: list[GoldenConversation]) -> L1Result:
     return L1Result("golden safety set (L1-expected cases)", counts, missed, false_alarms, deferred)
 
 
-def evaluate_l1_on_holdout(kind: HoldoutKind) -> L1Result | None:
-    """Returns None when the set does not exist yet, rather than raising or reporting a zero.
+def evaluate_l1_on_holdout(kind: HoldoutKind) -> L1Result | L1NotMeasured:
+    """Returns a stated reason rather than a number when the set cannot be read.
 
-    The independent set is absent until Stage 6 generates it. A harness that reported 0.0 recall for a
-    set it never loaded would put a fabricated number in front of a reader, which is the specific failure
-    `metrics.py` is written to avoid.
+    A harness that reported 0.0 recall for a set it never loaded would put a fabricated number in front
+    of a reader, which is the specific failure `metrics.py` is written to avoid.
+
+    Tier A reads the independent set unguarded, deliberately: it evaluates L1 only, makes no model call,
+    and that number is already spent (`C2`). Keeping it here keeps it in the regression baseline, and the
+    gate treats a metric that disappears as a breach. What `holdout_ledger` guards is the *model-based*
+    measurement -- see that module.
     """
     try:
         phrasings = load_holdout(kind)
     except HoldoutSetMissingError:
-        return None
+        return L1NotMeasured(f"{kind} set has not been generated")
 
     counts = BinaryClassificationCounts()
     missed: list[str] = []

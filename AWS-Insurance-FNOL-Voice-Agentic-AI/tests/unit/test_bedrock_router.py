@@ -72,6 +72,15 @@ def _user_turn(text: str) -> list[dict[str, object]]:
     return [{"role": "user", "content": [{"text": text}]}]
 
 
+def _valid_classification() -> dict[str, object]:
+    return {
+        "safety_flag": False,
+        "intent": "CoverageQuestion",
+        "intent_confidence": 0.9,
+        "coverage_question_type": "election_fact_optional",
+    }
+
+
 # --- classify_turn: happy path --------------------------------------------------------------
 
 
@@ -209,6 +218,49 @@ def test_generate_response_raises_bedrock_router_error_when_no_text_present() ->
 
     with pytest.raises(BedrockRouterError):
         generate_response(COVERAGE_QUESTION_SYSTEM_PROMPT, "a question", caller=caller)
+
+
+# --- D27 / Q12: both model calls are pinned to temperature 0.0 ------------------------------
+#
+# Neither pin had a test when it shipped. `ROUTER_TEMPERATURE` was set at Stage 0.5 and
+# `GENERATION_TEMPERATURE` at Stage 2, both verified only by the measurement scripts that
+# motivated them -- which is not the same as a test, because a script that stops being run
+# stops noticing. The pins exist to make measurement possible at all, so a silent revert to
+# Bedrock's default 0.7 would invalidate every number taken after it without failing anything.
+
+
+def test_classify_turn_sends_temperature_zero_by_default() -> None:
+    caller = FakeBedrockConverseClient(
+        responses=[converse_tool_use_response(CLASSIFY_TURN_TOOL_NAME, _valid_classification())]
+    )
+
+    classify_turn(_user_turn("some turn"), caller=caller)
+
+    assert caller.calls[0]["inferenceConfig"]["temperature"] == 0.0
+
+
+def test_generate_response_sends_temperature_zero_by_default() -> None:
+    caller = FakeBedrockConverseClient(responses=[converse_text_response("an answer")])
+
+    generate_response(COVERAGE_QUESTION_SYSTEM_PROMPT, "a question", caller=caller)
+
+    assert caller.calls[0]["inferenceConfig"]["temperature"] == 0.0
+
+
+def test_temperature_none_omits_the_key_entirely_on_both_calls() -> None:
+    """`temperature=None` must send no `temperature` key at all, not `temperature: None`
+    (which Bedrock would reject) and not a silently substituted 0.0. This is the escape
+    hatch the measurement scripts use to reproduce pre-fix behaviour, so it has to keep
+    working -- otherwise the 0.7-vs-0.0 comparison stops being reproducible."""
+    router_caller = FakeBedrockConverseClient(
+        responses=[converse_tool_use_response(CLASSIFY_TURN_TOOL_NAME, _valid_classification())]
+    )
+    classify_turn(_user_turn("some turn"), caller=router_caller, temperature=None)
+    assert "temperature" not in router_caller.calls[0]["inferenceConfig"]
+
+    gen_caller = FakeBedrockConverseClient(responses=[converse_text_response("an answer")])
+    generate_response(COVERAGE_QUESTION_SYSTEM_PROMPT, "q", caller=gen_caller, temperature=None)
+    assert "temperature" not in gen_caller.calls[0]["inferenceConfig"]
 
 
 # --- ADR-004 / Q10: structural separation, proven concretely, not just asserted -------------

@@ -86,7 +86,7 @@ Full analysis, with every caveat attached to the number it qualifies:
 | Metric | Kind | Threshold | **Measured** | | Draw |
 |---|---|---|---|---|---|
 | L1 escalation recall, labelled safety set | **GATE** | 1.00 | **1.000** | ✅ | deterministic |
-| Union (L1 ∪ L2) recall, independent held-out set | OBSERVED | — | **1.000** (26/26) | ✅ | **1×** |
+| Union (L1 ∪ L2) recall, independent held-out set | OBSERVED | — | **1.000** (26/26) | ✅ | **k=5** |
 | Groundedness / answer relevance | GATE / TARGET | ≥0.95 / ≥0.85 | **9/9 · 9/9** | ✅ | **1×**, n=9 |
 | **False-escalation rate** | TARGET | ≤ 0.10 | **0.529** | ❌ | **1×** |
 | **Intent classification macro-F1** | **GATE** | ≥ 0.90 | **0.623** | ❌ | **1×** |

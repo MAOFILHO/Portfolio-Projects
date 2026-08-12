@@ -1,0 +1,31 @@
+[
+  {
+    "started_utc": "2026-08-12T15:03:43+00:00",
+    "finished_utc": "2026-08-12T15:05:43+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 2 baseline: k-sampled union escalation recall of the CURRENT UNCHANGED merged configuration (ADR-004 \u00a71), establishing the number C1 attaches to before any candidate exists. Nothing is changed in response to this measurement.",
+    "fingerprint": "889cb0bc0c8a011b",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py"
+    ],
+    "samples_per_item": 5,
+    "git_commit": "59a4c5606523",
+    "metrics": {
+      "union_recall": 1.0,
+      "union_recall_counts": [
+        26,
+        26
+      ],
+      "union_false_escalation": 0.5294117647058824,
+      "l1_only_recall": 0.2692307692307692,
+      "unstable_item_count": 0,
+      "cost_usd": 0.008319324999999989
+    },
+    "notes": [
+      "Baseline of the unchanged merged configuration. No system change was made in response, which is what keeps this legitimate under BUILD-PLAN.md section 2.3."
+    ]
+  }
+]

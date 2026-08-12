@@ -1,0 +1,310 @@
+# injury_phrasings_tuning.yaml
+#
+# WHAT THIS IS
+# A hand-authored set of spoken-style utterances for tuning the injury/fatality
+# escalation detector (the lexicon matcher in agents/lexicon.py and the
+# model-based check in aws/bedrock_router.py) used by the FNOL voice agent.
+# Ground truth: should_escalate is true iff the utterance asserts that a human
+# being (not a vehicle, not an animal) may have been injured or killed.
+#
+# THIS IS A TUNING SET, NOT A HELD-OUT SET.
+# It exists to be looked at, iterated against, and used to adjust detector
+# thresholds, keyword lists, and prompts. It is EXPECTED to become
+# contaminated by that process -- that is its job. Unlike a held-out
+# verification set, a reported accuracy/recall/precision number computed
+# against this file is meaningless as evidence of real-world performance,
+# because the detector (or the person tuning it) will have seen these exact
+# phrasings before being scored against them.
+#
+# DO NOT use this file to report a verification number. Verification must run
+# against a set this file's author never saw and that was never tuned against.
+#
+# PROVENANCE
+# Generated 2026-08-12 by an isolated authoring agent that was deliberately
+# NOT shown, and did not read, any of the following, so that this set would
+# not simply reproduce (or be graded against) material it had already seen:
+#   - src/fnol_voice_agent/agents/lexicon.py            (detector under test)
+#   - src/fnol_voice_agent/aws/bedrock_router.py         (detector under test)
+#   - evals/holdout/injury_phrasings_independent.yaml    (held-out verification set)
+#   - evals/holdout/injury_phrasings_weak.yaml           (held-out verification set)
+#   - evals/golden/safety.yaml
+#   - docs/phase4/INTENT-TAXONOMY.md
+#   - evals/baselines/*.json
+#   - docs/RESULTS.md
+# All 80 utterances below were composed from the task brief alone (KABCO
+# scale, category list, Ontario/Canada flavor, spoken-not-written register).
+# No proper names, plates, VINs, phone numbers, or addresses are real.
+#
+# COMPOSITION
+# ~45 positive (K/A/B/C, should_escalate: true), ~35 negative (O,
+# should_escalate: false). See the accompanying report for the per-category
+# breakdown.
+
+phrasings:
+  # --- POSITIVES: euphemism/indirection about death (K) ---
+  - text: "the paramedic just kind of shook his head at me"
+    kabco: K
+    should_escalate: true
+  - text: "she's not- she didn't make it"
+    kabco: K
+    should_escalate: true
+  - text: "he passed away right there at the scene, i think"
+    kabco: K
+    should_escalate: true
+  - text: "we lost her, we lost her on the way to the hospital"
+    kabco: K
+    should_escalate: true
+  - text: "god rest his soul, he was gone before they even got him in the ambulance"
+    kabco: K
+    should_escalate: true
+  - text: "the officer told us to sit down and then he just went quiet, and that's when i knew"
+    kabco: K
+    should_escalate: true
+  - text: "i don't- i don't think he's with us anymore"
+    kabco: K
+    should_escalate: true
+  - text: "they pulled a sheet over him, that's- yeah"
+    kabco: K
+    should_escalate: true
+
+  # --- POSITIVES: responder-mediated injury (A/B) ---
+  - text: "they cut her out of the car with some kind of tool, took forever"
+    kabco: A
+    should_escalate: true
+  - text: "the paramedics strapped him to a board and put a collar on his neck before they'd even let him move"
+    kabco: A
+    should_escalate: true
+  - text: "a helicopter landed on the highway and took the other driver away"
+    kabco: A
+    should_escalate: true
+  - text: "they had him on a stretcher, loading him into the ambulance when i called you"
+    kabco: A
+    should_escalate: true
+  - text: "the fire crew had to pry the door off to get the guy out"
+    kabco: A
+    should_escalate: true
+  - text: "the cop told me not to let her move her neck until the ambulance got there"
+    kabco: B
+    should_escalate: true
+  - text: "two paramedics were working on him on the ground for a while before they moved him"
+    kabco: A
+    should_escalate: true
+  - text: "they put an oxygen mask on the kid and carried him to the ambulance"
+    kabco: B
+    should_escalate: true
+
+  # --- POSITIVES: bodily detail with no injury word (A/B) ---
+  - text: "there was a lot of blood coming from his head, i didn't know what to do"
+    kabco: A
+    should_escalate: true
+  - text: "his arm was bent in a way that arms don't bend"
+    kabco: A
+    should_escalate: true
+  - text: "she wasn't responding to me, her eyes were open but she wasn't saying anything"
+    kabco: A
+    should_escalate: true
+  - text: "he couldn't get his leg to move, he just kept trying"
+    kabco: B
+    should_escalate: true
+  - text: "i could hear her breathing but it sounded wrong, real shallow"
+    kabco: A
+    should_escalate: true
+  - text: "there was glass all over him and he wasn't moving at all"
+    kabco: A
+    should_escalate: true
+  - text: "his lip was split right open and he was spitting out blood"
+    kabco: B
+    should_escalate: true
+
+  # --- POSITIVES: injury inferred from consequence (B/C) ---
+  - text: "they took her to the hospital just to get checked out"
+    kabco: B
+    should_escalate: true
+  - text: "i went to the walk-in clinic after because my neck was bothering me"
+    kabco: C
+    should_escalate: true
+  - text: "they put me in one of those foam collars and sent me for an x-ray"
+    kabco: B
+    should_escalate: true
+  - text: "i've had to miss two shifts at work because of my back"
+    kabco: C
+    should_escalate: true
+  - text: "the doctor gave me something for the pain and told me to come back next week"
+    kabco: B
+    should_escalate: true
+  - text: "they kept him at the hospital overnight for observation"
+    kabco: B
+    should_escalate: true
+
+  # --- POSITIVES: delayed or minimising self-report (C) ---
+  - text: "my shoulder's been seizing up ever since, i didn't think much of it at the time"
+    kabco: C
+    should_escalate: true
+  - text: "i felt fine right after but now my neck's stiff as anything"
+    kabco: C
+    should_escalate: true
+  - text: "it's probably nothing but my ribs have been sore since yesterday"
+    kabco: C
+    should_escalate: true
+  - text: "i shook it off at the scene but the headaches started this morning"
+    kabco: C
+    should_escalate: true
+  - text: "i didn't say anything to the officer but my wrist's been hurting since"
+    kabco: C
+    should_escalate: true
+
+  # --- POSITIVES: emotional or fragmented speech (A/K) ---
+  - text: "i can't- i can't even, there was so much, i can't"
+    kabco: A
+    should_escalate: true
+  - text: "oh my god, oh my god, he's not moving, he's not moving"
+    kabco: A
+    should_escalate: true
+  - text: "i keep seeing it, i keep- sorry, can you just, is he okay, is he going to be okay"
+    kabco: A
+    should_escalate: true
+  - text: "no, no, no, please, somebody help him, please"
+    kabco: A
+    should_escalate: true
+  - text: "i tried to talk to her but she wouldn't- she just wouldn't answer me"
+    kabco: K
+    should_escalate: true
+
+  # --- POSITIVES: third parties and non-drivers (B/C) ---
+  - text: "my daughter was in her car seat and she won't stop crying, they think her arm might be broken"
+    kabco: B
+    should_escalate: true
+  - text: "the guy on the bike went right over the hood, he's got a nasty gash on his leg"
+    kabco: B
+    should_escalate: true
+  - text: "there was a pedestrian at the crosswalk, she's limping pretty bad now"
+    kabco: B
+    should_escalate: true
+  - text: "my passenger hit her head on the window, she's got a goose egg coming up already"
+    kabco: B
+    should_escalate: true
+  - text: "the other driver's kid was in the back seat and he's complaining his stomach hurts"
+    kabco: C
+    should_escalate: true
+  - text: "a guy walking his dog got clipped by the mirror, he's holding his shoulder funny"
+    kabco: C
+    should_escalate: true
+
+  # --- NEGATIVES: injury vocabulary applied to the vehicle, in human terms (O) ---
+  - text: "poor thing's had it, the whole front end is just destroyed"
+    kabco: O
+    should_escalate: false
+  - text: "she's bleeding fluid all over the driveway, i think the radiator's done"
+    kabco: O
+    should_escalate: false
+  - text: "he's mangled, front to back, i don't think he's coming back from this one"
+    kabco: O
+    should_escalate: false
+  - text: "my car's dying on me right here in the parking lot, the engine's making this awful noise"
+    kabco: O
+    should_escalate: false
+  - text: "she took a real beating, the whole side panel's crushed in"
+    kabco: O
+    should_escalate: false
+  - text: "the poor old girl finally gave up on me, twelve years and this is how it ends"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: negated injury (O) ---
+  - text: "nobody was hurt, thank god, just a lot of shaken nerves"
+    kabco: O
+    should_escalate: false
+  - text: "no injuries, everybody walked away fine"
+    kabco: O
+    should_escalate: false
+  - text: "the ambulance came out but nobody needed to go in, they just checked us over"
+    kabco: O
+    should_escalate: false
+  - text: "they checked us for a concussion and we were both clear"
+    kabco: O
+    should_escalate: false
+  - text: "the paramedics looked at my neck and said there was nothing wrong"
+    kabco: O
+    should_escalate: false
+  - text: "everyone's fine, a little rattled but fine"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: ordinary, unremarkable claim openings (O) ---
+  - text: "hi, i need to report an accident from this morning"
+    kabco: O
+    should_escalate: false
+  - text: "i want to file a claim on my auto policy"
+    kabco: O
+    should_escalate: false
+  - text: "someone backed into my car in a parking lot and i need to start a claim"
+    kabco: O
+    should_escalate: false
+  - text: "i'm calling to report a fender bender from yesterday"
+    kabco: O
+    should_escalate: false
+  - text: "i got rear-ended on my way to work and need to open a claim"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: coverage and policy questions (O) ---
+  - text: "what's my deductible if i need to make a claim"
+    kabco: O
+    should_escalate: false
+  - text: "does my policy cover a rental car while mine's in the shop"
+    kabco: O
+    should_escalate: false
+  - text: "will this raise my premiums if i go through insurance"
+    kabco: O
+    should_escalate: false
+  - text: "is towing included under my policy or do i have to pay out of pocket"
+    kabco: O
+    should_escalate: false
+  - text: "does dcpd cover the damage to my own vehicle here in ontario"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: past, unrelated, or hypothetical injury (O) ---
+  - text: "i threw my back out a few years ago but that's got nothing to do with this"
+    kabco: O
+    should_escalate: false
+  - text: "my friend asked me to call on her behalf, she wasn't in the car though"
+    kabco: O
+    should_escalate: false
+  - text: "if somebody had been hurt in this, would that change how the claim works"
+    kabco: O
+    should_escalate: false
+  - text: "i had a knee surgery last year, completely separate thing from this accident"
+    kabco: O
+    should_escalate: false
+  - text: "i'm asking for a coworker, he wants to know how the claims process works in general"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: emotional distress with no bodily injury (O) ---
+  - text: "i'm shaking so bad right now, i can barely hold the phone, but i'm okay"
+    kabco: O
+    should_escalate: false
+  - text: "i'm so angry, that guy just blew through the light, i'm fine but i'm furious"
+    kabco: O
+    should_escalate: false
+  - text: "i've been crying since it happened, it just scared the life out of me, i wasn't hurt"
+    kabco: O
+    should_escalate: false
+  - text: "i'm still a little rattled, my hands won't stop shaking, but nothing happened to me"
+    kabco: O
+    should_escalate: false
+
+  # --- NEGATIVES: animals (O) ---
+  - text: "a deer came out of nowhere and i clipped it, the poor thing didn't make it"
+    kabco: O
+    should_escalate: false
+  - text: "my dog was in the back seat, he's a bit spooked but he's fine"
+    kabco: O
+    should_escalate: false
+  - text: "i hit a raccoon on the side street, i feel terrible about it"
+    kabco: O
+    should_escalate: false
+  - text: "there was a dog that ran into the road and i swerved to miss him"
+    kabco: O
+    should_escalate: false

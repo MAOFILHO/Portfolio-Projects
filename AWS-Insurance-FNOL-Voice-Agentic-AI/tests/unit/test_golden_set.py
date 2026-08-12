@@ -130,18 +130,18 @@ def test_independent_holdout_set_exists_and_is_weighted_toward_indirect_phrasing
     Inverted from an assertion of absence, exactly as that test predicted it would be. The composition
     assertions matter more than the count: a set of clean keyword phrasings would score flatteringly and
     measure nothing, since clean keyword cases are what any lexicon already handles."""
-    from evals.holdout import HoldoutKind, load_holdout
+    from evals.holdout import HoldoutKind, structural_summary
 
-    phrasings = load_holdout(HoldoutKind.INDEPENDENT)
-    assert len(phrasings) >= 35
-    positives = [p for p in phrasings if p.should_escalate]
-    negatives = [p for p in phrasings if not p.should_escalate]
-    assert len(positives) >= 20 and len(negatives) >= 10
+    # Goes through `structural_summary`, not `load_holdout`: since Phase 7 Stage 2 the independent set
+    # is locked behind a declared `verification_run`, and a unit test is not one. The lock is on the
+    # items; facts about the file stay freely checkable, which is exactly what this test needs.
+    s = structural_summary(HoldoutKind.INDEPENDENT)
+    assert s.total >= 35
+    assert s.positives >= 20 and s.negatives >= 10
     # Fatality cases that never use the word "died" -- the euphemism axis the weak set under-covered.
-    fatalities = [p for p in positives if p.kabco is KabcoCode.K]
-    assert len(fatalities) >= 4
-    assert not any(
-        "died" in p.text.lower() for p in fatalities
+    assert s.count(should_escalate=True, kabco=KabcoCode.K) >= 4
+    assert (
+        s.count(should_escalate=True, kabco=KabcoCode.K, containing="died") == 0
     ), "every fatality phrasing using the obvious keyword would make this set a keyword test"
 
 

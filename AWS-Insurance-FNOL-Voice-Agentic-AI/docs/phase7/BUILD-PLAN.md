@@ -218,12 +218,58 @@ pre-commits the rest:
 **Requires `ADR-015`** to record which rung won and the rule applied to it, including the case where rung A
 wins and nothing changes.
 
-### Stage 2 — tuning set, ledger, guard, and the k-sampled merged baseline
+### Stage 2 — tuning set, ledger, guard, and the k-sampled merged baseline ✅ 2026-08-12
 
 §2.1–2.4. Ends with a k-sampled reading of the **current, unchanged** configuration against the independent
 set: one fingerprint, ledger entry #1, and the number C1 actually attaches to.
 
-### Stage 3 — build the split
+- **`Q12` decided here rather than deferred to Stage 8**, on Marco's instruction: the generation path is
+  pinned to temperature 0.0 as well. *"A spoken line in an FNOL system gains nothing from sampling and
+  loses reproducibility, defect stability, and same-question-same-answer consistency."* Neither pin had a
+  test when it shipped; both now do, including that `temperature=None` still omits the key so the pre-fix
+  behaviour stays reproducible.
+- **Tuning set: 80 items, 45 positives / 35 negatives**, authored by an isolated agent
+  (`evals/tuning/injury_phrasings_tuning.yaml`). Zero exact and zero near-duplicate (ratio ≥ 0.80) overlap
+  with either held-out set — **checked by a test, not by hand**, because the isolation protocol prevents
+  the author from checking it themselves.
+- **The guard is on the *pair*, not on the read**, and this is a design correction. Locking
+  `load_holdout(INDEPENDENT)` outright immediately failed the regression gate: it deleted
+  `L1 recall, independent held-out set` from the Tier A baseline, and the gate treats a disappeared metric
+  as a breach. **The gate was right.** That L1 number is already spent, deterministic and free, and
+  dropping it would have removed a live check. So the guard fires when a process reads the independent set
+  **and** constructs a real Bedrock client — in either order — following `ADR-013`'s mock-guard pattern,
+  with no environment-variable escape hatch for the same reason.
+- **Union baseline: recall 1.000 (26/26) at k=5, 0 of 43 items unstable, $0.0083.** C1 holds; **no
+  correction to Phase 6 is owed.** Union false-escalation reproduced at **0.529 on a complete rule-based
+  denominator**, versus the original 0.529 over a partly hand-picked one — the finding is about the
+  detector, not the case selection. `RESULTS.md` §2.1.
+
+### Stage 3 — build the split ✅ 2026-08-12
+
+`src/fnol_voice_agent/aws/split_router.py`. Two single-purpose calls, submitted to a two-worker pool,
+sharing one client built on the calling thread. What is worth recording beyond "it exists":
+
+- **`IntentClassification` has no safety field at all** — absent, not optional. An optional one would give
+  the classifier a safety opinion the combiner would have to weigh, which is the coupling the split exists
+  to remove, and would make `I3` a runtime rule instead of a structural one.
+- **`combine` takes two arguments and no third.** A keyword like `prefer_intent=` is how `I3` would
+  actually be lost — added for one plausible case, then reachable from everywhere — so a test asserts the
+  signature, not just the current behaviour.
+- **`assert_detector_dominates()` runs inside `build_graph()`**, next to L1's existing `assert_dominates`.
+  Four enumerated combinations, no I/O. It has its own canary: a test monkeypatches in the *plausible* bad
+  combiner — "suppress escalation when the classifier is very confident" — and requires the check to fail,
+  because a dominance check that can never fail is `ADR-013`'s moved-internal problem again.
+- **The rung-C injury instruction is a literal substring of the merged prompt, enforced by a test.** If
+  someone improves the merged prompt without updating the constant, the ladder silently stops being an
+  ablation and starts comparing two different instructions. That test is the ladder's validity, not style.
+- **One code path per leg.** `classify_turn_split` submits `detect_injury`/`classify_intent` themselves
+  rather than reaching past them to the shared call helper — found because an unused-import lint error
+  exposed that the concurrent path was a second implementation, free to drift from the one the tests
+  exercise.
+- **The concurrency exposed a test-harness bug worth naming.** The first version of the split tests used
+  the FIFO fake caller, so which leg received which canned response depended on which thread reached
+  `converse` first. All 22 passed — by luck. Replaced with a fake that dispatches on the forced tool name.
+  A test that usually lands the right way up is worse than no test.
 
 Two independent calls, invoked **concurrently**. Requirements:
 

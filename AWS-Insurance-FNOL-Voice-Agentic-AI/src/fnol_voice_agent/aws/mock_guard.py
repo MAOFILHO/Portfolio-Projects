@@ -47,13 +47,39 @@ therefore contains a **canary test** that asserts the flag actually flips inside
 `mock_aws()` block. If moto relocates the internal, that test fails loudly on the next upgrade
 instead of the guard quietly ceasing to guard. moto is pinned, and the canary is the thing that
 makes the pin's expiry visible.
+
+## Observers
+
+Real-client construction is the natural place for other layers to notice that this process has
+started making real calls, so `assert_real_aws_allowed` also notifies registered observers and
+keeps a count. Deliberately generic: this module knows nothing about who is listening or why,
+and `src/` gains no dependency on `evals/`. The eval harness's independent-set guard
+(`evals/holdout_ledger.py`) is the only current subscriber, and it both registers an observer
+*and* reads the count at import, so it cannot be defeated by construction order.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 class RealAWSCallInsideMockError(RuntimeError):
     """A real-AWS client was requested while moto was patching botocore (`ADR-013`)."""
+
+
+_observers: list[Callable[[str], None]] = []
+_real_client_count = 0
+
+
+def register_real_client_observer(observer: Callable[[str], None]) -> None:
+    """Called for every subsequent real-client construction, with the `what` label."""
+    _observers.append(observer)
+
+
+def real_client_count() -> int:
+    """How many real AWS clients this process has constructed. Lets a late-importing observer
+    discover that construction already happened, instead of only seeing what comes next."""
+    return _real_client_count
 
 
 def moto_is_patching() -> bool:
@@ -83,3 +109,8 @@ def assert_real_aws_allowed(what: str) -> None:
             f"Close the mock_aws() scope before making real calls -- see ADR-013 and "
             f"docs/TESTING-CONVENTIONS.md. There is deliberately no override."
         )
+    global _real_client_count
+    _real_client_count += 1
+    # After the moto check, so a refused construction is not counted as one that happened.
+    for observer in _observers:
+        observer(what)

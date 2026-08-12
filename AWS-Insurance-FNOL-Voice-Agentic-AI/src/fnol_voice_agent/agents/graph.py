@@ -31,6 +31,7 @@ from langgraph.graph import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
 from fnol_voice_agent.agents.graph_structure import assert_dominates
+from fnol_voice_agent.aws.split_router import assert_detector_dominates
 from fnol_voice_agent.agents.nodes.check_claim_status import check_claim_status
 from fnol_voice_agent.agents.nodes.coverage_question import make_coverage_question_node
 from fnol_voice_agent.agents.nodes.file_auto_claim import file_auto_claim
@@ -218,5 +219,12 @@ def build_graph(
     builder.add_edge("guardrails_output_check", END)
 
     assert_dominates(builder, "l1_safety_check")
+    # `ADR-014` I3, checked at construction time next to L1's graph-position check rather than only
+    # in CI. The two guard the same property at two layers: L1 must dominate the graph, and the
+    # split detector's verdict must not be overridable by the classifier that runs beside it. The
+    # realistic failure for both is a later edit -- a shortcut that skips escalation when some other
+    # signal looks confident -- and a check that only runs in a test does not stop that edit
+    # reaching a caller. Cheap: four enumerated combinations, no model call, no I/O.
+    assert_detector_dominates()
 
     return builder.compile(checkpointer=checkpointer)

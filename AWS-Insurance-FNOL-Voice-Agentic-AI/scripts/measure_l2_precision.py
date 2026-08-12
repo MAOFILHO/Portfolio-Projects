@@ -25,6 +25,13 @@ the committed baseline — but any *new* false-escalation population must be rul
 tuning set is built that way.
 
 `ADR-013`: no `mock_aws()` anywhere in this file. Every call here is a real, billed Bedrock call.
+
+**One change since it ran** (Phase 7 Stage 2): the body is wrapped in a declared `verification_run`.
+This script reads the independent set *and* constructs a real Bedrock client, which is exactly the pair
+`evals/holdout_ledger.py` now guards, so without the declaration it would raise. The measurement itself —
+population, order, call, scoring — is untouched, because changing it would break comparability with the
+committed `0.529`. The declaration costs a ledger entry, which is the intended cost of measuring against
+this set.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.aws.bedrock_router import BotoBedrockConverseClient, classify_turn
 
 from evals.holdout import HoldoutKind, load_holdout
+from evals.holdout_ledger import VerificationRun, verification_run
 from evals.metrics import BinaryClassificationCounts
 from evals.schema import load_golden_set
 from evals.tier_b import CostLog, LoggingCaller
@@ -74,6 +82,14 @@ def build_population() -> list[tuple[str, str]]:
 
 
 def main(out_path: Path) -> int:
+    with verification_run(
+        reason="re-run of the Phase 6 L2 false-escalation measurement (scripts/measure_l2_precision.py)",
+        samples_per_item=1,
+    ) as run:
+        return _measure(out_path, run)
+
+
+def _measure(out_path: Path, run: VerificationRun) -> int:
     log = CostLog()
     caller = LoggingCaller(BotoBedrockConverseClient(region="us-west-2"), log)
 
@@ -116,6 +132,13 @@ def main(out_path: Path) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"wrote {out_path}")
+    run.record(
+        cases=len(cases),
+        l1_fe=l1c.false_escalation_rate.value,
+        l2_fe=l2c.false_escalation_rate.value,
+        union_fe=unionc.false_escalation_rate.value,
+    )
+    run.note("Population includes 8 hand-picked ordinary openings -- see the module docstring.")
     return 0
 
 

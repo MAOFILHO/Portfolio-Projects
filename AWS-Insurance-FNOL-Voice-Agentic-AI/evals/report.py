@@ -14,15 +14,23 @@ from pathlib import Path
 from typing import Any
 
 from .schema import load_golden_set
-from .tier_a import L1Result, TierAReport, escalation_outcome_consistency, gate_failures, run_tier_a
+from .tier_a import (
+    L1NotMeasured,
+    L1Result,
+    TierAReport,
+    escalation_outcome_consistency,
+    gate_failures,
+    run_tier_a,
+)
 
 
-def _render_l1(result: L1Result | None, label: str, *, gated: bool) -> list[str]:
+def _render_l1(result: L1Result | L1NotMeasured, label: str, *, gated: bool) -> list[str]:
     kind = "GATE" if gated else "OBSERVED"
-    if result is None:
+    if isinstance(result, L1NotMeasured):
         return [
-            f"  [{kind}] {label}: not generated yet",
-            "           (absent by design until Stage 6 -- reported as absent, not as 0.0)",
+            f"  [{kind}] {label}: NOT MEASURED",
+            f"           {result.reason}",
+            "           (reported as absent, never as 0.0)",
         ]
     c = result.counts
     lines = [
@@ -107,9 +115,12 @@ def to_dict(report: TierAReport) -> dict[str, Any]:
     """Baseline-serialisable form. Counts are stored, not just rates, so a future comparison can
     re-derive any rate rather than being limited to the ones this version happened to compute."""
 
-    def l1(result: L1Result | None) -> dict[str, Any] | None:
-        if result is None:
-            return None
+    def l1(result: L1Result | L1NotMeasured) -> dict[str, Any] | None:
+        if isinstance(result, L1NotMeasured):
+            # The reason travels into the baseline JSON as well as the console report: a stored
+            # baseline whose independent-set entry is a bare `null` cannot be told apart from one
+            # taken before the set existed, and a future comparison would read it as a regression.
+            return {"not_measured": result.reason}
         c = result.counts
         return {
             "set_name": result.set_name,
