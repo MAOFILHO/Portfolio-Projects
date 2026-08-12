@@ -164,8 +164,10 @@ def main() -> int:
             )
 
     s = result["summary"]
-    print(f"=== Input guardrail v{args.guardrail_version} vs the {args.kind} set "
-          f"({s['positives']} positives) ===")
+    print(
+        f"=== Input guardrail v{args.guardrail_version} vs the {args.kind} set "
+        f"({s['positives']} positives) ==="
+    )
     print(f"  blocked, must-escalate       {s['blocked_must_escalate']}")
     print(f"  modified, must-escalate      {s['modified_must_escalate']}")
     print(
