@@ -55,6 +55,8 @@ from typing import Any, Protocol
 
 import boto3
 
+from fnol_voice_agent.aws.mock_guard import assert_real_aws_allowed
+
 TITAN_EMBED_V2_MODEL_ID = "amazon.titan-embed-text-v2:0"
 TITAN_EMBED_V2_DIMENSION = (
     1024  # default output size; 512/256 also supported. Verified live 2026-08-11:
@@ -181,6 +183,11 @@ class BedrockEmbedder:
     dimension = TITAN_EMBED_V2_DIMENSION
 
     def __init__(self, region: str) -> None:
+        # ADR-013: moto does not implement Bedrock, so a moto-intercepted embedding call would
+        # return a fabricated response rather than fail — refuse to build the client at all.
+        # DynamoVectorStore below is deliberately NOT guarded: moto implements DynamoDB
+        # faithfully, and running it against moto is this project's default, not an accident.
+        assert_real_aws_allowed("bedrock-runtime / BedrockEmbedder")
         # Region is a parameter, never a literal default baked into this class, per constraint 17 —
         # the caller (CLI) supplies it from an explicit flag/env var, not a hardcoded fallback here.
         self._client = boto3.client("bedrock-runtime", region_name=region)

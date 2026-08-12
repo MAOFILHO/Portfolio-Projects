@@ -37,6 +37,7 @@ import boto3
 from ..config.flags import get_generation_model_id
 from ..config.settings import DEFAULT_REGION, ROUTER_MODEL_ID
 from ..models.routing import TurnClassification
+from .mock_guard import assert_real_aws_allowed
 
 CLASSIFY_TURN_TOOL_NAME = "classify_turn"
 
@@ -89,6 +90,10 @@ class BotoBedrockConverseClient:
     """
 
     def __init__(self, region: str = DEFAULT_REGION) -> None:
+        # ADR-013: moto does not implement Bedrock -- it intercepts the request and returns a
+        # fabricated error that looks like it came from AWS. Constructing this client inside a
+        # mock_aws() scope is therefore never intentional, and the failure would be silent.
+        assert_real_aws_allowed("bedrock-runtime / BotoBedrockConverseClient")
         # Region is a parameter with a config-derived default, never a hardcoded literal
         # baked into this class -- same shape as knowledge/ingest.py's BedrockEmbedder.
         self._client = boto3.client("bedrock-runtime", region_name=region)
