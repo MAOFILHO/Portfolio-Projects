@@ -80,10 +80,22 @@ def test_rung_b_fails_loudly_if_the_schema_shape_moves(monkeypatch: Any) -> None
 # --- Rung D does not trade away recall ------------------------------------------------------------
 
 
-def test_the_revised_detector_prompt_keeps_the_recall_bias() -> None:
-    """`C1` is not tradeable: *"Any configuration that reduces it is rejected regardless of what it
-    buys."* A revised prompt that quietly drops "when in doubt, true" would buy false-escalation
-    improvements with recall, which is the one purchase this phase may not make."""
+def test_the_revised_detector_prompt_still_contains_the_recall_bias_wording() -> None:
+    """**A pre-filter, not a guard, and it is named that way because it once pretended otherwise.**
+
+    This assertion was originally called `..._keeps_the_recall_bias` and was written to stop rung D
+    buying precision with recall -- the one trade `C1` forbids. It passed. Rung D then measured union
+    recall **0.956**, missing two injuries, while posting the best false-escalation number on the
+    ladder.
+
+    The words stayed in the prompt and the behaviour did not follow them. Recall is not a property of
+    a prompt; it is a property of what a model does with one, and no string assertion can stand in
+    for the measurement. See `RESULTS.md` §3.5.
+
+    Kept because it is still worth catching an accidental deletion in review, for a tenth of a
+    second. Renamed so nobody reads its green tick as a recall guarantee again -- the guarantee is
+    `C1` evaluated against measured items, and nothing else.
+    """
     assert "when in doubt" in _REVISED_DETECTOR_PROMPT.lower()
 
 

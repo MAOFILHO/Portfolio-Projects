@@ -239,6 +239,61 @@ terminal state, and a decision procedure with no recorded outcome is worse than 
 | A larger model for the merged call | Rejected | Does not address a structural coupling, costs latency on the one path that runs every turn, and violates `I5` |
 | **Withdraw the merge's default status; decide by pre-committed rule over rungs A–D; bind I1–I5 regardless** | **Chosen** | Decides exactly what the evidence supports, and fixes in advance the parts most likely to be bent by a result — the reading rule, the tie-break, the refutation condition and the protocol |
 
+---
+
+## Amendment 1 — 2026-08-12: the sd-based tolerance is undefined under deterministic sampling
+
+**Appended, not edited.** `CLAUDE.md` holds ADRs immutable once accepted, and §4's original wording is left
+intact above so that what was pre-committed stays legible. Marco directed this be recorded as a dated
+amendment rather than a silent substitution.
+
+### The defect
+
+§4 requires false escalation to improve **"by ≥ 2 sd of that metric as measured at k=5"**, and macro-F1 not
+to degrade by the same standard. The stated reason was sound: `D31` had just found that a fixed 3-point
+tolerance against an unmeasured variance is unsafe, and expressing the bar in measured units was the
+correction.
+
+**Measured sd is 0.000.** `D27` pinned the router to temperature 0.0 before the ladder ran, and across
+7,900 calls no rung produced a single unstable item. Two standard deviations is zero, so the bar as written
+admits any nonzero difference — the opposite of what it was written to do.
+
+The rule was correct for a stochastic system and undefined for a deterministic one, and **the same phase
+made the system deterministic between writing the rule and applying it.**
+
+### The replacement rule
+
+> **Tolerance is expressed in measured standard deviations at k ≥ 5. Where the measured sd is not
+> resolvable — 0.000, or below one population unit — the tolerance is instead one **population unit**: the
+> change produced by a single item moving in the evaluation set.**
+>
+> A difference smaller than one population unit is not a difference, whatever the arithmetic says.
+
+For the Stage 4 populations that is:
+
+| Metric | Denominator | One population unit |
+|---|---|---|
+| Union false escalation | 35 tuning-set negatives | **0.029** |
+| Union escalation recall | 45 tuning-set positives | **0.022** |
+| Intent macro-F1 | 78 golden first turns | ~**0.013** (varies by class support) |
+
+**This changes no verdict in the Stage 4 ladder.** D fails `C1` by 2 positives (0.044, ~2 units); C's FE
+improvement is 0.157 (~5.4 units) and its macro-F1 degradation is 0.184 (~14 units); B's FE worsening is
+0.057 (2 units). Every difference that mattered is well clear of one unit in the direction already
+reported. Stated explicitly because a replacement rule chosen after seeing the numbers is only defensible
+if it can be shown not to have moved them.
+
+### What generalises
+
+**A tolerance must state the conditions it depends on, not only its threshold.** "≥ 2 sd" silently assumed
+sd > 0. Written originally as *"≥ 2 sd, or one population unit where sd is not resolvable"*, it would have
+survived its own phase without an amendment. `CF6` already requires Phase 10's CI gate to express
+tolerances in measured sd; **that requirement now carries this fallback with it**, or Phase 10 will
+rediscover the same hole the first time a deterministic metric is gated.
+
+`RESULTS.md` §3.7 records this alongside the second pre-registration failure in the same phase — a
+conditional instruction that assumed the ladder could only fail one way.
+
 ## Sources
 
 - `RESULTS.md` §3.2 (item-level merge evidence), §3.3 (temperature), §0.1 (which numbers are single draws)

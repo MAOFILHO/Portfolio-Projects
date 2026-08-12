@@ -454,6 +454,137 @@ the right design is now a live question for Phase 7**, with data behind it rathe
 
 ---
 
+## 3.5 A guard that checks the artifact rather than the outcome is not a guard
+
+**The third instance of one pattern in this project, and the first one caught by a metric rather than by
+a crash.** Recorded as its own finding at Marco's instruction, not as a footnote to a rejected rung.
+
+Phase 7's ablation ladder had a rung D: the split, with a revised detector prompt. `C1` makes union
+escalation recall non-tradeable, so before running it I wrote a test to stop rung D buying precision with
+recall:
+
+```python
+def test_the_revised_detector_prompt_keeps_the_recall_bias() -> None:
+    assert "when in doubt" in _REVISED_DETECTOR_PROMPT.lower()
+```
+
+**The test passed. The prompt kept the words. The behaviour did not.** Rung D measured union recall
+**0.956 (43/45)** — it missed two injuries — while posting the best false-escalation number of any rung
+by a wide margin (0.313 against rung A's 0.657). Exactly the trade `C1` forbids, made by a configuration
+whose guard against making it was green.
+
+The test checked that a string was present in a prompt. Recall is not a property of a prompt; it is a
+property of what a model does with one. **The assertion and the guarantee were about different things,
+and nothing in the test's name or its passing said so.**
+
+### The same shape, three times
+
+| Where | The guard | What it actually checked | What it missed |
+|---|---|---|---|
+| Phase 5 Stage 8 (`ADR-013`) | A verification script proving a real Bedrock call worked | That the call returned | That `mock_aws()` was still patching, so moto answered it with a fabricated 404 |
+| Phase 7 Stage 3 | 22 tests of the concurrent split | That the assertions held **on the run that happened** | That the fake dispatched responses FIFO, so which leg got which was a race the tests kept winning |
+| Phase 7 Stage 4 | `assert "when in doubt" in prompt` | That the words were in the prompt | That the model's recall survived the surrounding edits |
+
+Each guard was written deliberately, by someone thinking about the failure it was meant to prevent. Each
+checked something **adjacent to** the property it was defending — the artifact, not the outcome — and each
+passed while the property was absent.
+
+**The generalisable form: a guard that checks the artifact rather than the outcome is not a guard.** A
+prompt containing a rule is not a model following it. A test that ran is not a test that would fail. A call
+that returned is not a call that reached AWS. In all three cases the artifact is cheap to inspect and the
+outcome costs a measurement — which is exactly why the artifact gets checked instead, and exactly why
+that check should not be mistaken for the guarantee.
+
+The rule this project now works to: **when the property is behavioural, the guard has to be a measurement,
+and the artifact check is at most a fast pre-filter that is labelled as one.** Rung D's real guard was
+never the test — it was `C1` evaluated against 45 measured items, and that is what caught it.
+
+`ADR-013`'s canary test is the pattern applied correctly, and it is worth naming as the counter-example: it
+does not assert that moto's internal flag exists, it asserts the flag **actually flips** inside a real
+`mock_aws()` block. Same instinct, one level deeper, and it is the reason that guard still works.
+
+---
+
+## 3.6 The ablation ladder — and what it selected
+
+**7,900 real calls, $0.264, temperature 0.0, k=5, zero unstable items on any rung.** Escalation metrics on
+the Phase 7 tuning set (80 items, isolated author); intent metrics on the golden set's first turns. Rung A
+reproduced bit-identically across three separate processes over ~2 hours.
+
+| | union recall | union FE | eff. macro-F1 | raw macro-F1 | OOS | classifier drops |
+|---|---|---|---|---|---|---|
+| **A** merged, unchanged | 1.000 (45/45) | 0.657 (23/35) | 0.510 | 0.518 | 0.000 | 0 |
+| **B** + `InjuryEscalation` removed from the enum | 1.000 (45/45) | 0.714 (25/35) | **0.559** | 0.496 | **0.200** | 0 |
+| **C** + split into two concurrent calls | 1.000 (45/45) | **0.500 (17/34)** | 0.326 | 0.497 | 0.000 | 2.53% |
+| **D** + revised detector prompt | **0.956 (43/45)** | 0.314 (11/35) | 0.366 | 0.507 | 0.000 | 2.22% |
+
+**`ADR-014` §4's pre-committed rule selects nothing.** D is rejected on `C1`. C improves false escalation
+by 0.157 but its effective macro-F1 collapses. B improves intent and out-of-scope but makes false
+escalation *worse*. §4 requires a candidate to improve FE **and** not degrade macro-F1; no rung does both.
+**The merged incumbent stands by default rather than by merit, and nothing was promoted.**
+
+Two substantive findings survive the non-result:
+
+- **The merge and the label space are both real, and they pull in opposite directions.** C isolates the
+  merge: splitting buys 0.157 of false escalation with recall intact. B isolates the label space: it is the
+  only rung that detects out-of-scope at all. Neither hypothesis was wrong; the phase's error was expecting
+  one of them to win.
+- **Concurrency behaves as `ADR-014` §5 claimed.** p50 wall 473–495 ms against 861–906 ms sequential —
+  `max(t₁, t₂)`, not the sum. The pre-committed fallback (if concurrency measured near the sum, prefer B)
+  does not trigger.
+
+## 3.7 Two pre-registered rules were written against outcome shapes that did not occur
+
+Pre-registration has done real work in this phase — it is why the dropped-`safety_flag` threshold could not
+be shaped by its result, and why rung D's rejection was not negotiable. **It also failed twice here, in the
+same way, and the failure is worth more than the successes are.**
+
+### The tolerance was undefined under the conditions it ran in
+
+`ADR-014` §4 required false escalation to improve by **≥ 2 standard deviations**, measured at k=5. It was
+written deliberately: this project had just been burned by a fixed 3-point tolerance against an unmeasured
+variance (`D31`), and expressing the bar in measured sd looked like the disciplined correction.
+
+Then `D27` pinned the router to temperature 0.0 and **the measured sd became 0.000** — on every rung, over
+7,900 calls. Two standard deviations is zero. The bar admits any nonzero difference at all, which is the
+opposite of the strictness it was written for.
+
+The rule was correct for a stochastic system and undefined for a deterministic one, and the same phase
+made the system deterministic between writing the rule and applying it. Replaced by an explicit dated
+amendment to `ADR-014` rather than a silent substitution — **population resolution**: one negative on a
+35-item denominator is 2.9 FE points, one positive on 45 is 2.2 recall points, and a difference smaller
+than one item is not a difference.
+
+### The fallback assumed the ladder could only fail one way
+
+Marco's instruction before the re-run was explicit: *"If the re-run leaves C short of the 2 sd bar on a
+full denominator, ship B and report the split as refuted."*
+
+C was not short of the bar. It cleared the false-escalation criterion comfortably and failed a **different**
+criterion — macro-F1 — while B, the named fallback, failed the criterion C had passed. **The conditional
+described one failure mode and the ladder produced another**, so the fallback could not be applied as
+written. Marco's own reading, recorded verbatim: *"My instruction assumed the ladder could only fail one
+way and it failed a different way."*
+
+### What this says about the method
+
+**A pre-registered rule is only as good as the outcome space its author imagined.** Both rules here were
+written carefully, by people trying to constrain themselves in advance, and both were silently
+conditional on assumptions that stopped holding: one on variance being nonzero, the other on failure
+having a single shape.
+
+That is not an argument against pre-registration — the alternative is choosing the rule after seeing the
+number, which this project has watched go wrong. It is an argument for two specific habits:
+
+1. **State the conditions a rule depends on, not just the rule.** "≥ 2 sd" silently assumed sd > 0. Written
+   as "≥ 2 sd, or one population unit if sd is not resolvable", it would have survived its own phase.
+2. **When a pre-registered rule does not fire, say so and stop — do not pick the nearest reading.** The
+   temptation at that moment is to apply the rule's *spirit*, which is indistinguishable from choosing
+   after the fact. Both failures above were surfaced to the project owner as failures, and the decision
+   went back to him.
+
+---
+
 ## 4. Generation quality — passed, judged by a different vendor's model
 
 `us.anthropic.claude-haiku-4-5` as judge, deliberately a different vendor and family from Nova Lite,
