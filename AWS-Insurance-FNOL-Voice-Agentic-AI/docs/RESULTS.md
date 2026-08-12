@@ -32,6 +32,33 @@ guarantee it was built for, at a false-escalation cost that makes the system as 
 unusable as an IVR.** Both halves are real, and the second was found only because the anti-gaming metric
 Phase 1 insisted on was actually implemented and run.
 
+### Neither reader caught it. The metric did.
+
+This is not a story about one person's oversight, and reporting it that way would be the more flattering
+version rather than the true one. The incomplete conclusion was **written** on recall alone and
+**endorsed** on recall alone: the 19/19 result was presented as vindication, and the project owner read it,
+agreed, and said so in writing. Two readers, both working from a specification that already contained the
+precision metric, both failed to notice it had never been computed.
+
+What caught it was neither of them. It was `SUCCESS-METRICS.md` §4's false-escalation TARGET — written in
+Phase 1, before any detector existed, for the reason stated there at the time: it *"exists so safety cannot
+be bought by transferring everything."* Phase 6's standing rule was to implement **every** metric in that
+document rather than the ones that felt relevant while building. Implementing this one produced 0.529 and
+reversed the phase's headline claim.
+
+**That makes this the strongest evidence in the project that the metric design earned its keep, and it is
+worth more than any individual number in this report.** A metric that only ever confirms what its authors
+already believe has not been tested. This one contradicted both of them, on the phase's central claim, in
+the same session the claim was made — which is exactly the case anti-gaming metrics are written for, and
+exactly the case where skipping one is easiest, because the result already looks good and nobody is looking
+for a reason to doubt it.
+
+The generalisable form: **a favourable result on one half of a trade-off pair is not a result.** Recall
+without precision, containment without escalation appropriateness, latency without cost, coverage without
+false-positive rate. The pairing has to be built into the harness in advance, because at the moment a good
+number lands, neither the author nor the reviewer wants to go looking for its counterweight — and both
+will accept it if nothing forces the question.
+
 ---
 
 ## 1. Rule-shaped and vocabulary-shaped defects

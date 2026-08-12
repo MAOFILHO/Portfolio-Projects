@@ -10,8 +10,8 @@
 
 ---
 
-**Last updated:** 2026-08-11
-**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; all 8 stages complete, presented for closing sign-off.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
+**Last updated:** 2026-08-12
+**Current phase:** Phase 7 — Responsible AI and red-teaming — **exit criteria proposed 2026-08-12, awaiting `APPROVED: Phase 7`.** Phase 6 signed off 2026-08-12 (`APPROVED: Phase 6`); Phase 5 signed off 2026-08-12.
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -29,8 +29,8 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
-| 6 | Evaluation harness | 🟡 All 8 stages complete 2026-08-12 — presented for closing sign-off |
-| 7 | Responsible AI and red-teaming | ⬜ Not started |
+| 6 | Evaluation harness | ✅ **Signed off** 2026-08-12 — three GATEs failed at their real values, which is the specified outcome of a pre-tuning phase |
+| 7 | Responsible AI and red-teaming | 🟡 Exit criteria proposed 2026-08-12 — awaiting `APPROVED: Phase 7` |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
 | 10 | CI/CD and progressive delivery | ⬜ Not started |
@@ -487,6 +487,75 @@ not enough to specify the check. The same lesson as `CF3`/`D21`, arriving from a
 
 ---
 
+## Phase 7 exit criteria — proposed 2026-08-12, **awaiting `APPROVED: Phase 7`**
+
+Per the STOP CONDITIONS, no Phase 7 work starts until this table is approved. Stage order, the ablation
+design, the held-out-set discipline and the cost gate are detailed in **`docs/phase7/BUILD-PLAN.md`**; this
+table is the checklist that points there.
+
+**Marco's framing at Phase 6 sign-off, which sets this phase's shape:** *"the merged router+L2 question is
+the phase's central task, not one item among five. Treat unmerging as the leading hypothesis and test it…
+The current design asks one call to be simultaneously paranoid and discriminating, and the data says it
+cannot be both."*
+
+**Marco's two constraints, binding on every criterion below:**
+
+> **C1.** Union recall 1.000 on the independent set is not tradeable. Any configuration that reduces it is
+> rejected regardless of what it buys.
+>
+> **C2.** The independent set is spent for L1. Do not tune L2 against it either — that set is now the only
+> uncontaminated measure of the union, and Phase 7 will want it intact to verify the fix.
+
+**Three things that make this phase different from Phase 6**, stated before work begins:
+
+1. **Phase 6 was pre-tuning and a failing gate was a clean outcome. Phase 7 is the phase that was supposed
+   to close them.** A gate still failing at sign-off needs a stated reason in `NOT-FIXED.md`, not a silent
+   re-baseline.
+2. **This phase changes a Phase 1 metric.** C1 promotes held-out union recall from OBSERVED to a threshold,
+   which `SUCCESS-METRICS.md` §2 permits only *"once a real baseline exists"*. It does now — but the edit is
+   explicit, dated and argued, per Phase 6's standing rule.
+3. **This phase provisions one resource** — a Bedrock Guardrail, $0 at rest — and it is gated explicitly
+   rather than folded into `D3`'s standing inference approval, which does not cover it.
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | **`D25` tested at the item level before anything is built on it** — are the ten `InjuryEscalation` misclassifications the *same turns* as the false escalations, or two defects? $0.00, from data already paid for. **If `D25` is refuted, the plan changes before it is built** | ⬜ Stage 0 |
+| 2 | **`ADR-014` written before any code**, superseding `ADR-004`'s merge decision or explicitly declining to. Must record that ADR-004's alternatives table rejected separate **sequential** calls and never evaluated separate **parallel** ones, while `SUCCESS-METRICS.md` §2 had already specified L2 as a parallel single-purpose call | ⬜ Stage 1 |
+| 3 | **A Phase 7 tuning set, isolated-author, frozen before rung A runs.** Same protocol as the Phase 6 independent set, different seed vocabulary, ~80 items both polarities, including the false-positive shapes L2 actually failed on. **All tuning happens against this set and nothing else** | ⬜ Stage 2 |
+| 4 | **C2 made structural, not remembered** — `load_holdout(INDEPENDENT)` raises outside a declared verification run; an **append-only fingerprint ledger** records every independent-set run with a config hash; `RESULTS.md` publishes the count of distinct fingerprints ever measured against the set. One is a verification, six is de-facto tuning, and the reader can see which without taking anyone's word | ⬜ Stage 2 |
+| 5 | **The k-sample protocol for C1 settled and the *current merged* configuration measured under it first** — before any candidate exists to be flattered by the comparison. Recommended: k=5, an item missed on any sample counts as a miss. **If 1.000 does not survive repetition, that is reported as a correction to Phase 6's n=1 figure** and C1 attaches to the measured baseline | ⬜ Stage 2 |
+| 6 | **The ablation ladder A→D run on the tuning set**, each rung reported at its real value including rungs that move nothing. **The hypothesis reported as confirmed or refuted**, with the refutation condition fixed in advance (`BUILD-PLAN.md` §1) | ⬜ Stage 4 — mid-phase gate |
+| 7 | **The split built with concurrent invocation and a construction-time dominance invariant** for the detector, analogous to L1's existing `assert_dominates`: its output cannot be bypassed, overridden or vetoed by the classifier, the graph or Guardrails. **Q10 stays closed** — the detector remains unreachable from the generation-tier flag. Agent-internal latency **measured** on both configurations, not asserted | ⬜ Stage 3 |
+| 8 | **C1 verified against the independent set on one frozen configuration**, k-sampled. Any candidate below the baseline union recall is **rejected regardless of what it buys** | ⬜ Stage 8 |
+| 9 | **False-escalation, intent macro-F1 and out-of-scope re-measured** and reported at their real values. Intent macro-F1 scored on the system's **effective** intent, with the classifier's raw output reported alongside so the split cannot be credited by a scoring convention | ⬜ Stage 8 |
+| 10 | **Bedrock Guardrails as real IaC, input and output** — content filters, denied topics, PII entities, contextual grounding. Replaces the mock rule engine in every measurement. **The L1-before-input-guardrail ordering (`ADR-010`) verified by a test, not by reading the code** — that ordering survives a refactor only if something fails when it breaks | ⬜ Stage 5 |
+| 11 | **Prompt-injection defence demonstrated against real attacks** through both channels the threat model names: retrieved KB chunks (a poisoned chunk planted in our own corpus) and tool responses (the mock claims system returning adversarial content) | ⬜ Stage 6 |
+| 12 | **`make redteam` produces a real effectiveness report with counts**, covering escalation-policy jailbreak, PII exfiltration, guardrail bypass, and the Phase 1 **zero-occurrence GATEs** — fraud flag in caller-facing speech, silent partial write — which need actual attempts, not assertions. **The report states on its first page that it measures the attacks it contains** | ⬜ Stage 6 |
+| 13 | **Bias check, text-level, scoped honestly** — paired prompts varying name origin, register/dialect and disfluency; escalation rate, containment and answer quality compared across pairs. **Explicitly not an ASR or accent audit**; the README limitation stays as written | ⬜ Stage 7 |
+| 14 | **Redundancy check promoted TARGET → GATE**, as settled at Phase 6 approval, and **`CF5`'s tuning pass taken**. If the defect remains probabilistic after tuning, that is the reported outcome — three clean trials is not a retirement | ⬜ Stage 8 |
+| 15 | **`docs/phase7/NOT-FIXED.md`** — everything left unfixed, each with the reason and the phase that owns it. The roadmap asks this phase to *"document what I did not fix"*; **a short register would be a bad sign, not a good one** | ⬜ Stage 8 |
+| 16 | **Spend inside the proposed $1.25 sub-budget**, stop-and-report at $0.90, every run logged in `COSTS.md`. **The Bedrock Guardrail is the only provisioned resource**, $0 at rest, and `make destroy` removes it | ⬜ |
+| 17 | **Retrieval gate — time-boxed and subordinate.** recall@5 0.800 (GATE 0.90) and MRR 0.663 (TARGET 0.75) are a different subsystem; expanding Phase 7 to cover them would dilute the central task. Run last, only if Stages 0–8 land inside budget; otherwise it goes to `NOT-FIXED.md` with a named owner phase. **A failing gate does not get to drift unowned** | ⬜ Stage R (conditional) |
+| 18 | Marco's explicit approval to begin, per the STOP CONDITIONS | ⬜ |
+
+### The two decisions needing Marco's word at approval
+
+1. **The k-sample reading of C1** (criterion 5). `1.000` came from n=26 at **one sample per item**. A
+   zero-tolerance threshold needs to say what it means under repetition, or it becomes either a gate that
+   fails on noise or a number taken from the friendliest run. Recommended: **k=5, any-sample miss counts**,
+   and the merged baseline measured under the same protocol first. **This interprets C1 rather than
+   implementing it, which is why it is Marco's call and not mine.** The honest risk: the current
+   configuration may not achieve 1.000 under k-sampling, in which case Phase 6's figure was an n=1 artifact
+   and this phase owes that correction.
+2. **Local Terraform state for the guardrail** (criterion 10). Real IaC is required — *"zero portal clicks,
+   100% IaC"* — but the remote backend is Phase 8's `make bootstrap`. Recommended: apply
+   `infra/terraform/stacks/guardrails/` with **local state**, migrate in Phase 8. Residual risk at its real
+   size: a lost state file orphans a **$0/mo** resource that is findable by name. The alternative — measuring
+   Phase 7 against our own mock rule engine — is rejected because it would make the red-team effectiveness
+   report a measurement of the mock, which CLAUDE.md forbids outright.
+
+---
+
 ## Decisions to date
 
 | # | Decision | Rationale | Date |
@@ -512,6 +581,11 @@ not enough to specify the check. The same lesson as `CF3`/`D21`, arriving from a
 | D19 | **Barge-in reuses the identical per-turn pipeline as any other turn — no `is_barge_in` branch anywhere.** An inconclusive barge-in (no safety trigger detected, including one cut off mid-word) triggers exactly one open re-prompt, drawn from the *same* retry ladder as D18, not a separate uncounted loop | Marco's addition, given R4's zero prior art. Keeps the barge-in-ordering question answerable by pointing at `ADR-010`'s existing mechanism (L1 runs first on raw input, unconditionally) rather than inventing new ordering machinery for the interruption path specifically. Prevents the repair mechanism itself from becoming the unbounded-loop failure mode it exists to close | 2026-08-11 |
 | D20 | **"The majority of this system's spoken output is deterministic and cannot hallucinate" is a stated architectural claim**, not just an implementation detail of `D17` — checkable because `PROMPT-REGISTRY.md` §1 names the entire generative surface area (exactly two prompts). Elevated to Phase 12's README as a claim to make explicitly, not left buried under D17 | Marco: "D17 is more consequential than its placement suggests." A structural absence-of-hallucination-surface property is a stronger and more honest claim than a tuned mitigation, and belongs in the portfolio narrative once Phase 12 exists to state it | 2026-08-11 |
 | D21 | **Finding, not just a fix: a model invariant can pass every existing test while being wrong, if the case that breaks it was never exercised.** `Claim`'s settlement-figure rule (Stage 1) required exactly one of `estimated_settlement_cad`/`settlement_amount_cad` — correct against every record in the static corpus, because no `REPORTED` claim existed in it. The rule was never actually tested against a freshly-filed claim until Stage 6 built the first write path (`file_new_claim`) and produced one. **The lesson generalizes beyond this one field**: any invariant validated only against read-only fixture data is untested for whatever a write path would first produce — worth re-checking explicitly, not assumed clean, when Phase 8 provisions the real table and real writes start happening against it | Marco, explicitly asked this be recorded as a finding, not folded quietly into the Stage 6 fix-log entry — "an invariant that only fails once something writes is the kind of thing worth remembering when Phase 8 writes to a real table" | 2026-08-11 |
+| ~~D22~~ | ~~**L2 caught 19 of 19 phrasings L1 missed — the layered design is vindicated**~~ — **SUPERSEDED by D24** | The recall half is correct and still stands. The *conclusion* drawn from it was wrong because precision was never measured. Kept struck through rather than deleted, because the reasoning error is the more valuable artifact — see `D26` | 2026-08-12 |
+| D23 | **Precision generalises under repair; recall does not.** One clause-scoped negation rule cut L1 false-escalation 0.412 → 0.059 (−86%) on a set it had never seen, while moving recall only 0.192 → 0.269 | **Rule-shaped** defects are one defect wearing many faces — polarity is a property of language, so encoding it once transfers to phrasings nobody enumerated. **Vocabulary-shaped** defects are not: to catch *"they covered him with a sheet"* you must first have thought of it, and each entry buys exactly one phrasing. This is the measured argument for the L1/L2 split, and it is stronger than `ADR-010`'s defence-in-depth rationale: **each layer should own the defect class it can actually fix.** `RESULTS.md` §1 | 2026-08-12 |
+| D24 | **The layered design delivers the recall guarantee it was built for, at a false-escalation cost that makes the system as configured unusable as an IVR.** Union recall 1.000, union false-escalation **0.529** against a TARGET of ≤ 0.10. Supersedes `D22` | L2's recall was measured; its precision was not. Measuring it reversed the conclusion. L2 fires on *"I need to report an accident."* and on three descriptions of **vehicle** damage. Both halves of this decision are real and neither may be reported without the other | 2026-08-12 |
+| D25 | **The three failing Tier B gates are one finding, not three.** Intent macro-F1 0.623, out-of-scope detection 0.200 and false-escalation 0.529 share a single root: the merged router+L2 call (`ADR-004`) emits `safety_flag` and `intent` as **one structured object**, so the recall bias deliberately placed on `safety_flag` (*"when in doubt, true"*) propagates into `intent` — a model producing a structured object makes its fields mutually consistent | 27/73 misclassifications are not scattered: ten are benign turns read as `InjuryEscalation`. One prompt is being asked to be simultaneously paranoid and discriminating. Whether merging the two jobs was correct is now the central Phase 7 question, with data behind it | 2026-08-12 |
+| D26 | **The incomplete "vindicated" conclusion was written *and endorsed* on recall alone. Neither reader caught it; `SUCCESS-METRICS.md` §4's false-escalation TARGET did.** Recorded as evidence the metric design earned its keep, not as a footnote to `D24` | Marco, explicitly: *"I endorsed the incomplete conclusion on recall alone — the miss was mine as well as yours, and the anti-gaming metric caught both of us."* Two readers with the precision metric available in their own specification both failed to notice it had never been computed. A metric that only ever confirms what its authors already believe has not been tested; this one contradicted both of them on the phase's headline claim in the same session the claim was made. **Generalisable form: a favourable result on one half of a trade-off pair is not a result** — recall without precision, containment without escalation appropriateness, latency without cost. The pairing must be built into the harness in advance, because at the moment a good number lands neither author nor reviewer goes looking for its counterweight | 2026-08-12 |
 
 ### Carried forward to future phases — named now so they aren't rediscovered later
 
@@ -1519,3 +1593,55 @@ strongest vindication of §4's design that this project has produced.
   not working — and it is the correct description at the end of a phase specified as pre-tuning.
 - **Cost $0.0134 of the $1.00 sub-budget**; standing cap ≈$0.0138 of $5.00. 259 tests green.
 - **Phase 6 is not signed off** — presented for Marco's closing sign-off, not self-marked closed.
+
+### 2026-08-12 — `APPROVED: Phase 6`; the correction recorded as shared; Phase 7 scoped
+
+**`APPROVED: Phase 6`.** Marco's sign-off, and his framing of what the phase produced: *"This phase's most
+valuable output is the correction, not the metrics."*
+
+- **`D26` recorded at Marco's explicit instruction.** He asked that `PROJECT_STATE.md` record that **he
+  endorsed the incomplete "vindicated" conclusion on recall alone** — *"the miss was mine as well as yours,
+  and the anti-gaming metric caught both of us"* — and that this go into `RESULTS.md` as evidence the metric
+  design earned its keep, not as a footnote. Done: `RESULTS.md` §0 gains **"Neither reader caught it. The
+  metric did."** Two readers, both working from a specification that already contained the precision metric,
+  both failed to notice it had never been computed; `SUCCESS-METRICS.md` §4's false-escalation TARGET — written
+  in Phase 1, before any detector existed — is what contradicted them, on the phase's headline claim, in the
+  same session the claim was made. Generalisable form: **a favourable result on one half of a trade-off pair
+  is not a result**, and the pairing has to be built into the harness in advance, because at the moment a good
+  number lands neither author nor reviewer goes looking for its counterweight.
+- **`D22`–`D26` added to the decisions table.** They had been named in the session log and never indexed —
+  real drift in the canonical table, fixed. `D22` ("the layered design is vindicated") is struck through and
+  marked superseded by `D24` rather than deleted, on the same principle as `D14`: the reasoning error is the
+  more valuable artifact.
+- **Phase 7 scoped** — `docs/phase7/BUILD-PLAN.md` plus an 18-criterion exit table. Per Marco, the merged
+  router+L2 question is **the phase's central task, not one item among five**, with unmerging as the leading
+  hypothesis to be tested rather than assumed.
+- **A finding while scoping, worth more than the plan around it.** `ADR-004`'s alternatives table rejected
+  *"separate **sequential** calls for routing and L2"* on latency grounds — and never evaluated separate
+  **parallel** calls. `SUCCESS-METRICS.md` §2, written earlier, had already specified L2 as a *"single-purpose
+  binary 'injury indicated?' call"* whose latency *"sits inside the 1,800 ms budget as a parallel call, not a
+  serial one."* **The latency argument for merging only holds against an alternative the specification never
+  asked for.** Two concurrent Nova Micro calls cost `max(t₁, t₂)`, not `t₁ + t₂`. If that holds when measured,
+  the merge bought approximately nothing and cost three metrics. Hypothesis, not conclusion — Stage 3 measures
+  it.
+- **The plan is built to be able to fail.** A four-rung ablation ladder (merged baseline → label-space removal
+  → verbatim split → tuned split) separates three competing explanations that a single before/after would
+  confound, and the refutation condition is fixed in writing before any number exists. Stage 0 tests `D25`
+  itself at the item level, for $0.00, from data already paid for — a cheap falsification opportunity taken
+  before spending anything on the remedy.
+- **Marco's two constraints made structural rather than remembered.** C2 (do not tune against the independent
+  set) becomes: the set is unreachable outside a declared verification run, plus an **append-only fingerprint
+  ledger** whose distinct-fingerprint count is published in `RESULTS.md`. The real rule is not "use it once"
+  but **one configuration, any number of samples** — repeated sampling of a fixed config is legitimate and
+  necessary, since L2 is stochastic and 26/26 at n=1 is not a rate; what contaminates is changing the system
+  in response to what the set showed.
+- **Two decisions carried to Marco at approval**, both flagged rather than decided unilaterally: (1) the
+  **k-sample reading of C1**, which interprets his constraint rather than implementing it — and which may
+  reveal that Phase 6's 1.000 was an n=1 artifact, a correction this phase would then owe; (2) **local
+  Terraform state** for the Phase 7 Bedrock Guardrail, since real IaC is required but the remote backend is
+  Phase 8's.
+- **Cost gate: $1.25 sub-budget requested, stop-and-report at $0.90**, estimated actual ≈$0.30. **One
+  provisioned resource** — a Bedrock Guardrail, $0 at rest — **gated explicitly**, because `D3`'s standing
+  approval covers on-demand *inference* and neither a provisioned resource nor `ApplyGuardrail` text units are
+  literally that.
+- **No Phase 7 work has begun.** Awaiting `APPROVED: Phase 7`.
