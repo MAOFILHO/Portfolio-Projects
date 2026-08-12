@@ -11,10 +11,10 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 5 — Agent implementation — **in progress, Stages 1–5 of 8 complete, gated here at
-Marco's explicit instruction** (Stages 6–7 are the LangGraph wiring; hitting that with clean context rather
-than mid-compact was the point of the gate). Phase 4 signed off 2026-08-11.
-**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread, integrated, 145/145 tests green, ruff/black/mypy strict clean, zero real AWS calls across all five stages.
+**Current phase:** Phase 5 — Agent implementation — **in progress, Stages 1–7 of 8 complete, gated here at
+Stage 7 per Marco's instruction** (report before the optional Stage 8 real-Bedrock verification).
+Phase 4 signed off 2026-08-11.
+**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
 Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
@@ -30,7 +30,7 @@ Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
-| 5 | Agent implementation | 🟡 In progress — Stages 1–5/8 complete, gated 2026-08-11 |
+| 5 | Agent implementation | 🟡 In progress — Stages 1–7/8 complete, gated at Stage 7 2026-08-11 |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
@@ -251,12 +251,15 @@ Five deliverables, mapped to the eight roadmap components:
 
 ---
 
-## Phase 5 exit criteria — approved 2026-08-11 to begin; **Stages 1–5 complete, gated here per Marco's instruction**
+## Phase 5 exit criteria — approved 2026-08-11 to begin; **Stages 1–7 of 8 complete, gated at Stage 7 per Marco's instruction**
 
 `APPROVED: Phase 5` authorized the phase to begin, with Marco's requested build order/dependency sequence and
-per-component cost gate answered in `docs/phase5/BUILD-PLAN.md`. Marco also directed: subagents for Stages
-1–5, main thread as integrator for Stages 6–7, and **an explicit gate after Stage 5** — Stages 6–7 are the
-wiring, to be hit with clean context rather than mid-compact. That gate is where this table now stands.
+per-component cost gate answered in `docs/phase5/BUILD-PLAN.md`. Marco directed subagents for Stages 1–5, main
+thread as integrator for Stages 6–7, and an explicit gate after Stage 5 — lifted the same day with two
+requirements to hold through the wiring: L1's ordering (`ADR-010`) structurally enforced in the graph, not
+conventional; the retry ladder per-slot and shared with the barge-in re-prompt, one counter not two. Both are
+verified below, not merely asserted. Marco asked to report at Stage 7, before the optional Stage 8 real-call
+check — that is where this table now stands.
 
 | # | Criterion | Status |
 |---|---|---|
@@ -267,16 +270,64 @@ wiring, to be hit with clean context rather than mid-compact. That gate is where
 | 5 | Knowledge retrieval — the read half of `ADR-002`'s design | ✅ Stage 3 — real measured cosine-similarity latency: **0.036 ms** average over 1,000 calls against the real 21-chunk corpus, confirming (not just estimating) `ADR-002`'s "negligible against the 1,800 ms budget" claim |
 | 6 | Bedrock router implementing `PROMPT-REGISTRY.md` §1's two call paths; fake-LLM harness | ✅ Stage 4 — `ADR-004`/Q10's structural separation is now a passing assertion (flip the generation flag, prove the router's requested model ID never moves), not a docstring claim |
 | 7 | Guardrails + PII redaction module, built and tested against a mocked `ApplyGuardrail` client | ✅ Stage 5 — honest about limits: no name detection (assigned to Bedrock Guardrails, per `ADR-011`), date/time and location redaction catch plain phrasing only, creative phrasing (`ADR-011`'s own example) is a named, un-closed gap |
-| 8 | LangGraph nodes for all six intents plus the L1 safety pre-node | ⬜ Stage 6 — **not started, per the Stage 5 gate** |
-| 9 | Graph assembly, DynamoDB checkpointer, integration tests | ⬜ Stage 7 — **not started, per the Stage 5 gate** |
-| 10 | Cost gate named per component | ✅ `docs/phase5/BUILD-PLAN.md` §2 — and now empirically confirmed, not just planned: **zero real AWS calls across all five stages** |
-| 11 | Mock-by-default holds for every stage | ✅ Stages 1–5, confirmed by 145/145 passing tests with no real AWS credentials touched |
-| 12 | No billable resource created; $0.00 new spend | ✅ $0.00 across Stages 1–5. Stage 8's optional real-Bedrock verification remains unexercised, pending its own separate cost-gate approval when Stages 6–7 are done |
+| 8 | LangGraph nodes for all six intents plus the L1 safety pre-node | ✅ Stage 6 — `agents/lexicon.py` (new, real deterministic injury/fatality matcher), `agents/nodes/*.py` for L1, the merged router, both Guardrails steps, the shared repair node, and all six intents |
+| 9 | Graph assembly, DynamoDB checkpointer, integration tests covering all six intents, injury preemption, a barge-in scenario, and a retry-ceiling-exhaustion scenario | ✅ Stage 7 — see below for how Marco's two requirements were verified, not just implemented |
+| 10 | Cost gate named per component | ✅ `docs/phase5/BUILD-PLAN.md` §2 — empirically confirmed across all seven stages: **zero real AWS calls** |
+| 11 | Mock-by-default holds for every stage | ✅ Stages 1–7, confirmed by 199/199 passing tests with no real AWS credentials touched |
+| 12 | No billable resource created; $0.00 new spend | ✅ $0.00 across Stages 1–7. Stage 8's optional real-Bedrock verification remains unexercised, pending separate cost-gate approval |
 | 13 | Marco's explicit approval to begin | ✅ `APPROVED: Phase 5`, typed 2026-08-11 |
 
-**Phase 5 is not signed off — it is mid-phase, at the requested gate.** Stages 6–7 (LangGraph nodes, graph
-assembly, checkpointer) have not started. No exit criteria beyond this table exist for them yet; per the
-STOP CONDITIONS, that work does not begin without Marco's separate go-ahead.
+### Marco's two integration requirements, verified — not just implemented
+
+**1. L1 ordering (`ADR-010`) structurally enforced, not conventional.** `agents/graph_structure.py`'s
+`assert_dominates` is a real graph-theoretic dominance check (a restricted BFS from `START` that never expands
+past the named dominator) — `agents/graph.py`'s `build_graph()` calls it before `.compile()`, so a graph where
+any node is reachable from `START` without passing through `l1_safety_check` **cannot be built at all**, raising
+`GraphStructureError`. Proven to have real teeth, not just asserted: `tests/unit/test_graph_structure.py`
+includes two deliberately violating graphs (a direct `START` bypass and a conditional-edge bypass) and confirms
+both are caught, plus a dominance-holds case and a "reachable only via the dominator" case that must **not** be
+flagged. `tests/unit/test_graph_integration.py` exercises this against the real, compiled graph twice: an
+injury-preemption test asserts the Bedrock router was never called at all when L1 fires mid-`FileAutoClaim`
+flow, and a dedicated test confirms the real graph is buildable at all — which it can only be if
+`assert_dominates` already passed.
+
+**2. Retry ladder per-slot, shared with the barge-in re-prompt — one counter, not two.**
+`agents/retry_ladder.py`'s `record_attempt`/`ceiling_reached` are called from exactly one place,
+`agents/nodes/repair.py`'s `handle_no_match_or_barge_in` — the same function handles a normal no-match and an
+inconclusive barge-in, branching only on which line to speak, never on a separate counter. Verified at three
+levels: a unit test (`test_retry_ladder.py`) proving two calls on the same key with different "trigger" framing
+reach the ceiling together; a unit test (`test_graph_integration.py`'s
+`test_retry_ceiling_reached_via_mixed_normal_and_barge_in_triggers`) driving the **real compiled graph** through
+one normal no-match turn followed by one barge-in-inconclusive turn on the same slot, confirming the ceiling is
+reached on the second turn with `retry_counts["loss_location"] == 2`, not two independent counters at one each;
+and by construction, since no other module in `agents/` ever calls `record_attempt`.
+
+### Real findings from Stage 6/7, not asserted-clean
+
+- **A genuinely useful discovery about LangGraph's own semantics**, found writing `test_checkpointer.py`: a
+  per-invoke input dict is merged into checkpointed state via last-write-wins per channel, not accumulated — a
+  second `graph.invoke({"x": 0}, config)` on the same thread *resets* that channel rather than adding to it.
+  This is exactly why the integration tests' `_invoke_turn` helper reads `graph.get_state(config)` and
+  explicitly merges `filled_slots` before every call, rather than trusting a partial per-turn dict to accumulate
+  on its own.
+- **Two real gaps found and closed while wiring, not routed around**: `FileAutoClaim` had no write path at all
+  (Stage 2's original scope only named four read/update tools) — added `claims_server.file_new_claim`, reusing
+  `FileAutoClaimSlots` for validation, computing a Luhn-valid claim number seeded past the real corpus's
+  existing sequence, and refusing `injuries_present=True` defensively. This surfaced a second real gap: `Claim`'s
+  settlement-figure validator required exactly one of estimated/actual, but a freshly-`REPORTED` claim has
+  neither — fixed with a status-gated rule, confirmed against the real corpus (no `REPORTED` claims exist in it
+  yet, so the original rule's coverage was never actually tested against this case before now). Separately,
+  `escalation_server.py`'s `TriggeringLayer` type only listed L1/L2/L3 even though its own docstring already
+  said `DIALOGUE-POLICIES.md` §8 has capability/confidence routes too — extended, not worked around (mislabeling
+  a system-initiated escalation as L3 would corrupt the audit trail's meaning).
+- **The full `FileAutoClaim` flow works end-to-end on the real graph**: a scripted 10-turn conversation filling
+  all 11 slots (in `SLOT-DESIGN.md` §1.1's priority order), a summary confirmation, and a real
+  `file_new_claim` call producing a real Luhn-valid claim number — verified in
+  `test_file_auto_claim_full_multi_turn_happy_path`, not just smoke-tested by hand (though it was, first,
+  interactively, before being formalized as a test).
+
+**Phase 5 is not signed off.** Stage 8 (optional real-Bedrock verification of the actual shipped router code)
+has not run — Marco asked to report here first. No code has touched real AWS anywhere in Stages 1–7.
 
 ---
 
@@ -1001,3 +1052,76 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   per Marco's own gate instruction. No exit criteria for Stages 6–7 exist yet beyond `BUILD-PLAN.md`'s
   existing stage descriptions; per the STOP CONDITIONS, that work does not begin without Marco's separate
   go-ahead.
+
+### 2026-08-11 — Phase 5 Stages 6–7 built (main thread, not delegated); gate reached at Stage 7
+
+- **Marco lifted the Stage 5 gate**, with two requirements to hold through the wiring: (1) L1's ordering
+  (`ADR-010`) must be structurally enforced in the graph — impossible to construct a valid path where any
+  node precedes L1 — via an assertion or graph-shape test, not a comment; (2) the retry ladder is per-slot
+  and shared with the barge-in re-prompt (§7) — one counter, not two, since a second uncounted loop is
+  exactly the failure mode that design exists to prevent. Asked to report at Stage 7, before the optional
+  Stage 8 real-call check.
+- **Stage 6, built directly** (per Marco's earlier instruction that 6–7 stay on the main thread as
+  integrator): `agents/lexicon.py` — a real, new deterministic injury/fatality pattern matcher (nothing in
+  Stages 1–5 built this). Tiered: unambiguous keywords, third-party status phrases, body-part+distress
+  windows, and a contrastive self-negation pattern for `INTENT-TAXONOMY.md`'s hardest case ("I'm fine, but
+  the other driver might not be"). Every canonical and adversarial injury phrasing from `INTENT-TAXONOMY.md`
+  §1/§2.4 fires; ten benign `FileAutoClaim`-style utterances, including a deliberate near-miss ("my
+  headlight is broken"), do not. `agents/state.py`, `agents/retry_ladder.py` (the one shared counter),
+  `agents/nodes/*.py` for L1, the merged router, both Guardrails steps, the shared no-match/barge-in repair
+  node, and all six intents.
+- **Two real gaps found and closed while wiring, not routed around**: `FileAutoClaim` had no write path
+  (Stage 2's scope only named four read/update tools) — added `mcp/claims_server.file_new_claim`, reusing
+  `FileAutoClaimSlots` for validation, computing a Luhn-valid claim number seeded past the real corpus's
+  existing per-month sequence, looking up the real per-policy deductible and per-vehicle ACV rather than
+  guessing, and refusing `injuries_present=True` defensively. This surfaced a second gap: `Claim`'s
+  settlement-figure validator required exactly one of estimated/actual, but a freshly-`REPORTED` claim has
+  neither — fixed with a status-gated rule (no `REPORTED` claims existed in the corpus before now, so this
+  path had never actually been exercised). Also extended `escalation_server.py`'s `TriggeringLayer` type to
+  include "capability"/"confidence" (its own docstring already said `DIALOGUE-POLICIES.md` §8 needed them;
+  the type just hadn't been updated to match) — extended, not mislabeled as L3, since a system-initiated
+  escalation is a different fact from a caller explicitly asking for a human.
+- **Stage 7**: `agents/graph_structure.py` — a real graph-theoretic dominance check (restricted BFS from
+  `START` that never expands past the named dominator), proven to have teeth via two deliberately violating
+  test graphs (a direct `START` bypass and a conditional-edge bypass), both caught, plus a dominance-holds
+  case and a "only reachable via the dominator" case correctly *not* flagged. `agents/graph.py`'s
+  `build_graph()` calls `assert_dominates(builder, "l1_safety_check")` before `.compile()` — a violating
+  graph cannot be built at all, satisfying Marco's requirement (1) as a construction-time property, not a
+  runtime one. `aws/checkpointer.py` wraps `langgraph-checkpoint-aws`'s `DynamoDBSaver` (`ADR-005`), verified
+  against moto: two turns through a real compiled graph correctly accumulated and persisted state under one
+  `thread_id`. **One scope cut, named rather than silently dropped**: the thin per-node `structlog` trace
+  `BUILD-PLAN.md` originally described for Stage 7 was not built this pass — `AgentState.turn_log` exists
+  as a field, but no node writes to it yet. Time went to the two mandated verification properties and the
+  integration suite instead; flagged in `BUILD-PLAN.md` §3 for a follow-up or explicit fold into Phase 11.
+- **Requirement (2) verified at three levels, not just implemented**: a unit test proving two calls on the
+  same retry-ladder key reach the ceiling together regardless of "trigger label"; a real-graph integration
+  test (`test_retry_ceiling_reached_via_mixed_normal_and_barge_in_triggers`) driving one normal no-match turn
+  then one barge-in-inconclusive turn on the same slot, confirming `retry_counts["loss_location"] == 2` on
+  the second turn — the shared ladder, not two counters at one each; and by construction, since
+  `agents/retry_ladder.record_attempt` is called from exactly one place in the whole codebase
+  (`nodes/repair.py`'s `handle_no_match_or_barge_in`).
+- **A genuine discovery about LangGraph's own semantics**, found writing the checkpointer test: a per-invoke
+  input dict is merged into checkpointed state via last-write-wins per channel, not accumulated — passing
+  `{"x": 0}` a second time on the same thread resets that channel instead of adding to it. This is exactly
+  why the integration tests' `_invoke_turn` helper reads `graph.get_state(config)` and explicitly merges
+  `filled_slots` before every call.
+- **12 graph-integration tests**, all against the real compiled graph, the real ingested corpus, and real
+  synthetic policyholder/vehicle/claim records: all six intents' happy paths (including `FileAutoClaim`'s
+  full 10-turn-plus-confirmation flow, ending in a real `file_new_claim` call and a real Luhn-valid claim
+  number; `CoverageQuestion`'s all three question-type branches, including a check that the eligibility/
+  amount branch never calls the generation model at all), injury preemption from both L1 and L2, a
+  barge-in-inconclusive scenario, and the mixed-trigger retry-ceiling test above. Plus 2 checkpointer tests
+  and 4 dominance-check unit tests.
+- **Bumped `boto3` 1.35.99 → 1.43.69** (+ `boto3-stubs` to match) — a real dependency conflict, not
+  proactive: `langgraph-checkpoint-aws==1.2.1` requires `boto3>=1.42.90`. Added `langgraph==1.2.11` and
+  `langgraph-checkpoint-aws==1.2.1`.
+- **Verification**: `pytest tests/unit -q` → **199/199 passed**, `ruff check` clean, `black --check` clean,
+  `mypy src --strict` → **clean across 51 source files** (two narrow, documented exceptions: a
+  `[[tool.mypy.overrides]]` for `langgraph_checkpoint_aws`, which ships no type stubs — confirmed, not
+  assumed; and `# type: ignore[arg-type]` on `add_node` calls that pass a `NodeFn`-typed closure, a
+  LangGraph overload-resolution friction with no effect on runtime behaviour, verified by the integration
+  tests actually exercising those exact closures against the real compiled graph).
+- **Zero real AWS calls across all seven stages — $0.00 new spend**, confirmed empirically.
+- **Phase 5 exit-criteria table updated**: rows 1–13 now all checked; both of Marco's Stage 6/7 requirements
+  recorded with how each was verified, not just asserted. **Phase 5 is not signed off** — Stage 8's optional
+  real-Bedrock verification has not run, per Marco's instruction to report here first.
