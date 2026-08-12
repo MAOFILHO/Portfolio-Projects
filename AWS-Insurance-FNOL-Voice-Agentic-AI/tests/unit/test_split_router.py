@@ -107,6 +107,7 @@ def test_safety_flag_is_always_the_detector_verdict(
         InjuryVerdict(injury_indicated=injury),
         IntentClassification(intent=classifier_intent, intent_confidence=1.0),
     )
+    assert combined is not None
     assert combined.safety_flag is injury
 
 
@@ -115,6 +116,7 @@ def test_a_fired_detector_forces_the_effective_intent() -> None:
         InjuryVerdict(injury_indicated=True),
         IntentClassification(intent=Intent.CHECK_CLAIM_STATUS, intent_confidence=1.0),
     )
+    assert combined is not None
     assert combined.intent is Intent.INJURY_ESCALATION
 
 
@@ -127,6 +129,7 @@ def test_a_silent_detector_leaves_the_classifier_intent_alone() -> None:
             coverage_question_type=CoverageQuestionType.NOT_APPLICABLE,
         ),
     )
+    assert combined is not None
     assert combined.intent is Intent.RENTAL_TOWING_ENTITLEMENT
     assert combined.safety_flag is False
 
@@ -291,3 +294,88 @@ def test_rung_d_can_override_only_the_detector_prompt() -> None:
     systems = [call["system"][0]["text"] for call in caller.calls]
     assert "a revised detector prompt" in systems
     assert split_router._CLASSIFY_INTENT_SYSTEM_PROMPT in systems
+
+
+# --- The discard bug: a classifier failure must not throw away a resolved safety verdict ----------
+#
+# Found by the Stage 4 ladder rather than by review. `classify_turn_split` let a classifier
+# ValidationError propagate, which discarded a detector verdict that had already arrived on a
+# separate connection. The module docstring said graceful degradation was "available" -- it was
+# available and not taken, which is the kind of comment that reads as correct forever.
+
+
+class _ClassifierFailsCaller:
+    """Detector answers; classifier returns a tool call missing a required field."""
+
+    def __init__(self, *, injury: bool) -> None:
+        self._injury = injury
+        self.calls: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
+
+    def converse(self, **kwargs: Any) -> dict[str, Any]:
+        with self._lock:
+            self.calls.append(kwargs)
+        tool = kwargs["toolConfig"]["toolChoice"]["tool"]["name"]
+        if tool == DETECT_INJURY_TOOL_NAME:
+            return _detector(self._injury)
+        return converse_tool_use_response(
+            CLASSIFY_INTENT_TOOL_NAME, {"intent": "CoverageQuestion"}  # no intent_confidence
+        )
+
+
+def test_a_classifier_failure_does_not_discard_a_fired_detector_verdict() -> None:
+    """The turn is fully answerable: a fired detector determines the effective intent by `I3`, so
+    the classifier's answer was never going to be used anyway."""
+    result = classify_turn_split(_turn(), caller=_ClassifierFailsCaller(injury=True))
+
+    assert result.injury_indicated is True
+    assert result.classifier_error is not None
+    assert result.classification is not None
+    assert result.classification.safety_flag is True
+    assert result.classification.intent is Intent.INJURY_ESCALATION
+    assert result.raw_intent is None
+
+
+def test_a_classifier_failure_with_a_silent_detector_yields_no_classification() -> None:
+    """The one case with nothing to act on. `None` rather than an invented intent -- the caller's
+    retry ladder (`D18`) owns what happens next, and a fabricated intent would route a real caller.
+    """
+    result = classify_turn_split(_turn(), caller=_ClassifierFailsCaller(injury=False))
+
+    assert result.injury_indicated is False
+    assert result.classifier_error is not None
+    assert result.classification is None
+
+
+def test_a_detector_failure_still_raises() -> None:
+    """Asymmetric on purpose. A missing safety verdict is not something this function may paper
+    over -- there is no answer to degrade gracefully *to*."""
+
+    class DetectorFails:
+        def converse(self, **kwargs: Any) -> dict[str, Any]:
+            tool = kwargs["toolConfig"]["toolChoice"]["tool"]["name"]
+            if tool == DETECT_INJURY_TOOL_NAME:
+                return converse_tool_use_response(DETECT_INJURY_TOOL_NAME, {})
+            return _classifier()
+
+    with pytest.raises(ValidationError, match="injury_indicated"):
+        classify_turn_split(_turn(), caller=DetectorFails())
+
+
+def test_the_dominance_check_covers_the_absent_classifier_case() -> None:
+    """`assert_detector_dominates` gained the None case with this fix. A combiner that returned
+    nothing on a fired detector would be suppressing an escalation by omission."""
+
+    def discarding_combine(
+        verdict: InjuryVerdict, intent: IntentClassification | None
+    ) -> Any:  # pragma: no cover - exists to be rejected
+        if intent is None:
+            return None  # the bug, in miniature
+        return combine(verdict, intent)
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(split_router, "combine", discarding_combine)
+        with pytest.raises(DetectorVetoedError, match="already been resolved"):
+            assert_detector_dominates()

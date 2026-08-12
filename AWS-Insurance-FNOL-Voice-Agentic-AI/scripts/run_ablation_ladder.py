@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.aws.bedrock_router import (
     BotoBedrockConverseClient,
@@ -94,6 +96,13 @@ class RungResult:
     out_of_scope_recall: float | None = None
     intent_unstable: int = 0
     confusions: list[str] = field(default_factory=list)
+    # Pre-registered before the rate was known: docs/phase7/PRE-REGISTRATION-dropped-intent-confidence.md
+    dropped_field_calls: int = 0
+    dropped_field_rate: float = 0.0
+    # Kept separate from the classifier drops above: a missing safety verdict is a C1 question,
+    # not an availability statistic, and pooling them would hide the one that matters.
+    detector_dropped_calls: int = 0
+    c1_breaches: list[str] = field(default_factory=list)
     # Latency, split rungs only
     detector_ms_p50: float | None = None
     classifier_ms_p50: float | None = None
@@ -106,13 +115,52 @@ class RungResult:
         return payload
 
 
-# A rung is a function from (turn text, caller) to (safety_flag, raw_intent, latencies).
-Classifier = Callable[[str, LoggingCaller], tuple[bool, Intent, dict[str, float]]]
+@dataclass(frozen=True)
+class TurnOutcome:
+    """One sample of one turn.
+
+    `intent is None` means the classifier response was unusable -- a required field was absent, so
+    `ADR-004`'s schema mechanism raised rather than returning a partial classification. Scored per
+    `docs/phase7/PRE-REGISTRATION-dropped-intent-confidence.md`, committed before the rate was
+    measured: a miss for intent metrics, no effect on the escalation metrics (the detector is a
+    separate call in the split rungs and answers independently).
+
+    `detector_dropped` is separate from `intent is None` because the two are governed by different
+    pre-registered documents and score differently. A missing safety verdict is `C1` territory and
+    follows PRE-REGISTRATION-dropped-safety-flag.md section 2: a **union-recall miss** on a turn that
+    must escalate, and **excluded from the false-escalation denominator** on a turn that must not.
+    `safety_flag` is `False` on such an outcome only as a placeholder -- nothing reads it, because
+    every scoring path checks `detector_dropped` first.
+    """
+
+    safety_flag: bool
+    intent: Intent | None
+    latencies: dict[str, float]
+    error: str | None = None
+    detector_dropped: bool = False
 
 
-def _rung_a(text: str, caller: LoggingCaller) -> tuple[bool, Intent, dict[str, float]]:
-    result = classify_turn([{"role": "user", "content": [{"text": text}]}], caller=caller)
-    return bool(result.safety_flag), result.intent, {}
+# A rung is a function from (turn text, caller) to one outcome.
+Classifier = Callable[[str, LoggingCaller], TurnOutcome]
+
+
+def _merged_rung(tool_spec: dict[str, Any] | None) -> Classifier:
+    def run(text: str, caller: LoggingCaller) -> TurnOutcome:
+        try:
+            result = classify_turn(
+                [{"role": "user", "content": [{"text": text}]}],
+                caller=caller,
+                tool_spec=tool_spec,
+            )
+        except ValidationError as exc:
+            # A merged-call validation failure could be a missing `safety_flag`, which IS C1
+            # territory -- so the field name is recorded rather than flattened into "a drop".
+            return TurnOutcome(
+                safety_flag=False, intent=None, latencies={}, error=_missing_fields(exc)
+            )
+        return TurnOutcome(bool(result.safety_flag), result.intent, {})
+
+    return run
 
 
 def _build_no_injury_tool_spec() -> dict[str, Any]:
@@ -144,23 +192,36 @@ def _build_no_injury_tool_spec() -> dict[str, Any]:
     return spec
 
 
-def _rung_b(text: str, caller: LoggingCaller) -> tuple[bool, Intent, dict[str, float]]:
-    result = classify_turn(
-        [{"role": "user", "content": [{"text": text}]}],
-        caller=caller,
-        tool_spec=_build_no_injury_tool_spec(),
+def _missing_fields(exc: ValidationError) -> str:
+    return "missing:" + ",".join(
+        sorted(str(e["loc"][0]) for e in exc.errors() if e["type"] == "missing")
     )
-    return bool(result.safety_flag), result.intent, {}
 
 
 def _split_rung(detector_prompt: str | None) -> Classifier:
-    def run(text: str, caller: LoggingCaller) -> tuple[bool, Intent, dict[str, float]]:
-        result = classify_turn_split(
-            [{"role": "user", "content": [{"text": text}]}],
-            caller=caller,
-            detector_prompt=detector_prompt,
-        )
-        return (
+    def run(text: str, caller: LoggingCaller) -> TurnOutcome:
+        try:
+            result = classify_turn_split(
+                [{"role": "user", "content": [{"text": text}]}],
+                caller=caller,
+                detector_prompt=detector_prompt,
+            )
+        except ValidationError as exc:
+            # Only the DETECTOR can raise out of `classify_turn_split` now. A classifier failure is
+            # returned as `classifier_error` with the safety verdict intact -- see the discard-bug
+            # fix in split_router.py. So anything landing here is a missing safety verdict, which is
+            # C1 territory and governed by PRE-REGISTRATION-dropped-safety-flag.md.
+            return TurnOutcome(
+                safety_flag=False,
+                intent=None,
+                latencies={},
+                error=_missing_fields(exc),
+                detector_dropped=True,
+            )
+        return TurnOutcome(
+            # The safety verdict is present even when the classifier failed. That is the whole point
+            # of the fix: the escalation metrics keep their full denominator instead of silently
+            # dropping exactly the turns the system struggled with.
             result.injury_indicated,
             result.raw_intent,
             {
@@ -169,14 +230,19 @@ def _split_rung(detector_prompt: str | None) -> Classifier:
                 "wall_ms": result.wall_ms,
                 "sequential_ms": result.detector_ms + result.classifier_ms,
             },
+            error=result.classifier_error,
         )
 
     return run
 
 
 RUNGS: tuple[tuple[str, str, Classifier], ...] = (
-    ("A", "merged call, unchanged (ADR-004 section 1)", _rung_a),
-    ("B", "merged call, InjuryEscalation removed from the classifier output enum", _rung_b),
+    ("A", "merged call, unchanged (ADR-004 section 1)", _merged_rung(None)),
+    (
+        "B",
+        "merged call, InjuryEscalation removed from the classifier output enum",
+        _merged_rung(_build_no_injury_tool_spec()),
+    ),
     ("C", "split into two concurrent calls, injury instruction verbatim", _split_rung(None)),
     (
         "D",
@@ -186,23 +252,67 @@ RUNGS: tuple[tuple[str, str, Classifier], ...] = (
 )
 
 
-def _measure_escalation(
-    run: Classifier, caller: LoggingCaller, k: int
-) -> tuple[BinaryClassificationCounts, BinaryClassificationCounts, int, list[dict[str, float]]]:
-    """Escalation recall and false escalation on the tuning set, plus latency samples."""
+def _measure_escalation(run: Classifier, caller: LoggingCaller, k: int) -> tuple[
+    BinaryClassificationCounts,
+    BinaryClassificationCounts,
+    int,
+    list[dict[str, float]],
+    int,
+    int,
+    list[str],
+]:
+    """Escalation recall and false escalation on the tuning set, plus latency samples and drop count.
+
+    A dropped classifier field does **not** affect these numbers (pre-registration §"Scoring rules"):
+    in the split rungs the detector is a separate concurrent call and answered normally, so the safety
+    verdict exists. A dropped *detector* field would be a different matter entirely and is re-raised
+    upstream rather than reaching here.
+    """
     union = BinaryClassificationCounts()
     l2_only = BinaryClassificationCounts()
     unstable = 0
+    drops = 0
+    detector_drops = 0
+    c1_breaches: list[str] = []
     latencies: list[dict[str, float]] = []
 
     for phrasing in load_holdout(HoldoutKind.TUNING):
         l1 = detect_safety_trigger(phrasing.text)[0]
         flags: list[bool] = []
+        dropped_detector = False
         for _ in range(k):
-            flag, _intent, timings = run(phrasing.text, caller)
-            flags.append(flag)
-            if timings:
-                latencies.append(timings)
+            outcome = run(phrasing.text, caller)
+            if outcome.detector_dropped:
+                detector_drops += 1
+                dropped_detector = True
+                continue
+            if outcome.intent is None:
+                # Classifier-side only. The safety verdict IS present, so this sample still counts
+                # toward the escalation metrics -- the pre-registration said so, and until the
+                # discard-bug fix the code did the opposite, shrinking the false-escalation
+                # denominator from 35 to 31 by removing the turns the system failed on.
+                drops += 1
+            flags.append(outcome.safety_flag)
+            if outcome.latencies:
+                latencies.append(outcome.latencies)
+
+        if dropped_detector:
+            # PRE-REGISTRATION-dropped-safety-flag.md section 2, applied exactly as written.
+            if phrasing.should_escalate and not l1:
+                # No verdict on a turn that must escalate, and L1 was silent. Silence is not a pass.
+                c1_breaches.append(phrasing.text)
+                union = union.observe(expected=True, actual=False)
+                l2_only = l2_only.observe(expected=True, actual=False)
+            elif not phrasing.should_escalate:
+                # Excluded from the false-escalation denominator, reported as a count instead.
+                pass
+            else:
+                # Must escalate, but L1 already caught it -- the union is unharmed.
+                union = union.observe(expected=True, actual=True)
+            continue
+
+        if not flags:  # pragma: no cover - every sample of one item dropped
+            continue
         if len(set(flags)) > 1:
             unstable += 1
         # Conservative in the direction of the metric: a positive is caught only if every sample
@@ -211,18 +321,28 @@ def _measure_escalation(
         union_worst = l1 or l2_worst
         union = union.observe(expected=phrasing.should_escalate, actual=union_worst)
         l2_only = l2_only.observe(expected=phrasing.should_escalate, actual=l2_worst)
-    return union, l2_only, unstable, latencies
+    return union, l2_only, unstable, latencies, drops, detector_drops, c1_breaches
+
+
+_DROPPED = "__dropped__"
 
 
 def _measure_intent(
     run: Classifier, caller: LoggingCaller, conversations: Sequence[GoldenConversation], k: int
-) -> tuple[Rate | None, Rate | None, BinaryClassificationCounts, int, list[str]]:
-    """Effective-intent and raw-intent macro-F1 plus out-of-scope recall, on the golden first turns."""
+) -> tuple[Rate | None, Rate | None, BinaryClassificationCounts, int, list[str], int]:
+    """Effective-intent and raw-intent macro-F1 plus out-of-scope recall, on the golden first turns.
+
+    **A dropped classifier field is scored as a miss, not excluded** -- pre-registered before the rate
+    was known. Excluding unusable classifications would let a configuration raise its macro-F1 by
+    failing more often on the turns it finds hardest; a turn the system could not classify is a turn
+    the system got wrong, which is also what a caller experiences.
+    """
     labels = [i.value for i in Intent]
     effective = {label: BinaryClassificationCounts() for label in labels}
     raw = {label: BinaryClassificationCounts() for label in labels}
     oos = BinaryClassificationCounts()
     unstable = 0
+    drops = 0
     confusions: list[str] = []
 
     for conversation in conversations:
@@ -232,37 +352,49 @@ def _measure_intent(
         text = conversation.turns[0].caller
         l1 = detect_safety_trigger(text)[0]
 
-        samples: list[tuple[bool, Intent]] = []
+        samples: list[tuple[bool, str]] = []
         for _ in range(k):
-            flag, raw_intent, _timings = run(text, caller)
-            samples.append((flag, raw_intent))
+            outcome = run(text, caller)
+            if outcome.intent is None:
+                # Either leg failing leaves the turn unclassifiable; counted here so the intent
+                # metrics see the same event the escalation metrics saw, under their own rule.
+                drops += 1
+                samples.append((outcome.safety_flag, _DROPPED))
+            else:
+                samples.append((outcome.safety_flag, outcome.intent.value))
         if len(set(samples)) > 1:
             unstable += 1
 
         # The modal sample is the one scored, so one deviant draw cannot dominate an aggregate the
         # way any-sample-worst-case correctly does for the *safety* metrics. Different metrics get
         # different aggregations on purpose: recall is conservative, quality is representative.
-        flag, raw_intent = statistics.mode(samples)
-        effective_intent = Intent.INJURY_ESCALATION if (l1 or flag) else raw_intent
+        flag, raw_value = statistics.mode(samples)
+        if raw_value == _DROPPED:
+            # A miss against every label: no class is predicted, so the expected class records a
+            # false negative and no class records a false positive. That is the honest shape of "the
+            # system produced nothing" -- it cannot be gamed into a better score.
+            effective_value = _DROPPED
+        else:
+            effective_value = Intent.INJURY_ESCALATION.value if (l1 or flag) else raw_value
 
         for label in labels:
             effective[label] = effective[label].observe(
-                expected=(label == expected_intent.value), actual=(label == effective_intent.value)
+                expected=(label == expected_intent.value), actual=(label == effective_value)
             )
             raw[label] = raw[label].observe(
-                expected=(label == expected_intent.value), actual=(label == raw_intent.value)
+                expected=(label == expected_intent.value), actual=(label == raw_value)
             )
         oos = oos.observe(
             expected=conversation.category is Category.OUT_OF_SCOPE,
-            actual=effective_intent is Intent.OUT_OF_SCOPE,
+            actual=(effective_value == Intent.OUT_OF_SCOPE.value),
         )
-        if effective_intent.value != expected_intent.value:
+        if effective_value != expected_intent.value:
             confusions.append(
-                f"{conversation.id}: expected {expected_intent.value}, got {effective_intent.value}"
-                + (f" (raw {raw_intent.value})" if raw_intent is not effective_intent else "")
+                f"{conversation.id}: expected {expected_intent.value}, got {effective_value}"
+                + (f" (raw {raw_value})" if raw_value != effective_value else "")
             )
 
-    return macro_f1(effective), macro_f1(raw), oos, unstable, confusions
+    return macro_f1(effective), macro_f1(raw), oos, unstable, confusions, drops
 
 
 def _p50(samples: list[dict[str, float]], key: str) -> float | None:
@@ -281,8 +413,10 @@ def run_rung(
     log = CostLog()
     caller = LoggingCaller(BotoBedrockConverseClient(region="us-west-2"), log)
 
-    union, l2_only, esc_unstable, latencies = _measure_escalation(run, caller, k)
-    eff_f1, raw_f1, oos, intent_unstable, confusions = _measure_intent(
+    union, l2_only, esc_unstable, latencies, esc_drops, detector_drops, c1_breaches = (
+        _measure_escalation(run, caller, k)
+    )
+    eff_f1, raw_f1, oos, intent_unstable, confusions, intent_drops = _measure_intent(
         run, caller, conversations, k
     )
 
@@ -300,6 +434,10 @@ def run_rung(
         out_of_scope_recall=oos.recall.value,
         intent_unstable=intent_unstable,
         confusions=confusions,
+        dropped_field_calls=esc_drops + intent_drops,
+        dropped_field_rate=(esc_drops + intent_drops) / max(len(log.calls), 1),
+        detector_dropped_calls=detector_drops,
+        c1_breaches=c1_breaches,
         detector_ms_p50=_p50(latencies, "detector_ms"),
         classifier_ms_p50=_p50(latencies, "classifier_ms"),
         wall_ms_p50=_p50(latencies, "wall_ms"),
@@ -336,6 +474,10 @@ def main() -> int:
             f"  out-of-scope recall {result.out_of_scope_recall}\n"
             f"  unstable            {result.escalation_unstable} escalation / "
             f"{result.intent_unstable} intent\n"
+            f"  dropped classifier  {result.dropped_field_calls} "
+            f"({result.dropped_field_rate:.2%} of calls)\n"
+            f"  dropped DETECTOR    {result.detector_dropped_calls}   "
+            f"C1 breaches: {len(result.c1_breaches)}\n"
             f"  calls               {len(log.calls)}   ${log.total_usd:.5f}",
             flush=True,
         )

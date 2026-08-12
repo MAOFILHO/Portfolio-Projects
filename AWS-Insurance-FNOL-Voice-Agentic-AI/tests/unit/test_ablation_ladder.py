@@ -102,3 +102,122 @@ def test_the_ladder_is_cumulative_and_ordered() -> None:
     """Each rung adds one change to the previous one, which is what makes pairwise deltas
     attributable. Order matters for the same reason."""
     assert [name for name, _description, _run in RUNGS] == ["A", "B", "C", "D"]
+
+
+# --- Dropped classifier fields are scored, not excluded -------------------------------------------
+
+
+def _fixed_rung(intent: Intent | None, *, safety: bool = False) -> Any:
+    from scripts.run_ablation_ladder import TurnOutcome
+
+    def run(_text: str, _caller: Any) -> TurnOutcome:
+        return TurnOutcome(safety_flag=safety, intent=intent, latencies={}, error=None)
+
+    return run
+
+
+def test_a_dropped_classification_is_counted_and_not_skipped() -> None:
+    """The pre-registered rule: a turn the system could not classify is a turn it got wrong. The
+    turn stays in the denominator."""
+    from evals.schema import load_golden_set
+    from scripts.run_ablation_ladder import _measure_intent
+
+    conversations = load_golden_set()
+    _f1, _raw, _oos, _unstable, confusions, drops = _measure_intent(
+        _fixed_rung(None), caller=None, conversations=conversations, k=1
+    )
+    labelled = sum(1 for c in conversations if (c.turns[0].expect.intent or c.intent) is not None)
+    assert drops == labelled, "every call dropped, so every call should be counted as a drop"
+    assert len(confusions) == labelled, "a dropped turn is a confusion, not an exclusion"
+
+
+def test_dropping_cannot_score_better_than_answering_correctly() -> None:
+    """The property that matters: a configuration cannot improve its macro-F1 by failing on the
+    turns it finds hardest."""
+    from evals.schema import load_golden_set
+    from scripts.run_ablation_ladder import _measure_intent
+
+    conversations = load_golden_set()
+    dropped_f1, _r, _o, _u, _c, _d = _measure_intent(
+        _fixed_rung(None), caller=None, conversations=conversations, k=1
+    )
+    guessing_f1, _r2, _o2, _u2, _c2, _d2 = _measure_intent(
+        _fixed_rung(Intent.COVERAGE_QUESTION), caller=None, conversations=conversations, k=1
+    )
+    assert dropped_f1 is not None and guessing_f1 is not None
+    assert (dropped_f1.value or 0.0) == 0.0
+    # A confident wrong answer scores at least as well, because it can still be right sometimes.
+    # Stated rather than hidden: dropping incurs a false negative but no false positive, so it is
+    # not scored *worse* than an equally wrong guess -- only never better than a correct one.
+    assert (guessing_f1.value or 0.0) >= (dropped_f1.value or 0.0)
+
+
+def test_a_classifier_drop_keeps_its_turn_in_the_escalation_denominator() -> None:
+    """The pre-registered rule -- a classifier drop cannot cost escalation metrics -- is only true if
+    the safety verdict survives the classifier's failure. It did not, until the discard-bug fix.
+
+    **This test previously asserted the opposite** (`union.total == 0`), encoding the bug as the
+    expected behaviour. That is the trap in writing a test against observed output: the harness and
+    the test agreed with each other and both were wrong, and the disagreement only surfaced when the
+    denominator in a published number turned out to be 31 instead of 35.
+    """
+    from evals.holdout import HoldoutKind, structural_summary
+    from scripts.run_ablation_ladder import _measure_escalation
+
+    union, _l2, _unstable, _lat, drops, det_drops, breaches = _measure_escalation(
+        _fixed_rung(None), None, 1
+    )
+    summary = structural_summary(HoldoutKind.TUNING)
+    assert drops == summary.total, "every sample dropped its classifier field"
+    assert det_drops == 0 and breaches == []
+    assert union.total == summary.total, (
+        "a classifier drop must not remove its turn from the escalation denominator -- doing so "
+        "flatters the rung by excluding exactly the turns it failed on"
+    )
+
+
+def _detector_dropping_rung() -> Any:
+    """Every call loses the safety verdict -- the failure the first ladder run died on."""
+    from scripts.run_ablation_ladder import TurnOutcome
+
+    def run(_text: str, _caller: Any) -> TurnOutcome:
+        return TurnOutcome(
+            safety_flag=False,
+            intent=None,
+            latencies={},
+            error="missing:injury_indicated",
+            detector_dropped=True,
+        )
+
+    return run
+
+
+def test_a_missing_safety_verdict_on_a_must_escalate_turn_is_a_c1_breach() -> None:
+    """PRE-REGISTRATION-dropped-safety-flag.md section 2: *"Silence is not a pass."* A turn where the
+    detector produced no verdict and L1 was silent is a union-recall MISS, not an exclusion."""
+    from scripts.run_ablation_ladder import _measure_escalation
+
+    union, _l2, _unstable, _lat, _drops, det_drops, breaches = _measure_escalation(
+        _detector_dropping_rung(), None, 1
+    )
+    assert det_drops > 0
+    assert breaches, "must-escalate turns with no verdict have to surface as C1 breaches"
+    assert (union.recall.value or 1.0) < 1.0, "a silent detector cannot score perfect recall"
+
+
+def test_a_missing_safety_verdict_on_a_must_not_escalate_turn_is_excluded_not_counted() -> None:
+    """The other half of the same pre-registered table, and the asymmetry is deliberate: scoring a
+    no-verdict turn as a non-escalation for BOTH metrics would let one event improve one number
+    while damaging the other, which is the shape of a metric that can be gamed."""
+    from evals.holdout import HoldoutKind, structural_summary
+    from scripts.run_ablation_ladder import _measure_escalation
+
+    union, _l2, _unstable, _lat, _drops, _det, _breaches = _measure_escalation(
+        _detector_dropping_rung(), None, 1
+    )
+    negatives = structural_summary(HoldoutKind.TUNING).negatives
+    scored_negatives = union.true_negatives + union.false_positives
+    assert scored_negatives == 0, (
+        f"all {negatives} must-not-escalate turns dropped their verdict and must be excluded from "
+        f"the false-escalation denominator, not scored as clean passes"
+    )

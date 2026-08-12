@@ -49,8 +49,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from ..config.settings import ROUTER_MODEL_ID, ROUTER_TEMPERATURE
-from ..models.enums import Intent
+from ..models.enums import CoverageQuestionType, Intent
 from ..models.routing import InjuryVerdict, IntentClassification, TurnClassification
 from .bedrock_router import (
     DEFAULT_CLASSIFY_MAX_TOKENS,
@@ -109,14 +111,21 @@ class DetectorVetoedError(RuntimeError):
 @dataclass(frozen=True)
 class SplitClassification:
     """The combined result, plus what it cost to get. `elapsed_ms` fields exist because `ADR-014` §5
-    makes `max(t1, t2)` a hypothesis to measure rather than a claim to repeat."""
+    makes `max(t1, t2)` a hypothesis to measure rather than a claim to repeat.
 
-    classification: TurnClassification
+    `classification` is `None` in exactly one situation: the classifier failed **and** the detector
+    did not fire, so there is no usable intent. When the detector *did* fire, a classifier failure
+    costs nothing at all -- the effective intent is `InjuryEscalation` by `I3` regardless of what the
+    classifier would have said, so the turn is fully answerable from the detector alone.
+    """
+
+    classification: TurnClassification | None
     injury_indicated: bool
-    raw_intent: Intent
+    raw_intent: Intent | None
     detector_ms: float
     classifier_ms: float
     wall_ms: float
+    classifier_error: str | None = None
 
     @property
     def concurrency_saving_ms(self) -> float:
@@ -245,7 +254,9 @@ def classify_intent(
     return IntentClassification.model_validate(payload), elapsed_ms
 
 
-def combine(verdict: InjuryVerdict, intent: IntentClassification) -> TurnClassification:
+def combine(
+    verdict: InjuryVerdict, intent: IntentClassification | None
+) -> TurnClassification | None:
     """`I3`, expressed as the only combination this module offers.
 
     `safety_flag` is the detector's verdict, unconditionally. When the detector fires, the effective
@@ -254,11 +265,29 @@ def combine(verdict: InjuryVerdict, intent: IntentClassification) -> TurnClassif
     choice. The classifier's raw answer is preserved on `SplitClassification.raw_intent` and reported
     alongside, so the substitution is visible rather than hidden inside the metric.
 
+    **`intent=None` means the classifier call failed, and it is not an error case when the detector
+    fired.** A fired detector already determines the effective intent, so the turn is fully
+    answerable without the classifier. `intent_confidence` is 1.0 there because the value is not the
+    classifier's to supply -- the escalation is `I3`'s, not a prediction. Only a *silent* detector
+    plus a failed classifier leaves nothing to act on, and that returns `None` for the caller's retry
+    ladder (`D18`) rather than inventing an intent.
+
     There is deliberately no parameter that changes any of this.
     """
+    if verdict.injury_indicated:
+        return TurnClassification(
+            safety_flag=True,
+            intent=Intent.INJURY_ESCALATION,
+            intent_confidence=1.0,
+            coverage_question_type=(
+                intent.coverage_question_type if intent else CoverageQuestionType.NOT_APPLICABLE
+            ),
+        )
+    if intent is None:
+        return None
     return TurnClassification(
-        safety_flag=verdict.injury_indicated,
-        intent=Intent.INJURY_ESCALATION if verdict.injury_indicated else intent.intent,
+        safety_flag=False,
+        intent=intent.intent,
         intent_confidence=intent.intent_confidence,
         coverage_question_type=intent.coverage_question_type,
     )
@@ -273,15 +302,28 @@ def assert_detector_dominates() -> None:
     or a "if the classifier is certain this is a coverage question, don't escalate" shortcut -- and a
     check that only runs in CI does not stop that edit reaching a caller.
 
-    Exhaustive over the four combinations of (verdict, classifier intent agreeing or not), which is
-    small enough to enumerate rather than sample.
+    Exhaustive over the combinations of (verdict, classifier intent agreeing, disagreeing, or
+    absent), which is small enough to enumerate rather than sample. The **absent** case is the one
+    added after the discard bug: a failed classifier must not be able to suppress an escalation the
+    detector already decided on.
     """
+    classifier_outcomes: tuple[IntentClassification | None, ...] = (
+        IntentClassification(intent=Intent.INJURY_ESCALATION, intent_confidence=1.0),
+        IntentClassification(intent=Intent.COVERAGE_QUESTION, intent_confidence=1.0),
+        None,
+    )
     for injury in (True, False):
-        for intent in (Intent.INJURY_ESCALATION, Intent.COVERAGE_QUESTION):
-            combined = combine(
-                InjuryVerdict(injury_indicated=injury),
-                IntentClassification(intent=intent, intent_confidence=1.0),
-            )
+        for classifier in classifier_outcomes:
+            combined = combine(InjuryVerdict(injury_indicated=injury), classifier)
+            if combined is None:
+                if injury:
+                    raise DetectorVetoedError(
+                        "combine() returned nothing while the detector fired. A classifier failure "
+                        "must not discard a safety verdict that has already been resolved -- see "
+                        "ADR-014 I3."
+                    )
+                continue
+            intent = classifier.intent if classifier else None
             if combined.safety_flag is not injury:
                 raise DetectorVetoedError(
                     f"combine() returned safety_flag={combined.safety_flag} for a detector verdict "
@@ -334,20 +376,36 @@ def classify_turn_split(
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        # The detector is resolved first on purpose. If the classifier raises, the detector's verdict
-        # has already been obtained, and a future revision that wants to degrade gracefully (escalate
-        # on a classifier failure rather than fail the turn) has the safety answer in hand. Nothing
-        # today catches that exception -- a failure is still a failure -- but the ordering means the
-        # graceful path is available without re-plumbing the safety call.
+        # The detector is resolved first, and its exception is deliberately allowed to propagate:
+        # a missing safety verdict is not something this function may paper over.
         verdict, detector_ms = detector_future.result()
-        intent, classifier_ms = classifier_future.result()
+        # The classifier's is not. An earlier version of this function let a classifier
+        # `ValidationError` propagate, which **discarded a safety verdict that had already
+        # arrived** -- the detector call had succeeded, on a separate connection, and its answer was
+        # thrown away because the other leg failed. The docstring above this line claimed graceful
+        # degradation was "available"; it was available and not taken, which reads as correct
+        # forever. Found by the Stage 4 ladder, where it also silently shrank the false-escalation
+        # denominator by removing exactly the turns the system failed on.
+        classifier_error: str | None = None
+        intent: IntentClassification | None = None
+        try:
+            intent, classifier_ms = classifier_future.result()
+        except ValidationError as exc:
+            classifier_ms = 0.0
+            classifier_error = "; ".join(
+                f"{e['loc'][0] if e['loc'] else '?'}:{e['type']}" for e in exc.errors()
+            )
+        except BedrockRouterError as exc:
+            classifier_ms = 0.0
+            classifier_error = f"BedrockRouterError:{exc}"
     wall_ms = (time.perf_counter() - started) * 1000
 
     return SplitClassification(
         classification=combine(verdict, intent),
         injury_indicated=verdict.injury_indicated,
-        raw_intent=intent.intent,
+        raw_intent=intent.intent if intent else None,
         detector_ms=detector_ms,
         classifier_ms=classifier_ms,
         wall_ms=wall_ms,
+        classifier_error=classifier_error,
     )
