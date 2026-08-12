@@ -1,0 +1,6 @@
+# Local state, Phase 7 only -- migrated to the remote backend in Phase 8. Never committed: state can
+# contain resource metadata, and CLAUDE.md forbids committing .tfstate outright.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl

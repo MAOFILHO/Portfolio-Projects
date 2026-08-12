@@ -670,6 +670,109 @@ checked against the wrong world.
 
 ---
 
+## 3.9 Every setting was defensible. The composition was a C1 breach.
+
+**The strongest evidence in this project that a layered design needs whole-configuration verification
+rather than per-component reasoning** — and a better argument for the eval harness than any metric it
+produces.
+
+The Phase 7 guardrail was written setting by setting, each with a reason:
+
+| Setting | The reasoning, at the time |
+|---|---|
+| `VIOLENCE` input strength **LOW** | A caller describing a collision produces exactly what a violence filter catches. Blocking it would silence the utterances the detector exists to hear. **Correct, and measured correct.** |
+| Every other content filter **NONE** on input | Same argument, applied consistently |
+| All content filters **HIGH** on output | The system's own speech has no legitimate reason to contain any of it, and `D17`/`D20` mean only two prompts generate at all |
+| PII **ANONYMIZE**, never BLOCK; `NAME` excluded | A caller stating a phone number mid-sentence must not lose the turn; redacting `NAME` would strip the field the call exists to capture |
+| Denied topic: **health and life insurance** | `CLAUDE.md` puts health and life claims explicitly out of scope. Uncontroversial |
+
+Each line is individually defensible. **Together they blocked 10 of 26 injury phrasings on the independent
+held-out set**, including *"I can't feel my legs"*, *"we lost her"*, *"I'm doing CPR right now, please just
+send someone"*, and *"she's breathing but it's very shallow, sort of gurgling."*
+
+**All 10 blocks came from the denied topic. Zero came from the violence filter.**
+
+The setting I reasoned about most carefully was fine. The breach came from a line three stanzas below it,
+written for an unrelated purpose — because Bedrock's topic classifier keys on **medical subject matter**,
+not on whether an insurance product is being asked about, and a caller describing a medical emergency is
+saturated with medical language.
+
+### Why it is a C1 breach and not a caller-experience problem
+
+`ADR-010` sequences L1 strictly before `ApplyGuardrail`, so a block cannot pre-empt L1. **But L2 runs
+after the input guardrail.** A blocked turn never reaches the router. **6 of the 10 blocked phrasings are
+ones L1 provably misses** — they were L2's to catch, and L2 never saw them.
+
+In production this configuration would have taken union escalation recall from **1.000 to roughly 0.62**,
+with every detector behaving exactly as measured and every component test passing. The guarantee `C1`
+protects would have been lost in the gap *between* two correct components.
+
+### What no amount of per-component reasoning would have caught
+
+- **The safety detector's tests all pass.** It was never asked.
+- **The guardrail's own configuration review passed.** Every setting had a rationale, and the rationale was
+  right.
+- **`ADR-010`'s ordering guarantee held exactly as specified** — L1 really does run first. The ADR simply
+  never claimed anything about L2, because when it was written the guardrail was a mock with no topic
+  policy in it.
+- **No test in 320 would have gone red.** The defect lives in the interaction between a Terraform resource
+  and a graph edge, and nothing in the unit suite spans both.
+
+It was caught by running **the held-out injury set through the real resource** and counting — a measurement
+that exists only because someone asked for the composition to be checked rather than the parts.
+
+### The fix, and the discipline around it
+
+Narrowed the topic to require a question about a non-auto insurance **product**, stated in terms of the
+product rather than the subject matter, with the exclusion written into the definition text because the
+classifier reads it.
+
+**Verified on the tuning set, not the set that found it: 0 of 45 must-escalate phrasings blocked, 0 of 35
+must-not-escalate blocked.** The `VIOLENCE` LOW setting was re-verified in the same run and still passes
+every graphic phrasing — it was never the problem, and the fix touched the same resource, so it was
+re-checked rather than assumed. The denied topic still blocks genuine non-auto product questions (life
+insurance valuation, a physiotherapy claim, a health plan, dental benefits), so it was narrowed rather than
+neutered — imperfectly: *"I need to claim on my husband's life insurance policy"* now passes, and that is
+recorded as a real loss, not rounded away.
+
+**On why `C2` does not bind here**, recorded as reasoning rather than as an exception granted:
+
+> `C2` protects against tuning a **detector** against the set that measures its generalisation. This was a
+> **scope bug in a filter that should never have been evaluating medical language at all** — the fix
+> removes an unintended block rather than optimising recall. Different act, different risk. — Marco,
+> 2026-08-12
+
+The discipline still applied: the fix was verified against the tuning set, and **exactly one** further
+independent-set fingerprint is spent at Stage 8 as final verification. The ledger publishes **3**.
+
+### The availability half, which is not a safety issue but is a defect
+
+**5 of 17 must-not-escalate phrasings were blocked** by the pre-fix configuration. What happens to that
+caller, read out of `agents/graph.py` rather than assumed:
+
+```
+guardrails_input_check --[blocked]--> guardrail_blocked_response --> END
+```
+
+`_guardrail_blocked_response` sets one fixed string — *"I'm not able to help with that — let me connect
+you with someone who can."* — and the graph terminates. Concretely, for that caller:
+
+- **Not a hang-up.** The turn ends and control returns to the contact flow.
+- **Not the retry ladder.** `D18`'s no-input/no-match ceiling is never consulted; a guardrail block is a
+  different branch entirely and does not count toward it.
+- **Not an escalation.** And this is the defect: `injury_escalation` calls `initiate_escalation()` and
+  writes an `EscalationRecord`. The blocked path calls nothing and writes nothing. **The system tells the
+  caller it is connecting them to a human and then does not.**
+
+That is a promise the graph does not keep, and it contradicts `D18`'s own rule that *"the terminal state is
+always escalation (route 3), never a hang-up."* Post-fix the block rate on legitimate turns is 0/35 on the
+tuning set, so it is no longer reachable by the route that found it — but the branch is still wrong, and
+fixing it means deciding how a guardrail block is represented in an escalation record, which is a Phase 4
+dialogue-policy artifact. Carried to `docs/phase7/NOT-FIXED.md` rather than decided here, for the same
+reason `Q13` was.
+
+---
+
 ## 4. Generation quality — passed, judged by a different vendor's model
 
 `us.anthropic.claude-haiku-4-5` as judge, deliberately a different vendor and family from Nova Lite,

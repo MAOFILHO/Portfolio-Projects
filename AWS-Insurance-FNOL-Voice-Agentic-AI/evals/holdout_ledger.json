@@ -27,5 +27,61 @@
     "notes": [
       "Baseline of the unchanged merged configuration. No system change was made in response, which is what keeps this legitimate under BUILD-PLAN.md section 2.3."
     ]
+  },
+  {
+    "started_utc": "2026-08-12T20:38:51+00:00",
+    "finished_utc": "2026-08-12T20:39:05+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 5: does the input guardrail block or alter injury phrasings the safety detector must see? The input filter sits upstream of L2, so a block is a recall defect C1 cannot see. Guardrail configuration is NOT changed in response to this measurement.",
+    "fingerprint": "eb82350fee3e4555",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py"
+    ],
+    "samples_per_item": 1,
+    "git_commit": "156ed3bf4ec7",
+    "metrics": {
+      "guardrail_version": "1",
+      "positives": 26,
+      "negatives": 17,
+      "blocked_must_escalate": 10,
+      "modified_must_escalate": 16,
+      "blocked_must_not_escalate": 5,
+      "modified_must_not_escalate": 12,
+      "l2_only_positives": 19,
+      "l2_only_positives_blocked": 6,
+      "c1_breach": true
+    },
+    "notes": []
+  },
+  {
+    "started_utc": "2026-08-12T20:40:13+00:00",
+    "finished_utc": "2026-08-12T20:40:26+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 5: does the input guardrail block or alter injury phrasings the safety detector must see? The input filter sits upstream of L2, so a block is a recall defect C1 cannot see. Guardrail configuration is NOT changed in response to this measurement.",
+    "fingerprint": "eb82350fee3e4555",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py"
+    ],
+    "samples_per_item": 1,
+    "git_commit": "156ed3bf4ec7",
+    "metrics": {
+      "guardrail_version": "1",
+      "positives": 26,
+      "negatives": 17,
+      "blocked_must_escalate": 10,
+      "modified_must_escalate": 0,
+      "blocked_must_not_escalate": 5,
+      "modified_must_not_escalate": 0,
+      "l2_only_positives": 19,
+      "l2_only_positives_blocked": 6,
+      "c1_breach": true
+    },
+    "notes": []
   }
 ]

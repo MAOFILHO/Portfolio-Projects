@@ -41,6 +41,8 @@ from typing import Any, Literal, Protocol
 
 import boto3
 
+from ..aws.mock_guard import assert_real_aws_allowed
+
 from fnol_voice_agent.config.settings import DEFAULT_REGION
 
 GuardrailSource = Literal["INPUT", "OUTPUT"]
@@ -101,6 +103,18 @@ class BedrockGuardrailClient:
 
     def _get_client(self) -> Any:
         if self._client is None:
+            # `ADR-013`. This was missing until Phase 7 Stage 5 and is a real gap, not a formality:
+            # moto does not implement `bedrock-runtime`, so an `ApplyGuardrail` call made inside a
+            # `mock_aws()` scope would be intercepted and answered with a fabricated error -- and a
+            # red-team report built on fabricated "blocked" responses would look exactly like a
+            # working guardrail. The guard was on `BotoBedrockConverseClient` from the start and
+            # nobody carried it across when this class was written, because at the time no real
+            # guardrail existed to call.
+            #
+            # It also re-arms a second guard by side effect: `evals/holdout_ledger.py` subscribes to
+            # this observer hook, so a process that reads the independent held-out set and then makes
+            # a real guardrail call is now caught the same way a model call is.
+            assert_real_aws_allowed("bedrock-runtime / BedrockGuardrailClient")
             self._client = boto3.client("bedrock-runtime", region_name=self._region)
         return self._client
 
