@@ -11,7 +11,11 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 3 — Data engineering and knowledge base — **signed off** (`APPROVED: Phase 3` typed by Marco 2026-08-11, followed same day by one closing verification: a real Bedrock round-trip, also completed). **Phase 4 exit criteria proposed below, awaiting `APPROVED: Phase 4` — not started.**
+**Current phase:** Phase 4 — Conversation design — **content complete, presented for closing sign-off.**
+`APPROVED: Phase 4` (typed by Marco 2026-08-11) authorized the phase to *begin*, same pattern as Phase 3's
+opening approval — all five deliverables are now written; Marco's **closing** sign-off is a separate,
+still-pending step, named explicitly rather than left ambiguous (Phase 3's own session log flagged this
+exact wording gap once already — not repeating it here).
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. First real application code in the repo (`src/fnol_voice_agent/knowledge/`), plus `pyproject.toml`/`Makefile`/`COSTS.md` bootstrapped to support it. **First real AWS spend of the project**: one real Titan Embed V2 call, $0.0000103, logged in `COSTS.md`.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -27,7 +31,7 @@ Bedrock standing-approval budget consumed: **$0.00 of $5.00**.
 | 1 | Problem framing and success criteria | ✅ **Signed off** 2026-08-11 (two corrections applied) |
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
-| 4 | Conversation design | ⬜ Exit criteria proposed 2026-08-11, awaiting approval |
+| 4 | Conversation design | 🟡 `APPROVED: Phase 4` given; content complete, awaiting closing sign-off |
 | 5 | Agent implementation | ⬜ Not started |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
@@ -189,7 +193,16 @@ resource beyond the already-approved $5 Bedrock standing cap if embeddings gener
 
 ---
 
-## Phase 4 exit criteria — proposed 2026-08-11, awaiting `APPROVED: Phase 4`
+## Phase 4 exit criteria — approved 2026-08-11, content complete, awaiting closing sign-off
+
+**Marco typed `APPROVED: Phase 4`** and added one requirement above the original scope: given R4 (barge-in
+has zero prior art anywhere in the source corpus), the barge-in/repair criterion (6) needed two things
+designed explicitly rather than left implicit — (a) how a mid-prompt barge-in interacts with L1's safety
+ordering (`ADR-010`'s constraint, applied to the interruption path, not just the normal turn path), including
+what happens to a barge-in cut off mid-word; and (b) a named no-input/no-match retry ceiling with a stated
+terminal behavior, since an IVR that loops on no-match is the most common way these systems become unusable,
+and `D13` means the terminal behavior must be escalation, not a hang-up. Both are now `DIALOGUE-POLICIES.md`
+§6 and §7 respectively — load-bearing sections, not appendices.
 
 Per the STOP CONDITIONS, no Phase 4 work starts until this table is approved. Scope, per the Phase 0 roadmap:
 taxonomy, slots, utterances (incl. adversarial), prompt registry, dialogue policies, barge-in/repair, persona,
@@ -209,21 +222,21 @@ Five deliverables, mapped to the eight roadmap components:
 | `docs/phase4/PROMPT-REGISTRY.md` | prompt registry |
 | `docs/phase4/PERSONA.md` | persona |
 
-| # | Criterion | Notes |
+| # | Criterion | Status |
 |---|---|---|
-| 1 | Intent taxonomy finalized for all **six** intents (no additions), each with a canonical utterance set plus adversarial/ambiguous phrasings (multi-intent in one turn, out-of-scope requests, low-confidence phrasing) and a stated disambiguation policy | `docs/phase4/INTENT-TAXONOMY.md`. Adversarial set doubles as raw material for Phase 6 evals and Phase 7 red-team — authored once, reused, not duplicated |
-| 2 | Full slot specification for every slot-bearing intent — `FileAutoClaim`'s ~11 slots and `UpdateContactInfo` — covering elicitation prompt, validation rule, confirmation requirement, retry/reprompt ladder, and DTMF fallback grammar for digit-bearing slots (claim/policy number, matching `DATA-CONTRACTS.md`'s digits-only formats) | `docs/phase4/SLOT-DESIGN.md`. Slot priority ordering specified here even though CFN authorship (`ADR-007`) defers the implementation detail to Phase 8 — the *order* is a conversation-design decision, not an infra one |
-| 3 | **CoverageQuestion (intent 3) dialogue policy authored per `coverage-logic.md` §4's question-type split** — an explicit decision path showing how the dialogue manager distinguishes election-fact sub-questions (mandatory: pure RAG; optional: RAG + a policyholder-election lookup) from eligibility/amount sub-questions (always deflected to a human) *before* generating a response, not after. Names the tool surface this requires (a `GetPolicyholderElections`-shaped call) as a forward requirement for Phase 5, not built here | `docs/phase4/DIALOGUE-POLICIES.md`. **Marco's requirement — designed now, not discovered in Phase 5** |
-| 4 | Rental/towing (intent 4) dialogue policy authored, consistent with `endorsements.md`'s existing RAG+tool compound shape | `docs/phase4/DIALOGUE-POLICIES.md` |
-| 5 | Injury/fatality (intent 6) hard-escalation dialogue behavior specified: exact scripted language, preemption from any state, and its relationship to the deterministic pre-node (D12/D15) made explicit at the dialogue-design level, not just the architecture level | `docs/phase4/DIALOGUE-POLICIES.md` |
-| 6 | Barge-in and repair policy: explicit "agent" barge-in intent reachable from every state (constraint on human escalation); no-input/no-match retry ladder with a stated max-retry count and escalation-on-exhaustion, not an infinite loop | `docs/phase4/DIALOGUE-POLICIES.md`. Addresses R4 directly — first design artifact against a gap with zero prior art |
-| 7 | Write-path confirmation policy for `UpdateContactInfo` — explicit read-back-and-confirm step required before any write, per the original constraint that this intent "requires an explicit confirmation policy" | `docs/phase4/DIALOGUE-POLICIES.md` |
-| 8 | Prompt registry drafted for every model-calling node (the merged Nova Micro router+L2 call per `ADR-004`; the generation node; any safety-adjacent prompt) | `docs/phase4/PROMPT-REGISTRY.md` |
-| 9 | **Response-length discipline made an explicit, structured part of every prompt spec** — a per-intent/per-turn-type tolerance table distinguishing tight turns (slot elicitation, slot confirmation, yes/no checks — minimal padding, short declarative form) from relaxed turns (coverage explanation, claim-status summary — allowed to run longer because the caller asked for substantive information), each tied back to the 1,800ms p95 turn-latency budget (constraint: voice turn-latency). Documents the concrete motivating case: Nova Micro padding a one-word answer into a full sentence during pre-flight testing, and states the enforcement mechanism (explicit length instruction in-prompt; a stop-sequence or max-token cap where the model supports one; a length check added as a Phase 6 eval dimension, not just a hopeful instruction) | `docs/phase4/PROMPT-REGISTRY.md`. **Marco's requirement — explicit, not left as an implicit prompting habit** |
-| 10 | AI disclosure script for the greeting, and persona/tone spec (formality, empathy phrase bank — refactored from repo 6 per the Phase 0 merge matrix) | `docs/phase4/PERSONA.md` |
-| 11 | Full escalation-trigger enumeration — every trigger (injury/fatality, explicit "agent" request, no-match exhaustion, out-of-scope request, low routing confidence) mapped to a specific routing action, cross-checked against Phase 1's four escalation routes so nothing is added or dropped silently | `docs/phase4/DIALOGUE-POLICIES.md` |
-| 12 | No application/agent code written — the LangGraph graph, MCP servers, and tool implementations are Phase 5's scope, not this one. No billable resource created; $0.00 new spend, **except** an optional closing verification (same pattern as Phase 3's real-embedding check): a small number of real Bedrock calls against the drafted prompts to confirm the length-discipline instructions actually hold empirically, cost-gated separately at close, not assumed here | |
-| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | Pending — this table is the request for it |
+| 1 | Intent taxonomy finalized for all **six** intents (no additions), each with a canonical utterance set plus adversarial/ambiguous phrasings (multi-intent in one turn, out-of-scope requests, low-confidence phrasing) and a stated disambiguation policy | ✅ `docs/phase4/INTENT-TAXONOMY.md` — 6 canonical sets, 6 adversarial categories (multi-intent, out-of-scope, low-confidence, injury-phrasing-as-lexicon-seed, `CoverageQuestion` sub-question-type pairs, injury barge-in mid-elicitation), disambiguation policy §3 |
+| 2 | Full slot specification for every slot-bearing intent — `FileAutoClaim`'s ~11 slots and `UpdateContactInfo` — covering elicitation prompt, validation rule, confirmation requirement, retry/reprompt ladder, and DTMF fallback grammar for digit-bearing slots (claim/policy number, matching `DATA-CONTRACTS.md`'s digits-only formats) | ✅ `docs/phase4/SLOT-DESIGN.md` — 11-slot priority order + per-slot table for `FileAutoClaim`, 3-slot table for `UpdateContactInfo`, brief specs for the remaining three intents, DTMF policy scoped to exactly the three digits-only identifier slots |
+| 3 | **`CoverageQuestion` (intent 3) dialogue policy authored per `coverage-logic.md` §4's question-type split** — an explicit decision path showing how the dialogue manager distinguishes election-fact sub-questions (mandatory: pure RAG; optional: RAG + a policyholder-election lookup) from eligibility/amount sub-questions (always deflected to a human) *before* generating a response, not after. Names the tool surface this requires (a `GetPolicyholderElections`-shaped call) as a forward requirement for Phase 5, not built here | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §2. **Marco's requirement — designed now, not discovered in Phase 5** |
+| 4 | Rental/towing (intent 4) dialogue policy authored, consistent with `endorsements.md`'s existing RAG+tool compound shape | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §3 |
+| 5 | Injury/fatality (intent 6) hard-escalation dialogue behavior specified: exact scripted language, preemption from any state, and its relationship to the deterministic pre-node (D12/D15) made explicit at the dialogue-design level, not just the architecture level | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §5 |
+| 6 | Barge-in and repair policy: explicit "agent" barge-in intent reachable from every state; no-input/no-match retry ladder with a stated max-retry count and escalation-on-exhaustion, not an infinite loop. **Extended by Marco mid-phase**: the L1×barge-in ordering (incl. mid-word cutoff) and the retry ceiling's terminal behavior both designed explicitly | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §6 (barge-in reuses the exact per-turn pipeline, no second code path; mid-word cutoff handled by an open re-prompt drawn from the *same* retry ladder, not a separate loop) and §7 (ceiling = 2 consecutive no-input/no-match per slot/question; terminal state is always escalation, never hang-up — stated as an explicit negative rule) |
+| 7 | Write-path confirmation policy for `UpdateContactInfo` — explicit read-back-and-confirm step required before any write | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §4, mechanics in `SLOT-DESIGN.md` §2 — one retry only (tighter than the general 2-attempt ceiling), matching the "critical defect, not missed target" framing already set in Phase 1 |
+| 8 | Prompt registry drafted for every model-calling node (the merged Nova Micro router+L2 call per `ADR-004`; the generation node) | ✅ `docs/phase4/PROMPT-REGISTRY.md` §1, §3 — full tool schema and system prompt for the merged call, system prompts + suggested `max_tokens` for both generation-node use cases |
+| 9 | **Response-length discipline made an explicit, structured part of every prompt spec** — a per-intent/per-turn-type tolerance table, tied to the 1,800ms p95 turn-latency budget, motivated by the observed Nova Micro pre-flight padding case, with a named enforcement mechanism | ✅ `docs/phase4/PROMPT-REGISTRY.md` §2 — extended beyond the two generative nodes: the registry's own structural finding is that most spoken lines are fixed/templated, not generated at all (§1), which is itself the primary length-discipline mechanism; the tolerance table (§2.1) covers both generated and templated turns, with per-category enforcement (§2.2). **Marco's requirement — explicit, not left as an implicit prompting habit** |
+| 10 | AI disclosure script for the greeting, and persona/tone spec (formality, empathy phrase bank — refactored from repo 6 per the Phase 0 merge matrix) | ✅ `docs/phase4/PERSONA.md` — greeting + direct-question disclosure scripts (§2), tone rules (§3), a single budgeted (once-per-call, not per-turn) empathy phrase rather than a rotating bank, reasoned explicitly against the same padding concern as criterion 9 |
+| 11 | Full escalation-trigger enumeration — every trigger mapped to a specific routing action, cross-checked against Phase 1's four escalation routes so nothing is added or dropped silently | ✅ `docs/phase4/DIALOGUE-POLICIES.md` §8 — 11 triggers mapped to routes 1–4, explicit rule that no trigger may be tuned to trade recall for containment optics (`D13`) |
+| 12 | No application/agent code written — the LangGraph graph, MCP servers, and tool implementations are Phase 5's scope. No billable resource created; $0.00 new spend, **except** an optional closing verification (same pattern as Phase 3's real-embedding check): a small number of real Bedrock calls against the drafted prompts to confirm the length-discipline instructions hold empirically, cost-gated separately, not assumed here | ✅ No code written this phase — five Markdown design documents only. **Optional closing verification not yet run** — remains available, not exercised without separate cost-gate approval |
+| 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 4`, typed 2026-08-11, with the two barge-in/retry additions folded into criterion 6 before work began |
 
 ### Carried-forward risks and open items this phase must respect, not resolve
 
@@ -260,6 +273,9 @@ Five deliverables, mapped to the eight roadmap components:
 | ~~D14~~ | ~~**Loss date/time is NOT redacted**~~ — **SUPERSEDED by D16** | Original rationale was a utility argument only, which was insufficient and produced the wrong design | 2026-08-11 |
 | D15 | **Layered injury detection (L1+L2+L3) is an architectural requirement**, and the recall gate is split: 100% GATE on the labelled safety set, held-out novel phrasings reported with no threshold | Resolves Q6 instead of deferring it. A single detector cannot achieve 100% recall against unbounded natural language, and a gate known to be unachievable gets quietly excepted the first time it fails. The labelled gate got *stricter* (a failure is now a code defect, not a tuning problem) and a hidden weakness became a standing reported metric | 2026-08-11 |
 | D16 | **Loss date/time and loss location get identical treatment: both retained in the structured claim record, both redacted from transcripts and logs.** VIN/plate/policy/claim number added as redaction targets | Date + time + location is a **quasi-identifier close to uniquely identifying**, because a collision at a given place and time is often externally recorded (police reports, news, traffic/roadside logs). Redacting `NAME`/`PHONE` while keeping the tuple is not de-identification. Splitting a quasi-identifier across two policies protects nothing. The utility need is met by the structured record, so utility and privacy only conflicted while both lived in the same store | 2026-08-11 |
+| D17 | **The generation node (feature-flagged tier, `ADR-004`) is invoked for exactly two cases** — `CoverageQuestion` election-fact synthesis and `RentalTowingEntitlement` compound synthesis. Every other spoken line (elicitation, confirmation, retry, escalation, greeting) is a fixed string or a deterministic template substitution, never free generation | This is the primary mechanism behind the voice length-discipline requirement: a line that was never generative cannot pad itself. It also narrows the generation-tier feature flag's real blast radius to two prompts, both fully specified in `docs/phase4/PROMPT-REGISTRY.md` | 2026-08-11 |
+| D18 | **No-input/no-match retry ceiling fixed at 2 consecutive attempts per slot/question; the terminal state is always escalation (route 3), never a hang-up** | Makes concrete what `PROBLEM-FRAMING.md`'s escalation route 3 already numbered but didn't operationalize. Stated as an explicit negative rule ("hang-up is never a fallback state") because a missing terminal branch is exactly the kind of defect that's easy to leave implicit and hard to notice until a real call falls through it | 2026-08-11 |
+| D19 | **Barge-in reuses the identical per-turn pipeline as any other turn — no `is_barge_in` branch anywhere.** An inconclusive barge-in (no safety trigger detected, including one cut off mid-word) triggers exactly one open re-prompt, drawn from the *same* retry ladder as D18, not a separate uncounted loop | Marco's addition, given R4's zero prior art. Keeps the barge-in-ordering question answerable by pointing at `ADR-010`'s existing mechanism (L1 runs first on raw input, unconditionally) rather than inventing new ordering machinery for the interruption path specifically. Prevents the repair mechanism itself from becoming the unbounded-loop failure mode it exists to close | 2026-08-11 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -760,3 +776,53 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
 - **No application/agent code written this entry** — the table itself is the only artifact. No billable
   resource created. $0.00 new spend. **Phase 4 has not started** — presented for Marco's `APPROVED: Phase 4`,
   per the STOP CONDITIONS, same as every prior phase.
+
+### 2026-08-11 — Phase 4 approved and built: taxonomy, slots, dialogue policies, prompt registry, persona
+
+- **Marco typed `APPROVED: Phase 4`**, adding one requirement to criterion 6 before work began: given R4
+  (zero prior art anywhere in the source corpus for barge-in), the L1×barge-in ordering and the no-input/
+  no-match retry ceiling both needed to be **designed explicitly, not discovered later** — specifically, what
+  happens when a caller barges in mid-prompt with an injury disclosure that's cut off mid-word, and what the
+  system does at the retry ceiling rather than looping.
+- **Wrote all five deliverables:**
+  - `docs/phase4/INTENT-TAXONOMY.md` — canonical + adversarial utterance sets for all six intents, including
+    a paired adversarial set built directly against `coverage-logic.md` §4's question-type split (§2.5) and
+    against the new barge-in design (§2.6), so both land as reusable Phase 6/7 eval material, not just
+    documentation.
+  - `docs/phase4/SLOT-DESIGN.md` — `FileAutoClaim`'s 11-slot priority order and full per-slot spec (safety
+    first, then policy/vehicle context, then narrative, then party/report detail, driver identity last); the
+    `UpdateContactInfo` mandatory-confirmation write path; DTMF fallback scoped to exactly the three
+    digits-only identifier slots per `DATA-CONTRACTS.md`.
+  - `docs/phase4/DIALOGUE-POLICIES.md` — the compound `CoverageQuestion` decision path (§2, Marco's original
+    requirement: classify election-fact-mandatory / election-fact-optional / eligibility-amount as part of
+    the existing merged router+L2 call, not a new round-trip; names `GetPolicyholderElections` as a forward
+    Phase 5 tool requirement); the rental/towing compound policy (§3); the injury hard-escalation script and
+    preemption rule (§5); **§6 — barge-in reuses the exact per-turn pipeline with no separate code path, so
+    `ADR-010`'s L1-first ordering already covers the interruption path by construction, and a mid-word cutoff
+    is answered with one open re-prompt rather than either silent discard or an assumed-safe resumption**;
+    **§7 — the retry ceiling (2 attempts, then escalate, never a hang-up), scoped per-slot not per-call, with
+    the barge-in repair path in §6 explicitly drawing from this same ladder rather than creating a second
+    one**; a full escalation-trigger table (§8) cross-checked against Phase 1's four routes.
+  - `docs/phase4/PROMPT-REGISTRY.md` — full tool schema + system prompt for the merged Nova Micro router+L2
+    call; system prompts and suggested `max_tokens` for the two generation-node prompts. **Structural finding
+    stated as D17**: the generation node is invoked for exactly two cases — every other spoken line in the
+    system is fixed or templated, which is the real mechanism behind the length-discipline requirement, not
+    just a prompting instruction. The length-tolerance table covers both generated and templated turns with
+    per-category enforcement, directly citing the Nova Micro pre-flight padding case as the motivating
+    example Marco supplied.
+  - `docs/phase4/PERSONA.md` — greeting with AI disclosure inline (not a footer), a fixed truthful response
+    if asked directly whether the caller is talking to a person, tone rules, and a **single budgeted empathy
+    phrase used once per call** rather than a rotating bank — reasoned explicitly against the same padding
+    concern as the prompt registry's length discipline, including a note that the escalation script must
+    never be preceded by it.
+- **Recorded D17–D19** — the generation-node scope decision, the retry-ceiling/no-hang-up rule, and the
+  barge-in-shares-the-same-ladder rule — as standing architectural decisions, not just prose inside the
+  design docs.
+- **All 13 exit-criteria rows checked** (see table above). **Phase 4 content is complete — presented for
+  Marco's closing sign-off, not self-marked closed**, applying the exact lesson Phase 3's own log recorded
+  about not letting that distinction go ambiguous.
+- **No application/agent code written** — five Markdown documents only; the LangGraph graph, MCP servers, and
+  tool implementations remain Phase 5's scope. **No billable resource created; $0.00 new spend.** The
+  optional closing verification named in criterion 12 (a small number of real Bedrock calls to empirically
+  check the length-discipline prompts) was **not run** — it remains available but was not exercised without a
+  separate cost-gate approval, same discipline as every other real-spend decision this project has made.
