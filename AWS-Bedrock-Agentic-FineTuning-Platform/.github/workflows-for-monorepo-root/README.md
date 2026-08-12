@@ -8,12 +8,12 @@ ignored. No error, no warning; the workflows simply never run.
 Copy both files to the monorepo root when installing this project:
 
 ```bash
-cp AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/.github/workflows-for-monorepo-root/*.yml \
+cp AWS-Bedrock-Agentic-FineTuning-Platform/.github/workflows-for-monorepo-root/*.yml \
    .github/workflows/
 ```
 
 They are already path-scoped to
-`AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/**`, so they never fire on a
+`AWS-Bedrock-Agentic-FineTuning-Platform/**`, so they never fire on a
 sibling project's changes, and every job sets `working-directory` to this project folder.
 
 **If the folder is ever renamed**, update the `paths:` filters, `working-directory:`

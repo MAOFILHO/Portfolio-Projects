@@ -1,4 +1,4 @@
-# PLAN.md — AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+# PLAN.md — AWS-Bedrock-Agentic-FineTuning-Platform
 
 **Status:** Phase 2 deliverable. Awaiting approval. **Zero implementation code written. Zero resources provisioned.**
 **Source of truth:** `UserGuide - Create Bedrock Custom Model with Fine-tuning and Inference.pdf` (117 pages, read end to end).
@@ -391,7 +391,7 @@ Observability: OTel → CloudWatch + terminal spans │ Langfuse → agent/LLM t
 ## 5. File tree
 
 ```
-AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/
+AWS-Bedrock-Agentic-FineTuning-Platform/
 ├── CLAUDE.md                          # PRESERVED — read-only project law, never overwritten
 ├── PLAN.md  TASKS.md  COSTS.md
 ├── README.md  CHANGELOG.md  LICENSE  .gitignore  .env.example

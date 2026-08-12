@@ -1,4 +1,4 @@
-name: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform Terraform
+name: AWS-Bedrock-Agentic-FineTuning-Platform Terraform
 
 # Validate and plan only. There is deliberately NO apply job: every billable change in
 # this project requires a live cost estimate and a typed human approval, neither of
@@ -8,12 +8,12 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/**"
-      - ".github/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml"
+      - "AWS-Bedrock-Agentic-FineTuning-Platform/infra/**"
+      - ".github/workflows/aws-bedrock-agentic-finetuning-platform-terraform.yml"
   pull_request:
     branches: ["main"]
     paths:
-      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/**"
+      - "AWS-Bedrock-Agentic-FineTuning-Platform/infra/**"
 
 # id-token is required for OIDC. There are no long-lived AWS keys in this repository and
 # none may be added — OIDC issues short-lived credentials scoped to this workflow.
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/terraform
+        working-directory: AWS-Bedrock-Agentic-FineTuning-Platform/infra/terraform
     steps:
       - uses: actions/checkout@v7
 
@@ -62,7 +62,7 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     defaults:
       run:
-        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/infra/terraform
+        working-directory: AWS-Bedrock-Agentic-FineTuning-Platform/infra/terraform
     steps:
       - uses: actions/checkout@v7
 

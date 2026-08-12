@@ -13,8 +13,8 @@
 ![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?style=flat&labelColor=1a1a2e)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white&labelColor=1a1a2e)
 
-[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-ci.yml)
-[![Terraform](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-finetuning-langgraph-mcp-agentic-platform-terraform.yml)
+[![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-agentic-finetuning-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-agentic-finetuning-platform-ci.yml)
+[![Terraform](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-agentic-finetuning-platform-terraform.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-bedrock-agentic-finetuning-platform-terraform.yml)
 
 ## Project Description
 

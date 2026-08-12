@@ -1,4 +1,4 @@
-# COSTS.md — AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+# COSTS.md — AWS-Bedrock-Agentic-FineTuning-Platform
 
 **Permanent record of what was costed and approved.**
 Region: `us-east-1` · Account: `759316130780` · Currency: USD, list price.

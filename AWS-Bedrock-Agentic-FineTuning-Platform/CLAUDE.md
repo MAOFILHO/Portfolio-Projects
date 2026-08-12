@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-This repository is being built into a **production-grade Python project** — `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` — derived from a hands-on guide: *"Create a Bedrock Custom Model with Fine-tuning and Inference"*.
+This repository is being built into a **production-grade Python project** — `AWS-Bedrock-Agentic-FineTuning-Platform` — derived from a hands-on guide: *"Create a Bedrock Custom Model with Fine-tuning and Inference"*.
 
 Current contents are **source inputs**, not the finished project:
 

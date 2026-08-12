@@ -1,4 +1,4 @@
-name: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform CI
+name: AWS-Bedrock-Agentic-FineTuning-Platform CI
 
 # Runs on every push/PR touching this project's folder only — path-scoped so it never
 # fires on an unrelated sibling project's changes. Everything here is static analysis or
@@ -9,11 +9,11 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/**"
+      - "AWS-Bedrock-Agentic-FineTuning-Platform/**"
   pull_request:
     branches: ["main"]
     paths:
-      - "AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/**"
+      - "AWS-Bedrock-Agentic-FineTuning-Platform/**"
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+        working-directory: AWS-Bedrock-Agentic-FineTuning-Platform
     steps:
       - uses: actions/checkout@v7
 
@@ -37,8 +37,8 @@ jobs:
           python-version: "3.12"
           cache: "pip"
           cache-dependency-path: |
-            AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/requirements.txt
-            AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/requirements-dev.txt
+            AWS-Bedrock-Agentic-FineTuning-Platform/requirements.txt
+            AWS-Bedrock-Agentic-FineTuning-Platform/requirements-dev.txt
 
       - name: Install dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+        working-directory: AWS-Bedrock-Agentic-FineTuning-Platform
     steps:
       - uses: actions/checkout@v7
 
@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/frontend
+        working-directory: AWS-Bedrock-Agentic-FineTuning-Platform/frontend
     steps:
       - uses: actions/checkout@v7
 
@@ -99,7 +99,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform/frontend/package-lock.json
+          cache-dependency-path: AWS-Bedrock-Agentic-FineTuning-Platform/frontend/package-lock.json
 
       - run: npm ci
 

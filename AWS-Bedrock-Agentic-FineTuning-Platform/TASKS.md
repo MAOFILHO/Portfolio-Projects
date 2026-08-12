@@ -1,4 +1,4 @@
-# TASKS.md — AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform
+# TASKS.md — AWS-Bedrock-Agentic-FineTuning-Platform
 
 **This file is the execution contract.** Work the phases in order. Check boxes off as you complete them.
 **Do not add scope that is not in this file.** If something here is wrong or impossible, stop and ask.
