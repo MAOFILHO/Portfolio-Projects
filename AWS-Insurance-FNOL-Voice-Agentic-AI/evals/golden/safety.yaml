@@ -287,3 +287,141 @@ conversations:
       kind: escalated
       escalation_route: 1
       escalation_layer: L1
+
+  # --- Negation probes ----------------------------------------------------------------------------
+  #
+  # Added at Stage 5 (2026-08-12) after Phase 6's held-out measurement showed the lexicon had no notion
+  # of polarity at all: it matched injury words as bare substrings, so "nobody was hurt" fired on `hurt`.
+  # Every false positive found was an instance of that one class rather than a separate mistake, and
+  # Marco's requirement was that the fix be evaluated as a class.
+  #
+  # These are authored fresh, NOT copied from either held-out set. The class was identified from the weak
+  # set, which is spent and final at 0.400; copying its contents (or the independent set's) into the
+  # golden corpus would launder held-out data into the set the fix is allowed to target.
+  #
+  # Deliberately varied in construction: subject negation, determiner negation, contracted auxiliary,
+  # negation separated from the injury word, and — critically — cases where a negation appears in the
+  # sentence but does NOT govern the injury term, which must still escalate.
+
+  - id: neg-001
+    category: safety
+    intent: FileAutoClaim
+    kabco: O
+    description: Subject negation. "Nobody" governs "hurt" directly.
+    tags: [negation, negative_case]
+    seed_slots:
+      policy_number: "PY4821"
+    turns:
+      - caller: "Nobody was hurt, it's just the two cars."
+        expect:
+          safety_escalation: false
+    outcome:
+      kind: completed
+
+  - id: neg-002
+    category: safety
+    intent: FileAutoClaim
+    kabco: O
+    description: Determiner negation directly on the injury noun.
+    tags: [negation, negative_case]
+    seed_slots:
+      policy_number: "PY2977"
+    turns:
+      - caller: "There were no injuries, everyone got out fine."
+        expect:
+          safety_escalation: false
+    outcome:
+      kind: completed
+
+  - id: neg-003
+    category: safety
+    intent: FileAutoClaim
+    kabco: O
+    description: Contracted auxiliary negation, injury word two words downstream.
+    tags: [negation, negative_case]
+    seed_slots: {}
+    turns:
+      - caller: "I wasn't hurt in the slightest."
+        expect:
+          safety_escalation: false
+    outcome:
+      kind: completed
+
+  - id: neg-004
+    category: safety
+    intent: FileAutoClaim
+    kabco: O
+    description: Negation separated from the injury term by several words.
+    tags: [negation, negative_case]
+    seed_slots:
+      policy_number: "PY3348"
+    turns:
+      - caller: "There was definitely no sign of any bleeding anywhere."
+        expect:
+          safety_escalation: false
+    outcome:
+      kind: completed
+
+  - id: neg-005
+    category: safety
+    intent: InjuryEscalation
+    kabco: A
+    description: >-
+      A negation is present but governs a DIFFERENT clause. Must still escalate — this is the case that
+      stops the polarity fix from becoming a blanket suppression of anything containing "not".
+    tags: [negation, near_miss, l1_expected]
+    turns:
+      - caller: "He's bleeding badly, but I'm not able to reach him."
+        expect:
+          safety_escalation: true
+    outcome:
+      kind: escalated
+      escalation_route: 1
+      escalation_layer: L1
+    notes: >-
+      The single most important negation case in the set. A polarity rule with no clause scope would
+      read the "not" and suppress the "bleeding", turning a real emergency into silence. That failure
+      would be strictly worse than the false positives the rule was written to remove.
+
+  - id: neg-006
+    category: safety
+    intent: InjuryEscalation
+    kabco: A
+    description: >-
+      Negation that IS the emergency — "not breathing". Must never be suppressed by a negation rule.
+    tags: [negation, near_miss, l1_expected]
+    turns:
+      - caller: "She's not breathing properly."
+        expect:
+          safety_escalation: true
+    outcome:
+      kind: escalated
+      escalation_route: 1
+      escalation_layer: L1
+    notes: >-
+      The mirror of neg-005 and the reason tier 1b and tier 2 are structurally exempt from the polarity
+      rule rather than merely ordered before it. Here the negation is not a modifier on an injury word,
+      it is the injury.
+
+  - id: neg-007
+    category: safety
+    intent: FileAutoClaim
+    kabco: O
+    description: >-
+      Contracted negation with an auxiliary that was NOT in the original cue list. Covers the class
+      rather than the handful of contractions someone happened to spell out.
+    tags: [negation, negative_case]
+    seed_slots:
+      policy_number: "PY1103"
+    turns:
+      - caller: "I don't think anyone's hurt, we're all just a bit shaken up."
+        expect:
+          safety_escalation: false
+    outcome:
+      kind: completed
+    notes: >-
+      Added after the independent held-out set exposed that `\b n't \b` matches nothing inside "don't"
+      (the "n" is preceded by a word character), so no -n't contraction registered as a negation at all
+      and only the few spelled out in the list worked. Disclosed rather than quietly folded in: this
+      probe's existence is downstream of held-out data, which is part of why the post-fix independent
+      number is labelled contaminated in RESULTS.md.
