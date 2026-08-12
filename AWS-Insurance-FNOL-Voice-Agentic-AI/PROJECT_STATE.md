@@ -11,13 +11,12 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 5 — Agent implementation — **in progress, Stages 1–7 of 8 complete, gated here at
-Stage 7 per Marco's instruction** (report before the optional Stage 8 real-Bedrock verification).
-Phase 4 signed off 2026-08-11.
+**Current phase:** Phase 5 — Agent implementation — **all 8 stages complete, presented for closing
+sign-off, not self-marked closed.** Phase 4 signed off 2026-08-11.
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
-Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
+Bedrock standing-approval budget consumed: **≈$0.00037 of $5.00**.
 
 ---
 
@@ -30,7 +29,7 @@ Bedrock standing-approval budget consumed: **$0.0001161 of $5.00**.
 | 2 | Architecture and ADRs | ✅ **Signed off** 2026-08-11 |
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
-| 5 | Agent implementation | 🟡 In progress — Stages 1–7/8 complete, gated at Stage 7 2026-08-11 |
+| 5 | Agent implementation | 🟡 All 8 stages complete 2026-08-11 — presented for closing sign-off |
 | 6 | Evaluation harness | ⬜ Not started |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
@@ -274,8 +273,11 @@ check — that is where this table now stands.
 | 9 | Graph assembly, DynamoDB checkpointer, integration tests covering all six intents, injury preemption, a barge-in scenario, and a retry-ceiling-exhaustion scenario | ✅ Stage 7 — see below for how Marco's two requirements were verified, not just implemented |
 | 10 | Cost gate named per component | ✅ `docs/phase5/BUILD-PLAN.md` §2 — empirically confirmed across all seven stages: **zero real AWS calls** |
 | 11 | Mock-by-default holds for every stage | ✅ Stages 1–7, confirmed by 199/199 passing tests with no real AWS credentials touched |
-| 12 | No billable resource created; $0.00 new spend | ✅ $0.00 across Stages 1–7. Stage 8's optional real-Bedrock verification remains unexercised, pending separate cost-gate approval |
+| 12 | No billable resource created; $0.00 new spend beyond the standing Bedrock cap | ✅ Stage 8 ran, cost-gated: ≈$0.00025 combined across two passes, ≈$0.00037 of the $5.00 cap consumed to date. No provisioned resource created |
 | 13 | Marco's explicit approval to begin | ✅ `APPROVED: Phase 5`, typed 2026-08-11 |
+
+**All 8 stages now complete. Phase 5 content is done — presented for Marco's closing sign-off, not
+self-marked closed**, matching the pattern every prior phase has used.
 
 ### Marco's two integration requirements, verified — not just implemented
 
@@ -339,7 +341,7 @@ has not run — Marco asked to report here first. No code has touched real AWS a
 | D2 | Make targets: `bootstrap/deploy/destroy/eval/redteam` canonical, `provision`/`teardown` as aliases | Satisfies the Definition of Done verbatim while preserving sibling-project vocabulary | 2026-08-11 |
 | D3 | Bedrock on-demand inference pre-approved for Phases 3–7, **$5 hard cap**, logged per-run in `COSTS.md` | Avoids a gate prompt on every eval run; provisioned resources still gated individually | 2026-08-11 |
 | D4 | **Discard rate is an output to report and justify, not a target to hit** | A threshold on a descriptive statistic invites gaming the statistic instead of doing honest analysis. Low rates get challenged on the merits | 2026-08-11 |
-| D5 | Python `>=3.12,<3.13`; ruff line-length 100, `select=["E","F","I","UP","B","SIM"]`; mypy strict | Matches sibling project `AWS-Bedrock-FineTuning-LangGraph-MCP-Agentic-Platform` | 2026-08-11 |
+| D5 | Python `>=3.12,<3.13`; ruff line-length 100, `select=["E","F","I","UP","B","SIM"]`; mypy strict | Matches sibling project `AWS-Bedrock-Agentic-FineTuning-Platform` | 2026-08-11 |
 | D6 | Workflows authored in `.github/workflows-for-monorepo-root/`, prefixed `FNOL_*` repo variables | GitHub Actions ignores workflows inside project subfolders silently; established monorepo convention | 2026-08-11 |
 | D7 | Vendor **no images** from any source repo | Redaction/console screenshots and DMV specimens are an accidental-PII and likeness vector | 2026-08-11 |
 | D8 | **Simulator-first**; real calls reserved for demo/verification | Telephony is ~92% of the ~$0.20 marginal cost per conversation; ~100 real calls would nearly exhaust the $25 budget | 2026-08-11 |
@@ -355,6 +357,7 @@ has not run — Marco asked to report here first. No code has touched real AWS a
 | D18 | **No-input/no-match retry ceiling fixed at 2 consecutive attempts per slot/question; the terminal state is always escalation (route 3), never a hang-up** | Makes concrete what `PROBLEM-FRAMING.md`'s escalation route 3 already numbered but didn't operationalize. Stated as an explicit negative rule ("hang-up is never a fallback state") because a missing terminal branch is exactly the kind of defect that's easy to leave implicit and hard to notice until a real call falls through it | 2026-08-11 |
 | D19 | **Barge-in reuses the identical per-turn pipeline as any other turn — no `is_barge_in` branch anywhere.** An inconclusive barge-in (no safety trigger detected, including one cut off mid-word) triggers exactly one open re-prompt, drawn from the *same* retry ladder as D18, not a separate uncounted loop | Marco's addition, given R4's zero prior art. Keeps the barge-in-ordering question answerable by pointing at `ADR-010`'s existing mechanism (L1 runs first on raw input, unconditionally) rather than inventing new ordering machinery for the interruption path specifically. Prevents the repair mechanism itself from becoming the unbounded-loop failure mode it exists to close | 2026-08-11 |
 | D20 | **"The majority of this system's spoken output is deterministic and cannot hallucinate" is a stated architectural claim**, not just an implementation detail of `D17` — checkable because `PROMPT-REGISTRY.md` §1 names the entire generative surface area (exactly two prompts). Elevated to Phase 12's README as a claim to make explicitly, not left buried under D17 | Marco: "D17 is more consequential than its placement suggests." A structural absence-of-hallucination-surface property is a stronger and more honest claim than a tuned mitigation, and belongs in the portfolio narrative once Phase 12 exists to state it | 2026-08-11 |
+| D21 | **Finding, not just a fix: a model invariant can pass every existing test while being wrong, if the case that breaks it was never exercised.** `Claim`'s settlement-figure rule (Stage 1) required exactly one of `estimated_settlement_cad`/`settlement_amount_cad` — correct against every record in the static corpus, because no `REPORTED` claim existed in it. The rule was never actually tested against a freshly-filed claim until Stage 6 built the first write path (`file_new_claim`) and produced one. **The lesson generalizes beyond this one field**: any invariant validated only against read-only fixture data is untested for whatever a write path would first produce — worth re-checking explicitly, not assumed clean, when Phase 8 provisions the real table and real writes start happening against it | Marco, explicitly asked this be recorded as a finding, not folded quietly into the Stage 6 fix-log entry — "an invariant that only fails once something writes is the kind of thing worth remembering when Phase 8 writes to a real table" | 2026-08-11 |
 
 ### Carried forward to future phases — named now so they aren't rediscovered later
 
@@ -397,6 +400,7 @@ claim block**.
 | R4 | **Zero prior art in all eight repos** for barge-in, DTMF, no-input/no-match, timeouts, streaming, or interim audio fillers — the combined corpus contains only `MaxRetries: 2` | Constraint 14's 1,800 ms p95 must be engineered from docs, not adapted | Budget real time in Phase 4; measure cold-start impact in Phase 9 |
 | ~~R5~~ | ~~Two of the six intents (rental/towing entitlement) have no source material anywhere in the corpus~~ | **RESOLVED** | `data/synthetic/policy/endorsements.md` — rental (OPCF 20-modeled) and towing (bundled DCPD/Collision allowance) both authored, grounded against real Ontario reference products |
 | R6 | Repo 7 — nominally the "richest agentic source" — **contains no Bedrock at all** (self-hosted Ollama on GPU Karpenter) and its LangGraph code is partly non-functional | The entire Bedrock, checkpointer, guardrails, RAG, eval, MCP and observability layer is greenfield | Accepted and planned for; only the *patterns* and domain model were harvested |
+| R7 | **Model invariants validated only against static/read-only fixtures may be untested for the write path** — `D21`'s finding, generalized: `Claim`'s settlement-figure rule was correct against every existing corpus record and still wrong for a case none of them represented (a freshly-`REPORTED` claim) | A real DynamoDB write from Phase 8 could be the first thing to exercise a model invariant that has only ever seen read-only fixtures, the same way `file_new_claim` was for `Claim` | Re-audit invariants on every model that gains a real write path in Phase 8, specifically for states the static corpus never represented, before trusting them against a live table |
 
 [#42147]: https://github.com/hashicorp/terraform-provider-aws/issues/42147
 [#36845]: https://github.com/hashicorp/terraform-provider-aws/issues/36845
@@ -1125,3 +1129,63 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
 - **Phase 5 exit-criteria table updated**: rows 1–13 now all checked; both of Marco's Stage 6/7 requirements
   recorded with how each was verified, not just asserted. **Phase 5 is not signed off** — Stage 8's optional
   real-Bedrock verification has not run, per Marco's instruction to report here first.
+
+### 2026-08-11 — Stage 8: real-call verification, scoped tightly; two real divergences from the fakes
+
+- **Marco approved Stage 8**, scoped tightly to: one `classify_turn` call through the real, assembled graph;
+  `CoverageQuestion`'s optional-election generation path; `RentalTowingEntitlement`'s compound generation
+  path; plus `CF3` (sample Nova Micro's tight-turn path several times, not the n=1 Phase 4 left as a smoke
+  test). Asked for what diverges from the fake-LLM assumptions, not just whether it worked.
+- **A real test-hygiene bug caught on the first attempt**: building the real graph and invoking it *inside*
+  the same `with mock_aws():` block used to seed the moto-backed vector store sent the real Bedrock call
+  through moto too — `mock_aws()` intercepts every boto3 call process-wide within its context, not just the
+  service it's meant to fake, so the "real" Converse call got a moto-fabricated 404 instead of reaching
+  Bedrock. Fixed by building the table inside `mock_aws()`, then invoking the graph (and every real Bedrock
+  call) entirely outside it — general lesson, not specific to this script: never make a real AWS call inside
+  a `mock_aws()` scope meant for a different service, since moto does not scope its interception to the
+  service you asked it to fake.
+- **Real vs. fake, per path:**
+  - **Classification, via the real graph**: exact match to what `FakeBedrockConverseClient` was always
+    scripted to return — clean tool-use call, correct intent (`CheckClaimStatus`, confidence 1.0), correct
+    downstream response. No divergence.
+  - **`CoverageQuestion` optional-election (real policyholder `PY4821`, real IRB passage)**: matched the
+    length-discipline target (1 sentence) on both real trials run, correctly grounded against the real
+    election record both times. No divergence.
+  - **`RentalTowingEntitlement` compound (real claim `CLM-2608-00042-4`)**: **a real, reportable divergence.**
+    First trial: 2 sentences, no redundancy. Second trial (same prompt, same context, different sample):
+    **3 sentences, with the third restating the same "8 days remaining" fact already given in the second**
+    — the exact redundancy-via-restatement defect `PROMPT-REGISTRY.md` §4 documented fixing after Phase 4's
+    verification. The prompt-level "do not restate the same fact" instruction added then reduces but does
+    **not reliably eliminate** the defect — it's probabilistic, not fixed, and a second real sample was
+    enough to show it recurring. Also, both trials included the endorsement's general 20-day cap alongside
+    the caller-specific 8-days-remaining answer — a mild instance of exactly the "general mechanics beyond
+    what answers this caller's situation" padding the prompt already asks it not to do, within the sentence
+    budget but not fully honoring its spirit either time.
+  - **CF3 — 5 real Nova Micro tight-turn samples**, drawn from real `INTENT-TAXONOMY.md` §2.3 ambiguous
+    utterances (one repeated to separate run-to-run variance from input-dependent variance): **all 5
+    produced exactly one sentence**, no restated question, no filler — the sentence-count discipline that
+    motivated this whole requirement held across every real sample taken. Content quality varied more than
+    length did: one trial (rental-vs-coverage ambiguity) produced a serviceable but oddly-scoped
+    clarifying question rather than a clean either/or. n is still small (5, or 10 counting the earlier
+    duplicate full run below) — reported as observed, not asserted as proof the tendency is solved,
+    consistent with how `AI-USE-CASE-CARD.md` treats this class of risk generally.
+  - **A process gap, named rather than hidden**: the verification script was run twice — once before a
+    cost-logging wrapper was added, once after. Both runs made the same 8 real calls (including a second,
+    independent set of 5 CF3 samples — all also 1-sentence, and the rerun's `RentalTowingEntitlement` trial
+    was the one that produced the 2-sentence, non-redundant answer, while the *later*, precisely-logged run
+    produced the redundant 3-sentence one — the defect showed up on the second full pass, not the first).
+    Exact token counts exist only for the second run; the first run's cost is estimated, not measured, and
+    `COSTS.md` states that plainly rather than presenting one number as if both were captured with equal
+    precision.
+- **Cost**: second (instrumented) pass — 1,602 input / 199 output tokens across 8 real calls, $0.00012301
+  exact. First pass — same 8 calls, ≈$0.00012 estimated. **Combined ≈$0.00025**, logged in `COSTS.md`.
+  **Running Bedrock standing-cap total: ≈$0.00037 of $5.00.**
+- **`D21` recorded as a named finding, not folded into the Stage 6 fix-log entry**, per Marco's explicit
+  instruction: `Claim`'s settlement-figure invariant was correct against every existing corpus record and
+  still wrong for a case none of them represented — a model invariant validated only against static
+  read-only fixtures is untested for whatever a write path first produces. Generalized as `R7` — Phase 8's
+  real DynamoDB write path should re-audit invariants on every model it starts actually writing through,
+  not just the one this session happened to hit.
+- **All 8 Phase 5 stages are now complete.** Exit-criteria table fully checked. **Phase 5 is not signed
+  off** — content is presented for Marco's closing sign-off, not self-marked closed, per the pattern every
+  prior phase has used.
