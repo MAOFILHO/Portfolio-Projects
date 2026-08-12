@@ -1,0 +1,425 @@
+{
+  "k": 5,
+  "settings": {
+    "default_unset": {
+      "temperature": null,
+      "metrics": {
+        "per_run": [
+          {
+            "macro_f1": 0.488,
+            "accuracy": 0.5128205128205128,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3333333333333333
+          },
+          {
+            "macro_f1": 0.502375,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3333333333333333
+          },
+          {
+            "macro_f1": 0.527125,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.34615384615384615
+          },
+          {
+            "macro_f1": 0.551,
+            "accuracy": 0.5512820512820513,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3333333333333333
+          },
+          {
+            "macro_f1": 0.50875,
+            "accuracy": 0.5128205128205128,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.358974358974359
+          }
+        ],
+        "macro_f1": {
+          "values": [
+            0.488,
+            0.502375,
+            0.527125,
+            0.551,
+            0.50875
+          ],
+          "min": 0.488,
+          "max": 0.551,
+          "spread": 0.06300000000000006,
+          "mean": 0.5154500000000001,
+          "stdev": 0.02433853040962006
+        },
+        "accuracy": {
+          "values": [
+            0.5128205128205128,
+            0.5256410256410257,
+            0.5256410256410257,
+            0.5512820512820513,
+            0.5128205128205128
+          ],
+          "min": 0.5128205128205128,
+          "max": 0.5512820512820513,
+          "spread": 0.03846153846153855,
+          "mean": 0.5256410256410257,
+          "stdev": 0.01570185732553323
+        },
+        "oos_recall": {
+          "values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "spread": 0.0,
+          "mean": 0.0,
+          "stdev": 0.0
+        },
+        "safety_flag_rate": {
+          "values": [
+            0.3333333333333333,
+            0.3333333333333333,
+            0.34615384615384615,
+            0.3333333333333333,
+            0.358974358974359
+          ],
+          "min": 0.3333333333333333,
+          "max": 0.358974358974359,
+          "spread": 0.02564102564102566,
+          "mean": 0.34102564102564104,
+          "stdev": 0.0114670152692297
+        }
+      },
+      "stability": {
+        "items": 78,
+        "intent_unstable_count": 35,
+        "safety_flag_unstable_count": 13,
+        "intent_unstable": {
+          "adv-001": {
+            "CheckClaimStatus": 2,
+            "CoverageQuestion": 2,
+            "Ambiguous": 1
+          },
+          "adv-003": {
+            "Ambiguous": 4,
+            "CheckClaimStatus": 1
+          },
+          "amb-002": {
+            "FileAutoClaim": 2,
+            "Ambiguous": 2,
+            "InjuryEscalation": 1
+          },
+          "amb-003": {
+            "InjuryEscalation": 4,
+            "UpdateContactInfo": 1
+          },
+          "ccs-001": {
+            "CheckClaimStatus": 4,
+            "Ambiguous": 1
+          },
+          "ccs-002": {
+            "CheckClaimStatus": 4,
+            "Ambiguous": 1
+          },
+          "ccs-003": {
+            "CheckClaimStatus": 2,
+            "Ambiguous": 3
+          },
+          "ccs-004": {
+            "CheckClaimStatus": 4,
+            "Ambiguous": 1
+          },
+          "ccs-006": {
+            "CheckClaimStatus": 4,
+            "Ambiguous": 1
+          },
+          "cq-001": {
+            "InjuryEscalation": 3,
+            "CoverageQuestion": 2
+          },
+          "cq-006": {
+            "Ambiguous": 3,
+            "CoverageQuestion": 2
+          },
+          "cq-007": {
+            "CoverageQuestion": 4,
+            "OutOfScope": 1
+          },
+          "cq-009": {
+            "CoverageQuestion": 4,
+            "Ambiguous": 1
+          },
+          "cq-010": {
+            "CoverageQuestion": 3,
+            "InjuryEscalation": 1,
+            "Ambiguous": 1
+          },
+          "fac-003": {
+            "InjuryEscalation": 4,
+            "FileAutoClaim": 1
+          },
+          "fac-004": {
+            "InjuryEscalation": 4,
+            "FileAutoClaim": 1
+          },
+          "fac-005": {
+            "InjuryEscalation": 1,
+            "FileAutoClaim": 4
+          },
+          "fac-009": {
+            "FileAutoClaim": 2,
+            "InjuryEscalation": 3
+          },
+          "fac-010": {
+            "InjuryEscalation": 4,
+            "FileAutoClaim": 1
+          },
+          "fac-011": {
+            "InjuryEscalation": 4,
+            "Ambiguous": 1
+          },
+          "fac-012": {
+            "FileAutoClaim": 1,
+            "InjuryEscalation": 4
+          },
+          "inj-001": {
+            "InjuryEscalation": 4,
+            "Ambiguous": 1
+          },
+          "inj-005": {
+            "FileAutoClaim": 2,
+            "InjuryEscalation": 3
+          },
+          "neg-003": {
+            "FileAutoClaim": 3,
+            "InjuryEscalation": 1,
+            "Ambiguous": 1
+          },
+          "neg-004": {
+            "InjuryEscalation": 2,
+            "FileAutoClaim": 3
+          },
+          "neg-007": {
+            "InjuryEscalation": 4,
+            "Ambiguous": 1
+          },
+          "oos-002": {
+            "CoverageQuestion": 3,
+            "Ambiguous": 2
+          },
+          "oos-005": {
+            "FileAutoClaim": 2,
+            "Ambiguous": 3
+          },
+          "rte-001": {
+            "Ambiguous": 1,
+            "CheckClaimStatus": 3,
+            "RentalTowingEntitlement": 1
+          },
+          "rte-002": {
+            "CoverageQuestion": 4,
+            "Ambiguous": 1
+          },
+          "rte-005": {
+            "Ambiguous": 2,
+            "FileAutoClaim": 1,
+            "InjuryEscalation": 1,
+            "CheckClaimStatus": 1
+          },
+          "rte-006": {
+            "CoverageQuestion": 3,
+            "Ambiguous": 2
+          },
+          "rte-007": {
+            "CheckClaimStatus": 2,
+            "CoverageQuestion": 1,
+            "Ambiguous": 2
+          },
+          "rte-008": {
+            "CheckClaimStatus": 1,
+            "FileAutoClaim": 1,
+            "Ambiguous": 2,
+            "InjuryEscalation": 1
+          },
+          "uci-005": {
+            "Ambiguous": 1,
+            "UpdateContactInfo": 4
+          }
+        },
+        "safety_flag_unstable": {
+          "cq-001": {
+            "True": 2,
+            "False": 3
+          },
+          "cq-003": {
+            "False": 4,
+            "True": 1
+          },
+          "cq-006": {
+            "False": 4,
+            "True": 1
+          },
+          "fac-001": {
+            "True": 2,
+            "False": 3
+          },
+          "fac-002": {
+            "False": 3,
+            "True": 2
+          },
+          "fac-004": {
+            "True": 4,
+            "False": 1
+          },
+          "fac-009": {
+            "False": 2,
+            "True": 3
+          },
+          "fac-010": {
+            "False": 2,
+            "True": 3
+          },
+          "fac-011": {
+            "False": 2,
+            "True": 3
+          },
+          "fac-012": {
+            "False": 1,
+            "True": 4
+          },
+          "inj-005": {
+            "True": 1,
+            "False": 4
+          },
+          "neg-007": {
+            "True": 4,
+            "False": 1
+          },
+          "oos-003": {
+            "True": 3,
+            "False": 2
+          }
+        }
+      },
+      "dropped_safety_flag": {
+        "count": 0,
+        "of_attempts": 390,
+        "events": []
+      }
+    },
+    "zero": {
+      "temperature": 0.0,
+      "metrics": {
+        "per_run": [
+          {
+            "macro_f1": 0.517875,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3974358974358974
+          },
+          {
+            "macro_f1": 0.517875,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3974358974358974
+          },
+          {
+            "macro_f1": 0.517875,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3974358974358974
+          },
+          {
+            "macro_f1": 0.517875,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3974358974358974
+          },
+          {
+            "macro_f1": 0.517875,
+            "accuracy": 0.5256410256410257,
+            "oos_recall": 0.0,
+            "safety_flag_rate": 0.3974358974358974
+          }
+        ],
+        "macro_f1": {
+          "values": [
+            0.517875,
+            0.517875,
+            0.517875,
+            0.517875,
+            0.517875
+          ],
+          "min": 0.517875,
+          "max": 0.517875,
+          "spread": 0.0,
+          "mean": 0.517875,
+          "stdev": 0.0
+        },
+        "accuracy": {
+          "values": [
+            0.5256410256410257,
+            0.5256410256410257,
+            0.5256410256410257,
+            0.5256410256410257,
+            0.5256410256410257
+          ],
+          "min": 0.5256410256410257,
+          "max": 0.5256410256410257,
+          "spread": 0.0,
+          "mean": 0.5256410256410257,
+          "stdev": 0.0
+        },
+        "oos_recall": {
+          "values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "min": 0.0,
+          "max": 0.0,
+          "spread": 0.0,
+          "mean": 0.0,
+          "stdev": 0.0
+        },
+        "safety_flag_rate": {
+          "values": [
+            0.3974358974358974,
+            0.3974358974358974,
+            0.3974358974358974,
+            0.3974358974358974,
+            0.3974358974358974
+          ],
+          "min": 0.3974358974358974,
+          "max": 0.3974358974358974,
+          "spread": 0.0,
+          "mean": 0.3974358974358974,
+          "stdev": 0.0
+        }
+      },
+      "stability": {
+        "items": 78,
+        "intent_unstable_count": 0,
+        "safety_flag_unstable_count": 0,
+        "intent_unstable": {},
+        "safety_flag_unstable": {}
+      },
+      "dropped_safety_flag": {
+        "count": 0,
+        "of_attempts": 390,
+        "events": []
+      }
+    }
+  },
+  "cost": {
+    "calls": 780,
+    "input_tokens": 724030,
+    "output_tokens": 35195,
+    "usd": 0.03026835
+  }
+}
