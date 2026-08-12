@@ -203,6 +203,30 @@ Deliberate properties:
 - **The gate is demonstrated to work** by opening a deliberately bad PR and showing it blocked (Definition of Done item 6). An untested gate is not a gate.
 - **Judge-scored metrics carry a human-reviewed sample.** A judge regression is investigated before it is trusted, in either direction.
 
+> ### Addendum, 2026-08-12 — the 3-point rule is insufficient for model-dependent metrics
+>
+> Written in Phase 1, before any measurement existed. Phase 7 measured the variance the rule has to work
+> against and it is **larger than the tolerance**: five identical runs of the intent harness at the shipped
+> sampling temperature spread macro-F1 by 0.063, and Phase 6's published figure sits ~4.3 sd outside the
+> distribution five later runs describe, for reasons this project cannot explain from the client side
+> (`PROJECT_STATE.md` `D29`).
+>
+> Two failure modes follow, and the second is the dangerous one:
+>
+> 1. A 3-point tolerance against a metric that moves 6 points on identical input **fires on luck**.
+> 2. If the serving side moves under a committed baseline, a real regression **hides inside the drift** —
+>    the gate stays green while the system gets worse.
+>
+> **The rule above stands unchanged for deterministic metrics** — L1 recall, retrieval, corpus checks, cost
+> — which is most of the per-PR gate and the part with teeth today. For model-dependent metrics it is
+> **superseded by `CF6`**, which requires baselines stamped with date/model/temperature/k, a **same-run
+> control** re-measuring the unchanged configuration in the same CI job, and tolerances expressed in
+> measured standard deviations rather than fixed points. Phase 10 owns the implementation.
+>
+> Recorded here rather than only in `PROJECT_STATE.md` because this is the document the gate is built
+> from, and a constraint discovered after the spec was written is worth exactly nothing if it lives
+> somewhere the implementer will not look.
+
 ### Anti-gaming notes
 
 Recorded now because these are the specific ways this metric set could be satisfied while the system got worse:

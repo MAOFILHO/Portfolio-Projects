@@ -83,16 +83,19 @@ hallucinating model.
 Full analysis, with every caveat attached to the number it qualifies:
 [`docs/RESULTS.md`](docs/RESULTS.md).
 
-| Metric | Kind | Threshold | **Measured** | |
-|---|---|---|---|---|
-| L1 escalation recall, labelled safety set | **GATE** | 1.00 | **1.000** | ✅ |
-| Union (L1 ∪ L2) recall, independent held-out set | OBSERVED | — | **1.000** (26/26) | ✅ |
-| Groundedness / answer relevance | GATE / TARGET | ≥0.95 / ≥0.85 | **9/9 · 9/9** | ✅ |
-| **False-escalation rate** | TARGET | ≤ 0.10 | **0.529** | ❌ |
-| **Intent classification macro-F1** | **GATE** | ≥ 0.90 | **0.623** | ❌ |
-| **Out-of-scope detection** | TARGET | ≥ 0.85 | **0.200** | ❌ |
-| **Retrieval recall@5** | **GATE** | ≥ 0.90 | **0.800** | ❌ |
-| Retrieval MRR | TARGET | ≥ 0.75 | **0.663** | ❌ |
+| Metric | Kind | Threshold | **Measured** | | Draw |
+|---|---|---|---|---|---|
+| L1 escalation recall, labelled safety set | **GATE** | 1.00 | **1.000** | ✅ | deterministic |
+| Union (L1 ∪ L2) recall, independent held-out set | OBSERVED | — | **1.000** (26/26) | ✅ | **1×** |
+| Groundedness / answer relevance | GATE / TARGET | ≥0.95 / ≥0.85 | **9/9 · 9/9** | ✅ | **1×**, n=9 |
+| **False-escalation rate** | TARGET | ≤ 0.10 | **0.529** | ❌ | **1×** |
+| **Intent classification macro-F1** | **GATE** | ≥ 0.90 | **0.623** | ❌ | **1×** |
+| **Out-of-scope detection** | TARGET | ≥ 0.85 | **0.200** | ❌ | **1×** |
+| **Retrieval recall@5** | **GATE** | ≥ 0.90 | **0.800** | ❌ | deterministic |
+| Retrieval MRR | TARGET | ≥ 0.75 | **0.663** | ❌ | deterministic |
+
+**`1×` means one sample, not an estimate** — read those to the nearest 0.05, not three decimals, and see
+finding 3 below for why. `RESULTS.md` §0.1 says which is which and what still holds.
 
 Three gates fail. That is the specified outcome of a phase that was defined as **pre-tuning** — the
 harness was built and run before anything was adjusted to look better against it.

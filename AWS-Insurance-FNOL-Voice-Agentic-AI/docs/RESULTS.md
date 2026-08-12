@@ -3,6 +3,11 @@
 Real measurements. Every number was produced by `make eval` or by a cost-gated script in this repository,
 and every number that failed is at its real value.
 
+> **Read §0.1 before quoting any number from this report.** Phase 6 ran the whole Tier B harness **once**,
+> against models sampling at temperature 0.7. Phase 7 measured the spread that produces and it is large.
+> Roughly half the numbers below are **single draws**, not estimates; §0.1 says exactly which, and to how
+> many decimal places each may honestly be read.
+
 ---
 
 ## 0. The correction, up front
@@ -58,6 +63,70 @@ without precision, containment without escalation appropriateness, latency witho
 false-positive rate. The pairing has to be built into the harness in advance, because at the moment a good
 number lands, neither the author nor the reviewer wants to go looking for its counterweight — and both
 will accept it if nothing forces the question.
+
+## 0.1 The second correction — which numbers in this report are single draws
+
+**This is a retrospective caveat on Phase 6, not a Phase 7 finding, and it is the same class of error as
+§0.** Phase 6 ran the Tier B harness once and published the result as a scorecard. The harness calls Nova
+Micro and Nova Lite, both of which were sampling at **temperature 0.7** — no `temperature` key was sent, so
+Bedrock applied Nova's default. Phase 7 measured what that costs: **five runs × 78 turns at each of two
+settings** (§3.3).
+
+| | measured |
+|---|---|
+| Intent macro-F1 range across five identical runs at 0.7 | **0.488 – 0.551**, sd 0.024 |
+| Turns whose **intent** was not stable across those runs | **35 of 78** |
+| Turns whose **`safety_flag`** was not stable across those runs | **13 of 78** |
+| The same, at temperature 0.0 | **0 of 78**, sd 0.000 |
+
+**A scorecard printed to three decimal places from one draw of that distribution overstates its own
+precision, and it did so in the document a reader is most likely to quote from.** §0's error was reporting
+one half of a trade-off pair. This one is reporting a sample as though it were an estimate. Both are
+failures of the same kind: **a number that looked settled, published without the thing that would have
+shown it wasn't.**
+
+### Which is which
+
+Not every number here is affected, and saying "everything is noisy" would be as unhelpful as saying nothing.
+The dividing line is whether a model sampled anything to produce the number.
+
+| Numbers | Produced by | Reproducible? |
+|---|---|---|
+| **All L1 figures** — §2's recall/false-escalation before and after, §9's gate demonstration | `lexicon.py`, deterministic Python, no model call | **Exactly.** Same input, same output, every time |
+| **Retrieval recall@5 0.800, MRR 0.663** (§5) | Titan embeddings + cosine over a fixed index | **By construction** — the embeddings call has no sampling parameter. Argued, not re-measured |
+| **Bedrock spend $0.0138** (§7) | Token accounting from the responses | **Exact.** It is a bill, not an estimate |
+| **L2 recall 19/19, false-escalation 0.529, union 0.529** (§0, §2) | Nova Micro @ 0.7, **one sample per item** | **Single draw.** §2 already says so for recall; it is equally true of the 0.529 |
+| **Intent macro-F1 0.623, out-of-scope 0.200** (§3) | Nova Micro @ 0.7, one run | **Single draw — and the outlier.** See §3.3: 0.623 sits ~4.3 sd above the distribution five later runs describe |
+| **Groundedness 1.000 (9/9), answer relevance 1.000 (9/9)** (§4) | Claude Haiku 4.5 judge @ 0.0, judging **Nova Lite output generated @ 0.7** | **Single draw.** The judge is deterministic; what it judged was not. Also 9 items — a ceiling on nine |
+| **Redundancy defect 0/9, "known intermittent"** (§4, `CF5`) | Same path | **Single draw, and already labelled as one.** "Intermittent" was the right word and this is its mechanism |
+
+**How to read the affected numbers:** to the nearest 0.05, not to three decimals, unless they have been
+re-measured at temperature 0.0 with k ≥ 5. Nothing in this report has been, except the intent metrics in
+§3.3.
+
+### What survives, and why it is not everything
+
+The **conclusions** of §0, §1 and §3.2 stand, and each for a reason that does not depend on a point estimate:
+
+- **§0's false-escalation finding.** 0.529 is not stable to three decimals; the margin is 5× the ≤ 0.10
+  TARGET, which is ~20 sd of anything measured here. The specific value moves; the verdict does not.
+- **§1's rule-shaped vs vocabulary-shaped result.** L1 is deterministic. That entire section is exactly
+  reproducible.
+- **§3.2's merge evidence.** A **within-run** association (27/28 vs 3/50, Fisher p < 10⁻⁸) — it does not
+  ask two runs to agree about anything.
+
+What does **not** survive is every use of these numbers as a *baseline*: the regression gate, any
+before/after comparison across runs, and any claim that a Phase 7 change improved something. Those need a
+temperature-0.0 re-baseline, which is why the ablation protocol requires one (`D30`).
+
+### One place the fix has not been applied
+
+`ROUTER_TEMPERATURE = 0.0` pins the **router**. `generate_response()` still sends no `temperature` and so
+still runs Nova Lite at 0.7 — meaning §4's generation numbers remain single draws from a stochastic process
+even now, and `CF5`'s intermittent redundancy defect is a direct symptom. It is left as-is deliberately
+rather than overlooked: pinning it would invalidate Phase 6's generation baselines mid-phase, and whether a
+*spoken* response should be deterministic is a design question, not a hygiene one. **Named here as an open
+item** (`Q12`), owned by Phase 7's verification stage.
 
 ---
 
@@ -238,7 +307,9 @@ tolerance.** Three consequences, stated plainly:
    Phase 7 Stage 2 work, not a claim this section makes.
 
 This is the same class of error as §0's: **a number published as a guarantee that was only ever an n=1
-observation.** It was found by the same route — checking a thing that already looked settled.
+observation.** It was found by the same route — checking a thing that already looked settled. **§0.1 states
+this as a caveat over the whole report** — which numbers are single draws and which are reproducible —
+because a reader who quotes the scorecard will never reach this subsection.
 
 ### 3.2 The merge is real, measured at the item level
 
@@ -427,19 +498,22 @@ credentials. That is what makes it usable as a per-PR gate.
 
 ## 8. Scorecard
 
-| Metric | Kind | Threshold | Measured | |
-|---|---|---|---|---|
-| L1 escalation recall, labelled set | GATE | 1.00 | 1.000 | ✅ |
-| Union escalation recall, independent set | — | — | 1.000 | ✅ |
-| **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ |
-| **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ |
-| **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ |
-| **Retrieval recall@5** | **GATE** | **≥ 0.90** | **0.800** | ❌ |
-| Retrieval MRR | TARGET | ≥ 0.75 | 0.663 | ❌ |
-| Groundedness | GATE | ≥ 0.95 | 1.000 (9/9) | ✅ |
-| Answer relevance | TARGET | ≥ 0.85 | 1.000 (9/9) | ✅ |
-| Redundancy defect rate | TARGET | — | 0/9 this run; defect known intermittent | ⚠ |
-| Bedrock spend, Phases 3–7 | GATE | ≤ $5.00 | $0.0138 | ✅ |
+The **draw** column is not decoration: per §0.1, a `1×` number is one sample from a process whose macro-F1
+moves 0.063 between identical runs, and must not be read to three decimals or used as a baseline.
+
+| Metric | Kind | Threshold | Measured | | Draw |
+|---|---|---|---|---|---|
+| L1 escalation recall, labelled set | GATE | 1.00 | 1.000 | ✅ | deterministic |
+| Union escalation recall, independent set | — | — | 1.000 | ✅ | **1×** |
+| **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**, verdict robust |
+| **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ | **1×**, and ~4.3 sd high (§3.3) |
+| **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ | **1×**; 0.000 in all ten runs since |
+| **Retrieval recall@5** | **GATE** | **≥ 0.90** | **0.800** | ❌ | deterministic |
+| Retrieval MRR | TARGET | ≥ 0.75 | 0.663 | ❌ | deterministic |
+| Groundedness | GATE | ≥ 0.95 | 1.000 (9/9) | ✅ | **1×**, n=9 |
+| Answer relevance | TARGET | ≥ 0.85 | 1.000 (9/9) | ✅ | **1×**, n=9 |
+| Redundancy defect rate | TARGET | — | 0/9 this run; defect known intermittent | ⚠ | **1×** |
+| Bedrock spend, Phases 3–7 | GATE | ≤ $5.00 | $0.0138 | ✅ | exact |
 
 **Three GATEs fail and two TARGETs miss.** Per `SUCCESS-METRICS.md` §1, a failing gate means the system is
 not working, regardless of the other numbers — and that is the correct description of where this system

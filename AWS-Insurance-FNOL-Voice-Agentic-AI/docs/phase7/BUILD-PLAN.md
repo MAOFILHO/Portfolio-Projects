@@ -159,11 +159,64 @@ not been checked at the item level.** Phase 6's per-item results are already on 
 **A cheap falsification opportunity taken before spending anything on the remedy.** If Stage 0 refutes `D25`,
 Stage 1's ADR says so and the plan changes before it is built.
 
-### Stage 1 — `ADR-014`, written before any code
+**✅ Done 2026-08-12. `D25` confirmed at the item level** — 27/28 vs 3/50, Fisher p < 10⁻⁸. Marco's
+refutation condition is not met, so the rungs are green-lit. Stage 0 also found four write-up errors in
+`RESULTS.md` §3 and that `make lint`/`make typecheck` had never covered `evals/` or `scripts/` (`D28`).
 
-Supersedes `ADR-004`'s merge decision, or explicitly declines to and says why. Records the parallel-vs-
-sequential gap in ADR-004's alternatives table (§1 above), the hypothesis and its refutation condition, the
-ablation design, the latency and cost analysis, and the structural invariant the split must preserve.
+### Stage 0.5 — temperature, measured then fixed (unplanned; added by what Stage 0 found) ✅ 2026-08-12
+
+Not in the original plan. Stage 0's re-run differed from Phase 6's by 0.149 macro-F1 on identical inputs,
+which made every planned comparison meaningless until the variance was characterised. 5 runs × 78 turns at
+each of two settings, 780 real calls, $0.0303:
+
+- **Temperature 0.7** (shipped through Phase 6, Nova's default — no `temperature` was ever sent): macro-F1
+  0.488–0.551, **35/78 turns with an unstable intent, 13/78 with a different `safety_flag` verdict**.
+- **Temperature 0.0**: 0.518 on all five runs, **0/78 unstable**, sd 0.000.
+- `ROUTER_TEMPERATURE = 0.0` shipped (`D27`). **It buys reproducibility, not accuracy** — 0.518 sits inside
+  the 0.7 range — and it likely makes false escalation slightly *worse* (flag fires on 39.7% vs 34.1%),
+  recorded before the ladder so it cannot be banked as a gain.
+- **A causal attribution withdrawn** (`D29`): temperature does not explain Phase 6's 0.623, which sits ~4.3
+  sd outside the distribution five later runs describe. Left unexplained rather than attributed.
+- The **dropped-`safety_flag` pre-registration** was written and committed before the result was opened.
+  Measured 0 in 780; the pre-registered expectation of 0.3–1% was wrong, and the C1 rule stands unused
+  rather than relaxed.
+
+### Stage 1 — `ADR-014`, written before any code ✅ 2026-08-12
+
+`docs/adr/ADR-014-router-l2-split.md`. Supersedes **`ADR-004` §1 only** — the merge. ADR-004 §2's
+generation-tier flag, its Q10 separation and its forced-tool-use mechanism are re-asserted as invariants.
+
+**It does not decide the split, and that is deliberate.** Two explanations fit every number equally well
+(the merge; the label space), one of them is a one-line enum deletion, and no measurement in hand separates
+them. Recording "we split the call" before the ladder runs would make the ladder ceremonial — the failure
+mode this phase has already corrected three times. So ADR-014 decides what the evidence supports and
+pre-commits the rest:
+
+- **The merge loses its default status.** Its stated deciding factor is void — ADR-004 rejected separate
+  *sequential* calls and never evaluated separate *parallel* ones, while `SUCCESS-METRICS.md` §2 had
+  already specified L2 as a parallel single-purpose call. The burden is now symmetric; rung A must earn its
+  place like every other rung.
+- **A decision rule fixed before the numbers exist** (§4): admissibility (C1 + the invariants), selection
+  (false-escalation must improve by **≥ 2 sd measured at k=5**, macro-F1 must not degrade by the same
+  standard), and **ties go to the simplest configuration — B beats C beats D**. Written down now because
+  when the numbers land, the split will be the interesting result and the enum deletion the boring one.
+- **Pre-committed readings** of each outcome, including the two that embarrass the hypothesis: *B recovers
+  and C adds nothing* → ship B, the merge was innocent; *C ≈ A* → the injury instruction is the cause,
+  report a refutation and stop.
+- **Five invariants** (`I1`–`I5`) binding whichever rung wins. `I3` — the construction-time dominance check
+  on the detector — is the one the split *creates*: merged, the safety verdict was structurally inseparable
+  from routing, an ugly property that made bypass impossible. Two calls make bypass expressible for the
+  first time.
+- **Latency and cost analysed**: +$0.0003 per conversation (0.2% of marginal cost, derived from this
+  project's own bill), so cost decides nothing; `max(t₁, t₂)` is a hypothesis with a **pre-committed
+  fallback** — if concurrency measures closer to the sum, B wins even on a quality tie.
+- **One verified implementation constraint**: boto3 clients are thread-safe, but the docs warn that calling
+  `boto3.client()` *inside* a concurrent context risks response-ordering and SSL failures — which is
+  exactly what `get_bedrock_runtime_client()` does today. One client is created before the fork and shared;
+  this also keeps `ADR-009`'s SnapStart rule intact.
+
+**Requires `ADR-015`** to record which rung won and the rule applied to it, including the case where rung A
+wins and nothing changes.
 
 ### Stage 2 — tuning set, ledger, guard, and the k-sampled merged baseline
 
@@ -177,6 +230,11 @@ Two independent calls, invoked **concurrently**. Requirements:
 - Agent-internal latency measured on both configurations, not asserted. `max(t₁, t₂)` is the claim; the
   measurement is the evidence. Still **not** the 1,800 ms Lex-to-Polly GATE — only Phase 9 can measure that,
   and `RESULTS.md` keeps saying so.
+- **One Bedrock client, created on the calling thread before the two calls are issued, shared by both** —
+  fixed in `ADR-014` §5, not left to implementation taste. boto3's docs state clients are thread-safe *but*
+  that invoking `boto3.client()` inside a concurrent context risks response-ordering and SSL failures, and
+  `get_bedrock_runtime_client()` calls it per invocation today. Creating it inside the handler (not at
+  import) keeps `ADR-009`'s SnapStart rule satisfied at the same time.
 - A **construction-time dominance invariant** for the detector, analogous to the existing `assert_dominates`
   check on L1: the detector's output cannot be bypassed, overridden, or vetoed by the classifier, by the
   graph, or by Guardrails. Union semantics (`D15`) survive the split by construction, not by convention.
@@ -186,6 +244,13 @@ Two independent calls, invoked **concurrently**. Requirements:
 ### Stage 4 — the ablation ladder, tuning set only → **mid-phase gate**
 
 Rungs A→D, each reported at its real value including rungs that move nothing. Then stop and report.
+
+**Protocol is fixed and not a reporting convention** (`D30`, `ADR-014` §6): temperature **0.0**, **k=5**,
+tuning set only, every rung including A measured fresh. **No rung reuses a Phase 6 or Stage 0.5 number** —
+not Stage 0's 0.474 and not Stage 0.5's 0.518, the latter having come from a different harness (first turns
+only, no generation path). Marco, 2026-08-12: *"A comparison between a deterministic candidate and a
+stochastic baseline is not a comparison."* A rung measured off-protocol is **discarded and re-run**, not
+published with a caveat.
 
 ### Stage 5 — Guardrails as code
 
@@ -229,7 +294,11 @@ the kind of overclaim this project has spent six phases avoiding.
 - **Redundancy check promoted from TARGET to GATE**, as settled at Phase 6 approval, and `CF5`'s tuning pass
   taken. If the defect remains probabilistic after tuning, that is the reported outcome — three clean trials
   is not a retirement and Phase 6 already said so.
-- Baselines re-committed, regression gate re-baselined, `RESULTS.md` and `COSTS.md` updated.
+- **`ADR-015`**, recording which rung won, its numbers, and `ADR-014` §4's rule applied to them — including
+  the case where rung A wins and nothing changes.
+- Baselines re-committed, regression gate re-baselined, `RESULTS.md` and `COSTS.md` updated. **Baselines
+  carry the date, model ID, temperature and k they were produced at** (`CF6`(a)); a baseline that does not
+  say what it was measured under cannot be compared against.
 - **`docs/phase7/NOT-FIXED.md`** — everything left unfixed, each with the reason and the phase that owns it.
   The roadmap asks Phase 7 to *"document what I did not fix"*; this is that document, and a short one would
   be a bad sign.
