@@ -11,8 +11,8 @@
 ---
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 6 — Evaluation harness — **exit criteria proposed 2026-08-12, awaiting approval.**
-Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
+**Current phase:** Phase 6 — Evaluation harness — **approved 2026-08-12; Stages 1–4 of 8 complete, gated
+at Stage 4 per the build plan.** Phase 5 signed off 2026-08-12 (`APPROVED: Phase 5`).
 **Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
 **Running spend attributable to this project:** **$0.00** provisioned by us.
 Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
@@ -30,7 +30,7 @@ Bedrock standing-approval budget consumed: **≈$0.00037 of $5.00**.
 | 3 | Data engineering and knowledge base | ✅ **Signed off** 2026-08-11 |
 | 4 | Conversation design | ✅ **Signed off** 2026-08-11 |
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
-| 6 | Evaluation harness | 🟡 Exit criteria proposed 2026-08-12 — awaiting approval |
+| 6 | Evaluation harness | 🟡 Approved 2026-08-12 — Stages 1–4 of 8 complete, gated at Stage 4 |
 | 7 | Responsible AI and red-teaming | ⬜ Not started |
 | 8 | Integration and telephony | ⬜ Not started |
 | 9 | Testing | ⬜ Not started |
@@ -362,11 +362,11 @@ of them can be discovered as a convenient surprise later:
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | **Mock-scope rule written and enforced** — `ADR-013` plus `docs/TESTING-CONVENTIONS.md`, generalising the Stage 8 moto false-verification bug into a standing rule: `mock_aws()` is process-wide for every service; no real-AWS call inside a mock scope; mixed tests state which backend each call reaches. **Enforcement mechanism attempted, and its actual strength stated honestly** — a runtime guard in the real client factories if moto exposes a version-stable way to detect it is patching, otherwise a documented convention plus a lexical CI check, described as partial rather than implied to be a guarantee | ⬜ Stage 1. **Marco's carry-in 2** |
-| 2 | **Golden set of ≥60 labelled conversations** under `evals/golden/`, with a machine-checked schema and **per-category minimums** covering all six intents plus happy paths, edge cases, ambiguity, adversarial phrasings and out-of-scope — the composition rule `SUCCESS-METRICS.md` §9 requires so the set cannot be narrowed to easy cases. Seeded conceptually by the Phase 0 corpus's transcripts but **hand-authored**, per the blanket do-not-vendor rule | ⬜ Stage 2 |
-| 3 | **Held-out injury-phrasing set stored separately** and not used to build either detector, per `SUCCESS-METRICS.md` §2's OBSERVED metric. Its independence is **weak — same author as `agents/lexicon.py`** — and that limitation is reported next to the number, with the procedural mitigation stated | ⬜ Stage 2 |
-| 4 | **Tier A (deterministic) harness and `make eval`** — every metric computable with no live model: L1 safety recall on the labelled set, escalation routing and appropriateness, slot validation, the shared retry ladder, tool selection given a fixed classification, context-handover completeness, repeat-question rate, and the recording-flow static check. Runs at **$0.00 with no AWS credentials**, because this is the body of the CI gate | ⬜ Stage 3 |
-| 5 | **Response-length and redundancy detectors**, deterministic rather than judge-scored, with the **real Stage 8 known-bad `RentalTowingEntitlement` output committed as a fixture** and a passing unit test proving the detector flags it (and does not flag the known-good trial from the same session). Includes the separate "general mechanics leaked into a caller-specific answer" check | ⬜ Stage 4. **Marco's carry-in 1** |
+| 1 | **Mock-scope rule written and enforced** — `ADR-013` plus `docs/TESTING-CONVENTIONS.md`, generalising the Stage 8 moto false-verification bug into a standing rule: `mock_aws()` is process-wide for every service; no real-AWS call inside a mock scope; mixed tests state which backend each call reaches. **Enforcement mechanism attempted, and its actual strength stated honestly** — a runtime guard in the real client factories if moto exposes a version-stable way to detect it is patching, otherwise a documented convention plus a lexical CI check, described as partial rather than implied to be a guarantee | ✅ Stage 1 — `ADR-013`, `docs/TESTING-CONVENTIONS.md`, `aws/mock_guard.py`. **The runtime guard proved fully buildable**, so the planned convention-plus-grep fallback was not needed and was not built |
+| 2 | **Golden set of ≥60 labelled conversations** under `evals/golden/`, with a machine-checked schema and **per-category minimums** covering all six intents plus happy paths, edge cases, ambiguity, adversarial phrasings and out-of-scope — the composition rule `SUCCESS-METRICS.md` §9 requires so the set cannot be narrowed to easy cases. Seeded conceptually by the Phase 0 corpus's transcripts but **hand-authored**, per the blanket do-not-vendor rule | ✅ Stage 2 — 71 conversations, 134 turns, grounded in the real Phase 3 corpus. Minimums met with margin: happy 16/12, edge 19/10, ambiguity 7/6, adversarial 10/8, out-of-scope 5/5, safety 14/12 |
+| 3 | **Held-out injury-phrasing set stored separately** and not used to build either detector, per `SUCCESS-METRICS.md` §2's OBSERVED metric. Its independence is **weak — same author as `agents/lexicon.py`** — and that limitation is reported next to the number, with the procedural mitigation stated | ✅ Stage 2 — `evals/holdout/injury_phrasings_weak.yaml`, 23 phrasings with both polarities. `evals/holdout.py` requires a `kind` argument and deliberately exposes no function returning both sets blended |
+| 4 | **Tier A (deterministic) harness and `make eval`** — every metric computable with no live model: L1 safety recall on the labelled set, escalation routing and appropriateness, slot validation, the shared retry ladder, tool selection given a fixed classification, context-handover completeness, repeat-question rate, and the recording-flow static check. Runs at **$0.00 with no AWS credentials**, because this is the body of the CI gate | ✅ Stage 3 — `evals/tier_a.py`, `evals/report.py`, `make eval`. Exits non-zero on a gate breach |
+| 5 | **Response-length and redundancy detectors**, deterministic rather than judge-scored, with the **real Stage 8 known-bad `RentalTowingEntitlement` output committed as a fixture** and a passing unit test proving the detector flags it (and does not flag the known-good trial from the same session). Includes the separate "general mechanics leaked into a caller-specific answer" check | ✅ Stage 4 — three real Nova Lite outputs committed verbatim as fixtures (two defective, one clean). Deterministic, not judge-scored |
 | 6 | **`CF3` discharged** — the Nova Micro tight-turn path sampled repeatedly (n ≥ 20, not the n=1 Phase 4 left nor Stage 8's n=5) and reported as a **distribution**, since it is the one path with a known prior padding failure | ⬜ Stage 6 |
 | 7 | **Retrieval metrics computed on real Titan vectors** — one cost-gated embedding run whose vectors are committed to `evals/fixtures/`, making recall@5 and MRR genuinely real *and* reproducible offline at $0.00 thereafter. Fake hash vectors are explicitly not acceptable for these two metrics | ⬜ Stage 5 |
 | 8 | **Tier B (real-model) harness** covering every metric that needs a live model: intent macro-F1, out-of-scope detection, groundedness, answer relevance, abstention correctness, compound-case correctness, task success. **Cost and agent-internal latency reported on the same run as quality**, per `SUCCESS-METRICS.md` §9 | ⬜ Stage 6 |
@@ -414,6 +414,64 @@ reported after that.
 | L1 catches it | The deterministic layer generalises further than expected. Good, and cheap |
 | L1 misses, L2 catches | **The layered design working as designed** (`SUCCESS-METRICS.md` §2's table) — worth showing explicitly, not averaging away into a single blended recall figure. This is why the two are reported separately |
 | **Both miss** | **The most important finding Phase 6 can produce.** It goes in `RESULTS.md` at the top of the safety section with the phrasings that were missed quoted verbatim, not in a footnote |
+
+### Stage 1–4 gate — results, including two real findings
+
+Reached 2026-08-12. Everything deterministic is built, **$0.00 spent**, 248 tests green, ruff/black/mypy
+strict clean. Two findings that are the point of the gate rather than incidental to it:
+
+**1. The safety GATE fails today at L1 recall 0.778 (7/9), and one of the two misses is a fatality.**
+
+| Missed case | Utterance |
+|---|---|
+| `inj-004` | *"The other driver died at the scene."* |
+| `inj-010` | *"The other driver still hasn't moved since it happened."* |
+
+`inj-011` (*"She's in a bad way"*) is **not** counted as a miss — the corpus labels it
+`escalation_layer: L2`, i.e. the euphemism is expected to fall through the deterministic lexicon to the
+model layer. That is the layered design working, and Tier A cannot evaluate L2, so it is carried as an
+explicit deferral to Tier B rather than silently omitted.
+
+The `inj-004` miss is the one worth pausing on: a plain past-tense fatality statement, no euphemism, no
+indirection. `agents/lexicon.py` was verified during Phase 5 Stage 6 against every phrase in
+`INTENT-TAXONOMY.md` §1/§2.4 and passed — this case simply was not in that section. **That is exactly
+what a golden set is for**, and it is the first concrete demonstration in this project that the Phase 4
+verification set was narrower than the phenomenon.
+
+**Not fixed at this gate, deliberately.** `SUCCESS-METRICS.md` §2 says a labelled-set failure is "a code
+defect... debuggable to zero through a normal fix-and-re-run cycle", which reads as licence to patch it
+now. Against that: Marco's framing at approval was that Phase 6 is pre-tuning and a failing gate is a
+legitimate outcome, and there is a second, sharper reason below. **Flagged for Marco's decision rather
+than resolved unilaterally** — the two readings point in opposite directions and the choice is his.
+
+**2. L1 recall on the weakly-held-out set is 0.400 (6/15), with 2 false positives on negated phrasings.**
+
+Nine of fifteen K/A phrasings missed, including *"The other passenger didn't make it"* (a fatality) and
+*"He's slumped over the wheel and won't wake up."* And two false positives in the other direction, both
+on **negated** statements — *"Bit shaken up, that's all. No injuries."* and *"Nobody was hurt at all"* —
+where the lexicon fires on the injury word and misses the negation.
+
+This is a self-assessment, not a test (same author as the lexicon), and the honest reading is that even
+the *flattering* measure comes in at 0.400. The independent set at Stage 6 is unlikely to be kinder.
+
+**The contamination problem this creates, stated now rather than discovered later.** Having now seen
+which held-out phrasings miss, this author can no longer improve the lexicon without contaminating that
+set: any fix would be trained on the test data, and the weak set's post-fix number would be worthless.
+Two consequences: the weak set's 0.400 is its **final** honest reading, recorded here as the pre-fix
+baseline; and criterion 14's independent set becomes materially more important, since it is now the only
+uncontaminated measure of L1 that this phase can produce. It must be generated by an isolated agent
+**before** any lexicon change, not after.
+
+**3. A bug in the measuring instrument, found and fixed at Stage 3.** The first version of the L1 gate
+scored `inj-011` as a miss. Left alone it would have driven precisely the wrong fix — stuffing euphemisms
+into the deterministic lexicon, which is L2's job — and the resulting recall improvement would have
+looked like progress. Fixed, regression-tested, and worth recording as a category: **a harness defect
+produces a good number nobody investigates, which makes it worse than an agent defect.**
+
+**4. The redundancy detector needed a second real fixture to be correct.** Built against the Stage 8
+known-bad output, it passed immediately — and then failed on the Phase 4 known-bad output, which states
+the unit before the value (*"your remaining rental days is 8"*) rather than after. One real example was
+not enough to specify the check. The same lesson as `CF3`/`D21`, arriving from a third direction.
 
 ### Carried-forward items this phase owns or must respect
 
@@ -1330,3 +1388,41 @@ All eleven **accepted** 2026-08-11. ADRs are immutable once accepted; supersede,
   red for a whole phase on a known-open defect trains everyone to ignore red gates — the same argument
   `SUCCESS-METRICS.md` §2 made when it split the recall gate; Marco's to overrule).
 - **No Phase 6 work has begun.** Scoping documents only, per the STOP CONDITIONS.
+
+### 2026-08-12 — `APPROVED: Phase 6`; Stages 1–4 built; gate reached with two real findings
+
+- **Marco approved Phase 6**, both proposed decisions as recommended (Claude Haiku 4.5 as judge; the
+  redundancy check as TARGET now, GATE at Phase 7 sign-off), the $1.00 sub-budget with stop-and-report at
+  $0.75, and **added criterion 14**: a genuinely independent injury-phrasing set generated before Stage 7
+  without reference to `agents/lexicon.py`, with L1 and L2 recall reported separately against it. His
+  reasoning, recorded because it drove the design: the weakly-held-out set is the softest number in the
+  phase and it is attached to the safety gate.
+- **Stage 1 — `ADR-013`, the mock-scope guard.** The Phase 6 plan hedged that a runtime guard might not
+  be buildable and named a convention-plus-grep fallback. **It was buildable**:
+  `moto.core.models.botocore_stubber.enabled` tracks the mock scope exactly, verified empirically against
+  moto 5.0.28 for the context-manager form, the decorator form and nesting. Fallback not needed, not
+  built. Scoped by *faithfulness* rather than mocked-vs-real: Bedrock clients refuse to construct inside
+  `mock_aws()` because moto fabricates responses for them; DynamoDB paths are deliberately unguarded
+  because moto implements DynamoDB faithfully and that substitution is this project's zero-cost default.
+  The residual risk is stated in the ADR rather than papered over — the flag is a moto internal, a moved
+  internal would disarm the guard silently, and `test_canary_moto_internal_still_flips` is the only thing
+  that would make that visible.
+- **Stage 2 — 71 golden conversations, 134 turns**, grounded in the real Phase 3 corpus (real policy
+  numbers, real claims, real elections) rather than invented identifiers. Composition enforced in CI, not
+  intended. Plus the weakly-held-out injury set, stored separately and labelled in its own header as a
+  self-assessment.
+- **Stage 3 — Tier A harness and `make eval`**, $0.00 and credential-free, exits non-zero on a gate
+  breach.
+- **Stage 4 — the redundancy detector**, deterministic, proven against three real Nova Lite outputs
+  committed verbatim.
+- **Gate reached at Stage 4** per the build plan. Findings recorded in the section above: the safety GATE
+  fails at 0.778 with a missed **fatality** phrasing; weak held-out L1 recall is 0.400 with two false
+  positives on negated statements; a harness bug was caught that would have driven the wrong fix; and the
+  redundancy detector needed a second real fixture to be correct.
+- **One decision escalated rather than taken**: whether to patch `agents/lexicon.py` now. `SUCCESS-
+  METRICS.md` §2 frames a labelled-set miss as a code defect to be debugged to zero; Marco's approval
+  framed Phase 6 as pre-tuning. The two readings conflict, and a third factor now bears on it — having
+  seen the weak set's misses, any fix by this author contaminates that set permanently, which makes the
+  ordering of the lexicon fix relative to criterion 14's independent-set generation load-bearing rather
+  than incidental.
+- **$0.00 spent.** Bedrock cap still ≈$0.00037 of $5.00; Phase 6 sub-budget untouched.
