@@ -1693,3 +1693,24 @@ provisioned resource, not on-demand inference, and I want that distinction prese
 - **Cost: $0.00303 of the $1.25 sub-budget** (78 real Nova Micro calls). 259 tests, lint/typecheck clean at
   the widened scope.
 - **No ablation rung has been built.** Paused for Marco's decision on how temperature is handled.
+
+### 2026-08-12 — README restructured to the sibling-project template
+
+Marco supplied `/Users/marco/Downloads/Template1234.md` — the finished README of the sibling project
+`AWS-Bedrock-Agentic-FineTuning-Platform` — as the **binding section structure** for this project's README.
+
+Adopted in full: title + two subtitle lines, badges, Project Description, The problem, Results, Tech Stack,
+Architecture, Build status, Agent orchestration, Project invariants, Cost estimated-vs-actual,
+Prerequisites, Setup, Quickstart, Teardown, Testing, Engineering decisions, Screenshots, Lessons learned,
+Documentation, Author.
+
+**Sections that cannot yet be filled honestly say so and name the phase that fills them**, rather than
+carrying placeholder content — no CI badge (the workflows are authored but not installed, and a badge
+pointing at a workflow that does not run would be the first false claim in the file); Screenshots states
+that pictures of a system which has never taken a call would be a picture of a fake; Quickstart lists only
+targets that run today and tables the rest against their phase.
+
+Phase 12 still owns final assembly (clone→live-call walkthrough, model/data cards, demo script). This
+change makes Phase 12 a fill-in rather than a rewrite, and it retires the stale
+*"Phase 0 of 13 complete — this README is a stub"* header that had been wrong since Phase 1.
+

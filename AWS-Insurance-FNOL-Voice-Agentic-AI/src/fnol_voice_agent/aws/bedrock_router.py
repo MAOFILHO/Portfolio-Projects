@@ -145,6 +145,7 @@ def classify_turn(
     *,
     caller: BedrockConverseCaller | None = None,
     max_tokens: int = DEFAULT_CLASSIFY_MAX_TOKENS,
+    temperature: float | None = None,
 ) -> TurnClassification:
     """The merged router + L2 safety-classification call (`ADR-004`, `PROMPT-REGISTRY.md`
     §1.1). Runs every turn L1's deterministic pre-node didn't already terminate.
@@ -165,8 +166,22 @@ def classify_turn(
     `TurnClassification` requires (e.g. `safety_flag`) -- this is deliberate, not a gap:
     a missing safety-critical field must fail loudly, not silently produce a partial or
     wrong classification (Q10).
+
+    `temperature=None` sends no `temperature` key at all, which means Bedrock applies the
+    model's default -- **0.7 for Nova, per AWS's Converse documentation.** That was the
+    shipped behaviour through Phase 6 and it is `D27`: the component whose output is a
+    decision was sampling, while the eval judge next door set `temperature: 0.0`
+    explicitly. Re-running identical inputs moved intent macro-F1 0.623 -> 0.474.
+
+    The parameter exists so Phase 7 Stage 0.5 can **measure** both settings before
+    changing the default, rather than fixing the defect and asserting the fix mattered.
+    `None` is deliberately still the default here: `scripts/measure_temperature_variance.py`
+    has to be able to reproduce the pre-fix behaviour after the shipped default moves.
     """
     bedrock = caller or get_bedrock_runtime_client()
+    inference_config: dict[str, Any] = {"maxTokens": max_tokens}
+    if temperature is not None:
+        inference_config["temperature"] = temperature
     response = bedrock.converse(
         modelId=ROUTER_MODEL_ID,
         messages=list(messages),
@@ -175,7 +190,7 @@ def classify_turn(
             "tools": [build_classify_turn_tool_spec()],
             "toolChoice": {"tool": {"name": CLASSIFY_TURN_TOOL_NAME}},
         },
-        inferenceConfig={"maxTokens": max_tokens},
+        inferenceConfig=inference_config,
     )
     return _parse_classify_turn_response(response)
 

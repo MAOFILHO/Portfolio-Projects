@@ -1,154 +1,488 @@
-# AWS-Insurance-FNOL-Voice-Agentic-AI
+# AWS Insurance FNOL Voice Agentic AI
+### Amazon Connect + Lex V2 Turn Manager · LangGraph Orchestrator · MCP Tools over Amazon Bedrock
+### Voice-First First Notice of Loss · Layered Injury Escalation · Evaluation Before Tuning
 
-An agentic, voice-first **First Notice of Loss (FNOL)** intake system for P&C auto insurance, built on
-Amazon Connect, Amazon Lex V2, Amazon Bedrock and LangGraph.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat&labelColor=1a1a2e)
+![MCP](https://img.shields.io/badge/Model_Context_Protocol-2.0-6E56CF?style=flat&labelColor=1a1a2e)
+![Pydantic](https://img.shields.io/badge/Pydantic-v2.13-E92063?style=flat&labelColor=1a1a2e)
+![AWS](https://img.shields.io/badge/AWS-Connect_·_Lex_V2_·_Bedrock-FF9900?style=flat&logo=amazonwebservices&logoColor=white&labelColor=1a1a2e)
+![Terraform](https://img.shields.io/badge/Terraform-≥1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
+![pytest](https://img.shields.io/badge/pytest-259_passing-0A9EDC?style=flat&logo=pytest&logoColor=white&labelColor=1a1a2e)
+![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2?style=flat&labelColor=1a1a2e)
+![Budget](https://img.shields.io/badge/Spend_to_date-$0.017_of_$25/mo-2ea043?style=flat&labelColor=1a1a2e)
 
-> **Status: Phase 0 of 13 complete — analysis and workspace scaffolding only.**
-> No application code exists yet and no billable AWS resource has been created.
-> This README is a stub; the full clone-to-live-call guide is written in Phase 12.
->
-> **Start here instead: [`PROJECT_STATE.md`](PROJECT_STATE.md)** — current phase, decisions, risks and open questions.
+> **No CI badge yet, deliberately.** The workflows are authored in
+> `.github/workflows-for-monorepo-root/` but not installed — GitHub Actions reads workflows only from the
+> monorepo root, and copying them there is a Phase 10 change outside this project's directory that needs
+> its own approval. A badge pointing at a workflow that does not run would be the first false claim in
+> this file.
 
----
+## Project Description
 
-## What this will be
+A voice-first, agentic **First Notice of Loss (FNOL)** intake line for P&C personal auto insurance:
+**a caller dials a real number, an AI agent takes the claim, and an injury mention escalates to a human
+from any point in the conversation without the model getting a vote.**
 
-A caller dials a real number and reaches an AI agent that understands intent, retrieves grounded answers from
-policy documents, calls backend tools, handles interruption and fallback, escalates to a human when
-appropriate, and emits full traces and transcripts to a dashboard.
+**The source material** is eight AWS sample repositories covering call centres, claims processing and
+agentic workflows. Read end to end, they contain a real FNOL slot sequence, the NHTSA **KABCO** injury
+scale, a Lex V2 codehook contract and a modern contact-flow grammar — and, between them, **no Bedrock
+integration at all** in the nominally richest agentic repo, no MCP anywhere, and no prior art whatsoever
+for barge-in, DTMF, no-match handling, streaming or interim audio fillers. 53 of 100 assessed modules
+were discarded, including three entire frontends and two Kubernetes deployments.
 
-Scope is **P&C auto only** — health and life claims are out of scope — across exactly six intents:
+**The objective** is not a demo that answers happy-path questions. It is a system where the safety
+property is **structural** rather than prompted: injury detection is a deterministic pre-node that runs
+before the model sees the input, the graph is assembled with a construction-time check that no path can
+bypass it, and no downstream component — not the router, not the generator, not Guardrails — can veto the
+result. A model that decides whether to escalate is a model that can be talked out of escalating.
 
-1. File a new auto claim (multi-slot: policy number, date/time, location, vehicles, injuries)
-2. Check claim status (tool call)
-3. Coverage question (RAG against synthetic policy wordings)
-4. Rental / towing entitlement (RAG + tool call)
-5. Update contact info (write path, explicit confirmation)
-6. Injury or fatality mentioned — immediate hard-coded escalation from any state
+**Six intents, one graph.** File a new auto claim (9 slots), check claim status, coverage question
+(RAG), rental/towing entitlement (RAG **and** tool call), update contact info (a write path with an
+explicit confirmation policy), and injury or fatality — hard escalation, no slot filling, no negotiation.
 
-It is a **portfolio-grade prototype**: small scale, minimal cost, architecturally honest. Everything a
-production system would have is present and *functional* — IaC, CI/CD, evals, guardrails, observability,
-tests, runbooks — just sized down. Nothing is stubbed out and labelled "production would do X here."
+**What is built around that:**
 
----
+- A **Python backend** — LangGraph state machine, 4 **MCP servers** exposing 6 typed tools, a
+  Bedrock model router with forced tool-use, a DynamoDB checkpointer keyed on the Connect `contactId`,
+  and Pydantic v2 on every boundary.
+- An **evaluation harness built before any tuning** — 78 labelled golden conversations, two held-out
+  injury sets (one generated by an isolated agent that never read the detector), real Titan retrieval
+  vectors committed as a fixture so recall@5 is genuinely real *and* free to re-run, an LLM judge from a
+  different vendor than the models under test, and a CI regression gate demonstrated by opening a
+  deliberately bad change and showing it blocked.
+- **Cost control as a design constraint** — telephony is ~92% of the marginal cost per conversation, so
+  the call simulator is the primary cost control rather than a convenience. Total spend to date is
+  **$0.017**.
+- **A written record of what did not work** — including two conclusions this project published and then
+  had to reverse, both caught by metrics written before the code they judged.
 
-## Constraints that shape every decision
+**Every number below is measured**, and every failing gate is printed at its real value.
 
-| Constraint | Value |
+## The problem
+
+An FNOL intake line is the first thing a policyholder reaches after a collision. It is also the most
+safety-sensitive automation in personal-lines insurance, because the caller may be injured at the
+roadside while giving you a policy number.
+
+| Pain point | Impact |
 |---|---|
-| Hard monthly budget | **$25 USD** — a ceiling, not a target |
-| Region | `us-west-2` (single region; Bedrock via `us.*` cross-region inference profiles) |
-| Telephony | Connect instance and DID are **pre-provisioned** — never created, never destroyed |
-| Call recording | **Disabled**, enforced by a CI check |
-| Infrastructure | 100% IaC (Terraform); zero portal clicks |
-| Backend / frontend | Python 3.12 · React + TypeScript + Vite |
+| Injury disclosed mid-form | The caller is asked for a VIN while saying someone is not moving |
+| Injury disclosed indirectly | *"We lost her"*, *"he didn't make it"*, *"they covered him with a sheet"* — never the word "injury" |
+| Escalation as a model decision | Anything a prompt decides, a prompt can be talked out of |
+| Over-escalation as the safe default | Transfer everything and the line is a very expensive switchboard |
+| Coverage answered from general knowledge | *"Rental is usually covered"* is a compliance problem when this caller declined the endorsement |
+| No ground truth for entitlement | Rental and towing appear in **zero** of the eight source repos, yet two of six intents depend on them |
 
-Cost reality worth stating up front: **telephony is roughly 92% of the ~$0.20 marginal cost per
-conversation** — Bedrock is noise by comparison. The call simulator is therefore the primary cost control,
-not a convenience, and real calls are reserved for demo and verification.
+The last two are why the policy corpus is authored rather than borrowed: groundedness cannot be measured
+against documents that contradict each other, and an inconsistent corpus looks exactly like a
+hallucinating model.
 
----
+## Results — measured, including the reversals
 
-## Phase 0 findings
+Full analysis, with every caveat attached to the number it qualifies:
+[`docs/RESULTS.md`](docs/RESULTS.md).
 
-Eight AWS sample repositories were read and assessed. All are MIT-0, so there are no licence
-incompatibilities. Of 100 meaningful modules: **20 KEEP · 22 REFACTOR · 5 REWRITE · 53 DISCARD** — about
-**97% discarded by lines of code**, since the discards include entire EKS/Fargate deployments and three
-Create React App frontends while the keeps are small schemas, prompts, taxonomies and fixtures.
+| Metric | Kind | Threshold | **Measured** | |
+|---|---|---|---|---|
+| L1 escalation recall, labelled safety set | **GATE** | 1.00 | **1.000** | ✅ |
+| Union (L1 ∪ L2) recall, independent held-out set | OBSERVED | — | **1.000** (26/26) | ✅ |
+| Groundedness / answer relevance | GATE / TARGET | ≥0.95 / ≥0.85 | **9/9 · 9/9** | ✅ |
+| **False-escalation rate** | TARGET | ≤ 0.10 | **0.529** | ❌ |
+| **Intent classification macro-F1** | **GATE** | ≥ 0.90 | **0.623** | ❌ |
+| **Out-of-scope detection** | TARGET | ≥ 0.85 | **0.200** | ❌ |
+| **Retrieval recall@5** | **GATE** | ≥ 0.90 | **0.800** | ❌ |
+| Retrieval MRR | TARGET | ≥ 0.75 | **0.663** | ❌ |
 
-Four findings materially shaped the plan:
+Three gates fail. That is the specified outcome of a phase that was defined as **pre-tuning** — the
+harness was built and run before anything was adjusted to look better against it.
 
-- The nominal "richest agentic source" repository **contains no Bedrock at all** — it runs a self-hosted Ollama pod on GPU nodes, and its LangGraph code is partly non-functional. The entire Bedrock, checkpointing, guardrails, RAG, eval and MCP layer is greenfield. **No source repo uses MCP.**
-- The pre-provisioned DID is a **Canada** number, so the assumed US telephony rates do not apply.
-- Terraform's `aws_lexv2models_*` resources carry open bugs precisely where this project needs them (prompt specifications, DTMF/barge-in attempt specs, and an intent↔slot circular dependency). The proposed resolution keeps Terraform as the single IaC tool while defining the bot as one nested CloudFormation `AWS::Lex::Bot` resource.
-- The 12-month AWS free tier no longer exists in its old form, and **Lex V2 has no perpetual free tier** — every speech request costs from turn one.
+### Three findings that survived contact with the data
 
-Also worth knowing: across all eight repos combined there is **no prior art whatsoever** for barge-in, DTMF,
-timeout/no-match configuration, streaming, or interim audio fillers — and rental/towing coverage, which two
-of the six intents depend on, is never mentioned. Those are authored from scratch.
+**1. Precision generalises under repair. Recall does not.** One clause-scoped negation rule, measured
+against a set it had never seen, cut false-escalation **0.412 → 0.059 (−86%)** while moving recall only
+**0.192 → 0.269**. Same fix, same effort, opposite outcomes — because polarity is a *property of
+language* and encodes once, while catching *"they covered him with a sheet"* requires having first
+thought of that sentence. **Rule-shaped defects compound when fixed; vocabulary-shaped defects buy one
+phrasing each.** The distinction predicts, before you start, whether deterministic effort will pay — and
+it is a sharper argument for the L1/L2 split than the defence-in-depth rationale the ADR was written on.
 
-Details:
+**2. The layered detector works, and is unusable as configured.** L2 caught **19 of 19** injury phrasings
+L1 missed, including every fatality euphemism. It also fires on *"I need to report an accident."* and on
+three descriptions of **vehicle** damage. Union recall 1.000, union false-escalation **0.529**. Both
+halves are real and neither is reported without the other.
+
+**3. The router's two jobs are one decision wearing two names.** A single Bedrock call emits
+`safety_flag` and `intent` in one structured object. Over 78 turns: given the flag, the intent is
+`InjuryEscalation` **27 times out of 28**; without it, 3 of 50 (Fisher p < 10⁻⁸). The recall bias
+deliberately placed on the safety field propagates into the intent field, which is why three separate
+gate failures are one defect. Unmerging the call is the central task of the phase in progress.
+
+### Two published conclusions this project had to reverse
+
+**Recall without precision is not a result.** The layered detector was reported as *vindicated* on
+19/19 recall — and endorsed on that basis by both author and reviewer. Precision had never been
+measured. Measuring it gave 0.529 and reversed the conclusion. Neither reader caught it; a
+false-escalation target written in Phase 1, *before any detector existed*, did.
+
+**An n=1 number published as a guarantee.** The router was found to be running at Nova's **default
+sampling temperature (0.7)** — `maxTokens` was set, `temperature` was not, while the eval judge next to
+it set `0.0` explicitly. Re-running identical code over identical inputs moved intent macro-F1
+**0.623 → 0.474**, a swing roughly five times the regression gate's tolerance. Every Tier B figure above
+is a single draw from a distribution nobody had measured.
+
+Both were found the same way: by checking something that already looked settled.
+
+### Honest caveats
+
+- **The safety claim rests on phrasings no human wrote.** The independent held-out set is independent of
+  *the detector* — an isolated agent generated it without ever reading `lexicon.py` — but it is not
+  independent of *language models in general*. Agent-authored euphemism may be more model-legible than
+  what a frightened person says at the roadside. **No recall figure here should be read as predicting
+  real-world recall.** This is the largest gap between what is measured and what running a real line
+  would need.
+- **No real caller has spoken to this system.** Containment, satisfaction and abandonment cannot be
+  estimated from author- and agent-generated text.
+- **Bias across name, accent and dialect, and accessibility for callers with speech differences, are not
+  assessed** — a genuine equity gap in a voice-only system. A text-level paired-prompt check is in scope
+  for Phase 7; an ASR/accent audit needs audio and real callers and is not planned.
+- **`n` is small.** 26 held-out positives, one sample each, against a stochastic detector.
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Telephony** | Amazon Connect (pre-provisioned instance, Canada DID) — inbound only, recording disabled |
+| **Turn manager** | Amazon Lex V2 — ASR/NLU, slot elicitation, barge-in and DTMF specs (`ADR-001`) |
+| **Orchestration** | LangGraph 1.2 — deterministic safety pre-node, router, 6 intent nodes, shared retry ladder |
+| **Tool protocol** | Model Context Protocol 2.0 — 4 servers, 6 typed tools (`ADR-012`) |
+| **AI platform** | Amazon Bedrock — Converse API, forced tool-use, `ApplyGuardrail` decoupled from inference |
+| **Router / L2 model** | `us.amazon.nova-micro-v1:0` — fixed tier, unreachable from the generation flag (`ADR-004`) |
+| **Generation model** | `us.amazon.nova-lite-v1:0`, feature-flagged against `us.anthropic.claude-haiku-4-5` |
+| **Embeddings** | `amazon.titan-embed-text-v2:0` — real vectors committed as an eval fixture |
+| **Eval judge** | `us.anthropic.claude-haiku-4-5` — deliberately a different vendor from the models under test |
+| **State persistence** | DynamoDB checkpointer keyed on the Connect `contactId` (`ADR-005`) |
+| **Data validation** | Pydantic v2.13 — claim schema, agent state, MCP tool I/O, router tool schema |
+| **Feature flags** | OpenFeature 0.10 — generation tier only; no code path reaches the safety layer |
+| **AWS SDK** | boto3 1.43 + `boto3-stubs` for typed Bedrock/DynamoDB clients |
+| **Testing** | pytest 8.3 — 259 unit tests plus lifecycle-phased pre/post-provision, post-run, post-teardown suites |
+| **Linting / formatting** | Ruff 0.9 + Black 25.1 over `src tests evals scripts` |
+| **Type checking** | mypy 1.14 `--strict`, zero errors over `src evals scripts` |
+| **IaC** | Terraform ≥1.9; Lex bot via a nested `AWS::Lex::Bot` CloudFormation resource (`ADR-007`) |
+| **Cost control** | Simulator-first; per-run spend logged in [`COSTS.md`](COSTS.md); $25/mo hard ceiling |
+
+## Architecture
+
+```
+   PSTN  ──►  Amazon Connect  ──►  Amazon Lex V2  ──►  Lambda codehook
+   +1 416…    (pre-provisioned,     ASR · NLU ·         │
+              recording OFF)        slot elicitation    │  sessionState contract
+                                                        ▼
+        ┌───────────────────────────────────────────────────────────────┐
+        │                     LangGraph turn pipeline                   │
+        │                                                               │
+        │   START ──► l1_safety_check   ◄── deterministic, no model,    │
+        │                  │                runs on RAW input before    │
+        │                  │                Guardrails ever sees it     │
+        │            fired │ ──────────────────────────────────────┐    │
+        │                  ▼ not fired                             │    │
+        │            ApplyGuardrail (INPUT)                        │    │
+        │                  │                                       │    │
+        │                  ▼                                       │    │
+        │            classify_turn  ── Nova Micro, forced tool-use  │    │
+        │            {safety_flag, intent, confidence}              │    │
+        │                  │            │                          │    │
+        │        safety_flag└────────────┼──────────────────────────┤    │
+        │                               ▼                          ▼    │
+        │            ┌──────────────────────────────┐      injury_      │
+        │            │ FileAutoClaim                │      escalation   │
+        │            │ CheckClaimStatus             │        │          │
+        │            │ CoverageQuestion      (RAG)  │        │ 911 line  │
+        │            │ RentalTowingEntitlement      │        │ first,    │
+        │            │ UpdateContactInfo    (write) │        │ then      │
+        │            │ repair / retry ladder        │        │ transfer  │
+        │            └──────────────┬───────────────┘        │          │
+        │                           ▼                        │          │
+        │            ApplyGuardrail (OUTPUT)                 │          │
+        └───────────────────────────┬────────────────────────┴──────────┘
+                                    ▼
+     DynamoDB checkpoint            Polly  ──►  caller
+     (key: Connect contactId)       PII-redacted transcript ──► S3
+```
+
+**Union semantics, enforced at graph construction.** L1 (deterministic lexicon), L2 (`safety_flag` from
+the router call) and L3 (the caller's own "agent" barge-in) each escalate independently. No layer can veto
+another and nothing downstream can suppress the result. `agents/graph.py` refuses to build a graph in
+which `l1_safety_check` is not the sole successor of `START`.
+
+## Build status
+
+Stated plainly so nothing here reads as more finished than it is. **14 phases, gated individually.**
+
+| Phase | Status |
+|---|---|
+| 0 · Repo archaeology, merge matrix, workspace | ✅ complete |
+| 1 · Problem framing, six intents, success metrics **defined before building** | ✅ complete |
+| 2 · Architecture, 12 ADRs, cost model, threat model | ✅ complete |
+| 3 · Synthetic Ontario policy corpus, records, ingestion pipeline | ✅ complete |
+| 4 · Conversation design — taxonomy, slots, dialogue policies, prompt registry | ✅ complete |
+| 5 · Agent implementation — LangGraph, MCP servers, router, checkpointer | ✅ complete |
+| 6 · Evaluation harness, judge, baselines, CI regression gate | ✅ complete — three gates failing at their real values |
+| **7 · Responsible AI, red-teaming, router/L2 split** | 🟡 **in progress** |
+| 8 · Integration and telephony (Terraform, contact flows, Lex) | ⬜ not started |
+| 9 · Testing — coverage, LocalStack, load, cold-start vs the 1,800 ms budget | ⬜ not started |
+| 10 · CI/CD and progressive delivery | ⬜ not started |
+| 11 · Observability and operations | ⬜ not started |
+| 12 · Documentation and demo | ⬜ not started |
+| 13 · Continuous-improvement design | ⬜ not started |
+
+**Known issues**
+
+1. **Three GATEs fail** — intent macro-F1, retrieval recall@5, and (as a TARGET) false-escalation. Phase 7
+   owns the first and third; retrieval is time-boxed and subordinate within it.
+2. **The router samples at temperature 0.7**, so every model-dependent number is a single draw. Being
+   quantified now, before the fix, so the effect is measured rather than asserted.
+3. **`evals/` and `scripts/` were outside `make lint` and `make typecheck`** for six phases while every
+   phase reported "strict clean". The claim was true about a scope nobody had stated. Fixed.
+
+**Live resources: none.** No billable resource has been provisioned by this project. The only accrual is
+the pre-existing Canada DID, which is protected and deliberately survives `make destroy`.
+
+## Agent orchestration
+
+The agentic layer decides **which tool runs and what gets said**. It does not decide whether to escalate.
+
+| Node | Reaches | Model call |
+|---|---|---|
+| `l1_safety_check` | nothing | **none** — deterministic lexicon, ~0 ms, $0 |
+| `routing` | nothing | Nova Micro, forced tool-use |
+| `file_auto_claim` | `file_new_claim` | templated only |
+| `check_claim_status` | `get_claim_status` | templated only |
+| `coverage_question` | KB retrieval + `get_policyholder_elections` | **Nova Lite** (generative) |
+| `rental_towing` | KB retrieval + `get_rental_status` | **Nova Lite** (generative) |
+| `update_contact_info` | `update_contact_info` | templated only |
+| `injury_escalation` | `initiate_escalation` | **none** — fixed script |
+| `repair` | nothing | templated only |
+
+### The generative surface is exactly two prompts
+
+Every other spoken line — elicitation, confirmation, retry, escalation, greeting — is a fixed string or a
+deterministic template substitution. **The majority of this system's speech cannot hallucinate, because it
+was never generated.** That is a structural property, not a mitigation, and it narrows the entire
+prompt-injection and groundedness surface to two named prompts in
+[`docs/phase4/PROMPT-REGISTRY.md`](docs/phase4/PROMPT-REGISTRY.md).
+
+### What the agent cannot do
+
+- **Cannot decline to escalate.** L1 fires before the model is called; the graph has no edge that skips it.
+- **Cannot be switched off by config.** The safety classifier is on a call path with no shared key with
+  the generation-tier feature flag — a structural separation, tested by flipping the flag and asserting
+  the router's `modelId` never moves.
+- **Cannot speak a fraud flag.** Intake-time soft flags are notes for humans; a zero-occurrence GATE
+  asserts they never reach caller-facing text.
+- **Cannot partially write.** The contact-update path either matches what was confirmed or is unchanged.
+- **Cannot record a call.** No contact flow may enable recording, and CI fails the build on any flow whose
+  `RecordedParticipants` array is non-empty.
+
+## Project invariants
+
+These are enforced, not aspirational.
+
+| Invariant | Enforcement |
+|---|---|
+| L1 runs before anything else | `agents/graph.py` asserts `l1_safety_check` is the sole successor of `START` at construction time; the graph will not build otherwise |
+| The generation flag cannot reach the safety layer | `tests/unit/test_bedrock_router.py` flips the flag and asserts the router's requested `modelId` is unchanged |
+| No real AWS call inside a mock scope | `aws/mock_guard.py` raises if a real Bedrock client is constructed while moto is patching; no escape hatch (`ADR-013`) |
+| Call recording stays off | CI check globs flow files **by content**, not by `.json` extension, and fails on a non-empty `RecordedParticipants` or any `ContactLens`/`AnalyticsBehavior` string |
+| The DID is never destroyed | It lives in a separate Terraform state with `prevent_destroy`; the import guard asserts its `Protected=true` tag; `make destroy` does not touch that stack |
+| Region is never a literal in application code | `DEFAULT_REGION` comes from config; a region migration is a tfvars change, not a refactor |
+| Bedrock is called via `us.*` inference profiles | Mandatory, not stylistic — `amazon.nova-micro-v1:0` supports only `INFERENCE_PROFILE` |
+| Held-out sets cannot be silently spent | `load_holdout(kind)` requires an explicit kind and exposes **no** function returning both sets blended |
+| The uncontaminated L1 baseline is immutable | `evals/baselines/l1_before_fix_20260812.json` is marked DO-NOT-REGENERATE; regenerating it would overwrite the only honest reading with a flattering one |
+| A metric that vanishes is a failure, not a pass | The regression gate treats a missing metric as a breach — deleting a failing metric is the cheapest way to make a gate green |
+| Secrets live in `.env.example` only | Nothing with a value is committed; detect-secrets and gitleaks run pre-commit |
+
+## Cost — estimated vs actual
+
+| Item | Estimated | **Actual to date** |
+|---|---:|---:|
+| Bedrock inference, Phases 3–7 (cap: $5.00) | — | **$0.0168** |
+| Provisioned resources | $0.00 | **$0.00** |
+| Canada DID (pre-existing, protected) | $0.90–$3.00/mo | not yet read from Cost Explorer |
+| **Monthly ceiling** | | **$25.00** |
+
+Full per-run log, every real AWS call itemised: [`COSTS.md`](COSTS.md).
+
+### The cost decision that dominated every other
+
+| Per conversation (~4 min, 8 turns) | Cost | Share |
+|---|---:|---:|
+| Connect voice + Canada inbound telco | ~$0.091 | **~85%** |
+| Lex V2 speech (8 × $0.004) | $0.032 | ~13% |
+| Guardrails (16 text units) | ~$0.004 | ~2% |
+| Bedrock router + generation | ~$0.001 | **<1%** |
+
+**Telephony dominates and Bedrock is noise.** The consequence is architectural, not administrative: the
+call simulator is the **primary cost control**, and ~100 real calls would consume a meaningful share of
+the monthly budget on their own. Model choice was therefore settled as a **capability-fit** decision
+(`ADR-004`) rather than reaching for a cost justification that would not actually bind.
+
+### The tier nobody checks
+
+New Amazon Connect instances default to **Amazon Connect Customer** at $0.038/min — an AI-bundled tier.
+This project's architecture deliberately uses none of that bundled AI, making **Customer Basic**
+(~$0.0202/min all-in) the tier that matches actual usage. Switching **halved the dominant cost line**. It
+has no IaC path and is documented as one of exactly four permitted manual steps in
+[`docs/runbooks/MANUAL-STEPS.md`](docs/runbooks/MANUAL-STEPS.md).
+
+## Prerequisites
+
+- **Python 3.12** (`>=3.12,<3.13`)
+- **AWS CLI v2** with credentials for `us-west-2`
+- **Bedrock model access** for `us.amazon.nova-micro-v1:0`, `us.amazon.nova-lite-v1:0`,
+  `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `amazon.titan-embed-text-v2:0`
+- **Terraform ≥ 1.9** — *not needed until Phase 8*
+- **An existing Amazon Connect instance and claimed DID.** This project **never creates either**.
+  Releasing and re-claiming a number risks a 180-day claim block.
+
+Everything currently runnable works **without AWS credentials**. Retrieval metrics run offline against
+committed real Titan vectors; the agent runs against a fake-LLM harness and moto.
+
+## Setup
+
+```bash
+# 1. Virtual environment on 3.12
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# 2. Dependencies (pinned; a lockfile is committed)
+pip install -e ".[dev]"
+
+# 3. Configuration
+cp .env.example .env        # no secrets; SSM standard parameters are preferred at runtime
+```
+
+## Quickstart
+
+Only the targets that **actually run today** are listed. The rest are wired but land in Phases 8–11, and
+are marked as such in the Makefile rather than failing silently.
+
+```bash
+make test        # 259 unit tests, no AWS credentials, no network
+make lint        # ruff + black over src tests evals scripts
+make typecheck   # mypy --strict over src evals scripts
+make eval        # Tier A evaluation report — $0.00, real Titan retrieval numbers from a fixture
+make ingest      # chunk → embed → store, defaulting to mock embeddings + a local moto table
+```
+
+`make eval` exits non-zero on any gate breach, which is why it currently exits non-zero. That is the
+intended behaviour of a harness reporting three real failures.
+
+```bash
+make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGET degradation
+```
+
+### Not yet runnable
+
+| Target | Lands in |
+|---|---|
+| `make bootstrap` · `make deploy` · `make destroy` | Phase 8 |
+| `make simulate` | Phase 8 (needs the Lex bot) |
+| `make redteam` | Phase 7 |
+| `make verify-billable` | Phase 8 |
+
+## Teardown
+
+**There is nothing to tear down yet** — no billable resource has been provisioned. When Phase 8 lands:
+
+```bash
+make destroy     # returns the destroyable footprint to $0
+```
+
+`make destroy` **never touches `infra/terraform/stacks/telephony`**. The Connect instance and the DID live
+in separate state with `prevent_destroy`, and the stack's import guard asserts the number carries
+`Protected=true` before proceeding. A teardown that released the DID would risk a 180-day block on
+re-claiming it, so the protection is structural rather than a convention.
+
+## Testing
+
+```bash
+make test                      # unit — no AWS credentials, no network
+pytest tests/pre_provision     # region, model access, quotas          (Phase 8)
+pytest tests/post_provision    # recording off, budget exists, SKUs     (Phase 8)
+pytest tests/post_run          # against live resources after a call    (Phase 9)
+pytest tests/post_teardown     # release gate: zero surviving resources (Phase 8)
+```
+
+`tests/` is deliberately outside `mypy --strict`, and the reason is written in the Makefile rather than
+implied: langgraph's `StateGraph.add_node` and `Pregel.invoke` overloads reject plain callables and dict
+payloads under strict mode. Silencing ~20 stub-friction errors with `type: ignore` would add noise without
+adding a single check.
+
+## Engineering decisions
+
+Thirteen ADRs, immutable once accepted — superseded, never edited:
+[`docs/adr/`](docs/adr/).
+
+| Challenge | Resolution |
+|---|---|
+| Terraform's `aws_lexv2models_*` resources carry open bugs exactly at prompt specs, DTMF/barge-in specs, and an intent↔slot circular dependency | Define the bot as one nested `AWS::Lex::Bot` CloudFormation resource wrapped by `aws_cloudformation_stack` — structurally cannot hit the cycle. One IaC tool, zero portal clicks (`ADR-007`) |
+| An input guardrail would block a graphic injury description before the detector sees it | L1 runs on **raw input**, strictly before `ApplyGuardrail` — an ordering with its own ADR because getting it backwards defeats the entire safety mechanism (`ADR-010`) |
+| A generation-tier feature flag could disable the safety classifier as a side effect | Two structurally separate call paths with no shared config key, rather than one router with a tier dial (`ADR-004`) |
+| Loss date/time is the single most valuable captured field, and also a quasi-identifier | Retained in the structured record, **redacted from transcripts and logs**. Date + time + location is close to uniquely identifying; redacting names while keeping the tuple is not de-identification (`D16`) |
+| `mock_aws()` is process-wide, so a "real AWS" test can be silently answered by a mock | A runtime guard that raises when a real Bedrock client is constructed inside a moto scope, scoped by **faithfulness** — moto implements DynamoDB faithfully and fabricates Bedrock (`ADR-013`) |
+| Two gold retrieval labels named text that exists nowhere in the corpus | Produced `rank None`, arithmetically identical to a real retrieval failure. Would have published 0.700 instead of 0.800 and sent the next phase chasing a defect that did not exist. `validate_gold_labels()` is now a gate in its own right |
+| `\b` matches nothing before an apostrophe-t contraction, so `\bn't\b` never fires in `isn't` | Found **twice independently** — once in the third-party-status pattern, once in the negation cues, where it meant no contraction registered as negation at all |
+| A held-out set used to fix the detector is no longer held out | Generated by an isolated agent **before** any fix, sealed as an immutable baseline, and post-fix figures labelled contaminated by construction |
+| The script that produced the headline false-escalation number lived in a scratchpad | Recovered from the session transcript — luck, not process — and committed. **A number that appears in `RESULTS.md` must be reproducible from a clean checkout** |
+
+## Screenshots
+
+None yet. The React/Vite dashboard and the call simulator UI land in Phase 8, and a demo script with one
+deliberate failure plus a live injury escalation is Phase 12's deliverable. Screenshots of a system that
+has never taken a call would be a picture of a fake.
+
+## Lessons learned
+
+Most defects in this build were not found by reading code. They were found by measuring something that
+already looked fine.
+
+| # | Pattern | Cost |
+|---|---|---|
+| 1 | **A favourable result on one half of a trade-off pair is not a result** | One published conclusion reversed — recall measured, precision not |
+| 2 | **An n=1 observation published as a guarantee** | Every model-dependent number in the report; a 0.149 macro-F1 swing between identical runs |
+| 3 | **A test can pass because a mock answered a call meant for AWS** | Silent false verification, generalised into a runtime guard and a written rule |
+| 4 | **An instrument defect looks exactly like a model defect** | Three separate cases; two would have published worse numbers than reality |
+| 5 | **"Clean" is a claim about a scope** | Six phases of "strict clean" that never covered the eval harness |
+| 6 | **An invariant validated only against fixtures is untested for what a write path produces** | A model rule that was correct for every record that existed and wrong for the first one created |
+
+> **A green check on a code path that has never executed is not evidence.**
+
+Full write-up lands in [`docs/LESSONS-LEARNED.md`](docs/LESSONS-LEARNED.md) at Phase 12; the raw record is
+the session log in [`PROJECT_STATE.md`](PROJECT_STATE.md).
+
+## Documentation
 
 | Document | Contents |
 |---|---|
-| [`docs/phase0/MERGE-MATRIX.md`](docs/phase0/MERGE-MATRIX.md) | Per-module verdicts with reasons; discard rate reported both ways |
-| [`docs/phase0/DEPENDENCY-CONFLICTS.md`](docs/phase0/DEPENDENCY-CONFLICTS.md) | Ten conflict classes and their resolutions |
-| [`docs/phase0/DOMAIN-ARTIFACTS.md`](docs/phase0/DOMAIN-ARTIFACTS.md) | FNOL sequences, KABCO injury scale, coverage taxonomy, business rules, PII taxonomy |
-| [`docs/phase0/SECURITY-FINDINGS.md`](docs/phase0/SECURITY-FINDINGS.md) | Do-not-propagate list, critical findings, PII gate ruling |
-| [`docs/phase0/TARGET-LAYOUT.md`](docs/phase0/TARGET-LAYOUT.md) | Target layout and old→new path mapping |
+| [`PROJECT_STATE.md`](PROJECT_STATE.md) | **Start here.** Current phase, every decision with its rationale, open questions, risks, full session log |
+| [`CLAUDE.md`](CLAUDE.md) | Constraints, conventions, verified environment facts, do-not-propagate list |
+| [`COSTS.md`](COSTS.md) | Per-run log of every real AWS call and what it verified |
+| [`docs/RESULTS.md`](docs/RESULTS.md) | Every measured number, including the failures and the two reversals |
+| [`docs/phase1/SUCCESS-METRICS.md`](docs/phase1/SUCCESS-METRICS.md) | The metric specification, written before the code it judges |
+| [`docs/adr/`](docs/adr/) | Thirteen architecture decision records |
+| [`docs/phase0/`](docs/phase0/) | Merge matrix, dependency conflicts, domain artifacts, security findings |
+| [`docs/TESTING-CONVENTIONS.md`](docs/TESTING-CONVENTIONS.md) | Mock-scope rule and canary-test discipline |
+| [`docs/runbooks/MANUAL-STEPS.md`](docs/runbooks/MANUAL-STEPS.md) | The four permitted manual steps, and why no IaC path exists for them |
 
-**All data in this project is synthetic.** No real customer, policy or vehicle data is used. See the
-attestation in `DOMAIN-ARTIFACTS.md`.
+**All data in this project is synthetic.** No real customer, policy or vehicle data is used, and no image
+is vendored from any source repository. See the attestation in
+[`docs/phase0/DOMAIN-ARTIFACTS.md`](docs/phase0/DOMAIN-ARTIFACTS.md).
 
----
+This project is one top-level folder in the
+[`MAOFILHO/Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects) monorepo. GitHub Actions
+reads workflows only from the repository root, so this project's workflows live in
+`.github/workflows-for-monorepo-root/` and are copied to the root on install.
 
-## Commands
+## Author
 
-Not yet functional — implemented across Phases 5–11.
-
-```bash
-make bootstrap    # one-time local + state backend setup
-make deploy       # provision everything destroyable      (alias: provision)
-make destroy      # return to $0; never touches the protected telephony stack (alias: teardown)
-make simulate     # replay conversations locally, no AWS spend
-make eval         # eval report with real numbers
-make redteam      # guardrail effectiveness report
-make test lint typecheck
-```
-
----
-
-## Measured limitations
-
-Real numbers from `docs/RESULTS.md`, not caveats written in advance. Phase 6 was specified as
-**pre-tuning**: these are the values tuning starts from, reported as measured rather than adjusted to
-make a phase look finished.
-
-### The safety claim rests on phrasings no human wrote
-
-The injury detector's headline result — **100% escalation recall** across an independent held-out set —
-was measured against phrasings **written by a language model and classified by a language model**. The
-set is independent of *the detector* (an isolated agent generated it without ever reading `lexicon.py`
-or the taxonomy the lexicon was built from). It is **not** independent of language models in general.
-
-Agent-authored euphemism for injury may be systematically more model-legible than what a frightened
-person actually says at the roadside. The two systems may share an inductive bias a real caller does not.
-
-**No recall figure in this repository should be read as predicting real-world recall.** Establishing that
-needs human-authored phrasings from people who were not involved in building the detector, and this
-project has none. It is the single largest gap between what is measured here and what would be needed to
-run this on a real line.
-
-### The system escalates too much
-
-100% recall is bought at a **52.9% false-escalation rate** — more than half of the calls that should
-never be transferred are transferred, including *"I need to report an accident."* The target is ≤ 10%.
-The layered detector delivers the safety guarantee it was built for and is, in its current
-configuration, unusable as an IVR. Both halves are true and neither is presented without the other.
-
-### Three gates fail as of Phase 6
-
-| Metric | Threshold | Measured |
-|---|---|---|
-| Intent classification macro-F1 | ≥ 0.90 | **0.623** |
-| Retrieval recall@5 | ≥ 0.90 | **0.800** |
-| False-escalation rate | ≤ 0.10 | **0.529** |
-
-### Nothing here has taken a real call
-
-Every number in this repository comes from author-generated or agent-generated text. No real caller has
-spoken to this system. Real-world containment, satisfaction and abandonment cannot be estimated from it.
-
-Bias across name, accent and dialect variation, and accessibility for callers with speech differences,
-are **not assessed at all** — a genuine equity gap in a voice-only system, with no audit planned.
-
----
-
-## Repository context
-
-This project is one top-level folder in the [`MAOFILHO/Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects)
-monorepo. GitHub Actions reads workflows only from the repository root, so this project's workflows live in
-`.github/workflows-for-monorepo-root/` and are copied to the root on install — see the README in that
-directory.
-
-Conventions, commands and the full constraint set are in [`CLAUDE.md`](CLAUDE.md).
+**Marcos Oliveira** — [LinkedIn](https://www.linkedin.com/in/mfilho1/) | [GitHub](https://github.com/MAOFILHO)
