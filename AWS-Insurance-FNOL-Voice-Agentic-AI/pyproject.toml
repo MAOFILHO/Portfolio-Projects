@@ -73,6 +73,12 @@ target-version = ["py312"]
 python_version = "3.12"
 strict = true
 
+# langgraph_checkpoint_aws ships no py.typed marker / inline types (confirmed, not assumed --
+# mypy's own import-untyped error is the confirmation). No stub package exists for it on PyPI either.
+[[tool.mypy.overrides]]
+module = "langgraph_checkpoint_aws.*"
+ignore_missing_imports = true
+
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
