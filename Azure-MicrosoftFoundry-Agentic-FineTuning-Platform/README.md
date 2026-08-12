@@ -14,7 +14,7 @@
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-microsoftfoundry-agentic-finetuning-platform-ci.yml/badge.svg)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-microsoftfoundry-agentic-finetuning-platform-ci.yml)
 
-**Live:** [black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net) (Microsoft sign-in required — see [Live deployment](#live-deployment))
+**Live deployment:** currently offline — verified working end to end (real Microsoft sign-in, real 401 on an unauthenticated request), then torn down to stay at $0 between demos. See [Live deployment](#live-deployment) for the evidence and how to redeploy it.
 
 ## Project Description
 
@@ -555,11 +555,19 @@ rather than merely risky.
 
 ## Live deployment
 
-The app itself (not just the AI infra) is hosted publicly:
-**[black-bay-02b703b0f.7.azurestaticapps.net](https://black-bay-02b703b0f.7.azurestaticapps.net)**
-— Azure Static Web Apps (Free tier) for the frontend, Azure Container Apps
+**Status: currently offline.** The app itself (not just the AI infra) was
+hosted publicly at `black-bay-02b703b0f.7.azurestaticapps.net` — Azure
+Static Web Apps (Free tier) for the frontend, Azure Container Apps
 (Consumption, `min_replicas = 0`) for the backend, both provisioned by
-`infra/terraform/hosting.tf`.
+`infra/terraform/hosting.tf` — and verified working end to end (real
+Microsoft Entra ID sign-in with a real account, plus a direct `curl` **401**
+against a protected route with no token attached). It was torn down
+afterward, same as the AI infra, to stay at $0 between demos rather than
+leave a public endpoint running unattended. Everything below describes how
+it works when deployed; redeploy any time via the `…-deploy.yml` workflow
+(provisions the AI infra) followed by `…-hosting-deploy.yml` (builds +
+deploys the app itself) — see
+[GitHub Actions CI/CD](#github-actions-cicd) below.
 
 **Sign-in is required and enforced server-side.** The demo/demo123 screen
 used for local/mock dev was never checked by the backend — fine on
