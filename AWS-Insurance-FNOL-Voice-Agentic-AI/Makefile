@@ -31,13 +31,18 @@ test:
 # Everything that is checked. `evals` and `scripts` were outside this list until Phase 7
 # Stage 0 -- the entire eval harness, i.e. the code that produces every published number, was
 # never linted or type-checked while the phase reported "ruff/black/mypy strict clean".
-CHECKED = src tests evals scripts
+#
+# `redteam` added at Stage R, and it is the same omission one directory over: the note above was
+# written about `evals`/`scripts` and did not generalise to the other directory that produces a
+# published number. `make redteam`'s 11/11 came from code neither linted nor type-checked. It passed
+# both on the first try, which is luck, not evidence -- the point is that nothing was checking.
+CHECKED = src tests evals scripts redteam
 # mypy --strict covers production + measurement code. `tests` is deliberately excluded and
 # the reason is stated rather than left implicit: langgraph's StateGraph.add_node/Pregel.invoke
 # overloads reject plain callables and dict payloads under strict mode. Those are third-party
 # stub friction, not defects in the tests, and silencing ~20 of them with `type: ignore` would
 # add noise without adding a single check. Revisit if langgraph's stubs improve.
-TYPED = src evals scripts
+TYPED = src evals scripts redteam
 
 lint:
 	$(VENV)/ruff check $(CHECKED)

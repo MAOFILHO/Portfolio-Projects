@@ -2,18 +2,30 @@
 
 Roughly $0.0003 against the Phases 3-7 standing cap. Regenerate only when the corpus text or the graded
 query set changes -- `evals/retrieval.fixture_is_stale` detects that and fails loudly rather than
-reporting confident numbers about text that no longer exists.
+reporting confident numbers about text that no longer exists. (Until Phase 7 Stage R that sentence was
+false: no such function existed. It does now, and `evaluate_retrieval` calls it.)
 
-ADR-013: no mock_aws() anywhere. Every call here is real, deliberately.
+    --labels-only    Rewrite the fixture's gold labels from `GRADED_QUERIES` and nothing else. **$0.00,
+                     no model calls.** A gold label is not an embedding input -- correcting one changes
+                     which chunk counts as right, not what any vector is -- so paying for a full
+                     re-embedding to fix a label is spending money to change a string.
+
+ADR-013: no mock_aws() anywhere. Every call in the default path is real, deliberately.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import UTC, datetime
 
 from evals.queries import GRADED_QUERIES
-from evals.retrieval import FIXTURE_PATH, corpus_fingerprint
+from evals.retrieval import (
+    FIXTURE_PATH,
+    corpus_fingerprint,
+    label_fingerprint,
+    refresh_labels,
+)
 from fnol_voice_agent.knowledge.ingest import (
     DEFAULT_CORPUS_DIR,
     TITAN_EMBED_V2_MODEL_ID,
@@ -25,6 +37,21 @@ REGION = "us-west-2"
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--labels-only",
+        action="store_true",
+        help="rewrite gold labels from GRADED_QUERIES; no embedding calls, $0.00",
+    )
+    args = parser.parse_args()
+
+    if args.labels_only:
+        changes = refresh_labels()
+        for change in changes:
+            print(f"  label  {change}")
+        print(f"refreshed {len(changes)} label(s) in {FIXTURE_PATH} — $0.00, no model calls")
+        return 0
+
     embedder = BedrockEmbedder(region=REGION)
     chunks: list[dict[str, object]] = []
     for path in sorted(DEFAULT_CORPUS_DIR.glob("*.md")):
@@ -63,6 +90,10 @@ def main() -> int:
         "generated_at": datetime.now(UTC).isoformat(),
         "fingerprint": corpus_fingerprint(
             [str(c["text"]) for c in chunks], [q["query"] for q in queries]  # type: ignore[misc]
+        ),
+        "label_fingerprint": label_fingerprint(
+            (case.query_id, case.gold_source_file, case.gold_text_contains)
+            for case in GRADED_QUERIES
         ),
         "chunks": chunks,
         "queries": queries,

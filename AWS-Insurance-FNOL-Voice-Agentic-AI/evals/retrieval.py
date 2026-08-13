@@ -21,12 +21,36 @@ stochastic process and hide exactly the variance Phase 6 is meant to observe.
 Whenever the corpus text or the query set changes. `fixture_is_stale()` detects this by hashing both and
 comparing against the hash stored in the fixture, so a silently-outdated fixture fails loudly rather than
 producing confident numbers about text that no longer exists.
+
+⚠ **That paragraph was false for two phases, and how it was false is the point.** Until Phase 7 Stage R,
+`fixture_is_stale()` **did not exist**. `FixtureStaleError` was defined and never raised. The fingerprint
+was computed, written into the fixture, and never read back or compared by anything. Two docstrings --
+this one and `scripts/build_embedding_fixture.py`'s -- asserted a guard that had never been written, and
+both read as true. `RESULTS.md` §3.5's pattern in its purest form: the previous four instances at least
+had a guard that ran and checked the wrong thing. This one had prose.
+
+## Two fingerprints, not one
+
+Separated at Stage R because they invalidate different things and cost different amounts to repair:
+
+* **`corpus_fingerprint`** covers the *embedding inputs* -- chunk texts and query texts. If it moves, the
+  committed vectors describe text that no longer exists and the fixture must be **re-embedded** (a real,
+  billed Titan run).
+* **`label_fingerprint`** covers the *ground-truth gold labels*. If it moves, the vectors are still
+  perfectly valid and only the labels are out of date, so the fixture is repaired **offline at $0.00**
+  (`refresh_labels()`).
+
+Before the split, gold labels were copied into the fixture and covered by **neither** hash. `RESULTS.md`
+§6 records Phase 6 correcting two broken labels; that correction only took effect because the fixture
+happened to be regenerated in the same pass. **A label-only correction, committed to `queries.py` without
+a paid re-embedding run, would have changed nothing and reported the old number with no warning.**
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -68,6 +92,145 @@ def corpus_fingerprint(chunk_texts: list[str], queries: list[str]) -> str:
     return hasher.hexdigest()
 
 
+def label_fingerprint(labels: Iterable[tuple[str, str, str]]) -> str:
+    """Hash of the gold labels — `(query_id, gold_source_file, gold_text_contains)` per query.
+
+    Separate from `corpus_fingerprint` because a label change does not invalidate a single vector. The
+    null byte separates the fields so that `("cq-1", "a", "bc")` and `("cq-1", "ab", "c")` cannot hash
+    alike; concatenating without a separator is the classic way to make two different label sets agree.
+    """
+    hasher = hashlib.sha256()
+    for query_id, source_file, contains in sorted(labels):
+        hasher.update(f"{query_id}\x00{source_file}\x00{contains}\x00".encode())
+    return hasher.hexdigest()
+
+
+def current_fingerprints() -> tuple[str, str]:
+    """`(corpus, labels)` recomputed from the live corpus and the live query set."""
+    # Deferred imports, both deliberate: `evals.queries` imports `RetrievalCase` from this module, so a
+    # module-level import here is a cycle; and `ingest` pulls in the knowledge package for a pure
+    # function, which Tier A should not pay for at import time.
+    from fnol_voice_agent.knowledge.ingest import DEFAULT_CORPUS_DIR, chunk_markdown
+
+    from .queries import GRADED_QUERIES
+
+    chunk_texts = [
+        chunk.text
+        for path in sorted(DEFAULT_CORPUS_DIR.glob("*.md"))
+        for chunk in chunk_markdown(path.read_text())
+    ]
+    return (
+        corpus_fingerprint(chunk_texts, [q.query for q in GRADED_QUERIES]),
+        label_fingerprint(
+            (q.query_id, q.gold_source_file, q.gold_text_contains) for q in GRADED_QUERIES
+        ),
+    )
+
+
+def fixture_is_stale(path: Path = FIXTURE_PATH) -> list[str]:
+    """Reasons the committed fixture no longer matches the live corpus, queries or labels. Empty = current.
+
+    Each reason names its own repair, because the two are not the same price and a reader who conflates
+    them will either pay for an embedding run they did not need or skip one they did.
+
+    Drift is detected from **the fixture's own label rows**, not from the `label_fingerprint` field it
+    carries. The first draft of this function compared the stored hash against the live query set and
+    never looked at the rows the hash was supposed to describe — so hand-editing a gold label in the
+    fixture passed cleanly, because the hash and the query set still agreed with each other. That is
+    `RESULTS.md` §3.5's pattern reappearing inside the fix for §3.5's pattern, one test later
+    (`test_a_gold_label_correction_cannot_silently_report_the_old_number`). Checking the artifact that
+    stands in for the data, rather than the data, is apparently the default state of a guard unless
+    something forces otherwise.
+
+    The stored field is still compared — against the rows, as an integrity check — so that it is not a
+    second hash written and never read.
+    """
+    fixture = load_fixture(path)
+    corpus_now, labels_now = current_fingerprints()
+    reasons: list[str] = []
+
+    if fixture.get("fingerprint") != corpus_now:
+        reasons.append(
+            "corpus/query text has changed since the vectors were computed — the committed embeddings "
+            "describe text that no longer exists. Repair: re-embed "
+            "(scripts/build_embedding_fixture.py, a real billed Titan run)."
+        )
+
+    rows = [
+        (q["query_id"], q["gold_source_file"], q["gold_text_contains"]) for q in fixture["queries"]
+    ]
+    labels_in_fixture = label_fingerprint(rows)
+    if labels_in_fixture != labels_now:
+        reasons.append(
+            "the gold labels stored in the fixture differ from evals/queries.py. The vectors are "
+            "still valid — a label is not an embedding input. Repair: "
+            "scripts/build_embedding_fixture.py --labels-only ($0.00)."
+        )
+
+    stored = fixture.get("label_fingerprint")
+    if stored is None:
+        reasons.append(
+            "fixture predates label fingerprinting, so its labels carry no integrity hash. Repair: "
+            "scripts/build_embedding_fixture.py --labels-only ($0.00)."
+        )
+    elif stored != labels_in_fixture:
+        reasons.append(
+            "the fixture's stored label_fingerprint does not match its own label rows — the file has "
+            "been edited by hand or written by a builder that disagrees with this module. Repair: "
+            "scripts/build_embedding_fixture.py --labels-only ($0.00)."
+        )
+    return reasons
+
+
+def assert_fixture_current(path: Path = FIXTURE_PATH) -> None:
+    """Raise `FixtureStaleError` if the fixture is stale. Called by `evaluate_retrieval`.
+
+    This is the call the module docstring claimed existed for two phases. It is wired into the metric
+    rather than offered as a helper on purpose: a staleness check nobody invokes is the same artifact
+    the previous version was.
+    """
+    reasons = fixture_is_stale(path)
+    if reasons:
+        raise FixtureStaleError(f"{path} is stale:\n  - " + "\n  - ".join(reasons))
+
+
+def refresh_labels(path: Path = FIXTURE_PATH) -> list[str]:
+    """Rewrite the fixture's gold labels from `GRADED_QUERIES`, offline, at $0.00. Returns what changed.
+
+    **Refuses if the corpus fingerprint is also stale.** A label refresh that silently accepted a
+    changed corpus would paper over exactly the condition that needs a paid re-embedding, and would do
+    it while printing a reassuring message.
+    """
+    from .queries import GRADED_QUERIES
+
+    fixture = load_fixture(path)
+    corpus_now, labels_now = current_fingerprints()
+    if fixture.get("fingerprint") != corpus_now:
+        raise FixtureStaleError(
+            "corpus/query text has changed, so labels are not the only thing out of date. Re-embed "
+            "instead: scripts/build_embedding_fixture.py (no --labels-only)."
+        )
+
+    by_id = {q.query_id: q for q in GRADED_QUERIES}
+    changes: list[str] = []
+    for entry in fixture["queries"]:
+        case = by_id.get(entry["query_id"])
+        if case is None:
+            raise FixtureStaleError(
+                f"{entry['query_id']} is in the fixture but not in GRADED_QUERIES; the query set "
+                f"changed, which requires a re-embed, not a label refresh."
+            )
+        old = (entry["gold_source_file"], entry["gold_text_contains"])
+        new = (case.gold_source_file, case.gold_text_contains)
+        if old != new:
+            changes.append(f"{case.query_id}: {old[0]}/{old[1]!r} -> {new[0]}/{new[1]!r}")
+            entry["gold_source_file"], entry["gold_text_contains"] = new
+
+    fixture["label_fingerprint"] = labels_now
+    path.write_text(json.dumps(fixture))
+    return changes
+
+
 def load_fixture(path: Path = FIXTURE_PATH) -> dict[str, Any]:
     if not path.exists():
         raise FixtureMissingError(
@@ -95,6 +258,7 @@ class RetrievalReport:
 
 
 def evaluate_retrieval(path: Path = FIXTURE_PATH, top_k: int = 5) -> RetrievalReport:
+    assert_fixture_current(path)
     fixture = load_fixture(path)
     chunks = fixture["chunks"]
     hits = 0

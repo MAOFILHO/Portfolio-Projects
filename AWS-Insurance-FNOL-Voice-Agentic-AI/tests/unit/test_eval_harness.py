@@ -9,6 +9,10 @@ the wrong fix (stuffing euphemisms into the deterministic lexicon).
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from evals.metrics import BinaryClassificationCounts, Rate, macro_f1
 from evals.report import to_dict
 from evals.schema import load_golden_set
@@ -164,12 +168,137 @@ def test_mrr_averages_over_all_queries_including_misses() -> None:
     assert abs(report.mrr - expected) < 1e-9
 
 
-def test_retrieval_gate_fails_at_the_current_real_number() -> None:
-    """recall@5 is 0.800 against a 0.90 GATE. Asserted rather than left implicit so the failure cannot be
-    absorbed silently, and so a later improvement forces a re-report -- same mechanism as the L1 gate.
+def test_the_retrieval_gate_now_passes_at_exactly_its_threshold_and_why_that_is_not_a_clean_pass() -> (
+    None
+):
+    """recall@5 is **0.900 against a 0.90 GATE** -- met exactly, and only after Stage R corrected the
+    `cq-008` gold label. It read 0.800 before that.
+
+    This test replaces `test_retrieval_gate_fails_at_the_current_real_number`, which did its job: the
+    old test asserted the failure specifically so that a later improvement would force a re-report
+    rather than being absorbed silently. It forced this one.
+
+    Three facts are pinned here rather than left to `RESULTS.md`, because a green suite is what a reader
+    checks first:
+
+    1. The threshold is met **exactly**. With n=10 the metric's resolution is 0.1, so this GATE is
+       literally "at most one miss" and one query decides it.
+    2. The label correction was made **after** seeing the failure. It is right on the merits and was
+       found by auditing all ten labels rather than the two that failed -- but a threshold met by a
+       post-hoc correction is not the same as one met by a pre-registered measurement, and this project
+       does not let that distinction blur (`RESULTS.md` §5.1).
+    3. `cq-005` is still a genuine miss at rank 8, and it is the entire remaining gap on **both**
+       retrieval numbers.
     """
-    failures = gate_failures(run_tier_a())
-    assert any("retrieval recall@5" in f for f in failures)
+    from evals.retrieval import evaluate_retrieval
+
+    report = evaluate_retrieval()
+    assert report.recall_at_5.value == 0.9
+    assert report.per_query_rank["cq-005"] == 8, "the one genuine retrieval defect, undisturbed"
+    assert (
+        report.per_query_rank["cq-008"] == 1
+    ), "the corrected label; the retriever was always right"
+    assert "retrieval recall@5" not in " ".join(gate_failures(run_tier_a()))
+
+
+def test_mrr_is_still_below_its_target_and_turns_on_the_same_single_query() -> None:
+    """MRR 0.7458 against a 0.75 TARGET -- short by 0.0042. Not rounded up.
+
+    The shortfall is smaller than most single-rank improvements available on this set, which is a
+    statement about the instrument's resolution rather than about retrieval quality: moving `cq-005`
+    from rank 8 to rank 6 would land on 0.74997, still under. It clears 0.75 at rank 5. The target and
+    the gate therefore turn on the same one query, which is exactly why the fix for it is not being
+    tuned into place against a 10-query set (`NOT-FIXED.md` item 6)."""
+    from evals.retrieval import evaluate_retrieval
+
+    report = evaluate_retrieval()
+    assert report.mrr is not None
+    assert report.mrr < 0.75
+
+
+# --- The staleness guard that did not exist until Stage R -------------------------------------------
+
+
+def test_a_gold_label_correction_cannot_silently_report_the_old_number(tmp_path: Path) -> None:
+    """The Stage R instrument defect, as a standing guard.
+
+    Gold labels are copied into the fixture and were covered by **neither** fingerprint. Correcting a
+    label in `queries.py` therefore changed nothing about the measured number, and nothing warned:
+    `evaluate_retrieval` read the fixture's stale copy. `RESULTS.md` §6 records Phase 6 correcting two
+    labels -- that correction only took effect because the fixture happened to be re-embedded in the
+    same pass. Skip the paid run and the fix is a no-op that looks applied.
+    """
+    import json
+    import shutil
+
+    from evals.retrieval import (
+        FIXTURE_PATH,
+        FixtureStaleError,
+        evaluate_retrieval,
+        fixture_is_stale,
+    )
+
+    copy = tmp_path / "fixture.json"
+    shutil.copy(FIXTURE_PATH, copy)
+    fixture = json.loads(copy.read_text())
+    fixture["queries"][0]["gold_text_contains"] = "a label nobody agreed to"
+    copy.write_text(json.dumps(fixture))
+
+    reasons = fixture_is_stale(copy)
+    assert any("gold labels" in r for r in reasons)
+    # And it must be raised by the metric itself, not merely available to a caller who remembers to ask.
+    # A staleness check nobody invokes is the same artifact the previous version was.
+    with pytest.raises(FixtureStaleError):
+        evaluate_retrieval(copy)
+
+
+def test_a_label_change_does_not_claim_the_vectors_need_re_embedding(tmp_path: Path) -> None:
+    """The reason the two fingerprints are separate: a label is not an embedding input. Conflating them
+    would price a $0.00 repair as a billed Titan run, and the repair instructions have to be right or
+    nobody follows them."""
+    import json
+    import shutil
+
+    from evals.retrieval import FIXTURE_PATH, fixture_is_stale
+
+    copy = tmp_path / "fixture.json"
+    shutil.copy(FIXTURE_PATH, copy)
+    fixture = json.loads(copy.read_text())
+    fixture["queries"][0]["gold_source_file"] = "somewhere-else.md"
+    copy.write_text(json.dumps(fixture))
+
+    reasons = fixture_is_stale(copy)
+    assert reasons, "a changed gold label is a staleness condition"
+    assert all("$0.00" in r for r in reasons)
+    assert not any("re-embed" in r.lower() for r in reasons)
+
+
+def test_refresh_labels_refuses_when_the_corpus_itself_has_changed(tmp_path: Path) -> None:
+    """The $0.00 path must not be usable to paper over the condition that needs the paid one. A label
+    refresh that accepted a changed corpus would clear the warning and leave the vectors describing text
+    that no longer exists -- while printing a reassuring message."""
+    import json
+    import shutil
+
+    from evals.retrieval import FIXTURE_PATH, FixtureStaleError, refresh_labels
+
+    copy = tmp_path / "fixture.json"
+    shutil.copy(FIXTURE_PATH, copy)
+    fixture = json.loads(copy.read_text())
+    fixture["fingerprint"] = "the corpus moved under us"
+    copy.write_text(json.dumps(fixture))
+
+    with pytest.raises(FixtureStaleError, match="Re-embed"):
+        refresh_labels(copy)
+
+
+def test_label_fingerprint_separates_its_fields() -> None:
+    """`("cq-1", "a", "bc")` and `("cq-1", "ab", "c")` are different labels and must not hash alike.
+    Concatenating fields without a separator is the standard way to make two different sets agree.
+    """
+    from evals.retrieval import label_fingerprint
+
+    assert label_fingerprint([("cq-1", "a", "bc")]) != label_fingerprint([("cq-1", "ab", "c")])
 
 
 # --- Regression gate -------------------------------------------------------------------------------

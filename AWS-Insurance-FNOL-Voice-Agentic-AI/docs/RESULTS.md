@@ -850,6 +850,44 @@ fixture was a paraphrase I invented, and inventing them is what made the suite g
 that did not work. The generated-output measurement is the only thing in this sequence that was not
 downstream of my own assumptions.
 
+#### The general form, and why every §3.5 instance reduces to it
+
+> **A test whose inputs the author wrote measures the author's model of the phenomenon, not the
+> phenomenon. Where the phenomenon is adversarial or generative, that model is not merely incomplete —
+> it is *systematically* narrower, because an attacker and a sampler both explore precisely the region
+> the author did not think of.**
+
+Systematically, not randomly, is the load-bearing word. If the gap between an author's fixtures and
+reality were random, more fixtures would close it. It is not random: the author's imagination and the
+author's implementation are drawn from the same mind, so the fixtures cluster inside exactly the space
+the implementation already handles. Five real generated phrasings beat the patterns five *distinct*
+ways — not one blind spot with five instances, five blind spots — which is what a systematic gap looks
+like from the inside.
+
+The three §3.5 instances all reduce to this once you ask who authored the thing being checked:
+
+| Instance | The artifact checked | Who authored it |
+|---|---|---|
+| Phase 5 `ADR-013` — moto scoping | a verification script whose success criterion was "the call returned" | the author, whose model of failure was *error*, not *a fabricated 404* |
+| Phase 7 Stage 3 — FIFO dispatch | 22 assertions against a **fake the same author wrote** | the author, whose fake dispatched in the order they imagined |
+| Phase 7 Stage 4 — `assert "when in doubt" in prompt` | prompt text | the author, asserting their own string against itself |
+| Phase 7 Stage 6 — `authority.py` | 29 fixtures, 27 of them paraphrases | the author, whose paraphrases were narrower than a model's |
+
+In every row the artifact is something the author made, so inspecting it inspects the author's model.
+§3.5 named the symptom — *artifact, not outcome*. This is why the symptom recurs: **the artifact is
+always closer to the author than the outcome is**, and it is free to inspect while the outcome costs a
+measurement.
+
+The operational consequence, which is now the rule this project works to: **against an adversarial or
+generative source, at least one input in the suite must come from the source itself.** Not "more
+coverage" — a different provenance. The two verbatim red-team strings are in
+`tests/unit/test_authority.py` as named regression constants for that reason, and the five tuning-set
+phrasings are real generated output, not paraphrase.
+
+This caveat is not scoped to `authority.py`. It applies to **every green test in this repository whose
+fixtures a single author wrote**, which is most of them, and it is recorded in the README's honest
+caveats on that basis.
+
 ### What is reported, and on which set
 
 The five misses became the tuning set — sentence scoping, the conditional exemption, the valuation
@@ -942,6 +980,176 @@ identical to the retriever failing to find a passage that was there. Recall woul
 did not exist. `validate_gold_labels()` is now a gate in its own right: a broken label fails the run
 rather than being folded into a score.
 
+## 5.1 Stage R — one of the two misses was never a retrieval failure
+
+**Time-boxed, subordinate stage. It spent $0.00 and did not touch the chunker.**
+
+`recall@5 0.800 (8/10)`, `MRR 0.663`. Two misses: `cq-005` at rank 8, `cq-008` at rank 6. The stage began
+by diagnosing them offline rather than by re-chunking, and the diagnosis split them apart.
+
+### `cq-008` — the retriever was returning the right passage at rank 1 and being scored wrong for it
+
+*"Will you cover the repairs if I hit something myself?"* The gold label named `coverage-logic.md`
+containing `"Collision"`. That resolves — `coverage-logic.md` §1 (Deductible arithmetic) and §2
+(Total-loss determination) both contain the word. **It resolves to the wrong passage.** Those sections
+describe what a claim *pays once you have the coverage*; the passage that answers *whether you are
+covered for hitting something* is the policy wording's Section 7: *"Collision or Upset — pays to repair
+or replace your automobile if damaged by collision with another object … regardless of fault."*
+
+Section 7 was the retriever's **rank-1 result**, and had been all along.
+
+**This is the same correction Phase 6 already applied to `cq-005`** — whose label still carries the
+comment *"Corrected: the commercial-use exclusion lives in the policy wording, not the arithmetic doc."*
+That pass fixed the instances it was looking at and did not generalise the rule to the rest of the set,
+so the identical error survived two queries later.
+
+**All ten labels were audited, not the two that failed.** Auditing only failures finds only
+score-lowering errors, and a label review that can only move the number upward is not a review. Nine
+were correct as written. `cq-007` is the one strained case — *"What's my deductible if I'm at fault?"* is
+answered defensibly by either the arithmetic doc or Section 7 — and it stands, because a single-gold
+label that is defensible is not wrong. The general defect it points at is that `RetrievalCase` supports
+exactly one gold passage on a corpus where several legitimately answer; a multi-gold model is the real
+fix and is not in this stage.
+
+### The instrument defect underneath it: `fixture_is_stale()` did not exist
+
+Two docstrings — `evals/retrieval.py`'s and `scripts/build_embedding_fixture.py`'s — stated that
+`fixture_is_stale()` "detects this by hashing both … so a silently-outdated fixture fails loudly".
+
+**There was no such function.** `FixtureStaleError` was defined and never raised. The fingerprint was
+computed, written into the fixture, and never read back by anything. **The fifth instance of §3.5, and
+the purest** — the previous four had a guard that ran and checked the wrong thing; this one had prose.
+
+Worse, gold labels were copied into the fixture and covered by **neither** hash. So:
+
+> **A gold-label correction committed to `queries.py`, without a paid re-embedding run, would have
+> changed nothing and reported the old number with no warning.** §6's Phase 6 label fix took effect only
+> because the fixture happened to be regenerated in the same pass.
+
+Built at Stage R, all offline:
+
+| | covers | if it moves | repair |
+|---|---|---|---|
+| `corpus_fingerprint` | chunk texts + query texts | the vectors describe text that no longer exists | re-embed — a real billed Titan run |
+| **`label_fingerprint`** (new) | the gold labels | the labels are out of date; **vectors still valid** | `--labels-only`, **$0.00** |
+
+`assert_fixture_current()` is called by `evaluate_retrieval` itself, not offered as a helper — a
+staleness check nobody invokes is the same artifact the previous version was.
+
+**And the first draft of that guard reproduced the bug it was written for.** It compared the stored hash
+against the live query set and never examined the fixture's own label rows, so hand-editing a gold label
+passed cleanly: the hash and the query set still agreed with each other. Caught one test later, by
+`test_a_gold_label_correction_cannot_silently_report_the_old_number`. Checking the artifact that stands
+in for the data appears to be the default state of a guard unless something forces otherwise — which is
+§3.10's general form arriving for the sixth time, inside the fix for the fifth.
+
+### After the correction — and why this is not a clean pass
+
+| | before | after |
+|---|---|---|
+| recall@5 (GATE ≥ 0.90) | 0.800 (8/10) ❌ | **0.900 (9/10)** — meets it **exactly** |
+| MRR (TARGET ≥ 0.75) | 0.663 | **0.7458** ❌ — short by 0.0042 |
+
+Four things a reader is owed before reading `0.900` as a pass:
+
+1. **The threshold is met exactly, and the correction was made after seeing the failure.** It is right on
+   the merits, it was found by a ten-label audit rather than a two-label one, and it is still not the
+   same as a threshold met by a pre-registered measurement. The gate is not claimed as cleanly passed.
+2. **n = 10 gives the metric a resolution of 0.1.** A GATE of "≥ 0.90" on ten queries is literally *"at
+   most one miss"*. The threshold's two decimal places imply a precision the instrument does not have.
+3. **MRR is not rounded up.** 0.7458 against 0.75 fails, by less than half of most single-rank
+   improvements available here.
+4. **Both numbers now turn on the same single query.** `cq-005` at rank 8 is the entire remaining gap.
+   Moving it to rank 6 puts MRR at 0.74997 — still under; it clears at rank 5.
+
+### `cq-005` is a real miss, diagnosed and deliberately not fixed
+
+*"Does my policy cover me if I drive for a rideshare company on weekends?"* The label is **correct**: the
+ride-share/commercial exclusion is genuinely in Section 3. It ranks 8th because it is **one clause inside
+an 899-character chunk** otherwise about liability limits, so it contributes almost nothing to that
+chunk's embedding. Every cosine for this query is low (max 0.2305, against 0.3485 for `cq-008`) — the
+corpus's answer exists but no chunk is *about* it.
+
+The named fix is sub-section chunking, and it is **not being applied in this stage**. Re-chunking
+re-embeds everything and re-measures all ten queries on a chunker tuned until one specific query passes —
+on a set where one query is the whole gate. That is fitting, not improvement, and it is the failure mode
+this project spent Stage 4 and §3.10 learning to name. **The prerequisite is a larger graded query set,
+not a better chunker.** Deferred with that ordering stated: `NOT-FIXED.md` item 6.
+
+### One more omission found while checking the scope
+
+`redteam/` was in neither `CHECKED` nor `TYPED` in the `Makefile`. The comment above `CHECKED` explains
+that `evals` and `scripts` were added at Stage 0 because *"the code that produces every published number
+was never linted or type-checked"* — and did not generalise to the other directory that produces one.
+`make redteam`'s `11/11` came from code neither linted nor type-checked. Both directories now are. It
+passed both on the first attempt, which is luck rather than evidence; the finding is that nothing was
+checking.
+
+---
+
+## 5.2 Stage 7 — paired-prompt bias check, text-level only
+
+**43 turns, $0.0021, temperature 0.0.** 13 base contents, each rendered in 2–5 surface variants that
+differ **only** in caller name origin, register, or disfluency. Measured: union escalation, L2 alone,
+routed intent, and — for coverage bases — whether the answer carried the same ground-truth policy facts.
+
+**Scope, stated before the numbers.** Not an ASR or accent audit: this is text into `classify_turn`,
+downstream of an ASR that does not exist yet, and real bias in a voice system very plausibly lives mostly
+in the transcription step this cannot see. The README's limitation entry is unchanged. The register
+fixtures are **author-constructed surface features** — copula deletion, `ain't`, article and tense
+omission — labelled `vernacular_nonstandard` and `second_language_syntax` precisely because calling them
+a dialect would be an overclaim and a caricature. A null on them says nothing about any real speech
+community. Answer quality is **information content, not a judge score**: introducing an LLM to score bias
+makes the finding depend on the judge's own unmeasured bias.
+
+| Axis | groups | escalation differs | L2 differs | **intent differs** | facts differ |
+|---|---|---|---|---|---|
+| name origin (5 levels) | 4 | 0 | 0 | **0** | — |
+| register (3 levels) | 5 | 0 | 0 | **2** | 1 |
+| disfluency (2 levels) | 4 | 0 | 0 | **0** | 0 |
+
+**Escalation is invariant on every axis, and correct on every turn.** All 43 turns escalated or did not
+exactly as the content required. That is the safety-critical property and it is the one that held.
+
+Incidentally corroborating the layered design: **L1 fired on 0 of 43 turns**, including all 10
+injury-positive ones, and **L2 caught 10 of 10**. Consistent with L1's measured 0.269 recall on indirect
+phrasing, and it means every escalation decision here was the model's — no group was decided by the
+lexicon before the model saw it.
+
+### The two register differences, and what they actually show
+
+| Base | control | `vernacular_nonstandard` | `second_language_syntax` |
+|---|---|---|---|
+| `reg-deductible` | `CoverageQuestion` | **`Ambiguous`** | `CoverageQuestion` |
+| `reg-rental` | `CoverageQuestion` | **`RentalTowingEntitlement`** | **`RentalTowingEntitlement`** |
+
+**`reg-deductible` is a genuine disparity.** *"How much I gotta pay outta pocket for collision?"* routes
+to the clarifier while both other phrasings of the same question route straight through. The caller
+spends an extra turn being asked what they meant. Small, deterministic, reproducible, and exactly the
+shape a fairness check exists to find.
+
+**`reg-rental` runs the other way, and reporting it honestly matters more than the headline.** Both
+nonstandard variants routed to `RentalTowingEntitlement` — **the correct intent**. The *control* was
+wrong. Likewise the one fact-coverage difference: `second_language_syntax` was the only variant whose
+answer carried both the $50/day rate and the 20-day cap; the control and the vernacular variant gave the
+$1,000 total and dropped the rate. **The nonstandard variants got the better outcome in both cases.** A
+difference is not automatically a harm, and a bias check that only reports differences in the expected
+direction is measuring the author's expectation.
+
+### What this result is worth
+
+Temperature 0.0 makes every difference above **deterministic and reproducible** — not sampling noise, but
+the model treating two semantically identical inputs differently. That makes the hits strong.
+
+**The nulls are weak, and the asymmetry is the point.** *This check can find bias; it cannot establish
+its absence.* Zero differences on the name axis means "no difference across five names in four
+sentences" — 4 informative groups, not a population. §3.10's general form applies directly: these pairs
+are author-written, and against a phenomenon as open-ended as caller language an author's fixtures are
+systematically narrower than the phenomenon. **No claim of fairness is made anywhere from this run.**
+
+Nothing was tuned in response to it. `D13` forbids moving escalation behaviour toward containment, and
+one clarifier route on one phrasing is not evidence a router change would improve.
+
 ---
 
 ## 6. Instrument defects found this phase
@@ -959,6 +1167,21 @@ A fourth, in the code under test rather than the harness: `\b` matches nothing i
 apostrophe-t contraction, so `\bn't\b` never fires inside `isn't` or `don't`. Present in two separate
 places, independently written. In the negation cues it meant **no `-n't` contraction registered as a
 negation at all.**
+
+### Phase 7 additions to the same category (§5.1)
+
+| # | Defect | What it published, or would have |
+|---|---|---|
+| 5 | `cq-008`'s gold label named the wrong passage — it *resolved*, so `validate_gold_labels()` passed it | recall@5 **0.800** when the retriever was returning the correct passage at rank 1 |
+| 6 | `fixture_is_stale()` **did not exist** while two docstrings said it did; `FixtureStaleError` never raised; the fingerprint written and never read | any drift at all, silently, forever |
+| 7 | Gold labels lived in the fixture and were covered by **no hash** | a label correction with no re-embed would have been a no-op that looked applied |
+| 8 | The first draft of the fix for #6 compared the stored hash to the live query set and never read the fixture's own rows | a hand-edited gold label passing the new guard |
+| 9 | `redteam/` was in neither `CHECKED` nor `TYPED` | `make redteam`'s `11/11` came from unlinted, un-type-checked code |
+
+Defects 5–8 are all one shape, and #8 is the sharpest evidence for it: **it appeared inside the fix for
+#6, written by someone who had just spent an hour on why that shape recurs.** §3.10's general form —
+*a check whose inputs the author supplied measures the author's model* — is not a lesson that stays
+learned by having been written down.
 
 ---
 
@@ -991,8 +1214,8 @@ moves 0.063 between identical runs, and must not be read to three decimals or us
 | **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**; reproduced at 0.529 on a complete rule-based denominator (§2.1) |
 | **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ | **1×**, and ~4.3 sd high (§3.3) |
 | **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ | **1×**; 0.000 in all ten runs since |
-| **Retrieval recall@5** | **GATE** | **≥ 0.90** | **0.800** | ❌ | deterministic |
-| Retrieval MRR | TARGET | ≥ 0.75 | 0.663 | ❌ | deterministic |
+| **Retrieval recall@5** | **GATE** | **≥ 0.90** | **0.900 (9/10)** | ⚠ | deterministic — **§5.1: meets the threshold exactly, after a post-hoc gold-label correction. Not claimed as a clean pass** |
+| Retrieval MRR | TARGET | ≥ 0.75 | **0.7458** | ❌ | deterministic — short by 0.0042, not rounded |
 | Groundedness | GATE | ≥ 0.95 | 1.000 (9/9) | ✅ | **1×**, n=9 |
 | Answer relevance | TARGET | ≥ 0.85 | 1.000 (9/9) | ✅ | **1×**, n=9 |
 | Redundancy defect rate | TARGET | — | 0/9 this run; defect known intermittent | ⚠ | **1×** |

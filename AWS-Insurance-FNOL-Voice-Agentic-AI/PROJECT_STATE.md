@@ -1964,3 +1964,101 @@ on Phase 6, not only as a Phase 7 finding."* Three deliverables, then the ADR.
 - **Remaining in Phase 7:** Stage 7 (bias check — paired-prompt, text-level only), Stage 8 (verification:
   one frozen configuration k-sampled against the independent set, ledger entry #3, published count 3;
   redundancy check promoted TARGET→GATE), and Stage R (retrieval, time-boxed and conditional).
+
+---
+
+### 2026-08-12 — Phase 7 Stages 7 and R: bias check finds a register effect; Stage R finds the miss was never a miss
+
+**STOP CONDITIONS — restated verbatim, as required:**
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+- Restate these four conditions verbatim at the top of every session summary and after every `/compact`.
+
+**Three carry items from Marco, all discharged:**
+
+1. **§3.10's general form is now stated as a general form**, not as one instance: *a test whose inputs
+   the author wrote measures the author's model of the phenomenon; against an adversarial or generative
+   source that model is **systematically** — not randomly — narrower, because an attacker and a sampler
+   both explore precisely the region the author did not think of.* `RESULTS.md` §3.10 carries the
+   reduction of all four §3.5 instances to it (in every one, the artifact checked was authored by the
+   person checking it), and it is now a **README limitations bullet**, because it is the honest caveat
+   on every green test in the repo rather than a note about one module.
+2. **The grounding-would-have-passed-`kb-001` argument is promoted to its own subsection** at the top of
+   `NOT-FIXED.md` item 1, with the trace laid out, because grounding is what most readers will assume is
+   the answer and it is the one thing that provably is not. General statement recorded: *grounding is
+   measured relative to the context, so it can never defend against a threat whose delivery vehicle is
+   the context.*
+3. **The `D3` lapse gets its line in the close-out** — `NOT-FIXED.md`, after the summary table: three
+   runs went unlogged, the rule was correct, it was not followed.
+
+**`D47` — Stage 7 bias check: escalation is invariant; routing is not.** 43 turns, $0.0021, temperature
+0.0, 13 base contents × 2–5 surface variants differing only in caller name origin, register, or
+disfluency.
+
+- **Escalation invariant and correct on all 43 turns**, all three axes. **L1 fired 0/43** — including all
+  ten injury positives — so every escalation decision was L2's, and **L2 caught 10/10**. Consistent with
+  L1's 0.269 indirect recall; no group was decided by the lexicon before the model saw it.
+- **2 of 5 register groups differ in routed intent**; 0 of 4 on name origin, 0 of 4 on disfluency.
+- One is a genuine disparity: *"How much I gotta pay outta pocket for collision?"* → `Ambiguous`, an
+  extra clarifier turn, where two other phrasings of the same question route straight through.
+- **The other runs the opposite way and is reported as such.** On `reg-rental`, both nonstandard variants
+  routed to the *correct* intent and the control was wrong; the one information-content difference also
+  favoured the nonstandard variant. A check that only reports differences in the expected direction is
+  measuring the author's expectation.
+- **Temperature 0.0 makes the hits strong and leaves the nulls weak.** A difference is deterministic and
+  reproducible; an absence is "no difference on the pairs the author wrote". **No fairness claim is made
+  from this run.** Nothing was tuned in response (`D13`). Register fixtures are labelled
+  `vernacular_nonstandard` / `second_language_syntax` and explicitly **not** presented as a dialect
+  sample. Still not an ASR/accent audit; the README entry is unchanged.
+
+**`D48` — Stage R: one of the two retrieval misses was never a retrieval failure.** `$0.00`, no model
+calls, chunker untouched.
+
+- `cq-008`'s gold label named `coverage-logic.md`/`"Collision"`. It **resolved** — so
+  `validate_gold_labels()` passed it — and it named the wrong passage. The passage that answers *"will
+  you cover the repairs if I hit something myself"* is the wording's Section 7, which the retriever was
+  returning at **rank 1** and being scored wrong for.
+- **It is the same correction Phase 6 already applied to `cq-005`**, whose label still carries the
+  comment explaining it. That pass fixed what it was looking at and did not generalise the rule.
+- **All ten labels were audited, not the two that failed** — auditing only failures finds only
+  score-lowering errors. Nine were correct.
+- After correction: **recall@5 0.800 → 0.900** (meets the GATE *exactly*), **MRR 0.663 → 0.7458** (still
+  under its 0.75 TARGET, not rounded). **The gate is not claimed as a clean pass**: the correction was
+  post-hoc, n=10 gives the metric a resolution of 0.1 so the GATE is literally "at most one miss", and
+  both numbers now turn on the single remaining query.
+- `cq-005` is a real miss with a diagnosed mechanism — one clause inside an 899-char chunk about
+  something else — and is **deliberately not fixed**. Re-chunking would re-measure ten queries on a
+  chunker tuned until one of them passes. **The prerequisite is a larger graded set, not a better
+  chunker.** `NOT-FIXED.md` item 6.
+
+**`D49` — `fixture_is_stale()` did not exist, and two docstrings said it did.** `FixtureStaleError`
+defined and never raised; the fingerprint written into the fixture and never read by anything. **The
+fifth instance of §3.5 and the purest — the previous four had a guard that ran and checked the wrong
+thing; this one had prose.** Worse: gold labels were copied into the fixture and covered by **neither**
+hash, so a label correction without a paid re-embed would have been a no-op that looked applied. Built at
+Stage R: a second `label_fingerprint` separate from `corpus_fingerprint` (different invalidation,
+different price — labels repair at **$0.00** via `--labels-only`, vectors need a billed Titan run), and
+`assert_fixture_current()` called *by* `evaluate_retrieval` rather than offered as a helper.
+
+**`D50` — the first draft of the fix for `D49` reproduced `D49`.** It compared the stored hash against
+the live query set and never read the fixture's own label rows, so a hand-edited gold label passed
+cleanly: hash and query set still agreed with each other. Caught one test later. **Written by someone who
+had spent the preceding hour on why that shape recurs** — which is the strongest evidence in the project
+that §3.10's general form is not a lesson that stays learned by having been written down.
+
+**`D51` — `redteam/` was in neither `CHECKED` nor `TYPED`.** The `Makefile` comment above `CHECKED`
+explains that `evals` and `scripts` were added at Stage 0 because *"the code that produces every
+published number was never linted or type-checked"* — and did not generalise to the other directory that
+produces one. `make redteam`'s `11/11` came from unlinted, un-type-checked code. Both added; both passed
+first time, which is luck rather than evidence.
+
+- **352 tests green**, `make lint` and `make typecheck` clean over the widened scope. Phase 7 spend
+  **≈$0.354 of $1.25**; standing cap **≈$0.368 of $5.00**. Stop-and-report ($0.90) not reached.
+- **Remaining in Phase 7: Stage 8 only.** It carries one question that should not be decided silently —
+  **the ablation ladder selected nothing, so the "frozen configuration" to verify is the unchanged
+  merged incumbent, which is what ledger entry #1 already measured.** Whether that warrants spending a
+  third independent-set fingerprint, or whether entry #1 *is* the verification and the ledger's published
+  count stays at 2, is a `C2` question for Marco rather than a call to make while closing.

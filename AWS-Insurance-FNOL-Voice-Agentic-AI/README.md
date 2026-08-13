@@ -158,6 +158,17 @@ All three were found the same way: by checking something that already looked set
   assessed** — a genuine equity gap in a voice-only system. A text-level paired-prompt check is in scope
   for Phase 7; an ASR/accent audit needs audio and real callers and is not planned.
 - **`n` is small.** 26 held-out positives, one sample each, against a stochastic detector.
+- **Most green tests here were written against fixtures their own author invented — and that is the
+  honest caveat on all of them.** A test whose inputs the author wrote measures the author's model of
+  the phenomenon, not the phenomenon. Where the phenomenon is adversarial or generative, that model is
+  not merely incomplete, it is *systematically* narrower, because an attacker and a sampler both explore
+  precisely the region the author did not think of. This is not hypothetical: Phase 7's output authority
+  check shipped with **29 passing unit tests and a measured recall of 0.0** against real generated
+  output — five real phrasings defeated it five distinct ways. Every instance of the project's
+  "artifact, not outcome" pattern (`RESULTS.md` §3.5, four of them) reduces to this. The rule adopted in
+  response: against an adversarial or generative source, at least one input must come **from the source
+  itself**, and a behavioural property must be closed by a measurement, never by a test. Read a green
+  suite in this repo as evidence that the known cases hold, not that the space is covered.
 
 ## 🛠️ Tech Stack
 
