@@ -1,0 +1,56 @@
+{
+  "bot_id": "I0FVUXVE3V",
+  "declared": {
+    "control_dtmf_end_timeout_ms": 5000,
+    "dtmf_end_timeout_ms": 3000,
+    "policy_number_initial_prompt": "Okay. What is your policy number? It starts with P Y.",
+    "template_sha256": "c2c23e22ac9f7aaedf5ca9cabcafd81752830988b3b85ffc657248e22c9902fb"
+  },
+  "definition": {
+    "control_retry1_dtmf_end_timeout_ms": 5000,
+    "locale_status": "Built",
+    "slot_count": 11,
+    "slot_order": [
+      "injuries_present",
+      "policy_number",
+      "insured_vehicle",
+      "loss_datetime",
+      "loss_location",
+      "loss_type",
+      "damage_description",
+      "other_party_involved",
+      "police_report_filed",
+      "police_report_number",
+      "driver_name"
+    ],
+    "subject_initial_prompt": "Okay. What is your policy number? It starts with P Y.",
+    "subject_retry1_dtmf_end_timeout_ms": 3000,
+    "subject_retry2_dtmf_end_timeout_ms": 3000
+  },
+  "label": "apply-2",
+  "runtime": {
+    "after_no_match_messages": [
+      "Okay. What is your policy number? It starts with P Y.",
+      "Sorry, I didn't catch that. You can also enter it on your keypad, followed by the pound key."
+    ],
+    "opening_messages": [
+      "Is anyone hurt, including you?"
+    ],
+    "spoken_subject_prompt": "Okay. What is your policy number? It starts with P Y.",
+    "subject_prompt_messages": [
+      "Okay. What is your policy number? It starts with P Y.",
+      "Sorry, I didn't catch that. You can also enter it on your keypad, followed by the pound key."
+    ],
+    "text_requests": 3
+  },
+  "tags": {
+    "Ephemeral": "true",
+    "Managed": "terraform",
+    "Owner": "marcos",
+    "Phase": "8",
+    "Project": "AWS-Insurance-FNOL-Voice-Agentic-AI",
+    "aws:cloudformation:logical-id": "FnolPocBot",
+    "aws:cloudformation:stack-id": "arn:aws:cloudformation:us-west-2:759316130780:stack/fnol-lexpoc/41c6e4f0-96ca-11f1-b08d-024ffe786275",
+    "aws:cloudformation:stack-name": "fnol-lexpoc"
+  }
+}

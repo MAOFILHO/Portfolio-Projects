@@ -111,6 +111,33 @@ Three properties, each tested rather than asserted:
 3. A `terraform plan` in this stack after a `make destroy` shows **no changes** — the proof that teardown
    left it alone.
 
+### Stage 2 — the Lex bot, and `ADR-007`'s mandatory POC gate ✅ **DONE 2026-08-13 — `ADR-007` UPHELD**
+
+**The second apply took, at definition and at runtime.** `ADR-007` stands; nothing supersedes it. A third
+apply also confirmed that a **deletion** propagates rather than merging — the question the gate as written
+did not ask, and the more dangerous one. Stack **destroyed**, residue verified, line C closed at $0.00825.
+
+Four findings that matter more than the verdict, all in **`docs/phase8/LEXPOC-GATE.md`**:
+
+| | Finding | Lands in |
+|---|---|---|
+| 1 | The **locale build finishes after CloudFormation reports success** (`CREATE_COMPLETE` at 38 s, `Built` ~16 s later). A green apply does not mean a built bot | **Stage 3** — explicit wait, not an assumption |
+| 2 | **`TestBotAliasSettings` must be set explicitly** or the bot cannot be spoken to — and AWS's own reference example omits it. Every control-plane read reports a healthy bot | **Stage 3** |
+| 3 | **`MessageSelectionStrategy: Ordered` does not walk message groups per attempt.** Phase 4 §4's keypad-offer-on-first-no-match is **not declaratively expressible**; it belongs in the codehook. Recorded consequence: the opening turn apologised to the caller before they had spoken | **Stage 4**; `SLOT-DESIGN.md` §4 carries a dated correction |
+| 4 | **`ListSlots` pages at 10 and the intent has 11** — an unpaginated read silently drops `other_party_involved` | the gate script; a test asserts the count |
+
+Also confirmed rather than assumed: the `Project` tag **propagates from the CFN stack to the Lex bot**
+(Stage 0's rule applied to a new resource type), and #39948's intent↔slot cycle genuinely does not arise
+in the nested shape.
+
+Discharged by `scripts/lexpoc_gate.py` — three instruments (declared / definition / runtime), a negative
+control field held still, and **15 tests in `tests/unit/test_lexpoc_gate.py` that mutate the recorded
+evidence into each failure the gate claims to catch**. Evidence: `docs/evidence/phase8/lexpoc-apply-{1,2,3}.json`.
+
+Original scope below.
+
+---
+
 ### Stage 2 — the Lex bot, and `ADR-007`'s mandatory POC gate
 
 `ADR-007` chose nested CloudFormation `AWS::Lex::Bot` inside `aws_cloudformation_stack` because three open
@@ -237,9 +264,9 @@ Phase 7 criterion 16 is the precedent for the second option, and it is a real op
 | 5 | `make deploy` rebuilds everything destroyed, from clean, in one command, and criterion 1 passes again afterwards |
 | 6 | **Zero portal clicks beyond the four already recorded** in `MANUAL-STEPS.md`. Any fifth is added there with its justification, or the phase does not close |
 | 7 | **The recording CI check is red on a deliberately bad flow** and green on the shipped ones. Globbing is **by content**, proven against an extensionless file |
-| 8 | **`ADR-007`'s POC gate discharged**: a prompt change applied twice, verified to have actually taken effect. If it did not, an ADR supersedes `ADR-007` and says what replaced it |
+| 8 | ✅ **DONE 2026-08-13. `ADR-007`'s POC gate discharged**: a prompt change applied twice, verified to have actually taken effect at both definition and runtime. `ADR-007` is **upheld** — no supersession needed. `docs/phase8/LEXPOC-GATE.md` |
 | 9 | **Budget alarm is tag-filtered and proven with two probes in opposite directions**, each with a value known in advance: it must **include** a known non-zero quantity of *our* spend (the DID's $0.06/day, which accrues on its own) and **exclude** a known non-zero quantity of the sibling's (the $0.84935 Llama training run of 2026-08-10). One probe cannot distinguish a working filter from one that matches nothing — "ignores the sibling" is satisfied perfectly by a filter that ignores everybody. Also: **`IncludeCredit: false`**, per §6.1 of the audit. Marco, granting the approval: *"A tag-filtered alarm that silently matches nothing is the same failure shape as the fingerprint that hashed three files."* See `COST-ATTRIBUTION-AUDIT.md` |
-| 15 | **The Stage 2 Lex POC is destroyed once `ADR-007` resolves, pass or fail**, and its own `COSTS.md` line shows the teardown. Marco's condition on approving it separately: *"it has no purpose after `ADR-007` resolves"* |
+| 15 | ✅ **DONE 2026-08-13. The Stage 2 Lex POC is destroyed once `ADR-007` resolves, pass or fail**, and its own `COSTS.md` line shows the teardown. Marco's condition on approving it separately: *"it has no purpose after `ADR-007` resolves"*. Line C closed at **$0.00825**; residue verified by three independent reads, not asserted |
 | 10 | The guardrail stack is on the **remote backend**, and `RESULTS.md`/`PROJECT_STATE.md` record the migration |
 | 11 | **`D43` is fixed** — a blocked turn either performs a real transfer or stops promising one |
 | 12 | **`C1` re-verified on the deployed system** if anything in `_FINGERPRINT_SOURCES` moved. Phase 7's finding is that a defensible per-component change can move the composition; a Lambda wrapper around the graph is exactly such a change. **The reasoning for skipping this will be "the graph is unchanged, only its wrapper is new." That sentence is verbatim the argument Stage 8 rejected and §3.9 documented. If discharging this criterion feels unnecessary when you reach it, that feeling is the finding — proceed anyway.** (Marco, on granting `APPROVED: Phase 8`) |

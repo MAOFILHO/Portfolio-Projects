@@ -1,0 +1,386 @@
+# ADR-007's proof-of-concept bot. Phase 8 Stage 2. THROWAWAY — destroyed when the gate resolves.
+#
+# This is not the FNOL bot. It is the smallest `AWS::Lex::Bot` that carries the three things ADR-007
+# could not verify from documentation:
+#
+#   1. an eleven-slot intent with explicit `SlotPriorities` (the shape that makes native
+#      `aws_lexv2models_*` structurally impossible — provider issue #39948);
+#   2. a `PromptSpecification` on every slot (the shape that silently fails to update under provider
+#      issue #42147);
+#   3. `PromptAttemptsSpecification` with `AudioAndDTMFInputSpecification`/`DTMFSpecification` on the
+#      two digit-only slots (the advanced settings family of #36845, and Phase 4's DTMF policy).
+#
+# The gate is not "does this apply". It is "does a CHANGE to it apply", so the prompt strings and the
+# DTMF timings below are deliberately the fields the second apply moves.
+#
+# Slot inventory and prompt wording are taken from `docs/phase4/SLOT-DESIGN.md` §1.1–1.2 rather than
+# invented, so that a defect found here is a defect that would have been found in the real bot.
+#
+# RENDERED BY `templatefile()`. The two values the gate moves — `policy_number_initial_prompt` and
+# `dtmf_end_timeout_ms` — are interpolated from Terraform variables and re-exported as outputs, so the
+# gate script compares the DEPLOYED value against the value Terraform says it sent, from one source of
+# truth. A parameter echoed back would have been a second copy able to drift from the template body,
+# which is the "guard that checks the artifact rather than the outcome" failure in miniature.
+#
+# NOT PRESENT, DELIBERATELY:
+#   * `AWS::Lex::BotVersion` / `AWS::Lex::BotAlias` — the DRAFT version behind the built-in test alias is
+#     what an update actually mutates, so versioning would test the wrong object.
+#   * `SentimentAnalysisSettings: DetectSentiment: true` — AWS's own template example in the
+#     `AWS::Lex::Bot` reference sets this. It bills an Amazon Comprehend `DetectSentiment` call per
+#     utterance and is on Phase 0's cost-hazard list. Copying the sample verbatim would have switched on
+#     a per-utterance charge nobody asked for.
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  ADR-007 POC. Eleven-slot FNOL intent with prompt-attempt and DTMF specifications, to test whether an
+  UPDATE through nested CloudFormation actually reaches the deployed bot. Destroyed after the gate.
+
+Parameters:
+  BotName:
+    Type: String
+    Description: Name of the throwaway POC bot.
+  BotRuntimeRoleArn:
+    Type: String
+    Description: >-
+      IAM role Lex assumes at runtime. Created in Terraform, not here, so that the only IAM in this
+      project stays visible in a `terraform plan` rather than inside an opaque nested stack.
+
+Resources:
+  FnolPocBot:
+    Type: AWS::Lex::Bot
+    Properties:
+      Name: !Ref BotName
+      RoleArn: !Ref BotRuntimeRoleArn
+      Description: "ADR-007 POC. Throwaway. Destroyed when the Phase 8 Stage 2 gate resolves."
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      # The whole point of the second apply. If this is false, an update changes the DRAFT definition
+      # and leaves the built runtime serving the old prompts — a silent failure one layer below #42147.
+      AutoBuildBotLocales: true
+
+      # Without this the built-in test alias exists but serves no locale, and `RecognizeText` fails with
+      # "The BotAliasId TSTALIASID does not have Language en_US enabled." Found the hard way here rather
+      # than in Stage 3: nothing in the `AWS::Lex::Bot` reference example sets it, and a bot that builds
+      # cleanly and cannot be spoken to looks like a working bot from every control-plane read.
+      TestBotAliasSettings:
+        BotAliasLocaleSettings:
+          - LocaleId: "en_US"
+            BotAliasLocaleSetting:
+              Enabled: true
+        # Off. `DetectSentiment: true` is what AWS's own example ships, and it bills a Comprehend call
+        # per utterance.
+        SentimentAnalysisSettings:
+          DetectSentiment: false
+
+      BotLocales:
+        - LocaleId: "en_US"
+          Description: "FNOL POC locale"
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: "Joanna"
+
+          SlotTypes:
+            - Name: "LossTypeValues"
+              Description: "Loss type enum per SLOT-DESIGN 1.2"
+              SlotTypeValues:
+                - SampleValue:
+                    Value: collision
+                - SampleValue:
+                    Value: comprehensive
+                - SampleValue:
+                    Value: theft
+                - SampleValue:
+                    Value: vandalism
+                - SampleValue:
+                    Value: weather
+                - SampleValue:
+                    Value: liability
+              ValueSelectionSetting:
+                ResolutionStrategy: TOP_RESOLUTION
+
+          Intents:
+            - Name: "FileAutoClaim"
+              Description: "Intent 1 of six. The slot-filling showcase."
+              SampleUtterances:
+                - Utterance: "I need to file a claim"
+                - Utterance: "I want to report a car accident"
+                - Utterance: "I was in an accident"
+                - Utterance: "file a new auto claim"
+
+              # Explicit priorities are the reason this bot exists. In the native provider these live on
+              # the intent and reference slot IDs that only exist once the slots reference the intent —
+              # the cycle in #39948. Here they are names inside one resource body and the service
+              # resolves them internally.
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: injuries_present
+                - Priority: 2
+                  SlotName: policy_number
+                - Priority: 3
+                  SlotName: insured_vehicle
+                - Priority: 4
+                  SlotName: loss_datetime
+                - Priority: 5
+                  SlotName: loss_location
+                - Priority: 6
+                  SlotName: loss_type
+                - Priority: 7
+                  SlotName: damage_description
+                - Priority: 8
+                  SlotName: other_party_involved
+                - Priority: 9
+                  SlotName: police_report_filed
+                - Priority: 10
+                  SlotName: police_report_number
+                - Priority: 11
+                  SlotName: driver_name
+
+              Slots:
+                # 1. Asked first. No confirmation step, by rule: any affirmative escalates immediately
+                #    (intent 6, "no negotiation"), and a confirm step would be a negotiation.
+                - Name: "injuries_present"
+                  Description: "Safety first. Formal capture of what safety_check already asked."
+                  SlotTypeName: "AMAZON.Confirmation"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Is anyone hurt, including you?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                # 2. Critical identifier, and the slot the gate mutates.
+                #
+                #    THIRD APPLY, 2026-08-13. A second message group carrying Phase 4's keypad offer used
+                #    to sit below the prompt, on the assumption that `MessageSelectionStrategy: Ordered`
+                #    walks the list one entry per retry attempt. It does not. Lex plays ONE message from
+                #    EVERY message group on EVERY attempt and concatenates them; `Ordered` selects among
+                #    `Variations` WITHIN a group. The recorded consequence, in
+                #    `docs/evidence/phase8/lexpoc-apply-2.json`, is that the first thing a caller heard
+                #    was "What is your policy number? Sorry, I didn't catch that." — an apology for a
+                #    mistake they had not yet had the chance to make.
+                #
+                #    Removing it also asks the harder question the gate did not: does a DELETION reach
+                #    the deployed bot, or does the update mechanism merge? See `check_removal`.
+                - Name: "policy_number"
+                  Description: "PY#### — digits only, so DTMF is a real input path, not a courtesy."
+                  SlotTypeName: "AMAZON.AlphaNumeric"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "${policy_number_initial_prompt}"
+                      MessageSelectionStrategy: "Ordered"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+                      PromptAttemptsSpecification:
+                        Initial:
+                          AllowInterrupt: true
+                          AllowedInputTypes:
+                            AllowAudioInput: true
+                            # Off on the first attempt on purpose. Offering a keypad before the caller
+                            # has had trouble is noise; the offer is a repair, not a greeting.
+                            AllowDTMFInput: false
+                          AudioAndDTMFInputSpecification:
+                            StartTimeoutMs: 4000
+                            AudioSpecification:
+                              EndTimeoutMs: 640
+                              MaxLengthMs: 15000
+                        Retry1:
+                          AllowInterrupt: true
+                          AllowedInputTypes:
+                            AllowAudioInput: true
+                            AllowDTMFInput: true
+                          AudioAndDTMFInputSpecification:
+                            StartTimeoutMs: 4000
+                            AudioSpecification:
+                              EndTimeoutMs: 640
+                              MaxLengthMs: 15000
+                            DTMFSpecification:
+                              DeletionCharacter: "*"
+                              EndCharacter: "#"
+                              EndTimeoutMs: ${dtmf_end_timeout_ms}
+                              MaxLength: 4
+                        Retry2:
+                          AllowInterrupt: true
+                          AllowedInputTypes:
+                            AllowAudioInput: true
+                            AllowDTMFInput: true
+                          AudioAndDTMFInputSpecification:
+                            StartTimeoutMs: 4000
+                            AudioSpecification:
+                              EndTimeoutMs: 640
+                              MaxLengthMs: 15000
+                            DTMFSpecification:
+                              DeletionCharacter: "*"
+                              EndCharacter: "#"
+                              EndTimeoutMs: ${dtmf_end_timeout_ms}
+                              MaxLength: 4
+
+                - Name: "insured_vehicle"
+                  Description: "Resolved against the policy's vehicle list downstream."
+                  SlotTypeName: "AMAZON.FreeFormInput"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Which vehicle on your policy was involved?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "loss_datetime"
+                  Description: "Fuzzy-parsed downstream. Never blanket-redacted — see ADR-011."
+                  SlotTypeName: "AMAZON.Date"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "When did this happen?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "loss_location"
+                  Description: "Free text, no format constraint."
+                  SlotTypeName: "AMAZON.FreeFormInput"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Where did it happen?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "loss_type"
+                  Description: "Custom enum. Present so the POC exercises SlotTypes, not only built-ins."
+                  SlotTypeName: "LossTypeValues"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Was this a collision, a comprehensive-type loss like theft or weather, or something else?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "damage_description"
+                  Description: "Drives the damage-extent classification intent 4's towing branch reads."
+                  SlotTypeName: "AMAZON.FreeFormInput"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Can you describe the damage?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "other_party_involved"
+                  Description: "Bool. Sub-fields elicited downstream if affirmative."
+                  SlotTypeName: "AMAZON.Confirmation"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Was another vehicle or driver involved?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                - Name: "police_report_filed"
+                  Description: "Gates police_report_number."
+                  SlotTypeName: "AMAZON.Confirmation"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Was a police report filed?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                # Conditional in the design; Optional here. The conditional branch itself belongs to the
+                # codehook, not to the bot definition, so making it Required would misstate the design.
+                #
+                # NEGATIVE CONTROL. Its `EndTimeoutMs` is a hardcoded 5000 while `policy_number`'s is
+                # templated. The gate asserts this one is STILL 5000 after the second apply. An update
+                # mechanism that rewrote the whole locale from stale inputs, or one that reported success
+                # while changing nothing anywhere, would both be invisible if every field moved together.
+                - Name: "police_report_number"
+                  Description: "####-####-### — the second digit-only slot, so it carries DTMF too."
+                  SlotTypeName: "AMAZON.AlphaNumeric"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Optional"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "What's the report number?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+                      PromptAttemptsSpecification:
+                        Initial:
+                          AllowInterrupt: true
+                          AllowedInputTypes:
+                            AllowAudioInput: true
+                            AllowDTMFInput: false
+                          AudioAndDTMFInputSpecification:
+                            StartTimeoutMs: 4000
+                            AudioSpecification:
+                              EndTimeoutMs: 640
+                              MaxLengthMs: 15000
+                        Retry1:
+                          AllowInterrupt: true
+                          AllowedInputTypes:
+                            AllowAudioInput: true
+                            AllowDTMFInput: true
+                          AudioAndDTMFInputSpecification:
+                            StartTimeoutMs: 4000
+                            AudioSpecification:
+                              EndTimeoutMs: 640
+                              MaxLengthMs: 15000
+                            DTMFSpecification:
+                              DeletionCharacter: "*"
+                              EndCharacter: "#"
+                              EndTimeoutMs: 5000
+                              MaxLength: 11
+
+                - Name: "driver_name"
+                  Description: "Defaults to Self downstream; asked last because most calls do not need it."
+                  SlotTypeName: "AMAZON.FreeFormInput"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Were you driving, or was it someone else?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+            # Required by the service — bot creation fails without it.
+            - Name: "FallbackIntent"
+              Description: "Required by Lex. Real no-match handling is the codehook's job, not the bot's."
+              ParentIntentSignature: "AMAZON.FallbackIntent"
+
+Outputs:
+  BotId:
+    Description: "Bot id, read by the gate script."
+    Value: !Ref FnolPocBot
+  BotArn:
+    Description: "Bot ARN, used to check whether the stack-level Project tag actually propagated."
+    Value: !GetAtt FnolPocBot.Arn

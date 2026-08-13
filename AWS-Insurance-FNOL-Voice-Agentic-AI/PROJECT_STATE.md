@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stage 0 complete)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2303,7 +2303,77 @@ unsatisfiable tag condition, which fails at **plan** time with the guard's own m
 proven by running `terraform plan -destroy`. `make verify-destroy-scope` plus 8 unit tests, each with a
 negative control.
 
-### D36 — the log was the instrument that was never checked
+### Stage 2 — `ADR-007`'s POC gate, complete 2026-08-13. **ADR-007 upheld.** Stack destroyed
+
+`infra/terraform/stacks/lexpoc` — an 11-slot `FileAutoClaim` with explicit `SlotPriorities`, a
+`PromptSpecification` on every slot, and `PromptAttemptsSpecification`/`DTMFSpecification` on the two
+digit-only slots, taken from `SLOT-DESIGN.md` §1.1–1.2 rather than invented.
+
+**The second apply took, at definition *and* at runtime.** A third apply confirmed a **deletion**
+propagates rather than merging — the question the gate as written did not ask, and the more dangerous
+one. `ADR-007` stands; no supersession. Criteria 8 and 15 discharged. Line C closed at **$0.00825** — the
+bot was free, the eleven sentences said to it were not. Full result: `docs/phase8/LEXPOC-GATE.md`.
+
+**Three instruments, because they can disagree:** DECLARED (`terraform output`), DEFINITION
+(`DescribeSlot`), RUNTIME (`RecognizeText`). Stopping at DEFINITION would have been §3.5 a fifth time —
+the definition is what the locale build *reads*, not what it *serves*. A control field
+(`police_report_number`'s DTMF timeout) was held still throughout, and the gate itself is proven able to
+fail by **15 tests that mutate the recorded evidence into each failure it claims to catch**.
+
+### D68 — the POC's verdict was the least valuable thing it produced
+
+Four findings, none of which was the pass/fail answer, and one of which was a live dialogue defect:
+
+1. **The locale build completes *after* CloudFormation reports success** (`CREATE_COMPLETE` at 38 s,
+   `Built` ~16 s later, on all three applies). A green `terraform apply` does not mean a built bot.
+   Stage 3 needs an explicit wait; "it worked when I ran it" is what an implicit one looks like.
+2. **`TestBotAliasSettings` must be set explicitly or the bot cannot be spoken to** — and AWS's own
+   `AWS::Lex::Bot` reference example omits it. `RecognizeText` fails while every control-plane read
+   reports a healthy, `Built` bot. A pipeline that validated by describing would have shipped it.
+3. **`MessageSelectionStrategy: Ordered` does not walk message groups per retry attempt.** Lex plays one
+   message from *every* group on *every* attempt. `SLOT-DESIGN.md` §4's keypad-offer-on-first-no-match is
+   **not declaratively expressible**; it moves to the codehook. Recorded consequence in
+   `lexpoc-apply-2.json`: the opening turn apologised to the caller before they had spoken.
+4. **`ListSlots` pages at 10 and the intent has 11.** An unpaginated read drops `other_party_involved`
+   and looks complete doing it.
+
+Also confirmed rather than assumed: the `Project` tag propagates from the CFN stack to the Lex bot, and
+#39948's intent↔slot cycle genuinely does not arise in the nested shape — `ADR-007`'s main structural
+claim now has a measurement behind it instead of an argument.
+
+**What the pass does not cover**, stated because a pass invites over-reading: nothing about published
+versions or aliases (everything ran on DRAFT + the test alias, and Stage 3 associates Connect with a
+*version*, which re-opens the staleness question in a different shape); nothing about DTMF working on an
+actual call; two fields moved, not the schema; and `aws_cloudformation_stack` remains an opaque box in
+`terraform plan` — observed directly, the plan says `template_body` changed, not which prompt.
+
+### D69 — count the instruments before trusting the one you wrote
+
+Marco, on the CloudWatch finding: *"this project's instrument defects have mostly been discovered by
+building a better instrument. This one was discovered by noticing an independent instrument already
+existed, free, and had been running the whole time. Ask once, explicitly, before Stage 3: what else is
+AWS already measuring that we have been measuring ourselves?"*
+
+Asked, and answered in **`docs/phase8/EXISTING-INSTRUMENTS.md`** — ten candidates with a verdict each.
+**Adopt:** Lambda `InitDuration` (`ADR-009`'s central number, already recorded by AWS, which shrinks
+Phase 9's job to interpretation); Lex `ListUtteranceMetrics`' `Missed` (production no-match beside the
+eval harness's fixed-set figure); Connect contact records (free, 24-month retention, queryable **without**
+the Kinesis stream and the fifth portal click that "enable data streaming" would cost); DynamoDB consumed
+capacity; `AWS/Lex` runtime latency — the 1,800 ms budget has never been observed outside our own harness.
+
+**The survey's own output is the reason it is not a rule to prefer AWS's instrument.** Cost Explorer *is*
+the AWS instrument for cost and it was three orders of magnitude wrong. Bedrock model invocation logging
+would make per-run cost exact and persists complete prompts account-wide — declined for now, with the
+reason recorded rather than the option forgotten. The reusable move is **counting** the instruments: a
+single instrument cannot be wrong, because there is nothing for it to disagree with.
+
+**One finding here changes Stage 3's design, not its dashboards.** Lex slot `ObfuscationSetting` has three
+documented exclusions and our design walks into all three — missed utterances are *not* obfuscated (and
+digit-only identifiers are the slots most likely to no-match), slot values used in *responses* are not
+obfuscated (our confirmation policy reads the policy number back), and session attributes are not
+obfuscated. It is defence in depth; it cannot be the boundary. `ADR-011` stays where it is.
+
+### D67 — the log was the instrument that was never checked
 
 Marco declined to let the `COSTS.md` discrepancy wait for Stage 5: *"If our own logged token counts are
 right, one known call's cost is arithmetic — the question is whether CE is missing data or the log is
@@ -2340,7 +2410,7 @@ person sitting in the billing system** — outside `ADR-011`'s redaction boundar
 three hours. The tag value contains no PII; the tag in context is health information. Cost-per-intent is
 recovered offline by joining `contactId` inside the boundary, where the controls already are.
 
-### D33 — activating a cost allocation tag is not the same as attributing a cost
+### D64 — activating a cost allocation tag is not the same as attributing a cost
 
 Marco made propagation a condition of the approval: *"A tag-filtered alarm that silently matches nothing
 is the same failure shape as the fingerprint that hashed three files."* The audit found exactly that, in
@@ -2361,7 +2431,7 @@ the two largest cost sources in the project:
 Criterion 9 was rewritten around **two probes in opposite directions**, each with a value known in
 advance, because "ignores the sibling project" is satisfied perfectly by a filter that ignores everyone.
 
-### D34 — this account is on credits, and `CLAUDE.md` said the opposite
+### D65 — this account is on credits, and `CLAUDE.md` said the opposite
 
 `CLAUDE.md` stated **"Assume no promotional credits on this account."** Wrong, and wrong in the direction
 that disables the control: grouping by `RECORD_TYPE` gives usage/credit of $12.44/−$12.44 (June),
@@ -2373,7 +2443,7 @@ The budget must set `IncludeCredit: false` / `IncludeRefund: false` and manage a
 There is no public API for the remaining balance, so the credits are an unknown buffer, not a budget.
 Corrected in `CLAUDE.md`.
 
-### D35 — the Canada DID rate, resolved after eight phases
+### D66 — the Canada DID rate, resolved after eight phases
 
 **$0.06/day = $1.83/month**, twice the US rate, 7.3% of the ceiling, permanent, and the project's only
 always-on cost. Measured on two independent days rather than divided from one.
@@ -2388,13 +2458,13 @@ September. **A $0.00 reading and an absent line item look identical in a grouped
 
 | # | Item | Owner |
 |---|---|---|
-| A | Application inference profile for Bedrock attribution — **needs Marco's word**, ADR against constraint 17's wording | Stage 5 |
-| B | `Contact tags` block in the flow, ≤6 tags, **no PII** (AWS states this explicitly, and FNOL contacts carry claim and policy numbers) | Stage 3 |
+| A | ✅ **Approved and done 2026-08-12** — `ADR-016`, `stacks/inference`, region set verified against `GetInferenceProfile`. Was: application inference profile for Bedrock attribution | Stage 0.5 |
+| B | ✅ **Schema decided 2026-08-12**, ahead of Stage 3 per Marco — `Project`/`Env`/`FlowVersion`, `Intent` and `Outcome` rejected on the injury/health-inference argument. `docs/phase8/CONTACT-TAG-SCHEMA.md`. Implementation still Stage 3 | Stage 3 |
 | C | Activate `aws:connect:instanceId` after the first real call, then wait 24h | Stage 5 |
 | D | Budget `IncludeCredit: false` | Stage 5 |
-| E | Tag the Lex bot **alias**, not only the bot | Stage 2 |
-| F | **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
-| G | Verify the AMCS-sold DID line carries the tag once data accrues | 2026-08-13 |
+| E | Tag the Lex bot **alias**, not only the bot | **Stage 3 — not resolved in Stage 2.** The POC established that CFN stack tags propagate to the `AWS::Lex::Bot` resource, verified with `ListTagsForResource`. It did **not** establish the same for an alias: the POC deliberately had no `AWS::Lex::BotAlias`, because DRAFT behind the test alias is what an update mutates. Stage 3 creates a real alias and must check it there rather than generalising from the bot | Stage 3 |
+| F | ✅ **Resolved 2026-08-12 (`D67`)** — CloudWatch `AWS/Bedrock` as a third instrument. CE is missing data; the log under-reports by 22%. Was: **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
+| G | ⏳ **Checked 2026-08-13, still unanswerable — and the reason is worth keeping.** Every line in Aug 11–12 reports `Project$`, i.e. **untagged**, including the AMCS-sold DID. That is *not yet evidence of a defect*: cost allocation tags are **not retroactive**, and `Project` was only activated during 08-12, so those days would read untagged whatever the tag does. 08-13 has no settled data yet. **Re-check 2026-08-14/15 on 08-13's data specifically.** If the DID line is still untagged then, the tag-filtered budget alarm excludes the project's **only always-on cost** ($1.83/mo, 7.3% of the ceiling) — and criterion 9's first probe is already written to catch exactly that, which is why it requires including a known non-zero quantity of *our* spend rather than only excluding the sibling's | **2026-08-14/15** |
 
 The Cost Explorer API itself bills **$0.01/request** — trivial, but it inverts the assumption that looking
 at spend is free, and is recorded in `CLAUDE.md` so nobody writes a poller.

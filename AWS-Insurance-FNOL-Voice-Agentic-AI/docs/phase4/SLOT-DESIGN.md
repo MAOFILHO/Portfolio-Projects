@@ -116,6 +116,22 @@ mitigation for F7 (ASR error on critical identifiers) and directly serves the Ph
 0.80" target — it does not replace the shared retry ceiling in `DIALOGUE-POLICIES.md` §7, it is a better
 second attempt within it, not an additional attempt beyond it.
 
+> ### ⚠ Correction, 2026-08-13 — the policy stands, the mechanism does not
+>
+> The policy above was authored assuming it could be expressed declaratively, as a second message group
+> with `MessageSelectionStrategy: Ordered` walking one group per retry attempt. **It cannot.** Measured on
+> a live bot in Phase 8's `ADR-007` POC: Lex plays **one message from every message group on every
+> attempt**, concatenated into a single turn. `Ordered` selects among `Variations` *within* a group; it
+> does not advance across groups. Per-attempt prompt text has no representation in `PromptSpecification`.
+>
+> The recorded consequence, from `docs/evidence/phase8/lexpoc-apply-2.json`, is that the **opening** turn
+> read *"What is your policy number? Sorry, I didn't catch that. You can also enter it on your keypad…"* —
+> the caller apologised to for a mistake they had not yet had the chance to make.
+>
+> **The design intent is unchanged and is not being scaled back.** The keypad offer moves to the Lex
+> codehook (Stage 4) as an `ElicitSlot` carrying its own message, where per-attempt text is a normal thing
+> to write. What changes is which layer owns it. Full result: `docs/phase8/LEXPOC-GATE.md` §4.3.
+
 Free-text and enum slots (`loss_location`, `damage_description`, `loss_type`, …) have no DTMF equivalent —
 offering a keypad for a free-text description is meaningless — and simply use the shared retry ceiling
 unmodified.

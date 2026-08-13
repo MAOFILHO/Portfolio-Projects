@@ -63,7 +63,7 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 |---|---|---|
 | **A. Provisioned resources** | `APPROVED: Phase 8`, **under $2** | **$0.00** |
 | **B. Real inbound calls** | **20 calls, ≈$4** — a distinct line from the Phases 3–7 Bedrock cap. Marco: *"different resource class, different authorization"* | **$0.00** — 0 of 20 calls used |
-| **C. `AWS::Lex::Bot` POC (Stage 2)** | Approved separately and on condition. Marco: *"A resource created to test whether we can create resources is exactly the thing that gets folded in silently and then never accounted for."* **Must be destroyed once the `ADR-007` gate resolves, pass or fail — it has no purpose after that** | **$0.00** — not yet created |
+| **C. `AWS::Lex::Bot` POC (Stage 2)** | Approved separately and on condition. Marco: *"A resource created to test whether we can create resources is exactly the thing that gets folded in silently and then never accounted for."* **Must be destroyed once the `ADR-007` gate resolves, pass or fail — it has no purpose after that** | **$0.00825** — ✅ **created, gate discharged, DESTROYED 2026-08-13** |
 
 | Date | Stage | What ran | Real AWS call? | Units | Est. cost | Line |
 |---|---|---|---|---|---|---|
@@ -78,6 +78,17 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 
 | 2026-08-12 | 1 | **Protected telephony stack — DID imported.** `1 imported, 0 added, 0 changed, 0 destroyed`. No resource created, no tag modified. The number was already billing at $0.06/day since 2026-08-11 and continues to; importing it changes nothing about that | Yes | 1 import | **$0.00** | A |
 | 2026-08-12 | 1 | **Import-guard and `prevent_destroy` demonstrations.** Scratch-copy plans against a wrong number ID and against an unsatisfiable tag condition, plus `terraform plan -destroy` on the real stack. Plans only — no apply, no resource touched | Yes (plan/read) | 3 plans | **$0.00** | — |
+
+| 2026-08-12 | 2 | **`ADR-007` POC bot created** — `infra/terraform/stacks/lexpoc`. One `AWS::Lex::Bot` (11-slot intent, custom slot type, prompt-attempt + DTMF specs) inside `aws_cloudformation_stack`, plus an IAM role and inline policy. **Lex bills per request only** — no charge for storing a bot, for a locale build, or for any `lexv2-models` control-plane call | Yes | 3 resources | **$0.00 at rest** | **C** |
+| 2026-08-12 | 2 | **Second apply — the gate itself.** Prompt string and DTMF `endTimeoutMs` changed together; both took, at definition *and* runtime, with the control field held still | Yes | 1 update | **$0.00** | C |
+| 2026-08-13 | 2 | **Third apply — deletion.** A message group removed from the template stopped being served. The update replaces, it does not merge | Yes | 1 update | **$0.00** | C |
+| 2026-08-13 | 2 | **`RecognizeText` runtime probes.** 3 per snapshot × 3 snapshots, plus 2 ad-hoc during the stale-window check. The only billable part of the whole gate, and the only instrument that could tell a current definition from a stale build | Yes | **11 text requests** @ $0.00075 | **$0.00825** | **C** |
+| 2026-08-13 | 2 | **POC destroyed.** `0 added, 0 changed, 3 destroyed`. Residue verified rather than assumed: `list-bots` empty, `list-stacks` empty, `get-role fnol-lexpoc-runtime` → `NoSuchEntity`. Criterion 15 | Yes | 3 destroyed | **$0.00** | C |
+
+| 2026-08-13 | 2 | **Tag-propagation probe (open item G).** Two `ce:GetCostAndUsage` calls grouped by `SERVICE` × `TAG:Project`. Every line reads `Project$` — untagged — including the AMCS-sold DID. **Inconclusive, not negative:** cost allocation tags are not retroactive and `Project` was activated during 08-12, so 08-11/08-12 would read untagged regardless. Re-check on 08-13's settled data | Yes | 2 CE requests | **$0.02** | A |
+
+**Line C is closed at $0.00825.** The bot was free; the eleven sentences said to it were not. Everything
+this POC found is in `docs/phase8/LEXPOC-GATE.md`, which outlives the resource.
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that
