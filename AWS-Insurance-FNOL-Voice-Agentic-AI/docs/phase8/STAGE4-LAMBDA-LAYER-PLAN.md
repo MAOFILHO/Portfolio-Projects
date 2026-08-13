@@ -364,7 +364,20 @@ find python -type d -name "__pycache__" -exec rm -rf {} +
 find python -type d -name "tests" -exec rm -rf {} +
 python3 scripts/verify_layer_contents.py ./python   # 8/8 passed, real output, §3
 zip -qr9 lambda-deps-layer.zip python
+python3 scripts/verify_layer_contents.py ./python --zip lambda-deps-layer.zip   # D82: archive structure
 ```
+
+**`D82`, and why this manual sequence was never the thing that broke.** `zip -qr9 lambda-deps-layer.zip
+python` zips the DIRECTORY NAMED `python`, from its parent -- the resulting archive correctly contains
+`python/pydantic/...` etc. This sequence was right the whole time. `D82` was introduced translating it
+into `lambda.tf`'s `data.archive_file.codehook_deps`, whose `source_dir` pointed directly AT
+`local.deps_dir` (the `python/` directory itself) rather than at its parent -- `archive_file` zips a
+directory's CONTENTS at the zip's root, so that one Terraform resource silently dropped the exact path
+component this manual `zip` command was preserving correctly all along. Fixed: `source_dir` is now
+`local.deps_root`, `deps_dir`'s parent. The new last line above (`--zip`) is the check that would have
+caught the Terraform-side bug even though it could never have caught anything wrong with this shell
+sequence itself, which is why it is written as its own independent inspection of the shipped artifact
+rather than trusted to follow from this sequence being correct.
 
 `scripts/verify_layer_contents.py` (§3) is committed now, run this session against the real built
 artifact — it is not a proposed check, it is one already written and exercised. Not yet promoted into a

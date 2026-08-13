@@ -2260,8 +2260,15 @@ found by the gate doing exactly its job. Root cause identified (not yet fixed, n
 Marco's explicit "stop there"): the layer zip has no `python/` prefix — `lambda.tf`'s `archive_file`
 zips `local.deps_dir`'s CONTENTS rather than the `deps_dir` directory itself, so packages land at
 `/opt/pydantic` instead of the one path (`/opt/python/pydantic`) Lambda's Python runtime actually
-searches. `C1` still UNVERIFIED on any deployed build; **DID stays unrouted; criterion 9 NOT run, per
-Marco's explicit instruction**)
+searches — filed as the same root-cause CLASS as `D80` (a `lambda.tf` invariant nothing verified against
+the artifact, caught only at runtime), a different bug, not a different kind of mistake. **Fixed same
+day**: `source_dir` now points at `deps_dir`'s parent; `scripts/verify_layer_contents.py` gained a
+fourth check (`--zip`, opens the archive itself, not the directory) that FAILED against the real
+pre-fix zip (confirming it catches the actual defect, not only a synthetic one) and PASSES 8/8 against
+the rebuilt one. New `terraform plan`: **2 to add, 1 to change, 2 to destroy** (content-hash-in-key
+forces replacement of the broken layer version/S3 object, not an in-place fix) — **awaiting Marco's
+review of this plan before any apply.** `C1` still UNVERIFIED on any deployed build; **DID stays
+unrouted; criterion 9 NOT run**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -3046,14 +3053,39 @@ adds to `sys.path` for layers. This zip puts them at `/opt/pydantic` etc. instea
 `archive_file` block zipped its contents rather than the directory itself, silently dropping the one
 path component the whole mechanism depends on.**
 
-**Not yet fixed — Marco's instruction was explicit: report apply + gate output, stop there, no criterion
-9.** The fix, for review, not applied: `source_dir` should point at `deps_dir`'s PARENT
-(`"${path.module}/.terraform-build/layer"`, one level up), so the zip preserves `python/pydantic/...`
-etc. This is a one-line Terraform change; it requires a new `terraform plan`/`apply` cycle (`archive_file`
-recomputes its hash, `aws_s3_object`'s key changes, a new layer version publishes) and a re-run of
-`make verify-lambda-execution` before D80/D81's execution question is actually closed. Filed as its own
-number rather than folded into `D80` because it is a different bug in the fix for `D80`, not a recurrence
-of the original missing-layer defect — the layer exists now; its packaging is wrong.
+**Same root-cause CLASS as `D80`, on Marco's review — kept as its own number, not the same defect
+recurring.** `D80`: `lambda.tf`'s header comment asserted a layer existed; nothing checked that claim
+against the resource declarations, and it was false. `D82`: `lambda.tf`'s `archive_file` block asserted
+(by construction, not in a comment this time) that zipping `deps_dir` would produce a correctly-shaped
+layer; nothing checked that claim against AWS Lambda's own path convention, and it was false. **Both are
+the identical failure shape one level apart: a piece of `lambda.tf` encoded an invariant about the
+deployed artifact — "a layer exists," "the layer's paths are shaped the way Lambda expects" — that
+nothing in this project verified against the artifact itself, and both were caught only at runtime,**
+by an instrument built specifically to invoke the function rather than trust anything about its
+configuration. `D82` is filed as its own number because it is a different BUG (a source-directory
+one-level-off error, not a missing resource) — but it is not a different KIND of mistake, and treating it
+as unrelated would miss the generalization Marco named on review: **verify the artifact, not the config's
+claim about it.** `RESULTS.md` §11.2 records this as the pattern's second confirmed instance.
+
+**Fixed and verified, 2026-08-13, before any re-apply — Marco's explicit sequencing.** `lambda.tf`:
+`data.archive_file.codehook_deps.source_dir` changed from `local.deps_dir` (`.../layer/python`, the bug)
+to `local.deps_root` (`.../layer`, `deps_dir`'s parent) — `terraform fmt`/`validate` clean.
+`scripts/verify_layer_contents.py` extended with a fourth check, `--zip`, that opens the built archive
+directly (`zipfile`, not the directory) and asserts every expected package has an entry under a top-level
+`python/` prefix — the claim the first three checks structurally cannot make, because they only ever read
+the directory the zip was built FROM. **Run against the still-broken (pre-fix) zip first, to confirm the
+check actually catches the real defect, not only the synthetic one in its own unit tests
+(`tests/unit/test_verify_layer_contents.py`, 5 tests, all passing): FAILED, 1 problem — "no entry under a
+top-level 'python/' prefix found anywhere ... this is D82's exact shape."** `terraform plan` re-run after
+the `source_dir` fix regenerates the zip as a side effect (new md5 `73deb4753ca856a7cc60270092e4be96`,
+was `5ec60779e56a1d4876fcbd06da8d202b`); `unzip -l` on the regenerated zip shows `python/PyYAML-6.0.2.
+dist-info/...` etc. — the prefix is there. **Re-run against the fixed zip: PASSED, 8/8, "every expected
+package is at the correct python/ path in the built zip."** New `terraform plan`: because the zip's
+content-hash changed, the S3 key changes (by design, plan §6's drift-avoidance chain), which forces
+**replacement**, not an in-place update, of the resources published under the OLD (broken) key — 2 to
+add, 1 to change, **2 to destroy** (the broken `aws_lambda_layer_version.codehook_deps` version and
+`aws_s3_object.codehook_deps_layer`, replaced by new ones at the new key). Not yet applied — awaiting
+Marco's review of this exact plan, per his explicit "terraform plan → my review → apply → gate."
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 

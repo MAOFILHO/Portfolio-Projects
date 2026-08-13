@@ -1778,6 +1778,26 @@ inspections of it.** The artifact this project ships was unaffected (the repo-wi
 now references is genuinely clean, confirmed by the same diff), but the number that was reported for the
 earlier one was reported without checking whether its own documented steps had actually run.
 
+**A third instance, the same day, this time in code rather than prose (`D82`).** `lambda.tf`'s
+`data.archive_file.codehook_deps` block asserted — by its construction, not in a comment — that zipping
+`local.deps_dir` would produce a layer shaped the way AWS Lambda's Python runtime expects. Nothing
+verified that construction against the convention it depended on: `archive_file` zips a directory's
+CONTENTS at the zip's root, so pointing `source_dir` directly at `deps_dir` (named `python/` for exactly
+the convention this was supposed to satisfy) silently dropped the one path component the whole mechanism
+needed. The layer published, attached, and read back as `Active`/`Successful` — `terraform apply` clean,
+`get-function-configuration` clean — and the function still could not import `pydantic`, because every
+package shipped one directory level off the only path Lambda's runtime searches.
+
+**The generalized fix, stated once so it stops needing to be rediscovered:** in all three instances —
+`D80`'s comment, the layer plan's documented-but-unverified cleanup step, and `D82`'s Terraform
+construction — the artifact that actually ships was never inspected; something ABOUT the artifact was
+asserted, by prose or by config, and trusted. **Verify the artifact, not the config's (or the comment's,
+or the runbook's) claim about it.** `scripts/verify_layer_contents.py`'s new `--zip` check is that
+principle applied directly to `D82`'s own shape: it opens the built zip and reads its internal paths,
+rather than reading the directory the zip claims to have been built from — the one check in this whole
+history that could not have been fooled by any of the three instances above, because it never trusts a
+description of the artifact in the first place.
+
 ### 11.3 Cost below estimate as a liveness signal
 
 Criterion 9 was estimated at ≈$0.078 expected / ≈$0.107 worst case before it ran (`COSTS.md` Line D),
@@ -1795,6 +1815,19 @@ of efficiency until checked — it is as likely to be evidence that part of the 
 unexplained cost-below-estimate result should trigger a liveness check (did every expected downstream
 call actually happen) before any accuracy or recall number from the same run is read at all.** This
 project had no such rule before Phase 8 Stage 4; it has one now.
+
+**Confirmed a second time, on a different instrument, the same day `D82` was found.**
+`scripts/verify_lambda_execution.py`'s own module docstring estimated ~$0.0018 for one run (6 of 9
+events reaching Bedrock's guardrail and router). The actual run cost **$0.00** — every one of the 9
+`lambda:Invoke` calls crashed at cold-start import before reaching Bedrock at all, `D82`'s exact failure
+mode, one layer up from `D80`'s. **This is what makes the rule above a check rather than a one-time
+observation: it has now caught the identical failure SHAPE (nothing downstream of an early crash ever
+ran) on two independent runs, estimated by two different scripts, against two different root causes** —
+`D80` (a missing dependency, caught by `RecognizeText` cost undershooting `measure_composed_pipeline_
+deployed.py`'s estimate) and `D82` (a malformed archive, caught by `lambda:Invoke` cost undershooting
+`verify_lambda_execution.py`'s estimate). A rule that fires once could be coincidence read into after the
+fact; a rule that has now fired twice, on two unrelated defects, via two independently-estimated cost
+models, is doing the job a check is supposed to do.
 
 ### 11.4 A total outage that returns HTTP 200 is not a degraded conversation, it is a normal-looking one
 

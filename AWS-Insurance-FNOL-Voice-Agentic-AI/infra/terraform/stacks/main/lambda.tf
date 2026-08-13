@@ -28,8 +28,20 @@ locals {
   # (Darwin) dev machine, which would silently produce macOS binaries. `deps_dir` must exist and be
   # populated before `terraform plan` can even read `data.archive_file.codehook_deps` below; an empty or
   # missing directory is a build-step failure, not a Terraform one, and must be diagnosed there first.
-  deps_dir = "${path.module}/.terraform-build/layer/python"
-  deps_zip = "${path.module}/.terraform-build/lex-codehook-deps.zip"
+  #
+  # `D82`. `deps_dir` is the directory pip installs INTO and is named `python/` for exactly one reason:
+  # AWS Lambda's Python layer convention requires every package under a `python/<package>` path inside
+  # the layer zip, so that unzipping to `/opt` lands them at `/opt/python/<package>` -- the one path
+  # Lambda's runtime actually adds to `sys.path` for a layer. `archive_file.source_dir` zips a
+  # directory's CONTENTS at the zip's root, not the directory itself -- pointing it AT `deps_dir` (i.e.
+  # at `python/`) silently drops that one path component and was `D82`'s exact root cause: a real,
+  # correctly-versioned layer that put every package at `/opt/pydantic` instead of `/opt/python/pydantic`,
+  # which is never on `sys.path`. `source_dir` below is `deps_root` -- `deps_dir`'s PARENT -- so the zip
+  # preserves `python/<package>/...`. `deps_root` contains nothing else, so nothing else ends up in the
+  # zip alongside it.
+  deps_root = "${path.module}/.terraform-build/layer"
+  deps_dir  = "${local.deps_root}/python"
+  deps_zip  = "${path.module}/.terraform-build/lex-codehook-deps.zip"
 }
 
 /*
@@ -73,10 +85,21 @@ data "archive_file" "codehook" {
  * cross-platform pip install is not something `archive_file` or any other Terraform data source does.
  * This only zips what is already on disk, deterministically, so the resulting hash is content-addressed
  * the same way `data.archive_file.codehook` already is above.
+ *
+ * `D82`, corrected: `source_dir` is `local.deps_root` -- `deps_dir`'s PARENT, i.e. the directory that
+ * directly contains `python/` -- NOT `local.deps_dir` itself. `archive_file` zips a directory's
+ * CONTENTS at the zip's root; pointing it at `deps_root` means the zip's root contains exactly one
+ * entry, `python/`, with every package nested under it -- `python/pydantic/...`, `python/boto3/...` --
+ * matching AWS Lambda's layer convention exactly. Pointing it at `deps_dir` (the bug this replaces) put
+ * every package at the zip's OWN root instead, one path component short of where Lambda's runtime looks.
+ * `scripts/verify_layer_contents.py --zip` asserts this structure directly against the built zip, not
+ * only against the directory it was built from -- D82 passed every directory-based check that existed
+ * before it and still shipped the wrong archive, which is exactly why a directory check alone is not
+ * sufficient evidence for what ships.
  */
 data "archive_file" "codehook_deps" {
   type        = "zip"
-  source_dir  = local.deps_dir
+  source_dir  = local.deps_root
   output_path = local.deps_zip
 }
 

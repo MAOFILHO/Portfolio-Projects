@@ -42,6 +42,23 @@ trusted. This script's own run this session was on this dev machine (Darwin, not
 import check skipped for exactly this reason -- see the plan §3 for what that leaves open and its
 disposition (the AWS-published container image, or `verify_lambda_execution.py` against the real deployed
 function, are the two ways to actually close it).
+
+A FOURTH check, `--zip`, gated on nothing (always meaningful, unlike the import check -- this is pure
+path inspection, no interpreter involved): asserts every expected package appears under a top-level
+`python/` prefix INSIDE THE BUILT ZIP ITSELF, not merely present in the directory the zip was built from.
+
+`D82` is the reason this check exists, not a hypothetical: every check above -- checks 1-3, the whole
+`verify()` function -- ran against `.terraform-build/layer/python`, the DIRECTORY, and passed 8/8, import
+check included once run under a matching interpreter. The LAYER attached to the deployed function still
+crashed on `No module named 'pydantic'`, because `lambda.tf`'s `archive_file` zipped that directory's
+CONTENTS at the zip's own root, silently dropping the `python/` path component AWS Lambda's layer
+convention depends on -- every package landed at `/opt/pydantic` instead of `/opt/python/pydantic`, the
+one path Lambda's runtime actually searches. **Presence-in-directory and correct-path-in-archive are
+different claims.** `D82` passed the first and failed the second, and nothing before this check would
+have caught that difference, because nothing before this check ever looked inside the artifact that
+actually ships -- only at the directory it was assembled from. `verify_archive_structure` below opens the
+zip with `zipfile` and inspects its own internal paths; it cannot be fooled by a source-directory bug the
+way the directory-based checks structurally cannot see one.
 """
 
 from __future__ import annotations
@@ -51,6 +68,7 @@ import importlib
 import platform
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 # Lambda's `arm64` runtime, at the Python version this layer is built for (`pyproject.toml`'s
@@ -185,6 +203,50 @@ def verify(layer_root: Path, *, attempt_import: bool = True) -> tuple[list[str],
     return problems, import_check_ran
 
 
+def verify_archive_structure(zip_path: Path) -> list[str]:
+    """`D82`. Inspects the BUILT ZIP's own internal paths -- never the directory `verify()` above reads
+    from, because a bug in how the zip was ASSEMBLED (this is what `D82` was) is invisible to any check
+    that only ever looks at the directory it was assembled from. Returns an empty list on success.
+
+    Two things are checked, in order:
+
+    1. A top-level `python/` prefix exists in the archive AT ALL. Its total absence is `D82`'s exact
+       shape -- every package present, correctly versioned, at the zip's own root instead.
+    2. Every `IMPORT_NAMES` value has at least one archive entry under `python/<import_name>/` (a
+       package directory) or exactly at `python/<import_name>.py` (a single-file module, e.g. `six.py`
+       if it were retained). Checked per package rather than inferred from (1) alone, because a PARTIALLY
+       correct archive -- some packages nested under `python/`, others not, e.g. from a manual/partial
+       repackaging -- would pass (1) and still ship a broken layer for whichever packages it missed.
+    """
+    problems: list[str] = []
+    if not zip_path.is_file():
+        return [f"archive {zip_path} does not exist or is not a file"]
+
+    with zipfile.ZipFile(zip_path) as archive:
+        names = archive.namelist()
+
+    if not any(name.startswith("python/") for name in names):
+        problems.append(
+            f"ARCHIVE STRUCTURE: no entry under a top-level 'python/' prefix found anywhere in "
+            f"{zip_path.name} ({len(names)} entries total) -- this is D82's exact shape: packages "
+            f"present at the zip's OWN root instead of nested under python/, which Lambda's runtime "
+            f"never adds to sys.path"
+        )
+        return problems  # per-package checks below would only restate the same finding once each
+
+    for package, import_name in IMPORT_NAMES.items():
+        expected_dir_prefix = f"python/{import_name}/"
+        expected_file = f"python/{import_name}.py"
+        if not any(name.startswith(expected_dir_prefix) or name == expected_file for name in names):
+            problems.append(
+                f"ARCHIVE STRUCTURE: {package} ({import_name}) has no entry under "
+                f"{expected_dir_prefix!r} or {expected_file!r} inside {zip_path.name} -- present on "
+                f"disk does not mean present at the right path inside the archive that actually ships"
+            )
+
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -196,6 +258,17 @@ def main(argv: list[str] | None = None) -> int:
         "--no-import-check",
         action="store_true",
         help="Skip the import attempt even on a matching platform; presence/version checks only.",
+    )
+    parser.add_argument(
+        "--zip",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the built layer ZIP (D82). Asserts every expected package appears under a "
+            "top-level python/ prefix inside the archive itself, not only in the directory it was "
+            "built from. Strongly recommended before any apply; SKIPPED loudly, not silently, if "
+            "omitted -- see the module docstring."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -213,6 +286,23 @@ def main(argv: list[str] | None = None) -> int:
             "image pre-deploy, or verify_lambda_execution.py's post-deploy event matrix). ==="
         )
 
+    archive_problems: list[str] = []
+    if args.zip is not None:
+        archive_problems = verify_archive_structure(args.zip)
+        if archive_problems:
+            print(f"=== Archive structure check: RAN against {args.zip} -- FAILED ===")
+        else:
+            print(f"=== Archive structure check: RAN against {args.zip} -- every expected package is "
+                  f"under a top-level python/ prefix (D82) ===")
+    else:
+        print(
+            "=== Archive structure check: SKIPPED — no --zip given. A skip here is not a pass: "
+            "presence-in-directory (checks above) is a DIFFERENT claim from correct-path-in-archive, "
+            "and D82 is the proof -- 8/8 on every check above, and the shipped zip still put every "
+            "package at the wrong path. Pass --zip before trusting this layer for an apply. ==="
+        )
+
+    problems = problems + archive_problems
     if problems:
         print(f"=== Layer content verification FAILED: {len(problems)} problem(s) ===")
         for problem in problems:
@@ -224,8 +314,13 @@ def main(argv: list[str] | None = None) -> int:
         if import_check_ran
         else "with importable modules on disk (import NOT attempted — see the skip notice above)"
     )
+    archive_clause = (
+        "and every expected package is at the correct python/ path in the built zip"
+        if args.zip is not None
+        else "with the archive's own structure NOT checked — see the skip notice above"
+    )
     print(f"=== Layer content verification passed: {len(EXPECTED_PACKAGES)}/{len(EXPECTED_PACKAGES)} "
-          f"expected packages present at pinned versions, {import_clause} ===")
+          f"expected packages present at pinned versions, {import_clause}, {archive_clause} ===")
     return 0
 
 
