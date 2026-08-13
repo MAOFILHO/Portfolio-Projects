@@ -2232,3 +2232,33 @@ conclusions were originally instrument artefacts and both reversed when the inst
 
 **Phase 7 final: ≈$0.397 of $1.25.** Standing cap ≈$0.411 of $5.00. 377 tests green, lint and typecheck
 clean.
+
+**Two pricing corrections to `CLAUDE.md`'s verified-facts table, both re-verified 2026-08-12:**
+Connect **Customer Basic voice is $0.015/min** (first 5M min/month), correcting an earlier $0.018/min; and
+**regex-based sensitive-information filters are free** (AWS pricing page, verbatim). The second means the
+four regexes removed at v3 were costing nothing — the change was correctness, not cost, and saying so
+prevents it being remembered as an optimisation.
+
+---
+
+## Phase 8 — PROPOSED, awaiting `APPROVED: Phase 8`
+
+`docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
+telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
+(the ADR recorded the provider-bug risk as *unconfirmed rather than clean* and required a POC before
+relying further on the nested-CFN shape); `stacks/main`; the Lex codehook Lambda (`src/fnol_voice_agent/api/`
+does not exist yet); and cost controls on day one.
+
+**14 exit criteria**, headed by *a real inbound call to `+14169871547` reaches the agent and completes a
+turn* — nothing else on the list substitutes for it. Estimated under $2 in provisioned/usage cost, plus a
+separate request for a **20-call ≈$4 real-call allowance**, since telephony is not covered by the Phases
+3–7 Bedrock standing cap.
+
+**One finding already banked from the scoping:** the account is shared with the sibling fine-tuning
+project — Cost Explorer shows `USW2-Llama3-3-70B-Customization-Training` on 2026-08-10 — so an
+account-wide $25 budget alarm would fire on a neighbour's spend and be disabled within a week. The alarm
+must be **tag-filtered**, which means activating the cost allocation tag in Stage 0 rather than Stage 5,
+because it takes up to 24h to appear.
+
+**Three open questions for Marco** are listed in §5 of that plan; the real-call allowance is the only one
+that blocks Stage 0.
