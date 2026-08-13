@@ -1,14 +1,14 @@
-# The bot's published version, the alias Connect talks to, and the Connect↔Lex integration association.
+# The bot's published version, the alias Connect talks to, and the Connect-Lex integration association.
 #
 # Separate from `bot.yaml.tftpl`, and separate for one reason: **a published version cannot be created
 # until the DRAFT locale has finished building**, and Stage 2 measured CloudFormation reporting
 # `CREATE_COMPLETE` on the bot ~16 seconds before that happened, on three consecutive applies
-# (`docs/phase8/LEXPOC-GATE.md` §4.1). Putting these resources in the same stack as the bot would make
+# (`docs/phase8/LEXPOC-GATE.md` section 4.1). Putting these resources in the same stack as the bot would make
 # every apply a race against a build whose completion CloudFormation does not report. `lex.tf` waits on
-# `DescribeBotLocale` returning `Built` between the two stacks — `RESULTS.md` §3.5.1 rule 3.
+# `DescribeBotLocale` returning `Built` between the two stacks; `RESULTS.md` section 3.5.1 rule 3.
 #
 # ---------------------------------------------------------------------------------------------------
-# WHY THIS IS CLOUDFORMATION AND NOT TERRAFORM — two provider GAPS, found at Stage 3
+# WHY THIS IS CLOUDFORMATION AND NOT TERRAFORM; two provider GAPS, found at Stage 3
 #
 # `ADR-007` chose nested CloudFormation on the strength of three provider BUGS in `aws_lexv2models_*`,
 # and Stage 2 discharged its POC gate against them. Both of the resources below turn out to be
@@ -18,12 +18,12 @@
 #      `_bot_locale`, `_bot_version`, `_intent`, `_slot` and `_slot_type`. No alias. Connect associates
 #      with an ALIAS, so without CloudFormation there is no console-free path to a usable bot at all.
 #   2. **`aws_connect_bot_association` is Lex V1 only.** Its schema carries a single `lex_bot` block with
-#      `name` and `lex_region` — the classic-Lex shape. The V2 association needs `LexV2Bot.AliasArn`,
+#      `name` and `lex_region`; the classic-Lex shape. The V2 association needs `LexV2Bot.AliasArn`,
 #      which the resource cannot express, while `AWS::Connect::IntegrationAssociation` documents support
 #      for "Lex bot (both v1 and v2)".
 #
 # Neither gap was known when `ADR-007` was written; it argued from bug reports. This is the decision
-# holding up for reasons its author did not have, which is worth more than the reasons they did have —
+# holding up for reasons its author did not have, which is worth more than the reasons they did have;
 # and it is recorded here rather than as an amendment, because ADRs are immutable and nothing about the
 # decision changed.
 # ---------------------------------------------------------------------------------------------------
@@ -32,16 +32,16 @@
 #   AWS's own `AWS::Lex::BotVersion` reference states it plainly: *"If the DRAFT version of this resource
 #   hasn't changed since you created the last version, Amazon Lex doesn't create a new version, it
 #   returns the last created version."* And every one of its properties except `BotId` is
-#   "Update requires: No interruption" — so editing the bot and re-applying updates DRAFT and leaves the
+#   "Update requires: No interruption"; so editing the bot and re-applying updates DRAFT and leaves the
 #   published version, and therefore the alias, and therefore Connect, serving the old definition.
 #
-#   That is the Bedrock Guardrails DRAFT trap exactly (`RESULTS.md` §3.5.1, instance 1), in a second
+#   That is the Bedrock Guardrails DRAFT trap exactly (`RESULTS.md` section 3.5.1, instance 1), in a second
 #   service, and this time it was read out of the documentation before writing the resource instead of
 #   being found by a measurement that disagreed.
 #
 #   The fix is the CloudFormation analogue of `replace_triggered_by`: the version's **logical ID carries a
 #   hash of the bot definition**. A definition change produces a new logical ID, so CloudFormation creates
-#   a new BotVersion resource, points the alias at it, and deletes the old one in the cleanup phase —
+#   a new BotVersion resource, points the alias at it, and deletes the old one in the cleanup phase;
 #   create-before-destroy by construction.
 #
 #   RESIDUAL HAZARD, STATED RATHER THAN PAPERED OVER. If the hash changed but DRAFT did not, Lex returns
@@ -50,7 +50,7 @@
 #   which removes the realistic version of that case (a comment-only edit). It does not remove all of it,
 #   which is why `scripts/verify_lex_release.py` reads the alias back from the service after every apply
 #   and checks that its version exists, is `Available`, and serves the declared prompt. Mechanism plus
-#   verification — the mechanism alone is what §3.5.1 rule 1 says not to trust.
+#   verification; the mechanism alone is what section 3.5.1 rule 1 says not to trust.
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
@@ -72,7 +72,7 @@ Parameters:
     Description: PRE-EXISTING Connect instance. Consumed, never created; constraint 16.
 
 Resources:
-  # Logical ID carries ${definition_hash} — see the header. This is the whole staleness fix.
+  # Logical ID carries ${definition_hash}; see the header. This is the whole staleness fix.
   BotVersion${definition_hash}:
     Type: AWS::Lex::BotVersion
     Properties:
@@ -104,7 +104,7 @@ Resources:
       #
       # `D70`, Marco-approved 2026-08-13: no conversation logs without an ADR-011-compatible redaction
       # pass in front of them. Slot obfuscation is enabled in `bot.yaml.tftpl` as defence in depth and
-      # explicitly does not cover missed utterances or slot values used in responses — which is most of
+      # explicitly does not cover missed utterances or slot values used in responses; which is most of
       # what a digit-identifier slot produces when it goes wrong, and exactly what our confirmation
       # policy reads back. Production no-match COUNTS are available for free from
       # `ListUtteranceMetrics` without persisting any utterance text, so almost nothing is given up.
@@ -115,13 +115,21 @@ Resources:
       SentimentAnalysisSettings:
         DetectSentiment: false
 
+      # Array of {Key, Value}, NOT a map -- unlike aws_cloudformation_stack's own top-level `tags`
+      # argument (a map) and unlike bot.yaml.tftpl's BotAliasTags is absent there entirely. CFN's own
+      # generic Tag property is a map in most resource types; AWS::Lex::BotAlias documents it as an
+      # array of Tag objects instead.
       BotAliasTags:
-        Project: "${project_tag}"
-        Owner: "marcos"
-        Phase: "8"
-        Managed: "terraform"
+        - Key: "Project"
+          Value: "${project_tag}"
+        - Key: "Owner"
+          Value: "marcos"
+        - Key: "Phase"
+          Value: "8"
+        - Key: "Managed"
+          Value: "terraform"
 
-  # `AWS::Connect::IntegrationAssociation`, not `aws_connect_bot_association` — see gap 2 in the header.
+  # `AWS::Connect::IntegrationAssociation`, not `aws_connect_bot_association`; see gap 2 in the header.
   LexBotAssociation:
     Type: AWS::Connect::IntegrationAssociation
     Properties:

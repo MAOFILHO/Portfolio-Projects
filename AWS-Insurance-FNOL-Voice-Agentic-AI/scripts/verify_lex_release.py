@@ -121,10 +121,20 @@ def _dtmf_end_timeout(slot: dict[str, Any]) -> int | None:
 
 
 def _first_prompt(slot: dict[str, Any]) -> str | None:
+    """The first message value from `DescribeSlot`'s response.
+
+    The key is `messageGroups`, NOT `messageGroupsList`. `MessageGroupsList` is the CloudFormation
+    *template property* name -- what `bot.yaml.tftpl` writes -- and the raw `lexv2-models` API response
+    uses its own, shorter name for the same field. Confirmed live: a `describe-slot` on the deployed
+    `policy_number` slot returned the correct prompt under `messageGroups` while this function, reading
+    `messageGroupsList`, returned `None` for every slot, every time -- this check could never have passed,
+    which is a stronger failure than a check that sometimes passes wrongly. Found running `make verify-lex`
+    against the Stage 3 apply, not by inspection; see `D76`'s session notes.
+    """
     groups = (
         slot.get("valueElicitationSetting", {})
         .get("promptSpecification", {})
-        .get("messageGroupsList", [])
+        .get("messageGroups", [])
     )
     if not groups:
         return None

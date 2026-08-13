@@ -202,7 +202,13 @@ resource "aws_cloudformation_stack" "release" {
     BotId             = aws_cloudformation_stack.bot.outputs["BotId"]
     BotAliasName      = var.bot_alias_name
     CodeHookLambdaArn = aws_lambda_function.codehook.arn
-    ConnectInstanceId = local.instance_id
+    # ARN, not the bare instance ID. AWS::Connect::IntegrationAssociation.InstanceId is documented with
+    # pattern ^arn:aws[-a-z0-9]*:connect:[-a-z0-9]*:[0-9]{12}:instance/[-a-zA-Z0-9]*$ and CFN's early
+    # validation rejects the bare ID outright -- unlike aws_connect_queue/hours/lambda_function_association
+    # in connect.tf and lambda.tf, which are Terraform-native resources and DO take the bare
+    # `instance_id`. Two different shapes for "the same" instance, because one is a native provider
+    # resource and the other is a CFN property; conflating them is exactly what happened here first.
+    ConnectInstanceId = local.instance_arn
   }
 
   on_failure = "DELETE"

@@ -1,10 +1,10 @@
-# ADR-007's proof-of-concept bot. Phase 8 Stage 2. THROWAWAY — destroyed when the gate resolves.
+# ADR-007's proof-of-concept bot. Phase 8 Stage 2. THROWAWAY; destroyed when the gate resolves.
 #
 # This is not the FNOL bot. It is the smallest `AWS::Lex::Bot` that carries the three things ADR-007
 # could not verify from documentation:
 #
 #   1. an eleven-slot intent with explicit `SlotPriorities` (the shape that makes native
-#      `aws_lexv2models_*` structurally impossible — provider issue #39948);
+#      `aws_lexv2models_*` structurally impossible; provider issue #39948);
 #   2. a `PromptSpecification` on every slot (the shape that silently fails to update under provider
 #      issue #42147);
 #   3. `PromptAttemptsSpecification` with `AudioAndDTMFInputSpecification`/`DTMFSpecification` on the
@@ -13,19 +13,19 @@
 # The gate is not "does this apply". It is "does a CHANGE to it apply", so the prompt strings and the
 # DTMF timings below are deliberately the fields the second apply moves.
 #
-# Slot inventory and prompt wording are taken from `docs/phase4/SLOT-DESIGN.md` §1.1–1.2 rather than
+# Slot inventory and prompt wording are taken from `docs/phase4/SLOT-DESIGN.md` sections 1.1-1.2 rather than
 # invented, so that a defect found here is a defect that would have been found in the real bot.
 #
-# RENDERED BY `templatefile()`. The two values the gate moves — `policy_number_initial_prompt` and
-# `dtmf_end_timeout_ms` — are interpolated from Terraform variables and re-exported as outputs, so the
+# RENDERED BY `templatefile()`. The two values the gate moves; `policy_number_initial_prompt` and
+# `dtmf_end_timeout_ms`; are interpolated from Terraform variables and re-exported as outputs, so the
 # gate script compares the DEPLOYED value against the value Terraform says it sent, from one source of
 # truth. A parameter echoed back would have been a second copy able to drift from the template body,
 # which is the "guard that checks the artifact rather than the outcome" failure in miniature.
 #
 # NOT PRESENT, DELIBERATELY:
-#   * `AWS::Lex::BotVersion` / `AWS::Lex::BotAlias` — the DRAFT version behind the built-in test alias is
+#   * `AWS::Lex::BotVersion` / `AWS::Lex::BotAlias`; the DRAFT version behind the built-in test alias is
 #     what an update actually mutates, so versioning would test the wrong object.
-#   * `SentimentAnalysisSettings: DetectSentiment: true` — AWS's own template example in the
+#   * `SentimentAnalysisSettings: DetectSentiment: true`; AWS's own template example in the
 #     `AWS::Lex::Bot` reference sets this. It bills an Amazon Comprehend `DetectSentiment` call per
 #     utterance and is on Phase 0's cost-hazard list. Copying the sample verbatim would have switched on
 #     a per-utterance charge nobody asked for.
@@ -56,7 +56,7 @@ Resources:
         ChildDirected: false
       IdleSessionTTLInSeconds: 300
       # The whole point of the second apply. If this is false, an update changes the DRAFT definition
-      # and leaves the built runtime serving the old prompts — a silent failure one layer below #42147.
+      # and leaves the built runtime serving the old prompts; a silent failure one layer below #42147.
       AutoBuildBotLocales: true
 
       # Without this the built-in test alias exists but serves no locale, and `RecognizeText` fails with
@@ -109,7 +109,7 @@ Resources:
                 - Utterance: "file a new auto claim"
 
               # Explicit priorities are the reason this bot exists. In the native provider these live on
-              # the intent and reference slot IDs that only exist once the slots reference the intent —
+              # the intent and reference slot IDs that only exist once the slots reference the intent;
               # the cycle in #39948. Here they are names inside one resource body and the service
               # resolves them internally.
               SlotPriorities:
@@ -160,13 +160,13 @@ Resources:
                 #    EVERY message group on EVERY attempt and concatenates them; `Ordered` selects among
                 #    `Variations` WITHIN a group. The recorded consequence, in
                 #    `docs/evidence/phase8/lexpoc-apply-2.json`, is that the first thing a caller heard
-                #    was "What is your policy number? Sorry, I didn't catch that." — an apology for a
+                #    was "What is your policy number? Sorry, I didn't catch that."; an apology for a
                 #    mistake they had not yet had the chance to make.
                 #
                 #    Removing it also asks the harder question the gate did not: does a DELETION reach
                 #    the deployed bot, or does the update mechanism merge? See `check_removal`.
                 - Name: "policy_number"
-                  Description: "PY#### — digits only, so DTMF is a real input path, not a courtesy."
+                  Description: "PY####; digits only, so DTMF is a real input path, not a courtesy."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ValueElicitationSetting:
                     SlotConstraint: "Required"
@@ -236,7 +236,7 @@ Resources:
                       AllowInterrupt: true
 
                 - Name: "loss_datetime"
-                  Description: "Fuzzy-parsed downstream. Never blanket-redacted — see ADR-011."
+                  Description: "Fuzzy-parsed downstream. Never blanket-redacted; see ADR-011."
                   SlotTypeName: "AMAZON.Date"
                   ValueElicitationSetting:
                     SlotConstraint: "Required"
@@ -321,7 +321,7 @@ Resources:
                 # mechanism that rewrote the whole locale from stale inputs, or one that reported success
                 # while changing nothing anywhere, would both be invisible if every field moved together.
                 - Name: "police_report_number"
-                  Description: "####-####-### — the second digit-only slot, so it carries DTMF too."
+                  Description: "####-####-###; the second digit-only slot, so it carries DTMF too."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ValueElicitationSetting:
                     SlotConstraint: "Optional"
@@ -372,7 +372,7 @@ Resources:
                       MaxRetries: 2
                       AllowInterrupt: true
 
-            # Required by the service — bot creation fails without it.
+            # Required by the service; bot creation fails without it.
             - Name: "FallbackIntent"
               Description: "Required by Lex. Real no-match handling is the codehook's job, not the bot's."
               ParentIntentSignature: "AMAZON.FallbackIntent"

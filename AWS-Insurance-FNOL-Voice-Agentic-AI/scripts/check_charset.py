@@ -1,6 +1,6 @@
-"""Character-set CI check -- no non-Latin-1 characters in strings that reach an AWS API.
+"""Character-set CI check -- no non-ASCII/non-Latin-1 characters in strings that reach an AWS API.
 
-Phase 8 Stage 3, `D76`. Runs in `make lint` and in CI, and fails the build rather than warning.
+Phase 8 Stage 3, `D76` and `D77`. Runs in `make lint` and in CI, and fails the build rather than warning.
 
 WHY THIS EXISTS
 
@@ -24,28 +24,69 @@ WHY THIS EXISTS
     `test_soft_hyphen_is_within_the_iam_range`, because that assumption was wrong on the first draft of
     this file and a wrong assumption about the boundary is exactly what this check exists to replace.)
 
+`D77` -- THE REGISTRY THAT USED TO BE HERE WAS WRONG, AND HOW THAT WAS FOUND
+
+    The first version of this file shipped two exemptions, both marked "MEASURED": a Lex slot
+    `Description` and a caller-spoken message value, both citing Stage 2's lexpoc applies as evidence that
+    Lex V2 accepts U+2014 through the nested-CFN path. Both claims were **wrong**, and wrong in a specific,
+    instructive way: "the apply did not error" was read as "the character survived", and those are not the
+    same fact. `CreateStack` does not reject non-ASCII in `template_body` outright -- it silently replaces
+    every byte above U+007E with `?` and returns success. Confirmed against AWS's own stored copy, not
+    Terraform's cache: a live `aws cloudformation get-template --template-stage Original` on the deployed
+    `fnol-bot` stack showed every em dash AND every section sign (`§`, inside Latin-1, previously
+    judged safe by this exact file) rendered as `?`. Terraform's next plan then showed a perpetual,
+    content-only "update" to `aws_cloudformation_stack.bot` -- not a rejection, a silent, permanent drift
+    between what the source declares and what the service actually stored.
+
+    This is `RESULTS.md` section 3.5.1's family again, in a new shape: not a build that finishes after the
+    control plane reports success, but a **value** that is silently substituted while the control plane
+    reports success. And it is `D69` again too -- "count the instruments before trusting the one you
+    wrote" -- because the instrument that was trusted was "did the apply error", and the disagreeing
+    instrument, once someone thought to ask it, was `GetTemplate` read straight from the service.
+
+    Consequence: `bot.yaml.tftpl` and `release.yaml.tftpl` are now plain ASCII throughout, comments
+    included -- CloudFormation receives the whole file as `template_body`, so a comment is not "never
+    sent anywhere" for these two files the way it is for an ordinary `.tf` file. The registry below is
+    empty as a result. It stays in the file as working infrastructure rather than being deleted, because
+    the *mechanism* -- an evidence-tiered, content-anchored, staleness-checked exemption -- is still the
+    right shape for some future field that is genuinely measured against a live read-back. What changed
+    is the bar: "the apply did not error" no longer qualifies as MEASURED for anything CFN-shaped. A
+    future entry needs a `GetTemplate`, `DescribeSlot`, or equivalent read against the live service.
+
 SCOPE, AND WHY IT IS A DEFAULT RATHER THAN A LIST
 
     Every character in every source file under `--root` (default `infra/terraform`) is in scope unless
     something takes it out. There are exactly three ways out, in order of how much they are trusted:
 
-      1. **Comments.** They are not sent anywhere. Detected structurally, per file syntax.
+      1. **Comments -- in files that are NOT a CFN template source.** They are not sent anywhere. Detected
+         structurally, per file syntax. For `bot.yaml.tftpl` and `release.yaml.tftpl` this carve-out does
+         NOT apply -- see CFN_TEMPLATE_BASENAMES below. The whole file is the request body.
       2. **Terraform-local strings.** An HCL `variable`/`output` block's `description`, and any
          `error_message`, are documentation Terraform renders for humans; they never leave the machine.
          A `default` inside a `variable` block is NOT in this category and is deliberately still checked
          -- `var.greeting`'s default is spoken to a caller through Connect, and `var.hours_time_zone`'s
          reaches the Connect API.
-      3. **The exemption registry below**, which requires a stated reason and a stated evidence tier.
+      3. **The exemption registry below**, which requires a stated reason and a stated evidence tier --
+         and, per `D77`, a live read-back for anything that is CFN-shaped.
 
     A list of known-bad cases would go stale the first time somebody adds a file. Defaulting to in-scope
     is what makes this a control.
 
+TWO RULES, NOT ONE
+
+    Everything under `--root` is checked against `is_latin1_safe` (IAM's actual documented pattern) EXCEPT
+    files named in `CFN_TEMPLATE_BASENAMES`, which are checked against the strictly narrower
+    `is_ascii_safe`. That narrowing is itself evidence-based -- `D77`'s live `GetTemplate` read -- and it
+    is a **tightening**, not a loosening, so it does not need the same justification machinery as the
+    exemption registry: the registry exists to permit exceptions to the default; this exists to protect
+    two specific files from a default that is documented but, for them, empirically wrong.
+
 STALE EXEMPTIONS FAIL THE BUILD
 
-    Every registry entry must match at least one real occurrence. An exemption that matches nothing is
-    indistinguishable from an exemption that is working, and it silently widens the hole the day the line
-    it named is edited. Same failure shape as `check_flows.py`'s `--require-at-least`: a check that finds
-    nothing is not a passing check.
+    Every registry entry must match at least one real occurrence, among files that are in scope for it.
+    An exemption that matches nothing is indistinguishable from an exemption that is working, and it
+    silently widens the hole the day the line it named is edited. Same failure shape as
+    `check_flows.py`'s `--require-at-least`: a check that finds nothing is not a passing check.
 """
 
 from __future__ import annotations
@@ -54,6 +95,7 @@ import argparse
 import re
 import sys
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,6 +108,24 @@ def is_latin1_safe(char: str) -> bool:
     return codepoint in (0x09, 0x0A, 0x0D) or 0x20 <= codepoint <= 0x7E or 0xA1 <= codepoint <= 0xFF
 
 
+#: Strictly narrower than `is_latin1_safe`: drops the whole U+00A1-U+00FF Latin-1 supplement, including
+#: the section sign that `D77` found CloudFormation silently mangles to `?` despite it being inside the
+#: IAM-documented range. Applied only to `CFN_TEMPLATE_BASENAMES`.
+def is_ascii_safe(char: str) -> bool:
+    codepoint = ord(char)
+    return codepoint in (0x09, 0x0A, 0x0D) or 0x20 <= codepoint <= 0x7E
+
+
+#: Files whose ENTIRE content -- comments included -- becomes an `aws_cloudformation_stack.template_body`
+#: (see `infra/terraform/stacks/*/lex.tf`'s `templatefile()` locals). Matched by basename, not by path, so
+#: `stacks/lexpoc`'s copy is covered too: same mechanism, same measured failure mode, even though that
+#: stack is destroyed and the file is historical. A new file playing this role must be added here --
+#: nothing in this checker can discover the CFN wiring in `lex.tf` on its own, so this list is manually
+#: maintained the same way `build_registry()` is, and for the same reason: an addition here is a decision,
+#: not an automatic inference.
+CFN_TEMPLATE_BASENAMES = frozenset({"bot.yaml.tftpl", "release.yaml.tftpl"})
+
+
 #: Extensions worth reading. Everything else under the tree is either binary, generated, or not a source
 #: of API-bound literals.
 CHECKED_SUFFIXES = frozenset({".tf", ".tftpl", ".tfvars", ".hcl", ".json", ".yaml", ".yml"})
@@ -75,15 +135,23 @@ SKIP_DIRS = frozenset({".git", ".venv", ".terraform", ".terraform-build", "__pyc
 SKIP_NAMES = frozenset({"tfplan", ".terraform.lock.hcl"})
 
 
+def safety_check_for(path: Path) -> tuple[str, Callable[[str], bool]]:
+    """The (rule name, predicate) pair that applies to one file."""
+    if path.name in CFN_TEMPLATE_BASENAMES:
+        return "ASCII", is_ascii_safe
+    return "Latin-1", is_latin1_safe
+
+
 @dataclass(frozen=True)
 class Occurrence:
-    """One non-Latin-1 character, located."""
+    """One character rejected by the rule that applies to its file, located."""
 
     path: Path
     line_number: int
     column: int
     char: str
     line: str
+    rule_name: str
 
     @property
     def codepoint(self) -> str:
@@ -96,27 +164,26 @@ class Occurrence:
     def describe(self, root: Path) -> str:
         return (
             f"{self.path.relative_to(root)}:{self.line_number}:{self.column} "
-            f"{self.codepoint} {self.char_name}"
+            f"{self.codepoint} {self.char_name} (outside {self.rule_name})"
         )
 
 
 @dataclass(frozen=True)
 class Exemption:
-    """A permitted non-Latin-1 occurrence, anchored by content rather than by line number.
+    """A permitted out-of-rule occurrence, anchored by content rather than by line number.
 
     `path_suffix` and `line_contains` are both required: a bare substring would exempt the same text
     wherever it later appears, and a bare path would exempt a whole file.
 
-    `indent` is the structural discriminator, and it is the reason this registry is honest rather than
-    approximately honest. In `bot.yaml.tftpl` a slot's `Description:` and an intent's `Description:` are
-    the same eleven characters; only their nesting tells them apart -- slots sit at 18, intents at 14.
-    Matching on the substring alone would have exempted intent Descriptions under a measurement that
-    covers only slots. Anchoring on indentation is brittle to reformatting, deliberately: a reformat
-    makes the exemption match nothing, and a stale exemption FAILS the build. It breaks toward noticing.
+    `indent` is a structural discriminator for cases like `bot.yaml.tftpl`, where a slot's `Description:`
+    and an intent's `Description:` are the same eleven characters and only nesting tells them apart --
+    slots sit at 18, intents at 14. Anchoring on indentation is brittle to reformatting, deliberately: a
+    reformat makes the exemption match nothing, and a stale exemption FAILS the build. It breaks toward
+    noticing.
 
-    `evidence` is not decoration. It records *how strongly* the exemption is backed, because the two
-    entries here are backed very differently and collapsing that distinction is how a measured fact and
-    an assumption end up cited identically.
+    `evidence` is not decoration. Per `D77`, an exemption for a file in `CFN_TEMPLATE_BASENAMES` needs a
+    live read-back (`GetTemplate`, `DescribeSlot`, ...), not "the apply did not error" -- that bar is
+    exactly what the previous registry got wrong, at this project's own expense.
     """
 
     path_suffix: str
@@ -140,54 +207,20 @@ class Exemption:
 
 
 def build_registry() -> list[Exemption]:
-    """The exemption registry. Two entries, backed by two different kinds of evidence.
+    """The exemption registry. Empty by design -- see `D77` in the module docstring.
 
-    Adding a third is a decision, not a fix. If a build fails here, the first question is whether the
-    string needs the character at all -- both entries below needed it for a reason that survives being
-    written down, and most strings do not.
+    The two entries this file shipped with originally were both retracted: their "MEASURED" evidence was
+    an apply that did not error, and `D77` found that CloudFormation accepts a non-ASCII `template_body`
+    without erroring while silently replacing every offending byte with `?`. Neither exemption's
+    character actually reached Lex intact. Both strings were rewritten to plain ASCII instead of being
+    re-exempted, because the honest evidence bar for a CFN-shaped field is a live read-back, and neither
+    had one.
+
+    Adding an entry here is a decision, not a fix. If a build fails here, the first question is whether
+    the string needs the character at all -- almost none do. If one genuinely does, back it with a read
+    against the live service, not an apply's exit code.
     """
-    return [
-        Exemption(
-            path_suffix="stacks/main/bot.yaml.tftpl",
-            line_contains='Value: "Which would you like to update',
-            codepoint="U+2014",
-            indent=30,
-            reason=(
-                "Caller-spoken content, not an identifier. This string is synthesised by Polly and read "
-                "to a human; the em dash is a prosodic pause in a three-item question. Replacing it with "
-                "a hyphen or a semicolon would change what a caller hears, which is a behaviour change "
-                "smuggled in as a lint fix. If this ever has to move, it moves as a dialogue decision "
-                "with SLOT-DESIGN.md, not as a character swap."
-            ),
-            evidence=(
-                "MEASURED (adjacent). Lex V2 accepts U+2014 in this template through the same CFN path "
-                "-- see the slot Description entry. Message values carry no documented Pattern at all "
-                "and are the least constrained field in the bot definition."
-            ),
-        ),
-        Exemption(
-            path_suffix="bot.yaml.tftpl",
-            line_contains="Description:",
-            codepoint="U+2014",
-            # 18 is a SLOT's Description. An intent's sits at 14 and is NOT covered here -- see below.
-            indent=18,
-            reason=(
-                "Lex V2 slot Description. `CreateSlot`'s reference documents a length constraint (0-200) "
-                "and no Pattern, and unlike the IAM case that is corroborated by an apply rather than "
-                "trusted on its own."
-            ),
-            evidence=(
-                "MEASURED. `infra/terraform/stacks/lexpoc/bot.yaml.tftpl` carried U+2014 in three slot "
-                "Description fields (`policy_number`, `loss_datetime`, `police_report_number`) and "
-                "applied successfully THREE TIMES against live Lex V2 in Phase 8 Stage 2 -- create, "
-                "update, and delete-propagation. Recorded in docs/phase8/LEXPOC-GATE.md. This is the "
-                "only field in this project measured to accept a character outside Latin-1. "
-                "NOT extended to intent Description: Stage 2's POC carried no em dash in one, so there "
-                "is no measurement to cite, and the one that existed (`RentalTowingEntitlement`) was "
-                "rewritten rather than exempted on an assumption."
-            ),
-        ),
-    ]
+    return []
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -203,6 +236,8 @@ def hcl_out_of_scope_lines(text: str) -> set[int]:
     """1-indexed line numbers in a `.tf` file that cannot reach an AWS API.
 
     Two categories: comments, and documentation strings inside a top-level `variable` or `output` block.
+    Never applied to a `CFN_TEMPLATE_BASENAMES` file -- those have no out-of-scope lines at all, comments
+    included, because the whole file is submitted as `template_body`.
 
     Block tracking leans on a guarantee this repo already enforces -- `terraform fmt` is checked in CI,
     so a top-level block always opens at column 0 and its closing brace is a `}` at column 0. That makes
@@ -267,22 +302,16 @@ def hcl_out_of_scope_lines(text: str) -> set[int]:
     return out_of_scope
 
 
-def hash_comment_lines(text: str) -> set[int]:
-    """1-indexed comment line numbers for YAML, JSON-with-comments and template files.
-
-    Only whole-line comments count. A trailing `#` inside a YAML value is not a comment, and guessing
-    where a quoted string ends without a parser would be the kind of approximation that makes a check
-    silently permissive.
-    """
+def out_of_scope_lines(path: Path, text: str) -> set[int]:
+    """Lines exempt from scanning for one file. Empty set for any `CFN_TEMPLATE_BASENAMES` file -- see
+    `hcl_out_of_scope_lines`'s docstring."""
+    if path.name in CFN_TEMPLATE_BASENAMES:
+        return set()
+    if path.suffix in (".tf", ".tfvars", ".hcl"):
+        return hcl_out_of_scope_lines(text)
     return {
         index + 1 for index, line in enumerate(text.split("\n")) if line.strip().startswith("#")
     }
-
-
-def out_of_scope_lines(path: Path, text: str) -> set[int]:
-    if path.suffix in (".tf", ".tfvars", ".hcl"):
-        return hcl_out_of_scope_lines(text)
-    return hash_comment_lines(text)
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -302,8 +331,9 @@ def source_files(root: Path) -> list[Path]:
 
 
 def scan_file(path: Path, text: str) -> list[Occurrence]:
-    """Every in-scope non-Latin-1 character in one file."""
+    """Every in-scope out-of-rule character in one file, under whichever rule applies to it."""
     skip = out_of_scope_lines(path, text)
+    rule_name, is_safe = safety_check_for(path)
     found: list[Occurrence] = []
 
     for index, line in enumerate(text.split("\n")):
@@ -311,8 +341,8 @@ def scan_file(path: Path, text: str) -> list[Occurrence]:
         if line_number in skip:
             continue
         for column, char in enumerate(line, start=1):
-            if not is_latin1_safe(char):
-                found.append(Occurrence(path, line_number, column, char, line))
+            if not is_safe(char):
+                found.append(Occurrence(path, line_number, column, char, line, rule_name))
 
     return found
 
@@ -370,7 +400,10 @@ def applicable_exemptions(registry: list[Exemption], files: list[Path]) -> list[
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Fail the build on non-Latin-1 characters in strings that reach an AWS API."
+        description=(
+            "Fail the build on non-Latin-1 characters in AWS-API-bound strings (non-ASCII for files "
+            "that become a CloudFormation template_body -- see D77)."
+        )
     )
     parser.add_argument(
         "--root",
@@ -434,21 +467,30 @@ def main(argv: list[str] | None = None) -> int:
                 f"({len(exemption.matched)} occurrence(s)) -- {exemption.evidence.split('.')[0]}"
             )
 
+    cfn_scanned = sorted({f.name for f in files if f.name in CFN_TEMPLATE_BASENAMES})
+    if cfn_scanned:
+        print(f"  strict ASCII rule applied to: {', '.join(cfn_scanned)} (D77)")
+
     if violations:
         failed = True
-        print(f"  FAIL {len(violations)} non-Latin-1 character(s) in in-scope strings:")
+        print(f"  FAIL {len(violations)} out-of-rule character(s) in in-scope strings:")
         for occurrence in violations:
             print(f"       {occurrence.describe(root)}")
             print(f"           {occurrence.line.strip()[:110]}")
         print(
-            "\n       These reach an AWS API. IAM rejects them outright; other services are unmeasured,\n"
-            "       and unmeasured is the state D76 was in the day the apply died at resource 17 of 23.\n"
-            "       Replace the character, or add a registry entry to scripts/check_charset.py with a\n"
-            "       reason and an evidence tier."
+            "\n       These reach an AWS API. IAM rejects Latin-1 violations outright; CloudFormation "
+            "template_body\n"
+            "       (bot.yaml.tftpl, release.yaml.tftpl) SILENTLY MANGLES anything outside plain ASCII "
+            "to '?'\n"
+            "       instead of rejecting it (D77) -- do not assume a clean apply means the character "
+            "survived.\n"
+            "       Replace the character, or add a registry entry to scripts/check_charset.py backed "
+            "by a live\n"
+            "       read-back, not an apply's exit code."
         )
 
     if not failed:
-        print("  ok   no non-Latin-1 characters in in-scope strings")
+        print("  ok   no out-of-rule characters in in-scope strings")
 
     return 1 if failed else 0
 

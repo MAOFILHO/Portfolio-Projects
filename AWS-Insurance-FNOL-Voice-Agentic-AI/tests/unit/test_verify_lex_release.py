@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from scripts.verify_lex_release import verify
+from scripts.verify_lex_release import _first_prompt, verify
 
 CODEHOOK_ARN = "arn:aws:lambda:us-west-2:759316130780:function:fnol-codehook"
 
@@ -45,7 +45,13 @@ def _slot_detail(
         },
         "valueElicitationSetting": {
             "promptSpecification": {
-                "messageGroupsList": [{"message": {"plainTextMessage": {"value": prompt}}}],
+                # "messageGroups", NOT "messageGroupsList" -- the latter is the CFN *template* property
+                # name (`bot.yaml.tftpl`'s MessageGroupsList); the raw lexv2-models API response uses its
+                # own field name. A mock built on the template name and code read against the same wrong
+                # name agree with EACH OTHER, not with the service -- confirmed live against a real
+                # `describe-slot` during the Stage 3 apply, where `_first_prompt` returned `None` for
+                # every slot despite the deployed prompt being correct. See D76's session notes.
+                "messageGroups": [{"message": {"plainTextMessage": {"value": prompt}}}],
                 "promptAttemptsSpecification": {
                     "Retry1": {"audioAndDTMFInputSpecification": dtmf},
                 },
@@ -128,6 +134,63 @@ def test_a_matching_deployment_passes(client: FakeLexModels) -> None:
 
 
 # ---------------------------------------------------------------------------------------------------
+# `_first_prompt` against the ACTUAL live `describe-slot` response shape, not a name-guessed mock.
+#
+# The bug this guards: the first draft of `_first_prompt` read `messageGroupsList`, which is
+# `bot.yaml.tftpl`'s CloudFormation *template* property name, not the field the raw `lexv2-models` API
+# actually returns (`messageGroups`). The fixture above used to make the same wrong guess, so it agreed
+# with the buggy code instead of catching it -- `verify()` returned `[]` on every run, including against
+# the real Stage 3 deployment, where the served prompt was correct but `_first_prompt` still returned
+# `None` because the key it looked for never exists. This fixture is captured verbatim from a live
+# `aws lexv2-models describe-slot` on the `policy_number` slot of the deployed bot, trimmed to the
+# fields `_first_prompt` reads, specifically so a future edit cannot repeat the same wrong guess and have
+# a self-consistent mock hide it again.
+# ---------------------------------------------------------------------------------------------------
+
+LIVE_DESCRIBE_SLOT_RESPONSE: dict[str, Any] = {
+    "slotName": "policy_number",
+    "valueElicitationSetting": {
+        "promptSpecification": {
+            "messageGroups": [
+                {
+                    "message": {
+                        "plainTextMessage": {
+                            "value": "Okay. What is your policy number? It starts with P Y."
+                        }
+                    }
+                }
+            ],
+            "maxRetries": 2,
+            "allowInterrupt": True,
+            "messageSelectionStrategy": "Random",
+        }
+    },
+}
+
+
+def test_first_prompt_reads_the_live_api_field_name() -> None:
+    """The regression test for the bug itself: `messageGroups`, not `messageGroupsList`."""
+    assert (
+        _first_prompt(LIVE_DESCRIBE_SLOT_RESPONSE)
+        == "Okay. What is your policy number? It starts with P Y."
+    )
+
+
+def test_first_prompt_does_not_recognise_the_cfn_template_property_name() -> None:
+    """The inverse, stated explicitly: a slot shaped like the CFN template property (`messageGroupsList`)
+    is not what the live API sends, and this function must not silently accept it either -- that would
+    make the bug fixable by regressing the test instead of the code."""
+    wrong_shape = {
+        "valueElicitationSetting": {
+            "promptSpecification": {
+                "messageGroupsList": [{"message": {"plainTextMessage": {"value": "wrong key"}}}]
+            }
+        }
+    }
+    assert _first_prompt(wrong_shape) is None
+
+
+# ---------------------------------------------------------------------------------------------------
 # §3.5.1 rule 2 — the served version
 # ---------------------------------------------------------------------------------------------------
 
@@ -199,7 +262,7 @@ def test_a_disabled_locale_on_the_alias_is_caught(client: FakeLexModels) -> None
 def test_a_drifted_prompt_is_caught(client: FakeLexModels) -> None:
     """Provider issue #42147's signature: the definition says one thing, the deployment serves another."""
     client.slots["policy_number"]["valueElicitationSetting"]["promptSpecification"][
-        "messageGroupsList"
+        "messageGroups"
     ][0]["message"]["plainTextMessage"]["value"] = "What's your policy number?"
 
     assert any("prompt served" in f for f in verify(client, OUTPUTS))

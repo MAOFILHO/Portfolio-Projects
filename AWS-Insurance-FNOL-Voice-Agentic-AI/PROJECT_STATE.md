@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; **Stage 3 partially applied — 16 of 23**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; **Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2320,14 +2320,15 @@ the definition is what the locale build *reads*, not what it *serves*. A control
 (`police_report_number`'s DTMF timeout) was held still throughout, and the gate itself is proven able to
 fail by **15 tests that mutate the recorded evidence into each failure it claims to catch**.
 
-### Stage 3 — `stacks/main`, built and planned 2026-08-13. **Apply pending**
+### Stage 3 — `stacks/main`, built, planned, **applied and verified 2026-08-13**
 
-**23 resources. `terraform validate` clean, `terraform plan` clean (23 to add, 0 to change, 0 to destroy),
-488 tests green (+65), lint, mypy strict, `terraform fmt` all clean.** The apply did not run — the
-harness's permission layer declined it — so the plan and its cost delta are recorded and the apply needs
-a word. Everything in it sits inside the `APPROVED: Phase 8` under-$2 authorisation, and the **cost delta
-at rest is $0.00/month**: Lex bills per runtime request, Connect flows/queues/hours are not billed at all,
-and Lambda/DynamoDB/S3/CloudWatch are free at this volume. Nothing here places a call.
+**23 resources, all created. `terraform plan` reports no changes; `make verify-lex` passes against the
+live service; `make verify-flows`, `make verify-charset`, `make verify-destroy-scope`, `terraform fmt
+-check -recursive`, `terraform validate`, `make lint`, `make typecheck` and the full unit suite (523
+tests) are all clean as of the last apply.** Everything in it sits inside the `APPROVED: Phase 8` under-$2
+authorisation, and the **cost delta at rest is $0.00/month**: Lex bills per runtime request, Connect
+flows/queues/hours are not billed at all, and Lambda/DynamoDB/S3/CloudWatch are free at this volume.
+Nothing here places a call — the DID stays unrouted per `D75`.
 
 Delivered: the six-intent Lex bot via nested CFN, its published version and `live` alias, the
 Connect↔Lex integration association, an inbound contact flow, hours of operation, the escalation queue,
@@ -2433,20 +2434,132 @@ em dash reached exactly one API-bound field, and it was the one that failed.
 
 Two things this sweep is *not*. It is **not** proof the remaining 18 are safe — it is a classification with
 the evidence for each class named, and the Lex-slot row is the only one carrying a measurement. And it is
-**not** a repeatable control: it was a one-off script in a scratchpad. A `make lint` check that fails on
-non-Latin-1 characters in API-bound strings is the thing that would make this stay fixed, and it does not
-exist yet. Deliberately not built unasked — flagged for Marco.
+**not** a repeatable control: it was a one-off script in a scratchpad — **superseded same-day by `D77` and
+`scripts/check_charset.py`**, which turned it into `make verify-charset`, wired into `make lint`.
 
-### Where Stage 3 stands
+### `check_charset.py` — the sweep turned into a control, same session
 
-`terraform plan` regenerated clean against the live half-applied state: **7 to add, 0 to change, 0 to
-destroy**, saved to `infra/terraform/stacks/main/tfplan`. No drift on the 16, no replacements — the
-description fix touches a resource that does not exist yet, so it cascades into nothing. `terraform fmt`
-and `terraform validate` clean.
+Marco: *"a one-off scratchpad script is not a control, and this is the fourth time this project has fixed
+something without leaving behind the thing that keeps it fixed."* `scripts/check_charset.py` +
+`make verify-charset`, wired into `make lint`. In scope **by default** — every description/name/tag-value
+string under `infra/terraform` — with exactly three ways out: whole-line comments (structurally detected,
+per file syntax), HCL `variable`/`output` `description`/`error_message` (Terraform-local, never leave the
+machine — `default` is deliberately NOT exempt, since `var.greeting`'s default is spoken to a caller and
+`var.hours_time_zone`'s reaches the Connect API), and a content-anchored, evidence-tiered exemption
+registry that fails the build if any entry goes stale (matches nothing among files in scope). 33 unit
+tests, same discipline as `test_check_flows.py`: the shipped tree is the fixture, every failure case a
+targeted mutation. This section's own sweep table above is what seeded the registry — and immediately
+falsified half of it. See `D77`.
 
-**The apply is still pending and still needs a word.** Everything in it remains inside the
-`APPROVED: Phase 8` under-$2 authorisation and the cost delta at rest is unchanged at **$0.00/month**;
-nothing in the remaining 7 places a call.
+### D77 — the exemption registry's own evidence didn't survive contact with a live read
+
+The sweep above exempted two fields as "MEASURED": the Lex slot `Description` em dash (cited Stage 2's
+lexpoc applying three times without error) and the caller-spoken `Value` field (cited the same, adjacently).
+Both citations were **wrong**, in the specific way this whole phase keeps finding: *"the apply did not
+error"* was read as *"the character survived,"* and those are not the same fact.
+
+Running the actual apply (below) hit a `terraform_data` conflict that forced a `terraform plan -json` diff
+of `aws_cloudformation_stack.bot`'s `template_body`. The state's recorded `before` value and the freshly
+rendered `after` value disagreed at **30 character positions** — every em dash and every **section sign
+(`§`)** in the file, silently replaced with `?`. Confirmed against AWS's own stored copy, not Terraform's
+cache: `aws cloudformation get-template --template-stage Original` on the live `fnol-bot` stack showed the
+identical mangling. `CreateStack` does not reject non-ASCII `template_body` content — it **silently
+substitutes it with `?` and returns success**, and `§` is inside the Latin-1 range the sweep, the IAM
+pattern, and `check_charset.py`'s first draft all treated as safe.
+
+This is `RESULTS.md` §3.5.1's family in a new shape — not a build finishing after the control plane
+reports success, but a **value silently substituted** while the control plane reports success — and it is
+`D69` again: the trusted instrument was "did the apply error," and the disagreeing instrument, once asked,
+was `GetTemplate` read straight from the service.
+
+**Consequence, same day:** `bot.yaml.tftpl` and `release.yaml.tftpl` rewritten to plain ASCII throughout —
+comments included, because CloudFormation receives the *whole file* as `template_body`, so a comment is
+not "never sent anywhere" for these two files the way it is for an ordinary `.tf` file.
+`stacks/lexpoc/bot.yaml.tftpl` (same basename, same mechanism, stack destroyed but file still committed)
+fixed too, for consistency and because the checker matches by basename, not by directory.
+`check_charset.py` gained a second, stricter rule (`is_ascii_safe`, applied only to
+`CFN_TEMPLATE_BASENAMES = {"bot.yaml.tftpl", "release.yaml.tftpl"}`) and its exemption registry was
+**emptied**, not repopulated — `build_registry()` now returns `[]` by design, with the retraction recorded
+inline: a future exemption for a CFN-shaped field needs a live read-back, not an apply's exit code. Two new
+regression tests prove the point directly: the same `§` that passes the general Latin-1 rule must fail
+when the file is named `bot.yaml.tftpl`.
+
+The Stage 2 `LEXPOC-GATE.md` record itself is **not amended** — ADRs and closed-stage findings are
+immutable here — but its "measured" claim about em-dash survival in a slot `Description` should be read
+as *"the apply did not error,"* not as *"the character was preserved,"* now that those are known to be
+different facts.
+
+### Stage 3 apply — completed 2026-08-13, four more defects found and fixed along the way
+
+Re-running the apply after `D76`'s fix surfaced a **chain of pre-existing, unrelated defects** in
+`bot.yaml.tftpl`, `release.yaml.tftpl` and `flows/fnol-inbound.json.tftpl` — none touched by the
+character-set work, all invisible to `terraform validate`/`plan` because `aws_cloudformation_stack` and
+`aws_connect_contact_flow`'s content arguments are opaque strings to the provider. Each was found by
+attempting the real apply (once directly, twice via a throwaway `CreateContactFlow`/`describe-slot` probe
+against the live service to get an un-truncated error, cleaned up immediately after), fixed, and
+re-verified before moving on:
+
+1. **`D76`** — the em dash in `lex.tf`'s IAM role description. Fixed; see above.
+2. **`D77`** — `§` and every other non-ASCII character silently mangled to `?` in CFN `template_body`.
+   Fixed; see above.
+3. **`ContactFieldValues` slot type: `Synonyms` double-wrapped in `SampleValue`.** CFN's early validation
+   (`DescribeEvents`, not `DescribeStackEvents` — a distinct, newer API) reported 12 errors, all
+   `Required property [Value] not found` / `Unsupported property [SampleValue]` at
+   `SlotTypes/1/SlotTypeValues/*/Synonyms/*`. The CFN reference documents `Synonyms` as *"Array of
+   SampleValue"* — each entry **is** a `{Value: ...}` object directly, not a `SampleValue` wrapping
+   another one. Fixed in `bot.yaml.tftpl`.
+4. **`CoverageQuestion`'s sample utterance contradicted its own adjacent comment.** Lines documenting *"NO
+   QUESTION SLOT, and that is a design decision"* sat directly above `- Utterance: "am I covered for
+   {coverage_topic}"` — illegal outright (Lex rejects any `AMAZON.FreeFormInput` slot in a sample
+   utterance) and contrary to the stated design. Removed the one utterance line; the optional slot and its
+   elicitation are untouched. Not a new design decision — the fix enforces the one already written next to
+   the bug.
+5. **`release.yaml.tftpl`'s `ConnectInstanceId` parameter carried the bare instance ID, not the ARN.**
+   `AWS::Connect::IntegrationAssociation.InstanceId` is documented with pattern
+   `^arn:aws[-a-z0-9]*:connect:[-a-z0-9]*:[0-9]{12}:instance/[-a-zA-Z0-9]*$` and CFN's early validation
+   rejects the bare ID outright — unlike `aws_connect_queue`/`hours_of_operation`/
+   `lambda_function_association`, which are native Terraform resources and DO take the bare ID. Two
+   different shapes for "the same" instance; `local.instance_arn` already existed and was simply wired in.
+6. **`BotAliasTags` is `Array of Tag`, not a map.** CFN's own generic resource `tags` argument (and most
+   `Tag`-typed properties) is a map; `AWS::Lex::BotAlias.BotAliasTags` documents itself as an array of
+   `{Key, Value}` objects instead. Fixed — and this incidentally resolves Stage 3's open item **E** ("tag
+   the Lex bot alias, not only the bot"), previously unresolved because the POC never created a real alias.
+7. **`fnol-inbound.json.tftpl`'s `TagContact` action had no `Errors` transition.** Connect's
+   `CreateContactFlow` (via a direct diagnostic `aws connect create-contact-flow` call against a
+   throwaway-named flow, since Terraform's wrapped error truncated the real message to nothing) reported
+   *"Action is missing required error. Error: NoMatchingError, Path: Actions[1]"*. Every other action in
+   the flow already had one; `TagTheContact` was the one gap. Added, routing to `Trouble` — consistent with
+   the pattern every other action in the flow uses for a rare hard failure.
+
+**Two diagnostic probe resources** (a throwaway `AWS::Lex` — no, a throwaway Connect contact flow, twice)
+were created directly against the live service to get past Terraform's truncated error messages, and both
+were deleted immediately after use, confirmed via `list-contact-flows` returning empty for the probe name
+prefix. Neither was Terraform-managed and neither is billable (contact flows carry no charge).
+
+8. **`scripts/verify_lex_release.py`'s `_first_prompt` read `messageGroupsList`, which is
+   `bot.yaml.tftpl`'s *CloudFormation template property* name, not the field the live `lexv2-models`
+   `describe-slot` API actually returns (`messageGroups`).** Found by running `make verify-lex` against the
+   completed apply — it reported the served prompt as `None` for a slot whose deployed prompt, read
+   directly via `aws lexv2-models describe-slot`, was correct. **The unit test's own mock fixture used the
+   same wrong key**, so it agreed with the buggy code instead of catching it; `test_a_matching_deployment_
+   passes` had never exercised the real field name. Fixed in both the implementation and the fixture, plus
+   two new regression tests built from a live `describe-slot` response captured verbatim, so a future edit
+   cannot repeat the guess and have a self-consistent mock hide it again.
+
+**Final state, verified 2026-08-13:** all 23 resources created; `terraform plan` reports **no changes**;
+`make verify-lex` passes against the live alias (version 2, locale Built, code hook attached, declared
+prompt and DTMF timeout match, 9 slots obfuscated as declared); `make verify-flows`, `make verify-charset`,
+`make verify-destroy-scope`, `terraform fmt -check -recursive`, `terraform validate`, `make lint`,
+`make typecheck` (93 files) and the full unit suite (**523 tests**, +35 from this session) are all clean.
+The deployed contact flow reads `ACTIVE`/`PUBLISHED` from a direct `DescribeContactFlow` call. Cost delta
+at rest remains **$0.00/month**; the DID is not associated with the flow (`D75` — deliberate, unrouted
+until the safety path is real), so nothing here places or can receive a call yet.
+
+The generalisable finding across the whole session: **every one of the eight defects above was invisible
+to `terraform validate`/`plan` and to 488 pre-session unit tests, and visible only to the live service.**
+`aws_cloudformation_stack` and `aws_connect_contact_flow`'s content arguments are opaque strings to the
+provider — this is `D72`'s finding from the other side. A provider that cannot express Lex V2 natively
+also cannot validate what it is asked to submit on your behalf.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
@@ -2737,7 +2850,7 @@ September. **A $0.00 reading and an absent line item look identical in a grouped
 | B | ✅ **Schema decided 2026-08-12**, ahead of Stage 3 per Marco — `Project`/`Env`/`FlowVersion`, `Intent` and `Outcome` rejected on the injury/health-inference argument. `docs/phase8/CONTACT-TAG-SCHEMA.md`. Implementation still Stage 3 | Stage 3 |
 | C | Activate `aws:connect:instanceId` after the first real call, then wait 24h | Stage 5 |
 | D | Budget `IncludeCredit: false` | Stage 5 |
-| E | Tag the Lex bot **alias**, not only the bot | **Stage 3 — not resolved in Stage 2.** The POC established that CFN stack tags propagate to the `AWS::Lex::Bot` resource, verified with `ListTagsForResource`. It did **not** establish the same for an alias: the POC deliberately had no `AWS::Lex::BotAlias`, because DRAFT behind the test alias is what an update mutates. Stage 3 creates a real alias and must check it there rather than generalising from the bot | Stage 3 |
+| E | ✅ **Resolved 2026-08-13, Stage 3 apply.** `release.yaml.tftpl`'s `BotAliasTags` was a map; `AWS::Lex::BotAlias` documents it as `Array of Tag`, `{Key, Value}` objects, not a map — CFN's early validation caught it (`expected type: JSONArray, found: JSONObject`) before anything applied. Fixed as part of the same apply that surfaced `D77`. Was: Tag the Lex bot **alias**, not only the bot | Stage 3 |
 | F | ✅ **Resolved 2026-08-12 (`D67`)** — CloudWatch `AWS/Bedrock` as a third instrument. CE is missing data; the log under-reports by 22%. Was: **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
 | G | ⏳ **Checked 2026-08-13, still unanswerable — and the reason is worth keeping.** Every line in Aug 11–12 reports `Project$`, i.e. **untagged**, including the AMCS-sold DID. That is *not yet evidence of a defect*: cost allocation tags are **not retroactive**, and `Project` was only activated during 08-12, so those days would read untagged whatever the tag does. 08-13 has no settled data yet. **Re-check 2026-08-14/15 on 08-13's data specifically.** If the DID line is still untagged then, the tag-filtered budget alarm excludes the project's **only always-on cost** ($1.83/mo, 7.3% of the ceiling) — and criterion 9's first probe is already written to catch exactly that, which is why it requires including a known non-zero quantity of *our* spend rather than only excluding the sibling's | **2026-08-14/15** |
 

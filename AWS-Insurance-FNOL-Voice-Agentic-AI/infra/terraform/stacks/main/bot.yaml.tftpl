@@ -9,32 +9,32 @@
 #   `CLAUDE.md`: "exactly six intents, no additions." The six below are Phase 1's six. `FallbackIntent` is
 #   required by the service and is not an intent in that sense.
 #
-#   The one place this was genuinely tempting is escalation route L3 — the hard "agent"/"human" override
-#   that `DIALOGUE-POLICIES.md` §8 requires to be reachable from ANY state. A seventh Lex intent is the
+#   The one place this was genuinely tempting is escalation route L3; the hard "agent"/"human" override
+#   that `DIALOGUE-POLICIES.md` section 8 requires to be reachable from ANY state. A seventh Lex intent is the
 #   obvious way to express it and it is deliberately not used, for a reason that is about correctness
 #   rather than about counting: **mid-slot-elicitation, an utterance is interpreted against the active
 #   slot type first**, so a caller who says "agent" while `policy_number` is being elicited produces a
 #   no-match, not an intent switch. A Lex intent for L3 would be reachable from most states and would
 #   look reachable from all of them. L3 therefore lives in the codehook as a deterministic check on every
-#   turn, exactly where L1 lives and for the same reason (`ADR-010`) — and the dialog code hook is
+#   turn, exactly where L1 lives and for the same reason (`ADR-010`); and the dialog code hook is
 #   enabled on `FallbackIntent` below so that a no-match turn reaches it too. Stage 4 implements it.
 #
-# SLOT OBFUSCATION — `D70`, AND WHAT IT DOES NOT DO TODAY
+# SLOT OBFUSCATION; `D70`, AND WHAT IT DOES NOT DO TODAY
 #   Marco-approved 2026-08-13: obfuscation on as defence in depth, conversation logs off. Obfuscation
 #   replaces a captured slot value with the slot's name **in conversation logs and nowhere else**. This
-#   bot has no conversation logs (`lex.tf` — no `ConversationLogSettings` on the alias), so as configured
+#   bot has no conversation logs (`lex.tf`; no `ConversationLogSettings` on the alias), so as configured
 #   these settings currently protect nothing. That is not an argument against them and it is also not
 #   something to leave implied: they are here so that the day logging is enabled, the identifier slots are
 #   already covered rather than covered later, by someone who remembers.
 #
-#   It is defence in depth and never the boundary. `EXISTING-INSTRUMENTS.md` §"Slot obfuscation has three
-#   exclusions" records why: missed utterances are not obfuscated, and neither are slot values used in
+#   It is defence in depth and never the boundary. `EXISTING-INSTRUMENTS.md`, "Slot obfuscation has three
+#   exclusions" section, records why: missed utterances are not obfuscated, and neither are slot values used in
 #   responses, and this design does both. `ADR-011`'s redaction pipeline is the boundary.
 #
 # NOT PRESENT, DELIBERATELY
-#   * `SentimentAnalysisSettings: DetectSentiment: true` — AWS's own reference example sets it; it bills a
+#   * `SentimentAnalysisSettings: DetectSentiment: true`; AWS's own reference example sets it; it bills a
 #     Comprehend `DetectSentiment` call per utterance and is on Phase 0's cost-hazard list.
-#   * `KendraConfiguration`, `QnAIntentConfiguration`, `BedrockAgentIntentConfiguration` — Kendra is
+#   * `KendraConfiguration`, `QnAIntentConfiguration`, `BedrockAgentIntentConfiguration`; Kendra is
 #     banned by `CLAUDE.md`, and the other two are Connect Customer's managed agentic layer, which
 #     `ADR-001` rejected on portfolio-intent grounds.
 
@@ -76,7 +76,7 @@ Resources:
       AutoBuildBotLocales: true
 
       # Without `Enabled: true` the built-in test alias exists and serves no locale, and every
-      # control-plane read still reports a healthy bot. Stage 2 finding 4.2 — AWS's own reference example
+      # control-plane read still reports a healthy bot. Stage 2 finding 4.2; AWS's own reference example
       # omits it.
       TestBotAliasSettings:
         BotAliasLocaleSettings:
@@ -118,36 +118,34 @@ Resources:
 
             - Name: "ContactFieldValues"
               Description: "Which contact detail is being updated. SLOT-DESIGN.md 2."
+              # NOTE: `Synonyms` is documented as "Array of SampleValue" -- each entry IS a SampleValue
+              # object directly ({Value: ...}), not a SampleValue wrapping another SampleValue. An extra
+              # wrapper here was CFN early-validation's 12 errors (D76 sweep found the em dash; this bug
+              # is unrelated and was found only once the apply reached this resource for the first time).
               SlotTypeValues:
                 - SampleValue:
                     Value: phone number
                   Synonyms:
-                    - SampleValue:
-                        Value: phone
-                    - SampleValue:
-                        Value: mobile
-                    - SampleValue:
-                        Value: cell
+                    - Value: phone
+                    - Value: mobile
+                    - Value: cell
                 - SampleValue:
                     Value: address
                   Synonyms:
-                    - SampleValue:
-                        Value: home address
-                    - SampleValue:
-                        Value: mailing address
+                    - Value: home address
+                    - Value: mailing address
                 - SampleValue:
                     Value: email
                   Synonyms:
-                    - SampleValue:
-                        Value: email address
+                    - Value: email address
               ValueSelectionSetting:
                 ResolutionStrategy: TOP_RESOLUTION
 
           Intents:
             # -----------------------------------------------------------------------------------------
-            # 1. FileAutoClaim — the slot-filling showcase. Eleven slots, explicit priorities.
+            # 1. FileAutoClaim; the slot-filling showcase. Eleven slots, explicit priorities.
             #
-            # The priority order is `SLOT-DESIGN.md` §1.1 and is a conversation-design decision, not an
+            # The priority order is `SLOT-DESIGN.md` section 1.1 and is a conversation-design decision, not an
             # infrastructure one. It is also the shape that makes native `aws_lexv2models_*` structurally
             # impossible (provider issue #39948); here the priorities are names inside one resource body
             # and the service resolves them internally.
@@ -210,13 +208,13 @@ Resources:
                 # PY####. Digits, so DTMF is a real input path rather than a courtesy.
                 #
                 # The keypad OFFER is not here, and its absence is a Stage 2 finding rather than an
-                # oversight. `SLOT-DESIGN.md` §4 asks for the offer on the FIRST no-match; Lex plays one
+                # oversight. `SLOT-DESIGN.md` section 4 asks for the offer on the FIRST no-match; Lex plays one
                 # message from EVERY message group on EVERY attempt, so expressing it declaratively made
                 # the opening turn apologise to the caller before they had spoken. Recorded consequence in
                 # `docs/evidence/phase8/lexpoc-apply-2.json`. The offer moves to the codehook at Stage 4;
                 # the KEYPAD ITSELF is configured here, which is the half that is declarative.
                 - Name: "policy_number"
-                  Description: "PY#### — critical identifier, always confirmed by read-back downstream."
+                  Description: "PY####; critical identifier, always confirmed by read-back downstream."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ObfuscationSetting:
                     ObfuscationSettingType: DefaultObfuscation
@@ -293,7 +291,7 @@ Resources:
                 # blanket-redacted: it is the single most important captured field, and a claim record
                 # without it is not a claim record.
                 - Name: "loss_datetime"
-                  Description: "Fuzzy-parsed by the codehook. Never blanket-redacted — ADR-011."
+                  Description: "Fuzzy-parsed by the codehook. Never blanket-redacted; ADR-011."
                   SlotTypeName: "AMAZON.Date"
                   ValueElicitationSetting:
                     SlotConstraint: "Required"
@@ -375,10 +373,10 @@ Resources:
                       AllowInterrupt: true
 
                 # Optional, not Required. The design makes it CONDITIONAL on police_report_filed, and a
-                # condition is a codehook decision — marking it Required here would misstate the design
+                # condition is a codehook decision; marking it Required here would misstate the design
                 # and would corner a caller who has no report number to give.
                 - Name: "police_report_number"
-                  Description: "####-####-### — the second digit-only slot, so it carries DTMF too."
+                  Description: "####-####-###; the second digit-only slot, so it carries DTMF too."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ObfuscationSetting:
                     ObfuscationSettingType: DefaultObfuscation
@@ -449,7 +447,7 @@ Resources:
                       AllowInterrupt: true
 
             # -----------------------------------------------------------------------------------------
-            # 2. CheckClaimStatus — one slot, then a tool call.
+            # 2. CheckClaimStatus; one slot, then a tool call.
             # -----------------------------------------------------------------------------------------
             - Name: "CheckClaimStatus"
               Description: "Intent 2. Status of an existing claim, via the mock claims system."
@@ -526,9 +524,9 @@ Resources:
                               MaxLength: 13
 
             # -----------------------------------------------------------------------------------------
-            # 3. CoverageQuestion — the primary groundedness eval target.
+            # 3. CoverageQuestion; the primary groundedness eval target.
             #
-            # NO QUESTION SLOT, and that is a design decision. `DIALOGUE-POLICIES.md` §2 classifies the
+            # NO QUESTION SLOT, and that is a design decision. `DIALOGUE-POLICIES.md` section 2 classifies the
             # question by TYPE (election-fact versus eligibility/amount) inside the merged router call,
             # not by matching it to a slot. Eliciting the question into a slot would force Lex's NLU to
             # decide what was asked before the graph sees it, which puts a classification the eval harness
@@ -547,7 +545,11 @@ Resources:
                 - Utterance: "do I have collision coverage"
                 - Utterance: "is towing covered if my car breaks down"
                 - Utterance: "I have a question about my coverage"
-                - Utterance: "am I covered for {coverage_topic}"
+                # NOT "am I covered for {coverage_topic}". Lex rejects any AMAZON.FreeFormInput slot in
+                # a sample utterance outright (CreateBotVersion: "shouldn't be in any intent sample
+                # utterance"), and this slot is FreeFormInput on purpose -- the comment above already
+                # says why there is no question slot here. The utterance placeholder contradicted the
+                # decision written next to it; this is that decision enforced, not a new one.
 
               SlotPriorities:
                 - Priority: 1
@@ -557,7 +559,7 @@ Resources:
                 # Optional, and elicited only if the caller opened with a bare "I have a coverage
                 # question". A Required slot here would re-ask a caller who already said what they wanted.
                 - Name: "coverage_topic"
-                  Description: "What the question is about. Optional — most callers name it in the opening turn."
+                  Description: "What the question is about. Optional; most callers name it in the opening turn."
                   SlotTypeName: "AMAZON.FreeFormInput"
                   ValueElicitationSetting:
                     SlotConstraint: "Optional"
@@ -570,7 +572,7 @@ Resources:
                       AllowInterrupt: true
 
             # -----------------------------------------------------------------------------------------
-            # 4. RentalTowingEntitlement — the compound case. RAG plus a tool call.
+            # 4. RentalTowingEntitlement; the compound case. RAG plus a tool call.
             # -----------------------------------------------------------------------------------------
             - Name: "RentalTowingEntitlement"
               Description: "Intent 4. Rental or towing entitlement: corpus lookup plus claim state."
@@ -594,7 +596,7 @@ Resources:
                 # should get the corpus answer rather than an identifier demand. The codehook decides when
                 # the claim number is actually needed.
                 - Name: "entitlement_claim_number"
-                  Description: "Claim the entitlement is being asked about. Optional — see the comment."
+                  Description: "Claim the entitlement is being asked about. Optional; see the comment."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ObfuscationSetting:
                     ObfuscationSettingType: DefaultObfuscation
@@ -609,11 +611,11 @@ Resources:
                       AllowInterrupt: true
 
             # -----------------------------------------------------------------------------------------
-            # 5. UpdateContactInfo — the write path.
+            # 5. UpdateContactInfo; the write path.
             #
-            # `SLOT-DESIGN.md` §2 gives this a TIGHTER retry ladder than every other intent: one retry,
+            # `SLOT-DESIGN.md` section 2 gives this a TIGHTER retry ladder than every other intent: one retry,
             # not two, because a mis-heard write is worse than a repeated question. That ladder is the
-            # codehook's, not the bot's — `MaxRetries` below is the bot's own elicitation ceiling and the
+            # codehook's, not the bot's; `MaxRetries` below is the bot's own elicitation ceiling and the
             # confirmation policy sits above it.
             # -----------------------------------------------------------------------------------------
             - Name: "UpdateContactInfo"
@@ -645,7 +647,7 @@ Resources:
                       MessageGroupsList:
                         - Message:
                             PlainTextMessage:
-                              Value: "Which would you like to update — your phone number, your address, or your email?"
+                              Value: "Which would you like to update: your phone number, your address, or your email?"
                       MaxRetries: 2
                       AllowInterrupt: true
 
@@ -665,14 +667,14 @@ Resources:
                       AllowInterrupt: true
 
             # -----------------------------------------------------------------------------------------
-            # 6. InjuryEscalation — no slots, no negotiation, no LLM discretion.
+            # 6. InjuryEscalation; no slots, no negotiation, no LLM discretion.
             #
             # `CLAUDE.md`: "immediate hard-coded escalation from any state." This intent exists so that an
             # unambiguous injury utterance has somewhere to land in the NLU, and it is deliberately NOT
-            # the mechanism the guarantee rests on. The guarantee is L1 — a deterministic lexicon check
+            # the mechanism the guarantee rests on. The guarantee is L1; a deterministic lexicon check
             # that runs in the codehook on EVERY turn before routing (`ADR-010`), and therefore also on
             # turns Lex classified as something else entirely, which is the case that matters:
-            # `INTENT-TAXONOMY.md` §2.4's "he's not saying anything" carries no injury word at all and no
+            # `INTENT-TAXONOMY.md` section 2.4's "he's not saying anything" carries no injury word at all and no
             # intent classifier should be trusted to catch it.
             #
             # An intent match here is a convenience. L1 is the control.
@@ -692,7 +694,7 @@ Resources:
                 - Utterance: "we need an ambulance"
 
             # Required by the service. The dialog code hook is enabled so that a NO-MATCH turn still
-            # reaches the codehook — which is what makes L1 and L3 reachable from any state, including
+            # reaches the codehook; which is what makes L1 and L3 reachable from any state, including
             # mid-slot-elicitation where an utterance is matched against the slot type and not an intent.
             # This is load-bearing, not tidiness.
             - Name: "FallbackIntent"
