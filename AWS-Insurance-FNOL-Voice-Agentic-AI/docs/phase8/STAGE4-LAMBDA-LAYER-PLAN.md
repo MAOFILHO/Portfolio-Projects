@@ -194,20 +194,40 @@ gated on it — they can and should be implemented and tested (against the curre
 function, which is a perfect adversarial fixture for exercising the `invalid` path) before or in
 parallel with the layer work, not after it. **Sequencing for the actual re-run:**
 
-1. `D81` fix implemented and tested — the three-state classification, provenance tagging, and the
-   negative-control minimum from `PROJECT_STATE.md`'s expanded `D81` entry, including a test that
-   today's broken function correctly aborts the harness with `invalid`, not a scored 0.000 (the
-   regression test for this exact incident).
+1. `D81` fix implemented and tested — the three-state classification, the negative-control minimum
+   (all 17), **and, per `D81`'s expanded item 4, the two Lambda-side code changes that make provenance
+   readable at all**: an `escalation_reason` field written into `sessionAttributes` at the `_close()`
+   boundary (sourced from a required caller-supplied argument, not inferred from a nearby log line), and
+   `_respond_from_graph_result()`'s escalation branch routed through that same tagging point so the
+   graph's in-band detection is no longer the one path with zero provenance signal. This is source code
+   in `api/lex_codehook.py`, not only harness code in `scripts/measure_composed_pipeline_deployed.py` —
+   both are part of step 1, and both are tested (including a test that today's broken function correctly
+   aborts the harness with `invalid`, not a scored 0.000 — the regression test for this exact incident;
+   and a test that a fail-closed escalation and a genuine detection produce distinct `escalation_reason`
+   values under the still-broken deployed function, the closest available adversarial fixture for it).
 2. Layer built (`make build-lambda-layer`) and `scripts/verify_layer_contents.py` passes locally —
    zero AWS cost, catches a silent partial-resolution before anything is uploaded.
-3. This layer plan approved by Marco, then applied (`terraform apply`, Marco's to run).
+3. This layer plan approved by Marco, then applied (`terraform apply`, Marco's to run) —
+   **carrying both the dependency layer and step 1's Lambda code change in the same apply.** The re-run
+   must not depend on an apply that ships the layer alone: a layer-only apply would leave
+   `escalation_reason` unemitted, and a subsequent code-only apply to add it would be a second,
+   unplanned change to the exact function this plan is trying to verify, re-opening the same
+   read-back question `D77`/`D80` already cost a defect each to close. One apply, both changes, so the
+   function measured in step 5 is the one both the layer plan and `D81`'s fix describe.
 4. §4's permanent execution gate (the full event matrix, not one smoke event) passes post-apply.
 5. Criterion 9 re-run.
 
 Step 5 cannot produce a reportable number without step 1, regardless of how clean steps 2–4 are — a
 perfect layer measured by the current harness would report 1.000 with no more evidentiary weight than
-this run's 0.000 had, per `D81`'s "a passing run would not have been trustworthy either." Steps 1 and
-2–4 are independent and can proceed in either order or in parallel; step 5 is the only one gated on both.
+this run's 0.000 had, per `D81`'s "a passing run would not have been trustworthy either," and the same is
+true if step 1's harness fix lands without its Lambda-side half: a harness that can classify
+`escalated`/`not-escalated`/`invalid` but reads an `escalation_reason` field the deployed function never
+sets would either see the field absent on every call (indistinguishable from "not implemented," a fourth
+unhandled shape) or, worse, silently pass validation against a value that was never actually emitted by
+the path it claims to describe. Step 1 is therefore internally sequenced — harness classification,
+Lambda field, then the test tying them together — before it counts as done for step 3's purposes. Steps 1
+and 2 are independent of each other and can proceed in either order or in parallel; step 3 needs both
+done; steps 4–5 are gated on 3.
 
 ## 6. Terraform shape (sketch — not written into `lambda.tf`, not applied)
 

@@ -2241,7 +2241,9 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN — no measurement obtained, run invalid (`D80`/`D81`, corrected per Marco's review); `C1` UNVERIFIED on any deployed build and end-to-end on the current Lambda-wrapped configuration at all; layer plan written for review at `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md`, NOT applied; DID stays unrouted, fix and re-run pending**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN — no measurement obtained, run invalid (`D80`/`D81`, corrected per Marco's review); `C1` UNVERIFIED on any deployed build and end-to-end on the current Lambda-wrapped configuration at all; layer plan written for review at `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md`, NOT applied; exit-state
+chain (apply → gate event matrix → import verification → criterion 9 Line E) recorded below Stage 4's
+findings; DID stays unrouted, fix and re-run pending**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2944,6 +2946,40 @@ accumulated on `fnol-codehook` with nothing in this project raising about it —
 `Errors` metric exists for this function. A production system, or a more complete portfolio
 demonstration of one, would have paged on invocation #2. Logged here as scope, not fixed in this pass:
 Phase 9 (observability) or a Stage 4 follow-up is where a `errors > 0` alarm on `fnol-codehook` belongs.
+
+### Stage 4 exit state — 2026-08-13, paused on Marco's `terraform apply`
+
+Written on Marco's instruction, closing the third review round. Nothing below has run. This is the
+complete chain from here to a reportable criterion 9 number, in order, with what each step needs to pass
+and what happens if it doesn't.
+
+**Blocked on, right now: `terraform apply` (Marco's to run, per the auto-mode boundary — never
+auto-executed).** Per the layer plan §5 (revised this round), that one apply must carry **two changes
+together, not sequentially**: `aws_lambda_layer_version.codehook_deps` (the dependency layer, §6) and the
+`api/lex_codehook.py` code change implementing `D81` item 4 (the `escalation_reason` `sessionAttributes`
+field at `_close()`, and `_respond_from_graph_result()` routed through the same point). A layer-only apply
+followed by a separate code-only apply would be a second, unplanned change to the exact function this
+chain exists to verify — the same read-back risk `D77`/`D80` already cost two defects to close — so both
+land in one apply or neither does.
+
+| # | Step | Mechanism | Pass condition | What halts the chain if it fails |
+|---|---|---|---|---|
+| 0 | Prerequisite, before the apply is even proposed | `D81` fix landed in code: harness three-state classification + negative-control-17 in `scripts/measure_composed_pipeline_deployed.py`, **and** the two `lex_codehook.py` changes above | Both halves committed and unit-tested, including a test that today's still-broken function aborts the harness with `invalid` (not 0.000) and a test that a fail-closed escalation and a genuine detection produce distinct `escalation_reason` values | Apply is not proposed to Marco at all — layer plan §5 makes this explicit: a harness fix without the Lambda field, or vice versa, is not "done" for sequencing purposes |
+| 1 | `terraform apply` | Marco runs it; ships the layer + the `D81` code change together | Apply completes with no error; D77-safe read-back (`get-function-configuration`, local hash compare) confirms the deployed `CodeSha256` and the function's `layers` list match what was applied | **Halts immediately.** No gate, no import check, no criterion 9 attempt. Whatever broke gets root-caused before anything downstream runs — same discipline `D80` was found by, not skipped this time |
+| 2 | Gate event matrix (§4, `scripts/verify_lambda_execution.py` / `make verify-lambda-execution` — not yet written, required before this step exists) | Real `lambda:Invoke` against the full event matrix: each of the 6 in-scope intents' first turn, `FallbackIntent`, the raw-text L1 trigger, the raw-text L3 (`agent`) trigger, the `injuries_present`-confirmed-true path | Every event in the matrix: `FunctionError` absent from the `Invoke` response, payload parses with a legal `dialogAction.type`, and the path-specific marker (e.g. `escalate` attribute, named `slotToElicit`) is present | **Halts.** Does not proceed to import verification or criterion 9. A `FunctionError` here on any event is `D80` recurring — root-cause before anything else runs, same as step 1 |
+| 3 | Import verification under the real runtime | **Not a separate script** — this is what step 2's live invocations already are, read for a different question. `verify_layer_contents.py`'s own import check was SKIPPED on this dev machine (Darwin arm64, not Lambda's Linux/aarch64) precisely because a local import attempt there cannot answer this; a real `lambda:Invoke` that returns without `FunctionError` against Lambda's actual `arm64`/Linux/CPython 3.12 runtime is the evidence that check was deferring to. Stated so this is not silently assumed: closing this step **is** step 2 passing, not an independent fourth mechanism | Same pass condition as step 2 — no `FunctionError` across the matrix, on the real runtime | Same halt as step 2 — they are the same evidence, listed separately here only because Marco's ordering asked for it named explicitly as its own question |
+| 4 | Criterion 9 re-run — `COSTS.md` Line E, cost estimated and logged **before** the run per the cost gate, k=3 on the 26 must-escalate items + k=1 on all 17 negatives (`D81` item 5), not a continuation of the invalidated Line D | `scripts/measure_composed_pipeline_deployed.py` post-`D81`-fix | Zero `invalid` classifications across all runs (§`D81` item 1–3); every `escalate=true` observed carries `detection` provenance, none `fail-closed`, on the must-escalate set; every sampled negative reads `escalated=false` at least once (§`D81` item 5) | **If any invocation is `invalid`, the run aborts and is not scored — an instrument defect, filed as a new `D`-number, not reported as a recall figure.** If provenance shows `fail-closed` carrying any must-escalate item's only `escalate=true` sample, that item does not count toward recall regardless of the raw bucket total. If every sampled negative reads `escalated=true`, the run is invalid per the same rule (`D81` item 5), not a false-escalation finding |
+
+**Only after step 4 passes clean** does criterion 9 have a reportable `C1` number on the deployed system,
+and only then does criterion 10 (task #11, DID routing, `did.tf`'s `route_did` gate) become unblocked —
+unchanged from `D80`'s original consequence statement. Nothing in this table is a green light to route the
+DID early; it is unblocked by step 4 passing, not by any earlier step.
+
+**What this table does not cover, named so it isn't mistaken for closed:** the AWS-published container
+image pre-deploy check (§7) remains available as an earlier, optional, pre-apply backstop — attempted once
+this project already (Docker Desktop's daemon was not running in this sandbox) and not yet completed. It
+is not part of this chain because it answers the same question as step 2/3 earlier and more cheaply, not a
+different one; running it before the apply is a strictly-better-if-available option, not a required step.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 

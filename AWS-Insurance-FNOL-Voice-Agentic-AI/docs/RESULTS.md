@@ -215,6 +215,18 @@ scoped to the local graph call, not to a phone call. §11 has the full account, 
 100%-broken deployment actually looks like at the Lex boundary — which is not an obvious failure a reader
 would otherwise expect "C1 unverified" to mean.
 
+**Why this scoping cannot be lifted by fixing the deployment alone, per `D81`'s expanded entry: escalation
+provenance is unobservable at the deployed boundary on all three paths a real call can take, not merely
+unmeasured on this one.** The pre-graph detections log `triggering_layer`/`route` only, with text
+identical between a genuine detection and a fail-closed escalation triggered by the same layer's raw
+signal; the fail-closed path's own reason is captured in a `context` dict that is never logged or
+forwarded to `sessionAttributes`; and the graph's in-band escalation branch bypasses
+`initiate_escalation()`/logging entirely, making it the least observable of the three, not a floor the
+others merely fall short of. A future deployed run scoring 1.000 would therefore carry the same
+evidentiary weight this report's local-graph 1.000 does today — no more — until the Lambda emits a
+reason code an external harness can read; this is a structural gap in what the system currently exposes,
+not a gap in how much of it has been tested so far.
+
 ---
 
 ## 1. Rule-shaped and vocabulary-shaped defects
