@@ -1767,6 +1767,17 @@ exactly as well as the last time someone reconciled it against the resources it 
 `resource`/`data` blocks) and found its one instance in this repo on the first attempt; it costs
 re-running whenever a stage's own docstrings start asserting infrastructure again, not only once.
 
+**Same class, found again one layer down, 2026-08-13.** The layer plan's own §7 documents two cleanup
+commands (`find python -type d -name "__pycache__" -exec rm -rf {} +`; the same for `tests`) as part of
+the build. An earlier session's scratch-directory build carried both commands in its recorded history and
+still measured 162 MB — 40 MB of which turned out, on a byte-for-byte diff prompted by Marco's review of
+the size delta, to be exactly those `__pycache__`/`tests` directories, never actually removed from that
+copy. **A build step that is documented is not evidence it ran, for the identical reason a comment
+asserting a resource exists is not evidence one does — both are claims about the artifact, not
+inspections of it.** The artifact this project ships was unaffected (the repo-wired build the layer plan
+now references is genuinely clean, confirmed by the same diff), but the number that was reported for the
+earlier one was reported without checking whether its own documented steps had actually run.
+
 ### 11.3 Cost below estimate as a liveness signal
 
 Criterion 9 was estimated at ≈$0.078 expected / ≈$0.107 worst case before it ran (`COSTS.md` Line D),

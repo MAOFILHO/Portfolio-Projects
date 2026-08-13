@@ -198,6 +198,8 @@ requests × $0.00075 = **$0.05925 exact**, no estimation involved on either side
 | Date | Stage | What ran | Real AWS call? | Units | Actual cost | Line |
 |---|---|---|---|---|---|---|
 | 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. No measurement obtained; run invalid (`D80`/`D81`).** `C1` is unverified on the deployed system, not failed. 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
+| 2026-08-13 | 4 | **`D80`/`D81` layer fix, `terraform apply` — `APPROVED` by Marco.** `2 added, 1 changed, 0 destroyed`: `aws_lambda_layer_version.codehook_deps`, `aws_s3_object.codehook_deps_layer` (41.8 MB), `aws_lambda_function.codehook` updated. Layer/S3 storage at this size is within the always-free tier region-wide; nothing here is a per-request cost until invoked | Yes | 3 resources | **$0.00 at rest** | — |
+| 2026-08-13 | 4 | **`make verify-lambda-execution`, first real run (`D82` found it).** Estimated ~$0.0018 (6 of 9 events reach Bedrock). **Actual: $0.00** — every one of the 9 `lambda:Invoke` calls crashed at cold-start import (`D82`, the layer zip's missing `python/` prefix) before reaching the guardrail or router, the identical shape `RESULTS.md` §11.3 already named: cost-below-estimate as a liveness signal, confirmed a second time by a different instrument | Yes | 9 `lambda:Invoke` calls, 0 Bedrock calls | **$0.00 exact** | — |
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that

@@ -2253,11 +2253,15 @@ tests). The 162→122 MB layer-size question raised on review is fully reconcile
 byte-for-byte diff against the earlier scratch build found identical packages/versions/`.so` sizes, the
 entire 40 MB delta being `__pycache__`/`tests/` directories the earlier build's own cleanup commands
 evidently never removed — confirmed by applying that cleanup to a copy and landing on the exact same
-124,716 KB. `terraform plan` re-run against this exact changeset: **2 to add
-(`aws_lambda_layer_version.codehook_deps`, `aws_s3_object.codehook_deps_layer`), 1 to change
-(`aws_lambda_function.codehook`'s `layers` and `source_code_hash`), 0 to destroy** — same shape both
-times, matching the plan's own §6 sketch exactly; **plan only, not applied, no gate run, no re-run, DID
-stays unrouted**)
+124,716 KB. **`APPROVED` by Marco 2026-08-13, `terraform apply` run against that exact saved plan: 2
+added, 1 changed, 0 destroyed, clean.** `make verify-lambda-execution` run same day (Marco-approved
+~$0.002 spend): **9/9 events FAILED, identical `No module named 'pydantic'` — `D82`**, a real regression
+found by the gate doing exactly its job. Root cause identified (not yet fixed, not yet re-applied,
+Marco's explicit "stop there"): the layer zip has no `python/` prefix — `lambda.tf`'s `archive_file`
+zips `local.deps_dir`'s CONTENTS rather than the `deps_dir` directory itself, so packages land at
+`/opt/pydantic` instead of the one path (`/opt/python/pydantic`) Lambda's Python runtime actually
+searches. `C1` still UNVERIFIED on any deployed build; **DID stays unrouted; criterion 9 NOT run, per
+Marco's explicit instruction**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -3009,6 +3013,47 @@ image pre-deploy check (§7) remains available as an earlier, optional, pre-appl
 this project already (Docker Desktop's daemon was not running in this sandbox) and not yet completed. It
 is not part of this chain because it answers the same question as step 2/3 earlier and more cheaply, not a
 different one; running it before the apply is a strictly-better-if-available option, not a required step.
+
+### `D82` — step 1 (apply) succeeded, step 2 (gate) caught a real regression: the layer zip has no `python/` prefix
+
+**Marco: `"Approved. Run terraform apply."`** Ran 2026-08-13 — `terraform apply` against the exact saved
+plan already shown to Marco (2 added, 1 changed, 0 destroyed): `aws_lambda_layer_version.codehook_deps`
+created (`arn:aws:lambda:us-west-2:759316130780:layer:fnol-codehook-deps:1`), `aws_s3_object.
+codehook_deps_layer` created, `aws_lambda_function.codehook` updated with `layers = [...]` and the new
+`source_code_hash`. Apply reported clean: `Apply complete! Resources: 2 added, 1 changed, 0 destroyed`,
+`did_routed = false` (unchanged, correctly).
+
+**Step 2, `make verify-lambda-execution` (Marco-approved, ~$0.002 real Bedrock spend): 9/9 events FAILED,
+identical `Runtime.ImportModuleError: No module named 'pydantic'` on every one** — including all 3
+pre-graph events (L1, L3, `D79`), which the layer plan's own §4 correction names as the unambiguous
+liveness signal (no model in the loop, a failure there cannot be a classification miss). Per that same
+note, this reads unambiguously: `D80` has not recurred by chance or by a new defect class, it never
+actually closed. `get-function-configuration` confirms the layer IS attached (`Layers: [{Arn: .../
+fnol-codehook-deps:1, CodeSize: 43793016}]`, `LastUpdateStatus: Successful`, `State: Active`) — this is
+the exact `D77`/`D80` shape one more time: every service-reported signal says the deploy succeeded, and
+the function still cannot run.
+
+**Root cause, found by inspecting the zip directly (`unzip -l`), not assumed:** `lambda.tf`'s
+`data.archive_file.codehook_deps` sets `source_dir = local.deps_dir`, where `local.deps_dir =
+"${path.module}/.terraform-build/layer/python"`. `archive_file`'s `source_dir` zips the CONTENTS of that
+directory at the zip's root — so the built zip contains `pydantic/`, `boto3/`, `PyYAML-6.0.2.dist-info/`,
+etc. **directly at its root**, confirmed: `unzip -l .terraform-build/lex-codehook-deps.zip` shows
+`PyYAML-6.0.2.dist-info/INSTALLER`, `annotated_types/__init__.py`, … with no `python/` prefix anywhere.
+AWS Lambda's Python layer convention requires packages at `python/<package>` inside the zip, so that
+unzipping to `/opt` lands them at `/opt/python/<package>` — the one path Lambda's Python runtime actually
+adds to `sys.path` for layers. This zip puts them at `/opt/pydantic` etc. instead, which is never on
+`sys.path`. **The on-disk build directory was correctly named `python/` for exactly this convention; the
+`archive_file` block zipped its contents rather than the directory itself, silently dropping the one
+path component the whole mechanism depends on.**
+
+**Not yet fixed — Marco's instruction was explicit: report apply + gate output, stop there, no criterion
+9.** The fix, for review, not applied: `source_dir` should point at `deps_dir`'s PARENT
+(`"${path.module}/.terraform-build/layer"`, one level up), so the zip preserves `python/pydantic/...`
+etc. This is a one-line Terraform change; it requires a new `terraform plan`/`apply` cycle (`archive_file`
+recomputes its hash, `aws_s3_object`'s key changes, a new layer version publishes) and a re-run of
+`make verify-lambda-execution` before D80/D81's execution question is actually closed. Filed as its own
+number rather than folded into `D80` because it is a different bug in the fix for `D80`, not a recurrence
+of the original missing-layer defect — the layer exists now; its packaging is wrong.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
