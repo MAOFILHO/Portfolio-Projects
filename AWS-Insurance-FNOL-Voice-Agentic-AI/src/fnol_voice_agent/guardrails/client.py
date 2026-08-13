@@ -65,9 +65,13 @@ GuardrailSource = Literal["INPUT", "OUTPUT"]
 #          "I'm sorry, I'm not able to share that."
 #
 # That is the claim-status readback -- one of the six in-scope intents -- suppressed by a mask being
-# read as a refusal. See `docs/phase7/NOT-FIXED.md`; the remaining half (the guardrail masking the
-# agent's own claim and policy numbers back to the caller who owns them) needs a guardrail version
-# bump and is Marco's call, not a code fix.
+# read as a refusal. The other half of the same defect was in the guardrail itself: it masked the
+# caller's own claim number, policy number and plate back to them. Both are fixed -- this parser at
+# Stage 8, and the guardrail at v3 (the four `D16` regexes removed, Marco-approved; composed recall
+# re-verified at 1.000 against v3). `docs/phase7/NOT-FIXED.md` #8, `RESULTS.md` §5.3.
+#
+# The mask branch stays, and must: `EMAIL`, `PHONE`, `DRIVER_ID` and the rest are still ANONYMIZE on
+# OUTPUT, so a mask is still reachable and reading it as a block would still suppress a real answer.
 _INTERVENED_ACTION = "GUARDRAIL_INTERVENED"
 _BLOCKED_ACTION = "BLOCKED"
 _MASKED_ACTION = "ANONYMIZED"

@@ -224,7 +224,7 @@ difference was found".
 
 ---
 
-## 8. The output guardrail masks the caller's own claim number back to them
+## 8. ~~The output guardrail masks the caller's own claim number back to them~~ — FIXED 2026-08-12 (v3)
 
 **Found at Stage 8 by probing the live guardrail, and half-fixed.** The half that is fixed is a code
 defect and was fixed before the last fingerprint was spent, so the published verification describes what
@@ -242,23 +242,26 @@ The guardrail's `sensitive_information_policy_config` carries four regexes — `
 Those are precisely the identifiers this agent exists to speak back to the caller who owns them. Masking
 a caller's own claim number to that caller protects nobody.
 
-**Why it is not fixed here.** Removing those four regexes is a change to the phase's only *provisioned*
-resource, which was gated individually at Phase 7 sign-off and would need a new published version, a new
-live-config hash and — under the widened `_FINGERPRINT_SOURCES` — a new independent-set fingerprint if
-anything were to be re-verified against it. That is Marco's call on a resource he gated, not a close-out
-edit. The one-line shape of the change is known and recorded so it is a decision rather than a
-rediscovery:
+**FIXED, and kept here rather than deleted, because the register is the record of what this phase
+found — not a to-do list that empties.** Marco `APPROVED` the change: *"a defect with no upside — those
+regexes were added for transcript-side protection, and `guardrails/pii.py` owns that."*
 
-```hcl
-# infra/terraform/stacks/guardrails/main.tf — drop the four domain regexes from the OUTPUT path.
-# ADR-011 / D16 already own transcript-side redaction in guardrails/pii.py, which is where the
-# original requirement actually lives; the guardrail duplicated it onto the wrong boundary.
-```
+The four regexes are gone from `main.tf`; guardrail **v3** published and verified against `GetGuardrail`
+rather than against the apply output (the DRAFT trap is exactly a case where the two disagree). The
+readback is clean, `EMAIL` masking is unchanged, the denied topic and every content filter still behave
+as before, and **composed escalation recall was re-measured at 1.000 (26/26) on v3** rather than inferred
+from v2. `RESULTS.md` §5.3.
 
-**Reachability, stated plainly:** live today on `CheckClaimStatus` and on any answer that reads back a
-policy number. Not a `C1` issue — `injury_escalation` edges straight to `END` and never touches the
-output guardrail, and the Stage 8 run confirmed zero interventions of either kind on the independent
-set.
+Nothing was weakened: `guardrails/pii.py` redacts all four identifiers at the transcript boundary
+`ADR-011` put them at, so `D16`'s requirement is still met. A duplicate was removed from a boundary that
+could not host it correctly.
+
+**One operational consequence, recorded so Phase 8 does not rediscover it:** `create_before_destroy` plus
+`replace_triggered_by` means the apply **deleted v2**. `ListGuardrails` now returns only `DRAFT` and `3`.
+Ledger entry #4 and its evidence file still identify what was measured (`live_config_sha 4f42baaf…`), so
+the result stays attributable — but it is no longer re-runnable, because the resource it was taken
+against does not exist. `outputs.tf`'s claim that pinning a version makes a result *"attributable to one
+configuration"* is true; a reader could reasonably infer *reproducible*, and that part is not.
 
 ---
 
@@ -302,10 +305,11 @@ requirement was always owned. The guardrail duplicated it onto a boundary where 
 | 5 | PII/fraud passes are dispositional, not controls | report `mechanism` field | Medium | with item 1 |
 | 6 | `cq-005`: a single clause diluted inside a section-level chunk | Stage R diagnosis | Medium | the phase that expands the graded query set |
 | 7 | Bias: `vernacular_nonstandard` phrasing routes to the clarifier where two other phrasings of the same question do not | Stage 7 paired prompts | Low–Medium | unscheduled — one observation, not tuned against |
-| 8 | The output guardrail masks the caller's own claim/policy number back to them — **live on `CheckClaimStatus`** | Stage 8 live probe | **High** — breaks a shipped intent's readback | Marco's call: it is a change to a gated provisioned resource |
+| 8 | ~~The output guardrail masks the caller's own claim/policy number back to them~~ | Stage 8 live probe | ~~**High**~~ | **FIXED — guardrail v3, `APPROVED` 2026-08-12. Composition re-verified at 1.000** |
 | 9 | Input-side PII anonymisation does not run; fixing it is coupled to `C1` | Stage 8 live probe | Medium | with any future input-masking work, not before |
 | 10 | The router classifies `rte-001`'s own first turn as `Ambiguous` at 0.95, so the flagship compound case never reaches its node through the graph | `CF5` script's first run | Medium | with §5.2's `reg-rental` observation — same defect, two instruments |
-| 11 | Temperature 0.0 does not make the generation path reproducible — 2–3 distinct answers per 3 identical calls | `CF5` pass | Medium | `D32`'s reproducibility claim is qualified, not withdrawn; `D29` owns the mechanism |
+| 11 | Temperature 0.0 does not make the generation path reproducible — 2–3 distinct answers per 3 identical calls | `CF5` pass | Medium | `D32`'s reproducibility claim is qualified, not withdrawn; `D29` owns the mechanism. **Surfaced in `RESULTS.md` §8 where the numbers are, not only in the decision log** |
+| 12 | Publishing a new guardrail version **deletes the version the previous verification was taken against** (`create_before_destroy` + `replace_triggered_by`) | the v2→v3 apply | Low–Medium | Phase 8, with the state-backend migration — a retention policy on published versions, or an accepted trade recorded as one |
 
 **One process failure belongs here too, and it is not a defect in the system.** `D3` requires Bedrock
 spend to be logged in `COSTS.md` **per run**. Three runs — Stages 4, 5 and 6 — were not logged, and the

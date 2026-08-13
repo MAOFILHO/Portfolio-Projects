@@ -161,10 +161,19 @@ resource "aws_bedrock_guardrail" "fnol" {
   }
 
   /*
-   * PII. ANONYMIZE rather than BLOCK on every entity, and the distinction matters: a caller who says
-   * their phone number mid-sentence must not have the turn rejected -- the turn carries the claim.
-   * `ADR-011`/`D16` already redact before persistence; this is defence in depth on the same boundary,
-   * not the primary mechanism.
+   * PII. ANONYMIZE rather than BLOCK on every entity.
+   *
+   * ⚠ THIS POLICY IS OUTPUT-ONLY, AND THAT IS BEDROCK'S BEHAVIOUR, NOT A CHOICE MADE HERE. Verified
+   * live at Stage 8: on `source="INPUT"` an email, a phone number and a `PY####` policy number all
+   * returned `sensitiveInformationPolicyUnits: 0` and `action: NONE`; the same strings masked correctly
+   * on `source="OUTPUT"`. Until Stage 8 the comment here claimed input-side "defence in depth on the
+   * same boundary" and justified ANONYMIZE over BLOCK with "a caller who says their phone number
+   * mid-sentence must not have the turn rejected". The reasoning was sound and the mechanism was
+   * absent -- a documented capability that does not run, which `CLAUDE.md` forbids as plainly as a stub.
+   * `ADR-011`/`D16`'s redaction before persistence is `guardrails/pii.py`'s, and always was.
+   *
+   * What remains here is what the AGENT might say. Each entity below is one the system has no
+   * legitimate reason to speak aloud, so masking it costs nothing and catches a generation defect.
    *
    * NAME is deliberately absent. The FNOL record needs the claimant's name, redacting it here would
    * strip the field the call exists to capture, and `guardrails/pii.py` owns the transcript-side
@@ -188,34 +197,23 @@ resource "aws_bedrock_guardrail" "fnol" {
     }
 
     /*
-     * `D16`'s additions, which Bedrock has no built-in entity for. Phase 0 archaeology found the upstream
-     * PII taxonomy had no VIN, plate, policy number or claim number -- and those are precisely the
-     * identifiers this domain leaks. Patterns match the synthetic formats in `DATA-CONTRACTS.md`.
+     * NO `regexes_config`, REMOVED 2026-08-12 (v2 -> v3), Marco-approved: "the guardrail masking a
+     * caller's own claim number, policy number and plate back to the caller who owns them is a defect
+     * with no upside." `docs/phase7/NOT-FIXED.md` #8, `RESULTS.md` §5.3.
+     *
+     * Four regexes lived here -- `policy_number`, `claim_number`, `licence_plate`, `vin` -- added under
+     * `D16` because Phase 0 archaeology found the upstream PII taxonomy had none of them and they are
+     * precisely the identifiers this domain leaks. The requirement was real. The BOUNDARY was wrong.
+     *
+     * Bedrock evaluates this policy on OUTPUT only, and on OUTPUT these four match the agent's own
+     * speech -- so the shipped system masked `CLM-2608-00042-4` out of the claim-status readback and,
+     * with `blocked` conflating mask and block, replaced the whole line with a refusal. Four settings
+     * each individually defensible; a composition that broke one of the six in-scope intents.
+     *
+     * Transcript-side redaction of these identifiers is `guardrails/pii.py`'s and is unaffected --
+     * `D16`'s requirement is still met, at the boundary `ADR-011` put it at. Nothing was weakened here;
+     * a duplicate was removed from a boundary that could not host it correctly.
      */
-    regexes_config {
-      name        = "policy_number"
-      description = "Example Mutual policy number, PY#### or PY####-######"
-      pattern     = "PY[0-9]{4}(-[0-9]{6})?"
-      action      = "ANONYMIZE"
-    }
-    regexes_config {
-      name        = "claim_number"
-      description = "Claim number, CLM-YYMM-NNNNN-C"
-      pattern     = "CLM-[0-9]{4}-[0-9]{5}-[0-9]"
-      action      = "ANONYMIZE"
-    }
-    regexes_config {
-      name        = "licence_plate"
-      description = "Ontario-style licence plate, AAAA-###"
-      pattern     = "[A-Z]{4}-[0-9]{3}"
-      action      = "ANONYMIZE"
-    }
-    regexes_config {
-      name        = "vin"
-      description = "17-character vehicle identification number"
-      pattern     = "[A-HJ-NPR-Z0-9]{17}"
-      action      = "ANONYMIZE"
-    }
   }
 }
 

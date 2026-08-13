@@ -255,10 +255,10 @@ def _l2_fires(text: str, caller: LoggingCaller) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--guardrail-id", required=True)
-    parser.add_argument("--guardrail-version", default="2")
+    parser.add_argument("--guardrail-version", default="3")
     parser.add_argument("-k", type=int, default=SAMPLES_PER_ITEM)
     parser.add_argument(
-        "--out", type=Path, default=Path("evals/baselines/composed_pipeline_k5_20260812.json")
+        "--out", type=Path, default=Path("evals/baselines/composed_pipeline_k5_v3_20260812.json")
     )
     args = parser.parse_args(argv)
 
@@ -266,8 +266,12 @@ def main(argv: list[str] | None = None) -> int:
 
     with verification_run(
         reason=(
-            "Stage 8: k-sampled escalation recall of the COMPOSED pipeline -- L1 -> ApplyGuardrail"
-            "(INPUT) v2 -> L2 -- against the independent held-out set. Entry #1 measured the router "
+            "Stage 8 re-verification after the guardrail v2 -> v3 change (the four D16 regexes "
+            "removed, NOT-FIXED.md #8, Marco-approved): k-sampled escalation recall of the COMPOSED "
+            "pipeline -- L1 -> ApplyGuardrail(INPUT) -> L2 -- against the independent held-out set. "
+            "Re-measured rather than inferred because this touches the same resource that produced "
+            "RESULTS.md 3.9, and the phase's whole finding is that a defensible per-setting change "
+            "can move the composition. Entry #1 measured the router "
             "in isolation before the guardrail existed; entries #2/#3 measured guardrail v1 and "
             "carry a fingerprint that was blind to it. The guardrail is upstream of L2, so no "
             "component measurement can stand in for this one (RESULTS.md 3.9). C1 binds: below "

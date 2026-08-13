@@ -2188,3 +2188,47 @@ calls"` explicitly rather than omitting the fields. `CF6`(b)'s same-run control 
   result, not a footnote.
 - **Phase 7 is complete.** Every criterion is discharged or explicitly recorded as violated. Next gate:
   Marco's written exit criteria and approval before Phase 8 opens.
+
+### Post-approval addendum, same day — guardrail v3 and the re-verification
+
+**`APPROVED` typed by Marco: drop the four `D16` regexes from `main.tf`.**
+
+**`D59` — guardrail v3.** `policy_number`, `claim_number`, `licence_plate`, `vin` removed. The
+requirement was real and the **boundary** was wrong: Bedrock evaluates the sensitive-information policy
+on OUTPUT only, and on OUTPUT those four match the agent's own speech. `guardrails/pii.py` still redacts
+all four at the transcript boundary `ADR-011` put them at, so `D16` is still met — a duplicate was
+removed from a boundary that could not host it correctly. **Version verified against `GetGuardrail`, not
+against the apply output**, per Marco's note that the DRAFT-vs-published trap applies: v3 `READY`,
+`regexes: NONE`, seven PII entities intact, both denied topics intact, all six content filters unchanged.
+Behaviour re-probed: readback clean, `EMAIL` still masked, violence still blocked on OUTPUT, the denied
+topic still blocks, and the injury phrasing v1 ate still passes. `terraform apply` cost **$0.00**.
+
+**`D60` — the composition re-verified on v3, not inferred from v2.** Marco: *"it touches the same
+resource that produced §3.9, and the whole finding of this phase is that a defensible per-setting change
+can move the composition."* **Composed escalation recall 1.000 (26/26)**, identical to v2; 0 blocked, 0
+masked, 0 of 43 unstable. Ledger entry #5, fingerprint `cec0cfcba5dd133c`, live config sha
+`8405563f3d54692d`. **The ledger publishes 4** — five entries, four distinct configurations, and the
+fourth exists because a one-resource change was measured rather than reasoned about. $0.0212.
+
+**`D61` — publishing a version deletes the version you just measured.** `create_before_destroy` plus
+`replace_triggered_by` means the apply destroyed v2; `ListGuardrails` now returns only `DRAFT` and `3`.
+Entry #4 stays *attributable* via its stored live-config sha, but it is no longer *re-runnable*.
+`outputs.tf` claims pinning makes a result attributable to one configuration — true; a reader could
+reasonably infer reproducible, and that part is not. `NOT-FIXED.md` #12, owned by Phase 8's state-backend
+migration.
+
+**`D62` — `D32`'s qualification moved to where the numbers are.** Marco: *"I pushed that decision on
+reasoning that did not transfer between models and tasks. Every generation-path number in this project is
+a single draw regardless of temperature, and that should be visible where the numbers are."* Now a
+boxed warning at the head of `RESULTS.md` §8's scorecard, naming the specific failure of transfer
+(Nova Micro + forced tool use + short structured output → Nova Lite + free text) and marking the
+groundedness and relevance rows as single draws *at* 0.0. `D32` is qualified, not withdrawn.
+
+**`D63` — the instrument-defect ratio is stated as the phase's result.** New `RESULTS.md` §0.0. Marco:
+*"not as a confession, as a finding about what evaluating an agentic system actually costs. Most projects
+never measure their instruments and therefore report their instrument errors as system properties."*
+Fourteen instrument defects against a handful of agent defects; two of this project's headline
+conclusions were originally instrument artefacts and both reversed when the instrument was checked.
+
+**Phase 7 final: ≈$0.397 of $1.25.** Standing cap ≈$0.411 of $5.00. 377 tests green, lint and typecheck
+clean.
