@@ -150,7 +150,9 @@ verify-lex:
 # see scripts/verify_lambda_execution.py's own module docstring for why: 6 of its 9 events make real,
 # small (~$0.002 total) Bedrock calls, and whether the Phase 3-7 Bedrock standing approval's wording
 # extends to Phase 8 is Marco's call, not assumed here. Run it explicitly, after a deploy, until that is
-# settled.
+# settled. NOT a pure liveness check for the same reason -- a failure on one of those 6 events is
+# ambiguous between an infra regression and an ordinary model-classification miss; the script's own
+# output says which is which per event.
 verify-lambda-execution:
 	@$(VENV)/python scripts/verify_lambda_execution.py
 

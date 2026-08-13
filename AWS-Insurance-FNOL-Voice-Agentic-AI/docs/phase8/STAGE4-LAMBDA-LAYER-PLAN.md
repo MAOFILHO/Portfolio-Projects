@@ -72,13 +72,32 @@ plan` in this session actually reads):
 | **Lambda's unzipped budget (function + all layers combined)** | 250 MB | — |
 | **Headroom** | **≈127 MB (51%)** | — |
 
-The two builds are not a contradiction — `pip`'s resolver is not required to be deterministic across
-runs against an unpinned transitive closure (only the 8 top-level packages in `EXPECTED_PACKAGES` are
-pinned; their own dependencies resolve to whatever satisfies the constraint at build time, and this
-project's build has no lockfile pinning those). Both numbers are real measurements of an artifact that
-passed `verify_layer_contents.py` at 8/8; this table reports the one that is actually live in
-`.terraform-build`, not the larger of the two chosen for a bigger safety margin. The absence of a
-transitive lockfile is scope for a later pass, not fixed in this one.
+**Correction, 2026-08-13, on Marco's review of this exact plan: the "pip resolver non-determinism"
+explanation above was wrong, not merely unconfirmed, and the 40 MB was not left unexplained — it was
+never actually investigated the first time.** *"By your own cost-below-estimate rule that gets a
+liveness check before it gets trusted"* — applied literally: the earlier scratch-directory build (still
+present at the time of this correction) was diffed against the artifact this plan actually references,
+directory by directory, not assumed.
+
+**Result: zero missing packages, zero version drift, zero size difference in any compiled `.so` file.**
+Every `*.dist-info` directory name and version is identical between the two builds; `numpy`'s own
+compiled extensions measure exactly `12480 KB` in both. The two builds are the same resolved dependency
+set. The entire 40 MB is `__pycache__` and `tests/` directories — 232 `__pycache__` dirs and 14 `tests`
+dirs, present throughout the scratch-directory build and absent from the `.terraform-build` one. §7's own
+build commands include the two cleanup lines (`find python -type d -name "__pycache__" -exec rm -rf {}
++`; `find python -type d -name "tests" -exec rm -rf {} +`) that are supposed to remove exactly these —
+they evidently did not run, or did not run effectively, against that particular scratch copy. **Removing
+them from a copy of the scratch build by hand and re-measuring gives 124,716 KB — the exact same figure,
+to the kilobyte, as the artifact actually referenced by `lambda.tf`.** Not "close." Identical. There is no
+residual delta to explain, because there is no delta once both builds are compared on equal terms: one
+had its cleanup step applied, the other, despite claiming the same commands, did not.
+
+This is filed as a small process finding, not a defect in the artifact this plan ships: the number that
+matters — 122 MB / 41 MB, `verify_layer_contents.py` 8/8 against the exact hash Terraform's plan
+references (`codehook-deps-5ec60779e56a1d4876fcbd06da8d202b.zip`, re-confirmed the same session as this
+correction) — was always correct. What was wrong was the EXPLANATION offered for why an earlier, unused
+number differed from it, and that explanation is corrected here rather than left standing, same
+discipline as `D80`'s comment-as-evidence finding and this plan's own §4 cost correction below.
 
 Source, checked against the AWS Lambda troubleshooting guide rather than assumed: *"The maximum size for
 a .zip deployment package for Lambda is 250 MB (unzipped)... this limit applies to the combined size of
@@ -210,6 +229,20 @@ own downstream codehook invocation fails). **Specification, not left implicit:**
   and still orders of magnitude cheaper than finding the same class of defect via criterion 9's real
   `RecognizeText` calls (as happened this time) — but the claim was wrong, not merely optimistic, and is
   corrected here rather than left standing, same discipline as `D80`'s own comment-as-evidence finding.
+
+**Stated plainly, per Marco's review: this is NOT a pure liveness check, and that is a consequence worth
+naming rather than leaving implicit in the cost figure above.** A pure liveness check would ask exactly
+one question — did the function execute at all — and every event would be free to construct because none
+would need to depend on model behavior. 6 of these 9 events are not that: they route through the real
+router (`classify_turn`) and the real guardrail, so a FAILURE on one of them is now ambiguous between two
+different causes this gate cannot itself distinguish — (1) a `D80`-shaped infra regression (import broke,
+a dependency went missing) and (2) an ordinary model-classification miss (the router returned the wrong
+intent, or a low-confidence/ambiguous read, for a phrasing it should have handled) that has nothing to do
+with whether the Lambda executes. The 3 pre-graph events (L1, L3, `D79`) remain pure liveness checks in
+the strict sense — deterministic pattern matching, no model in the loop, a failure there is unambiguously
+an execution or packaging defect. **Whoever reads a failure from this gate needs to check which of the 9
+events failed before concluding `D80` has recurred** — a failure on one of the 6 model-routed events is
+not, by itself, evidence of a broken deployment the way a `FunctionError` or a pre-graph-event failure is.
 
 ## 5. Ordering — `D81`'s fix lands first, independent of this layer work
 

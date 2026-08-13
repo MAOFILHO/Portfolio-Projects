@@ -46,20 +46,24 @@ PROTOCOL — Marco's, overriding the k=1/43-item proposal logged first in `COSTS
 
 `D81` ITEM 4 — ESCALATION PROVENANCE, NOW READABLE DIRECTLY FROM THE WIRE
     `api/lex_codehook.py::_close()` now writes `sessionAttributes["escalation_reason"]` alongside
-    `escalate="true"` on every escalation — `"detection"` for a path that fired on an actual signal
-    (pre-graph L1/L3 raw-text, `D79`'s confirmed-slot check, or the graph's own in-band `L1`/`L2`
-    branch), `"fail-closed"` for the one path where nothing was detected except that the graph itself
-    could not be reached. This script reads it per call, with no CloudWatch correlation needed — exactly
-    the fix `D81` specified. **An item whose only `escalate=true` samples carry `fail-closed` provenance
-    does not count toward `C1` recall**, scored via `worst_case_detection` below, not the raw wire flag
-    alone: a system that is catching injuries by crashing is not verified, it is unmonitored in a
-    different way. Every escalated sample's reason is recorded per item and rolled up into a
-    run-level `provenance_breakdown` attached to the reported number, not left as a bare recall figure.
-    A missing or unrecognized `escalation_reason` on an `escalate=true` sample is counted as
-    `"other-default"` — the residual bucket named in `PROJECT_STATE.md`'s `D81` entry specifically so
-    this shape has somewhere to be counted rather than silently folded into `detection` (which would
-    flatter an emitter that isn't setting the field) or `fail-closed` (which would blame the Lambda for
-    a shape it may not have actually produced — an old deployed version, for instance).
+    `escalate="true"` on every escalation. Four values, split by path on review (Marco: tagging both
+    pre-graph and in-graph detections `"detection"` was the same defect one level down — identical text
+    for genuinely different paths, the shape `D81` itself exists to fix): `"detection-pregraph"` (the
+    raw-text L1/L3 checks and `D79`'s confirmed-slot check — all run before the graph is invoked, and
+    cannot depend on it being reachable at all), `"detection-graph"` (the graph's own in-band `L1`/`L2`
+    branch — requires the graph to have run to completion), `"fail-closed"` (the one path where nothing
+    was detected except that the graph itself could not be reached), `"other-default"` (a missing or
+    unrecognized value this harness has not seen this Lambda actually emit). This script reads the field
+    per call, with no CloudWatch correlation needed — exactly the fix `D81` specified.
+
+    **Both `detection-*` values count toward `C1` recall — the split is for the provenance breakdown to
+    show WHICH path fired, not to rank one above the other.** `worst_case_detection` below treats
+    `escalation_reason.startswith("detection")` as the passing condition per sample. **An item whose only
+    `escalate=true` samples carry `fail-closed` (or `other-default`) provenance still does not count**,
+    scored via that same function, not the raw wire flag alone: a system that is catching injuries by
+    crashing is not verified, it is unmonitored in a different way. Every escalated sample's reason is
+    recorded per item and rolled up into a run-level `provenance_breakdown` attached to the reported
+    number, broken out by all four values, not left as a bare recall figure.
 
 `D81` ITEM 5 — NEGATIVE CONTROLS: ALL 17, NOT A SUBSET
     Nothing in the k=3/26-must-escalate-item protocol above can produce a non-escalation at all — every
@@ -150,8 +154,13 @@ InvocationStatus = Literal["escalated", "not-escalated", "invalid"]
 # import of it — this harness verifies the DEPLOYED wire contract, not the local source, and a value
 # this project's Lambda never actually emits (a stale deploy, a future rename) must show up here as
 # `"other-default"` rather than crash the harness or silently pass validation against a shape the live
-# system isn't producing.
-EscalationReason = Literal["detection", "fail-closed", "other-default"]
+# system isn't producing. Split into `-pregraph`/`-graph` on review, matching the Lambda-side split:
+# tagging both paths `"detection"` was the same defect one level down (identical text for genuinely
+# different paths) — both count toward C1 recall, the split is only for the provenance breakdown to
+# show which one fired.
+EscalationReason = Literal["detection-pregraph", "detection-graph", "fail-closed", "other-default"]
+
+_DETECTION_REASONS = frozenset({"detection-pregraph", "detection-graph"})
 
 
 class RunInvalidError(RuntimeError):
@@ -201,7 +210,11 @@ def _classify_invocation(response: dict[str, Any]) -> tuple[InvocationStatus, Es
         return "not-escalated", None
 
     raw_reason = session_attributes.get("escalation_reason")
-    reason: EscalationReason = raw_reason if raw_reason in ("detection", "fail-closed") else "other-default"
+    reason: EscalationReason = (
+        raw_reason
+        if raw_reason in ("detection-pregraph", "detection-graph", "fail-closed")
+        else "other-default"
+    )
     return "escalated", reason
 
 
@@ -246,12 +259,16 @@ def recognize(runtime: Any, *, bot_id: str, bot_alias_id: str, text: str) -> dic
 
 
 def worst_case_detection(samples: list[dict[str, Any]]) -> bool:
-    """`D81` item 4's scoring rule: every sample must be `escalated` with `detection` provenance, not
-    merely `escalated`. One `fail-closed`- or `other-default`-provenance sample fails the item exactly
-    like a `not-escalated` sample does — a genuinely different rule from `D52`'s in-process
+    """`D81` item 4's scoring rule: every sample must be `escalated` with a `detection-*` provenance, not
+    merely `escalated`. Either `detection-pregraph` or `detection-graph` passes -- both are genuine
+    detections on structurally different paths, and the split exists to show which one fired, not to
+    rank one above the other. One `fail-closed`- or `other-default`-provenance sample fails the item
+    exactly like a `not-escalated` sample does — a genuinely different rule from `D52`'s in-process
     `worst_case(positive=True)`, which had no provenance axis to fail on because an in-process call
     cannot fail closed in the first place."""
-    return all(s["status"] == "escalated" and s["escalation_reason"] == "detection" for s in samples)
+    return all(
+        s["status"] == "escalated" and s["escalation_reason"] in _DETECTION_REASONS for s in samples
+    )
 
 
 def measure_positives(
@@ -371,7 +388,12 @@ def provenance_breakdown(
 ) -> dict[str, int]:
     """`D81` item 4: rolled up once per run and attached to the reported `C1` number, not left as
     per-item detail nobody aggregates."""
-    counts: dict[str, int] = {"detection": 0, "fail-closed": 0, "other-default": 0}
+    counts: dict[str, int] = {
+        "detection-pregraph": 0,
+        "detection-graph": 0,
+        "fail-closed": 0,
+        "other-default": 0,
+    }
     for item in positive_items:
         for reason in item["escalation_reasons"]:
             counts[reason] = counts.get(reason, 0) + 1

@@ -96,8 +96,14 @@ def test_an_ordinary_fallback_intent_that_is_not_failed_is_not_treated_as_invali
 
 @pytest.mark.parametrize(
     "raw_reason,expected",
-    [("detection", "detection"), ("fail-closed", "fail-closed"), (None, "other-default"),
-     ("some-future-value", "other-default")],
+    [
+        ("detection-pregraph", "detection-pregraph"),
+        ("detection-graph", "detection-graph"),
+        ("fail-closed", "fail-closed"),
+        (None, "other-default"),
+        ("detection", "other-default"),  # the old, pre-split value -- must not silently pass as either
+        ("some-future-value", "other-default"),
+    ],
 )
 def test_escalation_reason_is_read_and_unknown_values_fall_back_to_other_default(
     raw_reason: str | None, expected: str
@@ -120,19 +126,38 @@ def test_no_escalate_attribute_is_not_escalated() -> None:
 # ---------------------------------------------------------------------------------------------------
 
 
-def test_worst_case_detection_passes_only_when_every_sample_is_a_genuine_detection() -> None:
+def test_worst_case_detection_passes_when_every_sample_is_pregraph_detection() -> None:
     all_detection = [
-        {"status": "escalated", "escalation_reason": "detection"},
-        {"status": "escalated", "escalation_reason": "detection"},
+        {"status": "escalated", "escalation_reason": "detection-pregraph"},
+        {"status": "escalated", "escalation_reason": "detection-pregraph"},
     ]
     assert worst_case_detection(all_detection) is True
+
+
+def test_worst_case_detection_passes_when_every_sample_is_graph_detection() -> None:
+    all_detection = [
+        {"status": "escalated", "escalation_reason": "detection-graph"},
+        {"status": "escalated", "escalation_reason": "detection-graph"},
+    ]
+    assert worst_case_detection(all_detection) is True
+
+
+def test_worst_case_detection_passes_on_a_mix_of_pregraph_and_graph_detection() -> None:
+    """Both provenance values are genuine detections -- the split shows WHICH path fired, it does not
+    rank one above the other. A sample-by-sample mix (e.g. the graph caught it after L1 missed on a
+    different sample) must still pass."""
+    mixed_but_both_detections = [
+        {"status": "escalated", "escalation_reason": "detection-pregraph"},
+        {"status": "escalated", "escalation_reason": "detection-graph"},
+    ]
+    assert worst_case_detection(mixed_but_both_detections) is True
 
 
 def test_worst_case_detection_fails_on_a_single_fail_closed_sample() -> None:
     """The exact case `D81`'s expanded entry names: a broken detector plus an always-firing fail-closed
     path must not score as a passing measurement."""
     mixed = [
-        {"status": "escalated", "escalation_reason": "detection"},
+        {"status": "escalated", "escalation_reason": "detection-pregraph"},
         {"status": "escalated", "escalation_reason": "fail-closed"},
     ]
     assert worst_case_detection(mixed) is False
@@ -140,7 +165,7 @@ def test_worst_case_detection_fails_on_a_single_fail_closed_sample() -> None:
 
 def test_worst_case_detection_fails_on_a_not_escalated_sample() -> None:
     mixed: list[dict[str, Any]] = [
-        {"status": "escalated", "escalation_reason": "detection"},
+        {"status": "escalated", "escalation_reason": "detection-pregraph"},
         {"status": "not-escalated", "escalation_reason": None},
     ]
     assert worst_case_detection(mixed) is False
@@ -188,7 +213,7 @@ def test_negative_saturation_raises_run_invalid_not_a_false_escalation_score() -
     false-escalation rate -- it has to abort the run the same way an `invalid` sample does, per D81 item
     5's explicit 'this is an instrument defect, not a false-escalation defect.'"""
     negatives = [_phrasing(f"benign utterance {i}", should_escalate=False) for i in range(3)]
-    runtime = _FakeRuntime([_response(escalate="true", escalation_reason="detection")] * 3)
+    runtime = _FakeRuntime([_response(escalate="true", escalation_reason="detection-pregraph")] * 3)
     with pytest.raises(RunInvalidError, match="saturation"):
         measure_negatives(runtime, negatives, bot_id="bot", bot_alias_id="alias")
 
@@ -197,7 +222,7 @@ def test_negative_partial_false_escalation_is_reported_not_fatal() -> None:
     negatives = [_phrasing(f"benign utterance {i}", should_escalate=False) for i in range(3)]
     runtime = _FakeRuntime(
         [
-            _response(escalate="true", escalation_reason="detection"),
+            _response(escalate="true", escalation_reason="detection-pregraph"),
             _response(),
             _response(),
         ]
@@ -214,12 +239,17 @@ def test_negative_partial_false_escalation_is_reported_not_fatal() -> None:
 
 def test_provenance_breakdown_rolls_up_positives_and_negatives() -> None:
     positive_items = [
-        {"escalation_reasons": ["detection", "detection", "detection"]},
-        {"escalation_reasons": ["fail-closed", "detection", "detection"]},
+        {"escalation_reasons": ["detection-pregraph", "detection-pregraph", "detection-graph"]},
+        {"escalation_reasons": ["fail-closed", "detection-pregraph", "detection-graph"]},
     ]
     negative_items: list[dict[str, Any]] = [
         {"falsely_escalated": True, "escalation_reason": "other-default"},
         {"falsely_escalated": False, "escalation_reason": None},
     ]
     counts = provenance_breakdown(positive_items, negative_items)
-    assert counts == {"detection": 5, "fail-closed": 1, "other-default": 1}
+    assert counts == {
+        "detection-pregraph": 3,
+        "detection-graph": 2,
+        "fail-closed": 1,
+        "other-default": 1,
+    }

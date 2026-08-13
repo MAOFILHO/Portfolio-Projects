@@ -60,6 +60,13 @@ THE EVENT MATRIX — 9 EVENTS, NOT THE 10 THE FIRST DRAFT OF THIS PLAN NAMED
     Genuinely negligible against the $25 ceiling, but the CLAIM was wrong and is corrected here rather
     than left standing, same discipline as `D80`'s own "comment-as-evidence" finding.
 
+    **Consequence stated plainly: this is NOT a pure liveness check.** A pure liveness check asks one
+    question -- did the function execute -- and every event would be free to construct because none would
+    depend on model behavior. 6 of these 9 events are not that: a FAILURE on one of them is ambiguous
+    between (1) a `D80`-shaped infra regression and (2) an ordinary model-classification miss that has
+    nothing to do with whether the Lambda executes. Only the 3 pre-graph events (L1, L3, `D79`) are pure
+    liveness checks in the strict sense. Check WHICH event failed before concluding `D80` recurred.
+
 STANDING-APPROVAL SCOPE — FLAGGED, NOT RESOLVED, HERE
     `CLAUDE.md`'s Bedrock standing approval is worded *"for Phases 3-7, capped at $5 total."* This
     script's own Bedrock spend happens in Phase 8. Whether that approval's scope extends past the phase
@@ -199,6 +206,11 @@ def _expect_elicit_slot(slot_name: str) -> Callable[[dict[str, Any]], str | None
 
 
 def _expect_detection_escalation(*, must_contain_911: bool) -> Callable[[dict[str, Any]], str | None]:
+    """All three events this is used for (L1, L3, `D79`) are pre-graph paths, so the expected reason is
+    specifically `detection-pregraph`, not just any `detection-*` value -- a `detection-graph` reading
+    here would mean the pre-graph check DIDN'T fire and the turn fell through to the graph, which is
+    itself a real regression on a synthetic event engineered to hit the pre-graph path directly."""
+
     def check(payload: dict[str, Any]) -> str | None:
         action = _dialog_action(payload)
         if action.get("type") != "Close":
@@ -207,10 +219,13 @@ def _expect_detection_escalation(*, must_contain_911: bool) -> Callable[[dict[st
         if attributes.get("escalate") != "true":
             return f"expected escalate=true, got sessionAttributes={attributes!r}"
         # `D81` item 4: the deploy gate checks provenance too, not only the raw wire flag -- a
-        # fail-closed escalation on one of these deliberately-clean synthetic events would itself be a
-        # real finding (something in the pre-graph path is failing), not a pass.
-        if attributes.get("escalation_reason") != "detection":
-            return f"expected escalation_reason=detection, got {attributes.get('escalation_reason')!r}"
+        # fail-closed (or graph-provenance) escalation on one of these deliberately pre-graph synthetic
+        # events would itself be a real finding, not a pass.
+        if attributes.get("escalation_reason") != "detection-pregraph":
+            return (
+                f"expected escalation_reason=detection-pregraph, got "
+                f"{attributes.get('escalation_reason')!r}"
+            )
         message = _message(payload)
         has_911 = "911" in message
         if has_911 != must_contain_911:
@@ -355,6 +370,12 @@ def main(argv: list[str] | None = None) -> int:
         f"${_GUARDRAIL_PER_CALL_USD:.6f}/event -> ~${_ESTIMATED_COST_USD} total; the other "
         f"{len(matrix) - bedrock_events} are pre-graph and Bedrock-free. lambda:Invoke itself is inside "
         f"the always-free tier at this volume."
+    )
+    print(
+        f"    NOT a pure liveness check: {bedrock_events} of {len(matrix)} events route through the "
+        f"real router+guardrail. A failure there is ambiguous between an infra regression (D80-shaped) "
+        f"and an ordinary model-classification miss -- check WHICH event failed before concluding D80 "
+        f"recurred."
     )
 
     lambda_client = boto3.client("lambda", region_name=REGION)

@@ -79,13 +79,24 @@ FAIL-OPEN / FAIL-CLOSED, SPLIT (Stage 4 owns what Stage 3's docstring flagged as
     a required `escalation_reason` whenever `escalated=True` -- there is no default, a caller that omits
     it raises, because an unattributed escalation is exactly the silent case this fix exists to remove --
     and writes it into `sessionAttributes["escalation_reason"]`, readable directly from the
-    `RecognizeText`/`lambda:Invoke` response with no CloudWatch correlation needed. Two values are ever
-    set by this module: `"detection"` for every path that fired on an actual signal (the pre-graph L1/L3
-    raw-text checks, `D79`'s confirmed-slot check, and the graph's own in-band `L1`/`L2` branch in
-    `_respond_from_graph_result`, which used to carry no provenance signal at all -- see that function);
-    `"fail-closed"` for the one path where nothing was detected except that the graph could not be
-    reached. `"other-default"` is reserved for the harness's own defensive classification of a shape this
-    module never actually emits, not a value this module writes.
+    `RecognizeText`/`lambda:Invoke` response with no CloudWatch correlation needed.
+
+    **Split further on review, 2026-08-13: `"detection"` alone was the same defect one level down.**
+    The pre-graph L1/L3 raw-text checks and `D79`'s confirmed-slot check are a structurally different
+    path from the graph's own in-band `L1`/`L2` branch in `_respond_from_graph_result` -- one runs before
+    the graph is ever invoked and cannot depend on it being reachable at all, the other runs only because
+    the graph WAS reachable and classified the turn itself. Tagging both `"detection"` produced identical
+    text for genuinely different paths, the exact shape `D81` itself was written to fix one level up (the
+    original `"escalating contact %s on layer %s route %s"` log line, identical for a genuine `L1` hit
+    and an `L1`-shaped fail-closed default). Four values now: `"detection-pregraph"` (the raw-text L1/L3
+    checks and `D79`'s slot check, all in `_dispatch` -- bypass the graph and the checkpointer's turn
+    invocation entirely, or in `D79`'s case read the checkpointer but never invoke the graph);
+    `"detection-graph"` (the graph's own in-band `L1`/`L2` branch in `_respond_from_graph_result` --
+    requires the graph to have run to completion); `"fail-closed"` for the one path where nothing was
+    detected except that the graph could not be reached; `"other-default"` reserved for the harness's own
+    defensive classification of a shape this module never actually emits. **Both `detection-*` values
+    are genuine detections and both count toward `C1` recall** -- the split exists so a provenance
+    breakdown can show WHICH fired, not to demote one relative to the other.
 """
 
 from __future__ import annotations
@@ -100,12 +111,14 @@ from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 
 logger = logging.getLogger(__name__)
 
-# `D81` item 4. `"other-default"` is never written by this module -- it names the residual bucket the
-# HARNESS falls back to if it ever observes `escalate=true` with a missing or unrecognized reason, so
-# that shape has a name to be counted under rather than being silently folded into "detection" (which
-# would flatter a broken emitter) or "fail-closed" (which would blame this module for a shape it never
-# actually produced).
-EscalationReason = Literal["detection", "fail-closed", "other-default"]
+# `D81` item 4, split by path on review -- `"detection-pregraph"` and `"detection-graph"` are BOTH
+# genuine detections (both count toward C1 recall); the split exists so provenance shows which of two
+# structurally different paths fired, not to rank one above the other. `"other-default"` is never written
+# by this module -- it names the residual bucket the HARNESS falls back to if it ever observes
+# `escalate=true` with a missing or unrecognized reason, so that shape has a name to be counted under
+# rather than being silently folded into a detection value (which would flatter a broken emitter) or
+# "fail-closed" (which would blame this module for a shape it never actually produced).
+EscalationReason = Literal["detection-pregraph", "detection-graph", "fail-closed", "other-default"]
 
 # DIALOGUE-POLICIES.md §5 step 1, verbatim -- the same fixed script injury_escalation.py speaks when the
 # graph itself catches the trigger. Spoken here too so a caller hears the identical line regardless of
@@ -431,9 +444,9 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
             escalation.get("contact_id"),
             escalation.get("triggering_layer"),
             escalation.get("route"),
-            "detection",
+            "detection-graph",
         )
-        return _close(event, response_text, escalated=True, escalation_reason="detection")
+        return _close(event, response_text, escalated=True, escalation_reason="detection-graph")
 
     active_slot = result.get("active_slot")
     if active_slot:
@@ -462,7 +475,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
             route=1,
             message=_SAFETY_SCRIPT,
             context={"triggering_utterance": turn_input, "matched_term": l1_term},
-            escalation_reason="detection",
+            escalation_reason="detection-pregraph",
         )
 
     # `D79`. Raw text alone didn't catch it -- the only way to know whether `injuries_present` was
@@ -487,7 +500,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
                 "triggering_utterance": turn_input,
                 "slot_confirmed": True,
             },
-            escalation_reason="detection",
+            escalation_reason="detection-pregraph",
         )
 
     if l3_fired:
@@ -502,7 +515,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
                 "triggering_utterance": turn_input,
                 "matched_term": l3_term,
             },
-            escalation_reason="detection",
+            escalation_reason="detection-pregraph",
         )
 
     result = _run_graph_turn(contact_id, turn_input, filled_slots, previous)

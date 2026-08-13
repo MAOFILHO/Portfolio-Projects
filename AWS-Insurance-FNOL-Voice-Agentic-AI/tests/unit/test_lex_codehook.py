@@ -463,7 +463,7 @@ def test_l1_fires_without_any_graph_installed() -> None:
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
     assert "911" in response["messages"][0]["content"]
 
 
@@ -505,7 +505,7 @@ def test_l3_escalates_on_a_bare_override_word(monkeypatch: pytest.MonkeyPatch) -
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
 
 
 def test_l3_does_not_fire_on_an_ordinary_mention_of_the_callers_own_agent(
@@ -557,7 +557,7 @@ def test_injuries_present_confirmed_true_escalates_even_with_no_injury_words(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
     assert "911" in response["messages"][0]["content"]
 
 
@@ -614,7 +614,7 @@ def test_the_graphs_own_in_band_escalation_carries_detection_provenance(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
 
 
 def test_close_refuses_an_unattributed_escalation() -> None:

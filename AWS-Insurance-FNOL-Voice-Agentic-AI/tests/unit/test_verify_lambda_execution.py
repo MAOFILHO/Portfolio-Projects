@@ -76,11 +76,11 @@ def test_expect_elicit_slot_fails_on_the_wrong_dialog_action() -> None:
     assert problem is not None
 
 
-def test_expect_detection_escalation_passes_on_a_genuine_detection() -> None:
+def test_expect_detection_escalation_passes_on_a_genuine_pregraph_detection() -> None:
     check = _expect_detection_escalation(must_contain_911=True)
     payload = _payload(
         dialog_type="Close",
-        session_attributes={"escalate": "true", "escalation_reason": "detection"},
+        session_attributes={"escalate": "true", "escalation_reason": "detection-pregraph"},
         message="If anyone needs medical help, please hang up and call 911.",
     )
     assert check(payload) is None
@@ -100,6 +100,21 @@ def test_expect_detection_escalation_fails_on_fail_closed_provenance() -> None:
     assert "fail-closed" in problem
 
 
+def test_expect_detection_escalation_fails_on_graph_provenance() -> None:
+    """These three events (L1/L3/D79) are engineered to hit the PRE-GRAPH path directly. A
+    `detection-graph` reading means the pre-graph check didn't fire and the turn fell through to the
+    graph instead -- a real regression on this synthetic event, not an acceptable alternate provenance."""
+    check = _expect_detection_escalation(must_contain_911=True)
+    payload = _payload(
+        dialog_type="Close",
+        session_attributes={"escalate": "true", "escalation_reason": "detection-graph"},
+        message="If anyone needs medical help, please hang up and call 911.",
+    )
+    problem = check(payload)
+    assert problem is not None
+    assert "detection-pregraph" in problem
+
+
 def test_expect_detection_escalation_fails_when_escalate_is_missing() -> None:
     check = _expect_detection_escalation(must_contain_911=True)
     problem = check(_payload(dialog_type="Close"))
@@ -110,7 +125,7 @@ def test_expect_detection_escalation_checks_911_presence_both_ways() -> None:
     must_have = _expect_detection_escalation(must_contain_911=True)
     no_911_payload = _payload(
         dialog_type="Close",
-        session_attributes={"escalate": "true", "escalation_reason": "detection"},
+        session_attributes={"escalate": "true", "escalation_reason": "detection-pregraph"},
         message="connecting you now",
     )
     assert must_have(no_911_payload) is not None
@@ -118,7 +133,7 @@ def test_expect_detection_escalation_checks_911_presence_both_ways() -> None:
     must_not_have = _expect_detection_escalation(must_contain_911=False)
     has_911_payload = _payload(
         dialog_type="Close",
-        session_attributes={"escalate": "true", "escalation_reason": "detection"},
+        session_attributes={"escalate": "true", "escalation_reason": "detection-pregraph"},
         message="please call 911",
     )
     assert must_not_have(has_911_payload) is not None
@@ -137,7 +152,7 @@ def test_expect_fallback_reprompt_fails_if_escalate_is_present() -> None:
     synthetic event -- the marker check must not accept it."""
     payload = _payload(
         dialog_type="Close",
-        session_attributes={"escalate": "true", "escalation_reason": "detection"},
+        session_attributes={"escalate": "true", "escalation_reason": "detection-pregraph"},
         message="I didn't quite catch that -- could you say that again?",
     )
     problem = _expect_fallback_reprompt(payload)

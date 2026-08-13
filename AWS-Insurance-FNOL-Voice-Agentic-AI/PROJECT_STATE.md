@@ -2243,13 +2243,21 @@ prevents it being remembered as an optimisation.
 
 ## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN — no measurement obtained, run invalid (`D80`/`D81`, corrected per Marco's review); `C1` UNVERIFIED on any deployed build and end-to-end on the current Lambda-wrapped configuration at all; layer plan written for review at `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md`, NOT applied; exit-state
 chain (apply → gate event matrix → import verification → criterion 9 Line E) recorded below Stage 4's
-findings; **2026-08-13, step 0 of that chain implemented in full** — `lambda.tf`'s layer resource,
-`lex_codehook.py`'s `escalation_reason` field, the harness's three-state/provenance/17-negative rewrite,
-and `scripts/verify_lambda_execution.py` all committed and unit-tested (`ruff`/`mypy`/`pytest` all clean,
-601 tests), `terraform plan` run for real against this exact changeset: **2 to add
+findings; **2026-08-13, step 0 of that chain implemented in full, then refined on Marco's plan-shape
+review** — `lambda.tf`'s layer resource, `lex_codehook.py`'s `escalation_reason` field (split into
+`detection-pregraph`/`detection-graph` on review — tagging both paths `"detection"` was the same defect
+one level down), the harness's three-state/provenance/17-negative rewrite, and
+`scripts/verify_lambda_execution.py` (stated plainly as NOT a pure liveness check — 6 of 9 events route
+through the real router+guardrail) all committed and unit-tested (`ruff`/`mypy`/`pytest` all clean, 606
+tests). The 162→122 MB layer-size question raised on review is fully reconciled, not merely re-asserted:
+byte-for-byte diff against the earlier scratch build found identical packages/versions/`.so` sizes, the
+entire 40 MB delta being `__pycache__`/`tests/` directories the earlier build's own cleanup commands
+evidently never removed — confirmed by applying that cleanup to a copy and landing on the exact same
+124,716 KB. `terraform plan` re-run against this exact changeset: **2 to add
 (`aws_lambda_layer_version.codehook_deps`, `aws_s3_object.codehook_deps_layer`), 1 to change
-(`aws_lambda_function.codehook`'s `layers` and `source_code_hash`), 0 to destroy** — matching the plan's
-own §6 sketch exactly; **plan only, not applied, no gate run, no re-run, DID stays unrouted**)
+(`aws_lambda_function.codehook`'s `layers` and `source_code_hash`), 0 to destroy** — same shape both
+times, matching the plan's own §6 sketch exactly; **plan only, not applied, no gate run, no re-run, DID
+stays unrouted**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2892,6 +2900,21 @@ measurement of a non-functional detector.** Two more requirements, both required
    `_respond_from_graph_result()` through the same tagging point so it is no longer the one path with
    zero provenance signal. Until (a) and (b) land, the harness has no reason code to read regardless of
    how it is written, and item 4 is not satisfiable by changing the harness alone.
+
+   **(a) and (b) implemented 2026-08-13 — and split further on the same-day review that approved the
+   plan shape.** Marco, reading the implementation: tagging both the pre-graph checks and the graph's own
+   in-band branch `"detection"` was **the same defect one level down** — identical text for two
+   structurally different paths, exactly the shape the original `"...layer %s route %s"` log line had
+   (identical for a genuine `L1` hit and an `L1`-shaped fail-closed default). `escalation_reason` now
+   carries **four** values, not three: `"detection-pregraph"` (the raw-text L1/L3 checks and `D79`'s
+   confirmed-slot check, all in `_dispatch()` — never depend on the graph being reachable),
+   `"detection-graph"` (the graph's own in-band `L1`/`L2` branch in `_respond_from_graph_result` —
+   requires the graph to have run), `"fail-closed"` (unchanged), `"other-default"` (unchanged, harness-
+   only). **Both `detection-*` values count toward `C1` recall — the split is for the provenance
+   breakdown to show which path fired, not to rank one above the other.** Retrofitting this split after a
+   Line E run was already recorded would mean re-deriving per-item provenance from raw log text after the
+   fact instead of reading a wire field directly, which is exactly the fragile-correlation problem item 4
+   exists to avoid — caught before any run, not after.
 5. **Negative controls, with a stated minimum.** Nothing in criterion 9's k=3/26-must-escalate-item
    protocol can currently produce a non-escalation at all — the set contains no item where `escalated=
    false` is the CORRECT answer, so a harness that always reports `escalated=true` (whether from
