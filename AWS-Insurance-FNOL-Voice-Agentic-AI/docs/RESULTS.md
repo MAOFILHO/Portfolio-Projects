@@ -48,6 +48,30 @@ Three things made the difference, and they are cheap enough to be worth naming:
    fixes. Tallied, it is the reason to distrust a clean number from an unexamined harness — including
    the clean numbers in this document.
 
+### The generalisable form
+
+All three reduce to one sentence, and Phase 8 is what made it sayable:
+
+> **A single instrument cannot be wrong, because there is nothing for it to disagree with.**
+
+Not *wrong* in the sense of *accurate* — wrong in the sense of *knowably* wrong. A lone instrument's
+reading is the definition of the quantity as far as the project is concerned. There is no procedure, at
+any cost, that distinguishes it from the truth. Error becomes detectable at the second instrument and not
+before, which means **the count of instruments is a property of the measurement, and usually the only one
+worth improving first.**
+
+The weaker version of this — *prefer the platform's instrument to the one you wrote* — is tempting after
+Phase 8 Stage 0.5, where CloudWatch `AWS/Bedrock` had been counting Bedrock calls for free since Phase 3
+and caught our own cost log under-reporting by 22%. **It is wrong, and the same phase disproves it.** Cost
+Explorer is AWS's own instrument for cost, and on 2026-08-11 it reported $0.00124 against an actual
+$0.52540 — 0.24%, three orders of magnitude worse than the defective log it would have replaced. A third
+case, `docs/phase8/EXISTING-INSTRUMENTS.md` #6, is a free AWS instrument that is a *liability*: Bedrock
+model invocation logging would make per-run cost exact by persisting complete prompts, which is an
+`ADR-011` breach bought with an accounting improvement.
+
+So the rule is not about whose instrument. **Count them.** One is a claim; two is a measurement. Every
+finding in §6 was found by a second reading of the same quantity, and none of them by a better first one.
+
 ---
 
 ## 0. The correction, up front
@@ -542,6 +566,61 @@ never the test — it was `C1` evaluated against 45 measured items, and that is 
 `ADR-013`'s canary test is the pattern applied correctly, and it is worth naming as the counter-example: it
 does not assert that moto's internal flag exists, it asserts the flag **actually flips** inside a real
 `mock_aws()` block. Same instinct, one level deeper, and it is the reason that guard still works.
+
+---
+
+## 3.5.1 The success signal and the served behaviour are separate facts with separate clocks
+
+**A sibling family to §3.5, not a sub-case of it, and named here at Marco's instruction after its third
+independent instance.** §3.5 is about guards *we* wrote that checked an artifact instead of an outcome.
+This one is about **AWS handing us an artifact-shaped success signal** — a green apply, a returned
+`CREATE_COMPLETE`, a version number in an output — for an operation whose observable behaviour has not
+changed yet, or has changed somewhere other than where we are about to measure. The mistake is the same
+mistake; the difference is that here it is the *default*, and avoiding it costs an extra API call every
+single time.
+
+Three instances, three unrelated services, three different mechanisms:
+
+| Where | The artifact that reported success | What was actually being served |
+|---|---|---|
+| **Phase 7 Stage 5** — Bedrock Guardrails DRAFT | `terraform apply` green after narrowing the denied topic; the guardrail resource genuinely updated | `ApplyGuardrail` against **version 1** still ran the **pre-fix** policy. The edit landed on the mutable DRAFT head; `aws_bedrock_guardrail_version` depends on the guardrail's *ARN*, which a policy edit does not change, so no new version was published. A measurement taken then would have reported pre-fix behaviour while every artifact said the fix had shipped |
+| **Phase 7 Stage 8** — the version pin | `terraform apply` reported `guardrail_version = "3"` | The apply output is Terraform's record of *its own request*, not the service's state. v3 was confirmed `READY`, `regexes: NONE`, seven PII entities and both denied topics intact **only by `GetGuardrail`**. The same apply had also silently deleted **v2** — the version the previous verification was measured against |
+| **Phase 8 Stage 2** — the Lex locale build | CloudFormation `CREATE_COMPLETE` at **38 s**; the bot exists and every control-plane read calls it healthy | The `en_US` locale was still `Building`, and reached `Built` **~16 s later**. The same gap appeared on all three applies. `RecognizeText` inside that window is talking to a bot that does not yet know the intent |
+
+### Why three is enough to call it a platform pattern
+
+Two instances in the same service is a service quirk, and the honest response is a note in that service's
+runbook. These are **Bedrock, CloudFormation and Lex**, and the mechanisms do not resemble each other — a
+mutable head versus an immutable pin, a client-side plan record versus a server-side state, and a
+control-plane create that returns before a data-plane build finishes. What they share is structural, not
+incidental: **AWS's create/update calls return when the control plane has accepted the change, and every
+service is free to choose when the data plane reflects it.** Nothing in the API shape distinguishes the two,
+and in all three cases the success signal was accurate about the thing it was reporting on.
+
+There is a second, compounding gap wherever a resource is *versioned*: the mutable head moves and the pin
+does not, so an edit that unambiguously applied can change nothing about what runs. Guardrails and Lex bots
+both work this way, and Stage 3 associates Connect with a **bot version** — which is why `LEXPOC-GATE.md`
+§6 records that Stage 2's pass, taken entirely on `DRAFT` and the test alias, does not close this question
+for the thing that ships.
+
+### The three rules this produces
+
+1. **Verify against a service read, not against the apply output.** `GetGuardrail`, `DescribeBotLocale`,
+   `GetInferenceProfile`. The read is a fact; the apply is a report of a request. `make verify-inference`
+   (`ADR-016`) is this rule already applied correctly and is the counter-example worth copying: it does not
+   trust that an application inference profile inherited the three-region set from its `copy_from`, it asks
+   `GetInferenceProfile` and compares.
+2. **Verify the version you are actually serving.** Pinning makes a measurement attributable; it also means
+   editing the resource changes nothing about the pinned behaviour until a new version exists — and, per
+   `NOT-FIXED.md` #12, may destroy the version the last measurement was taken against.
+3. **When the served behaviour has a build step, wait on the build state — never on the create call.**
+   Stage 3 owns this one: the Connect↔Lex association, any `AWS::Lex::BotVersion`, and every post-deploy
+   smoke test can race a green apply. *"It worked when I ran it"* is the evidence that will be offered for
+   skipping the wait, and it is the evidence a race always offers.
+
+**Anyone deploying on AWS will meet this family again**, which is why it is written as a pattern rather
+than three runbook entries. The cost of respecting it is one extra read per resource; the cost of not is a
+verification that describes a configuration nobody is running.
 
 ---
 

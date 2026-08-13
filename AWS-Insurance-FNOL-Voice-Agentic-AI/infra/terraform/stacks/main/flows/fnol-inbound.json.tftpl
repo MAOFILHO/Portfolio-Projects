@@ -1,0 +1,139 @@
+{
+  "Version": "2019-10-30",
+  "StartAction": "RecordingOff",
+  "Actions": [
+    {
+      "Identifier": "RecordingOff",
+      "Type": "UpdateContactRecordingBehavior",
+      "Parameters": {
+        "RecordingBehavior": {
+          "RecordedParticipants": [],
+          "ScreenRecordedParticipants": [],
+          "IVRRecordingBehavior": "Disabled"
+        }
+      },
+      "Transitions": {
+        "NextAction": "TagTheContact"
+      }
+    },
+    {
+      "Identifier": "TagTheContact",
+      "Type": "TagContact",
+      "Parameters": {
+        "Tags": {
+          "Project": "${project_tag}",
+          "Env": "${environment}",
+          "FlowVersion": "${flow_version}"
+        }
+      },
+      "Transitions": {
+        "NextAction": "Greeting"
+      }
+    },
+    {
+      "Identifier": "Greeting",
+      "Type": "MessageParticipant",
+      "Parameters": {
+        "Text": "${greeting}"
+      },
+      "Transitions": {
+        "NextAction": "Agent",
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "Agent",
+      "Type": "ConnectParticipantWithLexBot",
+      "Parameters": {
+        "Text": "${opening_question}",
+        "LexV2Bot": {
+          "AliasArn": "${bot_alias_arn}"
+        },
+        "LexSessionAttributes": {
+          "contactId": "$.ContactId",
+          "channel": "$.Channel",
+          "instanceArn": "$.InstanceARN"
+        },
+        "LexTimeoutSeconds": {
+          "Text": "${lex_session_timeout_seconds}"
+        }
+      },
+      "Transitions": {
+        "NextAction": "Goodbye",
+        "Errors": [
+          {
+            "ErrorType": "InputTimeLimitExceeded",
+            "NextAction": "NoInput"
+          },
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Trouble"
+          },
+          {
+            "ErrorType": "NoMatchingCondition",
+            "NextAction": "Goodbye"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "NoInput",
+      "Type": "MessageParticipant",
+      "Parameters": {
+        "Text": "I'm sorry, I didn't hear anything. Please call back when you're ready and we'll pick this up."
+      },
+      "Transitions": {
+        "NextAction": "Hangup",
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Hangup"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "Trouble",
+      "Type": "MessageParticipant",
+      "Parameters": {
+        "Text": "${trouble_message}"
+      },
+      "Transitions": {
+        "NextAction": "Hangup",
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Hangup"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "Goodbye",
+      "Type": "MessageParticipant",
+      "Parameters": {
+        "Text": "Thank you for calling. Goodbye."
+      },
+      "Transitions": {
+        "NextAction": "Hangup",
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Hangup"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "Hangup",
+      "Type": "DisconnectParticipant",
+      "Parameters": {},
+      "Transitions": {}
+    }
+  ]
+}

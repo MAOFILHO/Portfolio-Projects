@@ -156,7 +156,89 @@ rather than clean*. So Stage 2 is a gate, not a task:
 The "change it and apply again" half is the whole point. #42147 is a *silent* failure: the first apply
 looks fine.
 
-### Stage 3 — `stacks/main`
+### Stage 3 — `stacks/main` ⏸ **BUILT AND PLANNED 2026-08-13 — apply pending**
+
+**23 resources, `terraform plan` clean, `terraform validate` clean, 488 tests green.** The apply has not
+run: the harness's permission layer declined it, so the plan and its cost delta are below and the apply
+needs a word. Nothing in this stage is outside the `APPROVED: Phase 8` under-$2 authorisation.
+
+**Cost delta: $0.00/month at rest.** Lambda, DynamoDB on-demand, S3 and CloudWatch are free at this
+volume; Connect flows, queues and hours of operation are not billed at all; Lex bills per runtime
+**request** and not for storing a bot — measured in Stage 2, not assumed. Nothing in this stage places a
+call, and a call is the only thing here that costs money.
+
+| Resource | Count | At rest |
+|---|---|---|
+| Lex bot + published version + `live` alias (2 CFN stacks) | 2 | $0.00 |
+| Connect contact flow, queue, hours of operation | 3 | $0.00 — not billed |
+| Connect↔Lex integration association, Connect↔Lambda association | 2 | $0.00 |
+| Lambda + log group + 2 permissions | 4 | $0.00 (1M req / 400k GB-s free) |
+| IAM: 2 roles + 2 inline policies | 4 | $0.00 |
+| DynamoDB checkpointer + vector table, on-demand | 2 | $0.00 idle; 25 GB storage free |
+| S3 artifacts bucket + 4 configuration resources | 5 | $0.00 |
+| `terraform_data` build wait, `terraform_data` flow version | 2 | $0.00 |
+
+#### Four things in this stage that are not routine
+
+**1. The provider cannot express two of these resources at all — an independent vindication of `ADR-007`.**
+`ADR-007` chose nested CloudFormation on the strength of three provider *bugs*, and Stage 2 discharged its
+POC gate against them. Stage 3 found two provider **gaps** that would have forced the same decision from
+scratch:
+
+- **There is no `aws_lexv2models_bot_alias` resource.** Provider 6.59.0 ships `_bot`, `_bot_locale`,
+  `_bot_version`, `_intent`, `_slot`, `_slot_type`. No alias — and Connect associates with an *alias*.
+- **`aws_connect_bot_association` is Lex V1 only.** Its schema carries one `lex_bot` block with `name` and
+  `lex_region`, the classic-Lex shape. The V2 association needs `LexV2Bot.AliasArn`, which the resource
+  cannot express, while `AWS::Connect::IntegrationAssociation` documents "Lex bot (both v1 and v2)".
+
+Neither was known when `ADR-007` was written. **A decision holding up for reasons its author did not have
+is worth more than the reasons they did have**, and it is recorded in `release.yaml.tftpl`'s header rather
+than as an ADR amendment, because nothing about the decision changed.
+
+**2. The version-staleness trap was read out of the documentation before the resource was written.**
+`AWS::Lex::BotVersion`, verbatim: *"If the DRAFT version of this resource hasn't changed since you created
+the last version, Amazon Lex doesn't create a new version, it returns the last created version."* Every
+property except `BotId` is "Update requires: No interruption". **That is the Bedrock Guardrails DRAFT trap
+in a second service** — `RESULTS.md` §3.5.1, instance 1 — and this time it was predicted rather than
+measured after the fact. The fix is the CloudFormation analogue of `replace_triggered_by`: the version's
+**logical ID carries the bot definition's hash**. Plus `make verify-lex`, because §3.5.1 rule 1 says a
+mechanism is not a verification.
+
+**3. Constraint 18's CI check, as `CLAUDE.md` words it, has a hole. Widened, and reported rather than
+widened silently.** `CLAUDE.md` specifies *"`RecordedParticipants` is non-empty"*. The
+`UpdateContactRecordingBehavior` parameter reference shows **three independent switches**:
+
+```
+RecordedParticipants        — Agent / Customer call audio
+ScreenRecordedParticipants  — Agent screen recording
+IVRRecordingBehavior        — "Enabled" | "Disabled"
+```
+
+A flow with `{"RecordedParticipants": [], "IVRRecordingBehavior": "Enabled"}` **passes the check exactly
+as worded while recording the caller's entire self-service conversation** — and the IVR leg is the only
+leg this system has, because there are no agents. `scripts/check_flows.py` fails on all three.
+`tests/unit/test_check_flows.py::test_ivr_recording_fails_even_with_an_empty_participant_list` is the
+negative control. **This is a proposed amendment to constraint 18's wording, not a done deal.**
+
+**4. The DID is deliberately not pointed at the flow, and the flow's greeting deliberately promises
+nothing.** The Stage 3 codehook implements the Lex wire contract and does not yet run L1/L2. A number
+pointed at a flow is a number a stranger can dial, and an FNOL bot that collects claim details with no
+injury-detection path is the one thing `CLAUDE.md` marks as admitting no negotiation. An unrouted number
+rings out: a worse demo, a better system. Same reasoning keeps *"say agent to reach a person"* out of the
+greeting — `NOT-FIXED.md` #2's *"a record with no transfer behind it is a different lie, not a smaller
+one"*, committed in the first sentence of the call. Both land in Stage 4, one resource and one default.
+
+#### One design decision worth flagging
+
+**L3 — the hard "agent"/"human" override — is NOT a seventh Lex intent, and that is about correctness
+rather than about counting to six.** Mid-slot-elicitation an utterance is matched against the active slot
+type, so a caller saying "agent" while `policy_number` is being elicited produces a **no-match, not an
+intent switch**. A Lex intent for L3 would be reachable from most states and would *look* reachable from
+all of them. L3 therefore lives in the codehook as a deterministic per-turn check, exactly where L1 lives
+and for `ADR-010`'s reason — and `DialogCodeHook` is enabled on `FallbackIntent` so a no-match turn
+reaches it. Stage 4 implements it.
+
+#### Original scope below
 
 Contact flows, queue, hours of operation, the Lex association, the Lambda association, the Lambda itself,
 the DynamoDB tables (checkpointer + vector store), the S3 bucket. All destroyable.

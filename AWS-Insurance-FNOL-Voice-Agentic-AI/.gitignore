@@ -83,3 +83,7 @@ data/synthetic/.ingest/
 
 # Claude Code local overrides
 .claude/settings.local.json
+
+# Terraform plan files and the Lambda build output — generated, never committed.
+tfplan
+infra/terraform/stacks/*/.terraform-build/

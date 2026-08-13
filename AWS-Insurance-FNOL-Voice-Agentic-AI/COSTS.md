@@ -87,6 +87,18 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 
 | 2026-08-13 | 2 | **Tag-propagation probe (open item G).** Two `ce:GetCostAndUsage` calls grouped by `SERVICE` × `TAG:Project`. Every line reads `Project$` — untagged — including the AMCS-sold DID. **Inconclusive, not negative:** cost allocation tags are not retroactive and `Project` was activated during 08-12, so 08-11/08-12 would read untagged regardless. Re-check on 08-13's settled data | Yes | 2 CE requests | **$0.02** | A |
 
+| 2026-08-13 | 3 | **`stacks/main` written, `terraform init` + `validate` + `plan`.** 23 resources: the six-intent Lex bot and its published version/alias (2 nested CFN stacks), the Connect↔Lex integration association, an inbound contact flow, hours of operation, the escalation queue, the codehook Lambda + log group + 2 permissions + Connect association, 2 IAM roles and policies, 2 DynamoDB tables, the artifacts bucket and its 4 configuration resources, 2 `terraform_data` markers. **Plan only — no apply.** The harness's permission layer declined the apply, so this row is the plan and its projected delta, not a spend | Plan/read only | 23 planned | **$0.00** | A |
+
+⏸ **Stage 3's projected delta is $0.00/month at rest, and the apply has not run.** Recorded here at the
+time it was planned rather than after it lands, per criterion 13 — *"every run logged in `COSTS.md` at
+the time it runs"* — because a cost row written retrospectively is a row written by someone who already
+knows the answer. Why $0.00: **Lex bills per runtime request and not for storing a bot** (measured at
+Stage 2, not assumed); Connect **contact flows, queues and hours of operation are not billed at all**;
+Lambda, DynamoDB on-demand, S3 and CloudWatch are inside always-free allowances at this volume. Nothing
+in this stage places a phone call, and a phone call is the only thing here that costs money. Line A stays
+at **$0.12 of $2** — the $0.10 audit and the $0.02 probe, both Cost Explorer, neither a provisioned
+resource.
+
 **Line C is closed at $0.00825.** The bot was free; the eleven sentences said to it were not. Everything
 this POC found is in `docs/phase8/LEXPOC-GATE.md`, which outlives the resource.
 

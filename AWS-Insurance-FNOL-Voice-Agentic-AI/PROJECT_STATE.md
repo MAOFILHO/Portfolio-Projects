@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 built, apply pending)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2320,6 +2320,104 @@ the definition is what the locale build *reads*, not what it *serves*. A control
 (`police_report_number`'s DTMF timeout) was held still throughout, and the gate itself is proven able to
 fail by **15 tests that mutate the recorded evidence into each failure it claims to catch**.
 
+### Stage 3 — `stacks/main`, built and planned 2026-08-13. **Apply pending**
+
+**23 resources. `terraform validate` clean, `terraform plan` clean (23 to add, 0 to change, 0 to destroy),
+488 tests green (+65), lint, mypy strict, `terraform fmt` all clean.** The apply did not run — the
+harness's permission layer declined it — so the plan and its cost delta are recorded and the apply needs
+a word. Everything in it sits inside the `APPROVED: Phase 8` under-$2 authorisation, and the **cost delta
+at rest is $0.00/month**: Lex bills per runtime request, Connect flows/queues/hours are not billed at all,
+and Lambda/DynamoDB/S3/CloudWatch are free at this volume. Nothing here places a call.
+
+Delivered: the six-intent Lex bot via nested CFN, its published version and `live` alias, the
+Connect↔Lex integration association, an inbound contact flow, hours of operation, the escalation queue,
+the codehook Lambda with a scoped IAM role, both DynamoDB tables, the artifacts bucket, `make deploy` /
+`make destroy` (+ `provision`/`teardown` aliases), `make verify-flows`, `make verify-lex`, and
+`src/fnol_voice_agent/api/lex_codehook.py` written test-first.
+
+`make verify-destroy-scope` still passes **now that a `destroy` target actually exists** — Stage 1 noted
+that the check was passing with nothing to find, and that the moment the target appears is the moment
+nobody is looking. It appeared, and the check was watching.
+
+### D72 — `ADR-007` held up for reasons its author did not have
+
+`ADR-007` chose nested CloudFormation over native `aws_lexv2models_*` on the strength of three provider
+**bugs**, and Stage 2's POC gate discharged it against exactly those. Stage 3 found two provider **gaps**
+that would have forced the same decision from scratch, and neither is a bug anyone will fix by reading a
+bug report:
+
+1. **There is no `aws_lexv2models_bot_alias` resource.** Provider 6.59.0 ships `_bot`, `_bot_locale`,
+   `_bot_version`, `_intent`, `_slot`, `_slot_type`. No alias — and Connect associates with an *alias*.
+2. **`aws_connect_bot_association` is Lex V1 only.** One `lex_bot` block carrying `name` and `lex_region`,
+   the classic-Lex shape. The V2 association needs `LexV2Bot.AliasArn`, which the resource cannot express;
+   `AWS::Connect::IntegrationAssociation` documents "Lex bot (both v1 and v2)".
+
+Without CloudFormation there is **no console-free path to a usable Lex V2 bot on Connect at all** in this
+provider version. Recorded in `release.yaml.tftpl`'s header rather than as an ADR amendment, because ADRs
+are immutable and nothing about the decision changed — only the strength of the case for it.
+
+The generalisation worth keeping: **a decision that survives evidence its author never saw is better
+supported than one that survives the evidence they chose.** The original three bug reports were selected
+by someone who had already formed a view. These two gaps were not.
+
+### D73 — constraint 18's CI check, as worded, has a hole; widened and reported
+
+`CLAUDE.md` specifies the recording check as *"`RecordedParticipants` is non-empty"*. The
+`UpdateContactRecordingBehavior` parameter reference shows the behaviour object carries **three
+independent switches**: `RecordedParticipants`, `ScreenRecordedParticipants`, and `IVRRecordingBehavior`
+(`"Enabled"` | `"Disabled"`). An empty participant list disables none of the other two.
+
+**A flow with `{"RecordedParticipants": [], "IVRRecordingBehavior": "Enabled"}` passes the check exactly
+as `CLAUDE.md` words it while recording the caller's entire self-service conversation** — and the IVR leg
+is the *only* leg this system has, because there are no agents. The check as specified would have been
+green over the precise failure it exists to prevent.
+
+`scripts/check_flows.py` fails on all three, plus an `UpdateContactRecordingBehavior` with no behaviour
+object at all — absent is not off, it is unspecified. Each has a negative control in
+`tests/unit/test_check_flows.py`. **This is a proposed amendment to constraint 18's wording and is
+flagged rather than silently applied**; the checker is wider than the constraint until Marco says
+otherwise.
+
+Same family as `D67` and `D69`: the check was written against the mechanism someone had in mind, and the
+service had three.
+
+### D74 — L3 is not a Lex intent, because a Lex intent would not be reachable from any state
+
+`DIALOGUE-POLICIES.md` §8 requires the hard "agent"/"human" override to be reachable from **any** state,
+and `CLAUDE.md` fixes the intent count at six. A seventh Lex intent is the obvious way to express L3 and
+would have been defensible as "escalation route 2, not a product intent". It is rejected on correctness,
+not on counting.
+
+**Mid-slot-elicitation, an utterance is matched against the active slot type first.** A caller saying
+"agent" while `policy_number` — an `AMAZON.AlphaNumeric` slot — is being elicited produces a **no-match,
+not an intent switch**. An L3 intent would be reachable from most states and would *look* reachable from
+all of them, which is worse than not having one: it is a safety guarantee that tests green in every state
+anyone thinks to test.
+
+So L3 goes in the codehook as a deterministic per-turn check, next to L1, for `ADR-010`'s reason — and
+`DialogCodeHook` is enabled on `FallbackIntent` so that a **no-match turn reaches the codehook too**.
+That line in `bot.yaml.tftpl` is load-bearing, not tidiness: it is what makes both L1 and L3 reachable on
+the turns they cannot afford to miss. Stage 4 implements the check.
+
+### D75 — the DID stays unrouted until the safety path is real
+
+Stage 3 does not create `aws_connect_phone_number_contact_flow_association`, and the flow's greeting does
+not mention the agent override.
+
+The Stage 3 codehook implements the Lex wire contract and nothing above it. A number pointed at a flow is
+a number a stranger can dial, and an FNOL bot that collects claim details with **no injury-detection path
+at all** is the one thing `CLAUDE.md` marks as admitting no negotiation and no discretion. An unrouted
+number rings out. Worse demo, better system, and the trade is not close.
+
+The greeting follows from the same rule one level down: announcing *"say agent to reach a person"* before
+L3 exists puts `NOT-FIXED.md` #2's *"a record with no transfer behind it is a different lie, not a smaller
+one"* into the first sentence of the call. Both are one-line changes in Stage 4, and the flow's content
+hash makes the greeting change a **new flow** rather than an edit to the one currently serving.
+
+Second-order consequence, asserted by a test: because the DID is not referenced, `stacks/main` has **no
+edge into `stacks/telephony`'s state at all**. The moment it has one is the moment a routine apply has a
+path toward the protected number, and Stage 4 should add that edge deliberately rather than inherit it.
+
 ### D68 — the POC's verdict was the least valuable thing it produced
 
 Four findings, none of which was the pass/fail answer, and one of which was a live dialogue defect:
@@ -2372,6 +2470,51 @@ documented exclusions and our design walks into all three — missed utterances 
 digit-only identifiers are the slots most likely to no-match), slot values used in *responses* are not
 obfuscated (our confirmation policy reads the policy number back), and session attributes are not
 obfuscated. It is defence in depth; it cannot be the boundary. `ADR-011` stays where it is.
+
+### D70 — obfuscation on, conversation logs off, invocation logging declined
+
+**Marco-approved 2026-08-13**, as proposed, and binding on Stage 3:
+
+- Lex slot `ObfuscationSetting` is **enabled** on identifier-bearing slots, as defence in depth.
+- **No Lex conversation logs in Stage 3** without an `ADR-011`-compatible redaction pass in front of them.
+- **Bedrock model invocation logging declined** on the same grounds — recorded rather than re-discovered.
+
+Marco's reasoning, which is the part worth keeping: *"all three documented obfuscation exclusions hit our
+design directly, and the one that matters most is that missed utterances aren't obfuscated — those are
+exactly the digit-identifier slots most likely to no-match. Conversation logs would trade production
+no-match data for raw caller identifiers in CloudWatch, and **no-match data is recoverable later at no
+privacy cost while identifiers in logs are not removable.**"*
+
+That last clause is the general rule and it is not specific to Lex: **the two sides of a
+telemetry-versus-privacy trade are not symmetric in time.** Deferred measurement can be taken later;
+logged identifiers cannot be un-logged. Where the trade is close, the reversible side wins by default —
+which also means the decision to defer must be recorded, or "we can get it later" quietly becomes "we
+never got it."
+
+`ListUtteranceMetrics`' `Missed` (`EXISTING-INSTRUMENTS.md` #3) is the reason the deferred side is cheap:
+it reports production no-match **counts** without persisting the utterance text, so most of what
+conversation logs were wanted for is available at no privacy cost at all.
+
+### D71 — a third instance makes it a platform pattern, not a service quirk
+
+Marco, on Stage 2's locale-build finding: *"the third instance of
+artifact-reports-success-while-served-behaviour-is-stale, after Bedrock Guardrails DRAFT and the guardrail
+version pinning. Name it as a family in `RESULTS.md`. Anyone deploying on AWS will meet it again, and three
+independent services is enough to call it a platform pattern rather than a service quirk."*
+
+Written as **`RESULTS.md` §3.5.1** — a sibling family to §3.5, not a sub-case. §3.5 is about guards *we*
+wrote that checked an artifact instead of an outcome; §3.5.1 is about **AWS handing us an artifact-shaped
+success signal**, which makes the same mistake the default. Bedrock, CloudFormation and Lex, three
+unrelated mechanisms, one structure: create/update returns when the control plane accepts the change, and
+each service chooses independently when the data plane reflects it.
+
+Three rules, of which the third is Stage 3's to build: verify against a service read not an apply output;
+verify the version you are actually serving; and **wait on the build state, never on the create call**.
+`make verify-inference` (`ADR-016`) is the pattern already applied correctly and is the model to copy.
+
+Also recorded in §0.0: **"a single instrument cannot be wrong, because there is nothing for it to disagree
+with"** now sits there as the generalised form of the phase's result, with Cost Explorer named as the
+counterexample that disproves the weaker claim (*prefer the platform's instrument*).
 
 ### D67 — the log was the instrument that was never checked
 

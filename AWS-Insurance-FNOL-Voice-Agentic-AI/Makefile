@@ -1,5 +1,5 @@
 .PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
-        verify-destroy-scope
+        verify-destroy-scope verify-flows verify-lex deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -8,6 +8,20 @@
 
 VENV := .venv/bin
 BOOTSTRAP_DIR := infra/terraform/bootstrap
+
+# Applied in this order and destroyed in the reverse of it. `stacks/main` reads the other two through
+# `terraform_remote_state`, and a remote-state read of an unapplied stack fails with an empty-outputs
+# error rather than a helpful one.
+#
+# The protected telephony stack is NOT in this list and must never be. `make verify-destroy-scope` fails
+# the build if any recipe line here names its directory -- see scripts/verify_destroy_scope.py, and note
+# that this comment is allowed to mention it while a recipe line is not.
+DEPLOY_STACKS := infra/terraform/stacks/guardrails \
+                 infra/terraform/stacks/inference \
+                 infra/terraform/stacks/main
+DESTROY_STACKS := infra/terraform/stacks/main \
+                  infra/terraform/stacks/inference \
+                  infra/terraform/stacks/guardrails
 
 # One-time state backend setup: a versioned, encrypted, public-access-blocked S3 bucket, with native S3
 # state locking (Terraform >= 1.10 `use_lockfile`) rather than a billable DynamoDB lock table.
@@ -42,6 +56,77 @@ verify-backend:
 		else echo "  ok       $$f"; fi; \
 	done; \
 	exit $$rc
+
+# Provision everything destroyable. Canonical name per the Definition of Done; `provision` is the alias
+# kept for consistency with sibling projects in the monorepo.
+#
+# COST GATE. Every resource this creates is inside the `APPROVED: Phase 8` authorisation of 2026-08-12
+# (provisioned resources, under $2) and the table backing that number is `docs/phase8/BUILD-PLAN.md` §3.
+# At rest this stack is $0.00/month: Lambda, DynamoDB on-demand, S3 and CloudWatch are all free at this
+# volume, Connect flows/queues/hours are not billed, and Lex bills per runtime REQUEST rather than for
+# storing a bot. What costs money is a phone call, and nothing here places one.
+#
+# `-auto-approve` is deliberately ABSENT. CLAUDE.md requires the plan and its cost delta to be shown
+# before an apply, and a target that skips the confirmation is a target that skips that rule.
+deploy:
+	@for d in $(DEPLOY_STACKS); do \
+		echo "==> $$d"; \
+		terraform -chdir=$$d init -input=false || exit 1; \
+		terraform -chdir=$$d apply -input=false || exit 1; \
+	done
+	@$(MAKE) --no-print-directory verify-inference
+
+provision: deploy
+
+# Return to $0. Reverse order, because stacks/main reads the other two.
+#
+# WHAT THIS DOES NOT TOUCH, and both omissions are load-bearing:
+#   * The protected DID. It lives in a stack this file does not name, in separate state, behind
+#     `prevent_destroy`. `make verify-destroy-scope` fails the build if that ever stops being true.
+#   * The state backend. A backend that can delete itself takes every other stack's state with it,
+#     including the state that points at a number which cannot be re-claimed for 180 days.
+#
+# ONE CONSEQUENCE WORTH KNOWING BEFORE YOU RUN IT: destroying the guardrail stack deletes the published
+# guardrail version that Phase 7's red-team results were measured against. `NOT-FIXED.md` #12 already
+# records that shape -- publishing a new version deletes the old one -- and Phase 8 Stage 6 owns it. The
+# evidence files and ledger entries stay attributable by `live_config_sha`; they stop being re-runnable.
+destroy:
+	@for d in $(DESTROY_STACKS); do \
+		echo "==> $$d"; \
+		terraform -chdir=$$d init -input=false || exit 1; \
+		terraform -chdir=$$d destroy -input=false || exit 1; \
+	done
+	@$(MAKE) --no-print-directory verify-destroy-scope
+
+teardown: destroy
+
+# Constraint 18 and the contact tag schema, as a build failure rather than a convention.
+#
+# Fails on: any recorded participant, any screen-recorded participant, IVR recording left enabled, any
+# occurrence of AnalyticsBehavior/ContactLens/RealTimeContactAnalysis, any contact tag key outside
+# {Project, Env, FlowVersion}, and any flow path that can disconnect or transfer before it has been
+# tagged. Flow files are globbed BY CONTENT -- some upstream exports have no extension, and an extension
+# glob would examine zero files and pass.
+#
+# Also fails if it finds no flows at all, which is the same failure one level up.
+verify-flows:
+	@$(VENV)/python scripts/check_flows.py
+
+# Read the deployed Lex release back from the service and compare it against what Terraform declared.
+#
+# `RESULTS.md` §3.5.1 rule 1: the apply output is Terraform's record of its own request; the read is a
+# fact. Everything is checked against the version THE ALIAS ACTUALLY POINTS AT, never against DRAFT --
+# DRAFT is what an apply mutates, so a verifier reading it would agree with Terraform in exactly the
+# cases where the deployment is broken.
+#
+# Catches, among others, the failure `AWS::Lex::BotVersion` produces by default: AWS documents that an
+# unchanged DRAFT yields the PREVIOUS version rather than a new one, so the alias can keep serving an old
+# definition while every artifact says otherwise. `release.yaml.tftpl` has a mechanism against that; this
+# is the check that the mechanism worked.
+#
+# Control-plane reads only. Lex bills per runtime request; this costs $0.00.
+verify-lex:
+	@$(VENV)/python scripts/verify_lex_release.py
 
 # Chunk + embed the policy corpus, load it into the vector store. Free by default: mock embeddings + a
 # local in-memory table (see src/fnol_voice_agent/knowledge/ingest.py's module docstring). Real Bedrock
@@ -104,6 +189,7 @@ TYPED = src evals scripts redteam
 lint:
 	$(VENV)/ruff check $(CHECKED)
 	$(VENV)/black --check $(CHECKED)
+	@$(MAKE) --no-print-directory verify-flows
 
 # ruff --fix + black
 format:
