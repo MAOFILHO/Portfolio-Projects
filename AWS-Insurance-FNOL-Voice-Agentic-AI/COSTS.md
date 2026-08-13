@@ -147,10 +147,20 @@ to fit — still 5.4% of the $2 provisioned line and 0.4% of the $25 hard ceilin
 run; the actual figure lands in the row below once criterion 9 executes, per criterion 13's per-run
 discipline.
 
-**RAN 2026-08-13. Result: `C1` BREACH on the deployed system — composed recall 0.000 (0/26), not the
-1.000 D52 established. Root cause is NOT the safety logic; it is that the deployed Lambda has been unable
-to execute ANY code, on ANY turn, since Stage 4's deploy.** `scripts/measure_composed_pipeline_deployed.py`,
-result at `evals/baselines/composed_pipeline_deployed_k3_20260813.json`.
+**RAN 2026-08-13. Result: no measurement obtained; run invalid (`D80`). `C1` is UNVERIFIED on the deployed
+system, not failed** — corrected 2026-08-13 after Marco's review: *"0/26 is not a measurement. The
+instrument returned nothing; it did not return zero."* He is right. The harness (`D81`, filed separately
+below and in `RESULTS.md` §11) had no channel to distinguish "asked and did not escalate" from "never
+executed," and silently scored a `Runtime.ImportModuleError` as 26 missed escalations. **`C1`'s status:
+unverified on any deployed build, and unverified end-to-end on the current Lambda-wrapped configuration
+at all** — the last build on which `C1` passed end-to-end was the LOCAL graph composition at fingerprint
+`cec0cfcba5dd133c` (2026-08-13T01:56 UTC, recall 1.000/26/26, "Stage 8 re-verification after the
+guardrail v2 → v3 change"), and that fingerprint predates `api/lex_codehook.py`, `agents/l3_lexicon.py`
+and `aws/checkpointer.py` entirely — those files did not exist in the six-file set it hashed. **No build,
+local or deployed, has ever verified `C1` end-to-end through the code that is now shipped.**
+`scripts/measure_composed_pipeline_deployed.py`, result (corrected in place, raw value preserved under
+`composed_recall_deployed_RAW_UNSCORED` rather than deleted) at
+`evals/baselines/composed_pipeline_deployed_k3_20260813.json`.
 
 Diagnosed the same way the flow-content bug was, earlier this stage: a real API probe, not a guess.
 `aws cloudwatch get-metric-statistics` on `fnol-codehook` for the run's exact window shows **78
@@ -184,7 +194,7 @@ requests × $0.00075 = **$0.05925 exact**, no estimation involved on either side
 
 | Date | Stage | What ran | Real AWS call? | Units | Actual cost | Line |
 |---|---|---|---|---|---|---|
-| 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. BREACH — 0/26, root cause is a missing Lambda dependency layer, not a safety-logic regression.** 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
+| 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. No measurement obtained; run invalid (`D80`/`D81`).** `C1` is unverified on the deployed system, not failed. 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that

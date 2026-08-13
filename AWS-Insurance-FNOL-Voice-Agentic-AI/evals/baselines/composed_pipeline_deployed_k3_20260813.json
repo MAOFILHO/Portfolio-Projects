@@ -661,11 +661,8 @@
     }
   ],
   "positives": 26,
-  "composed_recall_deployed": 0.0,
-  "composed_recall_deployed_counts": [
-    0,
-    26
-  ],
+  "composed_recall_deployed": null,
+  "composed_recall_deployed_counts": null,
   "unstable_item_count": 0,
   "divergences_from_d52": [
     {
@@ -817,5 +814,15 @@
   "run_started_utc": "2026-08-13T19:01:18+00:00",
   "run_finished_utc": "2026-08-13T19:01:46+00:00",
   "bot_id": "W9MNF86T1H",
-  "bot_alias_id": "ZYAWLCMPQX"
+  "bot_alias_id": "ZYAWLCMPQX",
+  "run_status": "INVALID",
+  "run_invalid_reason": "no measurement obtained; run invalid (D80). D80: the deployed Lambda crashed at cold-start import (Runtime.ImportModuleError: No module named pydantic) on 79/79 real invocations in this window (CloudWatch-confirmed), because infra/terraform/stacks/main/lambda.tf never actually bundles the runtime dependencies its own header comment promises. D81: this harness had no invalid-invocation channel and silently scored every crashed call as escalated=false, i.e. as a missed escalation, which is why composed_recall_deployed below reads 0.0 -- that number is not a measurement of C1, it is a measurement of the crash.",
+  "composed_recall_deployed_RAW_UNSCORED": {
+    "note": "What the (defective) harness originally computed from this run, preserved for the D81 record, not for reading as C1.",
+    "value": 0.0,
+    "counts": [
+      0,
+      26
+    ]
+  }
 }

@@ -186,7 +186,7 @@
     "samples_per_item": 3,
     "git_commit": "7ec731e98aa5",
     "metrics": {
-      "composed_recall_deployed": 0.0,
+      "composed_recall_deployed": null,
       "composed_recall_deployed_counts": [
         0,
         26
@@ -335,11 +335,14 @@
       },
       "cost_usd": 0.084918,
       "bot_id": "W9MNF86T1H",
-      "bot_alias_id": "ZYAWLCMPQX"
+      "bot_alias_id": "ZYAWLCMPQX",
+      "composed_recall_deployed_STATUS": "no measurement obtained; run invalid (D80)",
+      "composed_recall_deployed_RAW_UNSCORED": 0.0
     },
     "notes": [
       "Deployed re-verification (criterion 9), not a component measurement \u2014 real RecognizeText calls against the live alias, matching the shape D52 measured only in the graph.",
-      "C1 BREACH: deployed composed recall below 1.000 on the must-escalate items."
+      "C1 BREACH: deployed composed recall below 1.000 on the must-escalate items.",
+      "CORRECTION, appended after review: the 0.0 this run recorded above is not a measurement of C1. D80 (infra: no Lambda dependency layer, every invocation crashed at cold-start import) and D81 (instrument: this harness had no invalid-invocation channel and silently scored crashed calls as missed escalations) both apply. Status is unverified, not failed. Raw historical value preserved as composed_recall_deployed_RAW_UNSCORED rather than deleted."
     ]
   }
 ]

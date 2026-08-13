@@ -1680,3 +1680,78 @@ the full conversation harness driving multi-turn dialogues, which Phase 6 did no
 GATE is Lex-STT-completion to Polly-audio-start, which includes telephony, ASR and TTS legs this phase
 never touches. Publishing an internal number next to the 1,800 ms budget would invite exactly the wrong
 comparison. Phase 9 owns it.
+
+---
+
+## 11. Phase 8 — deployment verification findings
+
+This file's title says Phases 6 and 7. §0.0's finding — *"most of what looked like system behaviour
+turned out to be instrument behaviour"* — held again at Phase 8, one layer further down the stack, and
+the three findings below generalize past this project. Full detail, including the specific defect IDs
+(`D80`, `D81`) and the run they came from, is in `PROJECT_STATE.md`'s Phase 8 Stage 4 section; this is
+the register entry, promoted rather than left as a footnote, per Marco's instruction on review.
+
+### 11.1 Deployment verification that doesn't verify execution
+
+A Lambda deploy was checked by reading back `LastUpdateStatus: Successful`, `State: Active`, and an
+independently-computed `CodeSha256` matching the deployed artifact bit-for-bit — deliberately not
+trusting the deploy call's own response, per this project's `D77` ("an API returning success is evidence
+the request was accepted, not evidence the value was stored"). That check passed. The function had, at
+that exact moment, never once executed past its own first `import` statement — every invocation crashed
+at cold start with `Runtime.ImportModuleError` (`D80`), and had done so on 100% of calls since the code
+went live.
+
+**Both facts are true at once, and the first does not imply the second.** `LastUpdateStatus`/`State`/
+`CodeSha256` verify that the right bytes reached the service and that the service considers the function
+schedulable. None of the three, individually or together, execute the function. A read-back built to
+satisfy exactly `D77`'s lesson — read what is running, not what the deploy call claimed — was still
+answering "is this deployed," not "does this run," because those are different questions with different
+instruments, and only one of them was asked. **Say plainly what generalizes:** a deployment-verification
+check that reads service-reported deploy status, however rigorously, is necessary and not sufficient for
+"the code executes." The sufficient check invokes the function and reads its output.
+
+### 11.2 Comment-as-evidence
+
+The root cause of `D80` was a comment: `infra/terraform/stacks/main/lambda.tf`'s own header asserted
+*"Stage 4's langgraph/boto3 requirements land as a Lambda layer, which is the change that makes package
+size a real number"* — written when the file's only dependency was the standard library, true at the
+time, and never revisited when Stage 4 actually added `langgraph`, `pydantic`, and five other runtime
+packages to the handler's import graph. No `aws_lambda_layer_version` resource, or any other
+dependency-bundling mechanism, was ever added to reconcile the claim against what the file actually
+declares. The comment was read, by a later stage's authors including this session, as if it described a
+resource that existed.
+
+**A repo-wide sweep followed, checking every comment or doc claiming infrastructure exists against the
+actual resource declarations**, searching `infra/terraform` and `src` for aspirational/promissory
+phrasing (*"lands as," "will be created," "gets provisioned," "ships as a layer,"* and near variants) and
+cross-checking each hit against real resource blocks. **Result: exactly one substantiated claim of
+infrastructure that does not exist — `lambda.tf:36`, already `D80`'s root cause.** Every other match was
+either metaphorical ("defense layer," "tool layer," "repository layer" — not infrastructure) or an
+explicit, correctly-honest *negative* claim (`coverage_question.py` and `checkpointer.py` both state, in
+their own module docstrings, that *no* real DynamoDB table is created by that module — true, and stated
+as absence rather than implied as presence, which is the pattern this sweep was checking for the failure
+mode of). No second instance of the `D80` shape was found elsewhere in the repo as of this sweep.
+
+**Say plainly what generalizes:** a comment describing infrastructure is a claim, not a check, and ages
+exactly as well as the last time someone reconciled it against the resources it describes — which, for
+`lambda.tf:36`, was never. A sweep for this pattern is cheap (one grep pass, cross-referenced against
+`resource`/`data` blocks) and found its one instance in this repo on the first attempt; it costs
+re-running whenever a stage's own docstrings start asserting infrastructure again, not only once.
+
+### 11.3 Cost below estimate as a liveness signal
+
+Criterion 9 was estimated at ≈$0.078 expected / ≈$0.107 worst case before it ran (`COSTS.md` Line D),
+built from a per-call rate for calls that reach Bedrock's guardrail and router. The actual run cost
+**$0.05925 — Lex only, $0 Bedrock.** Read at face value, underspend looks like good news: cheaper than
+budgeted. It was not good news. It was the same finding `D80` reached by a completely different
+instrument: **zero of 78 real calls ever reached Bedrock, because none of them executed past a Python
+`import` statement.** The dollar figure and the CloudWatch error count are two independent readings of
+the identical fact, and the dollar figure was available before either the metrics or the logs were
+pulled.
+
+**Say plainly what generalizes, and codify it:** when a real, billed run costs meaningfully less than a
+cost model that was itself derived from the system's own prior real behaviour, that gap is not evidence
+of efficiency until checked — it is as likely to be evidence that part of the pipeline never ran. **An
+unexplained cost-below-estimate result should trigger a liveness check (did every expected downstream
+call actually happen) before any accuracy or recall number from the same run is read at all.** This
+project had no such rule before Phase 8 Stage 4; it has one now.

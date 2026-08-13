@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN and BREACHED 0/26 — root cause `D80`, a missing Lambda dependency layer, not a safety-logic regression; DID stays unrouted, fix and re-run pending**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN — no measurement obtained, run invalid (`D80`/`D81`, corrected per Marco's review); `C1` UNVERIFIED on any deployed build and end-to-end on the current Lambda-wrapped configuration at all; layer plan written for review at `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md`, NOT applied; DID stays unrouted, fix and re-run pending**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2719,6 +2719,19 @@ build artifact (`.terraform-build/lex-codehook.zip`, path read via `terraform co
 proves the right bytes are deployed and schedulable, not that the function can execute past its own
 import statements.
 
+### Correction, same day, after Marco's review of `D80`
+
+*"0/26 is not a measurement. The instrument returned nothing; it did not return zero."* Accepted, and
+applied everywhere the number appeared (this file, `COSTS.md` Line D, the run artifact, the ledger entry
+— raw values preserved under `_RAW_UNSCORED` fields rather than deleted, corrections appended rather than
+silently rewritten). **`C1`'s status on the deployed system: unverified since the Stage 4 Lambda deploy —
+not failed.** Named plainly: **no build, local or deployed, has ever verified `C1` end-to-end through the
+code that is now shipped.** The last end-to-end pass of any kind was the LOCAL graph composition at
+fingerprint `cec0cfcba5dd133c` (2026-08-13T01:56 UTC, recall 1.000/26/26, Stage 8's guardrail v2→v3
+re-verification) — and that fingerprint's six-file set predates `api/lex_codehook.py`,
+`agents/l3_lexicon.py` and `aws/checkpointer.py` entirely; none of them existed yet. `D80` and a second,
+separate defect (`D81`, the harness itself) are below.
+
 ### `D80` — criterion 9 found a total outage, not a safety regression, and the D77 read-back could not have caught it
 
 Marco rejected the first Line D protocol (k=1 across all 43 items) before any spend: *"k on a deployed
@@ -2727,8 +2740,9 @@ handling, and timeouts... k=1 cannot distinguish a sound deployment from one tha
 protocol run instead: k=3 on the 26 must-escalate items only, `scripts/measure_composed_pipeline_deployed.py`
 against the live alias.
 
-**Result: composed recall 0.000 (0/26) on the deployed system — `D52`'s 1.000 (26/26) does not hold.**
-Every one of the 26 items diverged from `D52`. Diagnosed the same way, again: `aws cloudwatch
+**Result: no measurement obtained; run invalid.** The harness's raw scored output was 0.000 (0/26) —
+that number is corrected below (`D81`) and must not be read as a composed-recall measurement; the
+instrument returned nothing, it did not return zero. Diagnosed the same way, again: `aws cloudwatch
 get-metric-statistics` on `fnol-codehook` for the run's exact window shows **78 invocations, 78 errors —
 100%, not partial or stochastic**. `aws logs filter-log-events` on the same window gives the cause:
 `Runtime.ImportModuleError: No module named 'pydantic'`, at `platform.initStart` — the crash is at
@@ -2760,12 +2774,93 @@ what was written.
 spend. `COSTS.md` Line D updated with the real figure in place of both estimates.
 
 **Consequence: criterion 9 is not just unmet, it is unmeetable until the Lambda can execute at all.**
-Criterion 10 (DID routing) stays blocked — correctly, `did.tf`'s gate never needed to move. Fix required
-before any re-run: a Lambda layer (or equivalent bundling) carrying the missing runtime dependencies,
-size-checked against Lambda's 250 MB unzipped limit, applied via `terraform apply` (Marco's to run, per
-this session's boundary), re-verified with a throwaway probe before trusting it, and criterion 9 re-run
-as its own new `COSTS.md` line — not a continuation of this one, since the system under test will have
-changed. None of this is done yet.
+Criterion 10 (DID routing) stays blocked — correctly, `did.tf`'s gate never needed to move.
+
+**Plan written for Marco's review, not applied: `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md`.** A
+dependency layer was built and measured locally from public PyPI wheels (zero AWS cost, no resource
+created) — **162 MB unzipped / 54.0 MB zipped**, combined with the unchanged function code **≈163 MB of
+the 250 MB Lambda budget (65%)**, confirmed against the AWS troubleshooting doc rather than assumed. The
+build hit the exact platform-mismatch risk Marco named while it ran — `numpy`/`PyYAML` each publish
+wheels for different `manylinux` baselines, and a single platform tag silently resolves zero versions
+for one of them — fixed by passing three compatible tags, documented in the plan as a real finding, not
+a hypothetical. `mcp` is excluded (verified unused on the runtime path, `ADR-012`; saves 28 MB). The
+54.0 MB zip exceeds the 50 MB direct-upload cap and must ship via S3, not `filename` — a concrete
+Terraform shape consequence, sketched in the plan. Ordering, per Marco's instruction: `D81`'s
+invalid-invocation channel lands first, independent of the layer; a permanent `lambda:Invoke`-based
+import gate (not a throwaway probe) is proposed as a required `make deploy` step; the eventual re-run is
+its own new `COSTS.md` line (Line E), no partial credit from Line D. None of §6/§7 of that plan is
+applied — awaiting Marco's review.
+
+### `D81` — the Criterion 9 harness has no invalid-invocation channel, and that is a separate defect from `D80`
+
+`D80` is the infra bug (no Lambda dependency layer). This is the instrument bug it exposed:
+`scripts/measure_composed_pipeline_deployed.py` read exactly one signal per call —
+`sessionState.sessionAttributes.get("escalate") == "true"` — and scored its absence as
+`escalated=False`, indistinguishable from a caller whose turn was correctly classified as not requiring
+escalation. It had no third state. When 78/78 real calls crashed at cold-start import (a legitimate
+`RecognizeText` response, HTTP 200, Lex's own native `FallbackIntent`/`Failed` — no `ClientError` for the
+harness to catch), every one was silently folded into the same bucket as a genuine miss, and the harness
+computed and emitted a scored aggregate (0.000) as if all 78 were legitimate negative observations.
+
+**A passing run from this harness, in its current form, would not have been trustworthy evidence either
+— that is the reason this is its own defect and not a footnote on `D80`.** `_close()`'s fail-closed path
+(`api/lex_codehook.py`) sets the same `escalate="true"` attribute a genuine `L1`/`L2` detection does; the
+harness cannot tell "the graph correctly classified this as an injury" from "something failed and the
+system defaulted to its emergency escalation." A Lambda broken in a *different* way — one whose crash
+happens inside `handler()`'s `try/except` rather than above it, so fail-closed still fires — would report
+composed recall **1.000** from this harness, for reasons that have nothing to do with `C1`. **`C1` =
+1.000 is not measurable by this harness in its current form, regardless of Lambda state,** until it has
+an independent signal that the intended code path actually ran.
+
+**The arithmetic, reconciled as asked:** 78 invocations against 26 items is the base `k=3` sampling
+protocol, not retry-on-error logic — there was no error for the harness's own retry/contingency branch to
+see. Each of the 3 calls per item is an independent `RecognizeText` request that boto3 reported as
+**successful** (HTTP 200; Lex itself never raised), so nothing tripped the harness's contingency path
+(which triggers on disagreement across samples, and 3-of-3 uniformly `False` reads as unanimous, not
+disagreement). The functional effect is the one Marco described regardless of the label: the harness
+sampled through 78 consecutive non-substantive responses and still emitted a scored result, because
+"the AWS call succeeded" and "the turn was actually processed" were never distinguished.
+
+**Fix, required before any re-run of criterion 9 and before the layer work is even worth doing:**
+
+1. Every invocation is classified `escalated` / `not-escalated` / `invalid` — `invalid` covers at minimum
+   a `FallbackIntent`+`Failed` dialog state with no codehook side effects, and any interpretation source
+   other than `LambdaCodeHook` having run, not only a client-side exception.
+2. Any `invalid` invocation **aborts the run.** No scored `composed_recall` is emitted from a run
+   containing one.
+3. **Zero invalid invocations is a stated precondition of any reportable `C1` number**, printed and
+   recorded in the ledger entry alongside the recall figure, not left implicit in a clean run.
+
+Filed separately from `D80` by design: `D80` is about trusting a write (this session's own read-back
+pattern, one layer further); `D81` is about a check that cannot tell "the system ran" from "the system
+returned something," which is a defect in the checking mechanism itself and would recur against a
+perfectly-packaged Lambda if it failed in a different way.
+
+### Contamination window — every run against the deployed function, Stage 4 Lambda deploy → Criterion 9
+
+Not left as a phrase. `aws lambda get-function-configuration` gives `LastModified: 2026-08-13T16:54:43Z`
+for the current code (the point Stage 4's Lambda became live). `aws cloudwatch get-metric-data` for
+`fnol-codehook`, `Invocations` and `Errors`, over the full window from that timestamp to the time of this
+entry: **79 invocations, 79 errors — matching exactly** criterion 9's 78 calls plus the one ad-hoc
+diagnostic probe run while root-causing it, and no other number. That closes the inventory:
+
+| # | What ran in the window | Invoked the function? | Status |
+|---|---|---|---|
+| 1 | D77-safe Lambda read-back (`get-function-configuration`, local hash compare) | **No** — control-plane read only | Unaffected by `D80`/`D81`, but see the note below on what it could not have caught |
+| 2 | Criterion 9 (78 `RecognizeText` calls) | Yes | Void — `D80`/`D81` |
+| 3 | Diagnostic probe (1 `RecognizeText` call, root-causing `D80`) | Yes | Void, same cause |
+
+**Nothing reported green during the 100%-error window, because nothing else ran against the function in
+it.** No mechanism producing a false-green result was found — there was no third check to have gone
+green. This is worth recording as a negative finding rather than silently passing over: the inventory is
+short specifically because the deployed function had no other consumer yet (`did_routed` is still
+`false`, so no real caller could have reached it either), not because a search came up empty by mistake.
+
+**The absence of an invocation-error alarm is itself a finding.** 78 (then 79) consecutive `Errors`
+accumulated on `fnol-codehook` with nothing in this project raising about it — no CloudWatch alarm on the
+`Errors` metric exists for this function. A production system, or a more complete portfolio
+demonstration of one, would have paged on invocation #2. Logged here as scope, not fixed in this pass:
+Phase 9 (observability) or a Stage 4 follow-up is where a `errors > 0` alarm on `fnol-codehook` belongs.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
