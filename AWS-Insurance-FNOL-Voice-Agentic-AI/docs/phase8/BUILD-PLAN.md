@@ -257,13 +257,93 @@ the DynamoDB tables (checkpointer + vector store), the S3 bucket. All destroyabl
   (presence of an `Actions` or `modules` key), not by `.json` extension — some upstream exports have no
   extension, and extension-globbing would silently skip them.
 
-### Stage 4 — the Lambda codehook
+### Stage 4 — the Lambda codehook, the real transfer, and the DID — **PROPOSED 2026-08-13, awaiting `APPROVED: Stage 4`**
 
-`src/fnol_voice_agent/api/` does not exist yet. This is the first code Phase 8 writes: the Lex V2 codehook
-entry point, the sessionState contract (`Delegate`/`Close`/`ElicitSlot`, `slots.X.value.interpretedValue`),
-and the graph invocation keyed on the Connect `contactId` per `ADR-005`.
+`src/fnol_voice_agent/api/lex_codehook.py` exists from Stage 3 but implements the Lex V2 wire contract and
+nothing above it — its own docstring names what is missing and defers each item here by name. This stage
+closes those items, wires the real Connect transfer `D43`/`NOT-FIXED.md` #2 has been waiting on since
+Phase 7, and — **only if the last thing it does passes** — routes the DID. Nothing before the final
+criterion touches `stacks/telephony`'s state.
 
-`ADR-009` binds: no client at module load, SnapStart-compatible, lazily created and cached per instance.
+**Re-scoped from the original plan, named rather than left to drift:** `NOT-FIXED.md` #2 (`D43`, the real
+transfer) was filed under Stage 6 when this plan was written. It moves to Stage 4 because it is now
+coupled to the same flow content this stage already has to touch for the greeting change (`D75`) — proving
+a real transfer needs an actual `Transfer to Queue` action in the flow, wired from an escalation signal
+this stage introduces. Building that twice, once here and once in Stage 6, is the kind of split that lets
+half of it ship silently incomplete. Stage 6 keeps `NOT-FIXED.md` #12 (guardrail version retention), which
+is unrelated.
+
+#### What Stage 3 already named as missing, and this stage owns
+
+1. **`_dispatch()` replaced with the real LangGraph invocation**, `thread_id` = Connect `contactId`, per
+   `ADR-005`. The DynamoDB checkpointer Stage 3 provisioned starts being read and written for the first
+   time.
+2. **L1 and L3 wired in as the deterministic per-turn checks `D74` requires**, reachable from `FallbackIntent`'s
+   `DialogCodeHook` (already enabled in `bot.yaml.tftpl` — that line was load-bearing before this stage
+   existed to use it). L2 is already inside the graph (`ADR-010`'s ordering); this stage does not rebuild
+   it, only reaches it.
+3. **The sessionState contract completed**: `ElicitSlot` alongside the `Delegate`/`Close` Stage 3 shipped,
+   because the graph — not Lex's own slot machine — now decides what happens next on some turns.
+4. **The fail-open/fail-closed split** `lex_codehook.py`'s own docstring flags as unexamined: today every
+   error path returns `Delegate`, chosen deliberately for a handler that did nothing safety-relevant. Once
+   L1/L2 run behind it, an exception swallowed on a turn carrying an injury disclosure is a `C1` breach
+   wearing a resilience argument, not a resilience win. This stage splits the two cases: fails open
+   (`Delegate`) where no safety signal has fired on the turn, fails closed (escalate) once one has.
+5. **`ADR-009` extended to the new client set.** The checkpointer client and any Bedrock client the graph
+   needs are lazily created and cached, never at module load — same two-level test (source-level and
+   observed) Stage 3 already applied to the codehook's own boto3 usage.
+
+#### The real transfer (`D43`, `NOT-FIXED.md` #2)
+
+The escalation path performs an actual transfer to the queue Stage 3 provisioned — `EscalationRecord`'s
+`real_connect_transfer_executed` stops being a hardcoded `False`. This needs a `Transfer to Queue` action
+in the contact flow, reached from an escalation signal the graph hands back (session attribute or an
+equivalent the flow can branch on) — not a second, parallel path that bypasses the flow the caller is
+already in.
+
+#### The greeting flow (`D75`)
+
+*"Say agent to reach a person"* enters the greeting only now that saying it is true. Per `D75`'s own
+mechanism: the flow's content hash makes this a **new** flow, not an edit to the one currently serving —
+so a bad version never overwrites a known-good one and rollback is "point the association back," not
+"redeploy."
+
+#### `_FINGERPRINT_SOURCES`, widened a third time
+
+`D53` widened the tuple from three files to seven because the guardrail joined the composition and nobody
+told the fingerprint. The same mistake is available again here: `lex_codehook.py` and whatever graph-
+invocation glue this stage adds are now load-bearing components of what gets measured, and the fingerprint
+must move when they do. Widen it as part of this stage, not discovered after the fact the way `D53` was.
+
+#### Stage 4 exit criteria
+
+| # | Criterion |
+|---|---|
+| 1 | `_dispatch()` invokes the real graph, keyed on `contactId`. A two-turn conversation against the live alias (`RecognizeText`, not a real call) shows a slot value collected on turn 1 still present on turn 2 — proof the checkpointer round-trips, not just that it was provisioned |
+| 2 | An "agent" utterance mid-slot-elicitation (a Lex no-match, per `D74`'s own finding) reaches L3 through `FallbackIntent`'s codehook and escalates — demonstrated live, not asserted from the graph's existing unit coverage alone |
+| 3 | The fail-open/fail-closed split is real, proven by a test that forces an exception **after** a safety flag is set and asserts the response is not `Delegate` |
+| 4 | A forced escalation performs a **real** Connect transfer to the Stage 3 queue. `EscalationRecord.real_connect_transfer_executed` is `True` on that path, verified against a live contact record, not against the field the code sets |
+| 5 | sessionState contract covers `Delegate`/`Close`/`ElicitSlot`, each exercised by at least one live turn |
+| 6 | The new greeting flow (with the agent-override line) exists as a distinct, content-hash-suffixed resource. `terraform plan` confirms it is a new flow, not a diff to the currently-serving one |
+| 7 | `_FINGERPRINT_SOURCES` includes every file this stage adds to the composition. A test fails if a file under `src/fnol_voice_agent/api/` is not in the tuple, mirroring `D53`'s fix rather than re-deriving it |
+| 8 | `ADR-009`'s discipline (no client at module load, lazy + cached) holds for every client this stage adds, checked at both the source level and the observed level |
+| 9 | **`C1` re-verified against the DEPLOYED system.** Not the local graph call `D52` measured — a real invocation through the deployed Lambda and the live Lex bot alias (`RecognizeText`/direct Lambda invoke), on the independent injury set, k-sampled per Stage 8's protocol. Composed recall must not fall below the 1.000 (26/26) baseline `D52` established, or the candidate is rejected regardless of what it buys, exactly as `C1` has read everywhere else it has applied. **This is Phase 8 exit criterion 12, discharged here because this stage is the first point at which `_FINGERPRINT_SOURCES` moves on a deployed resource** — and it is a precondition of criterion 10, not a parallel item |
+| 10 | **The DID is routed — last, and only if criterion 9 passed.** `aws_connect_phone_number_contact_flow_association` is created against the flow from criterion 6, in `stacks/main`, still not touching `stacks/telephony`'s state per `D75`'s second-order finding. **This criterion's own text carries its precondition, matching how Phase 8's criterion 12 was written:** routing the number before criterion 9 passes repeats the exact mistake `D75` was filed to prevent — a number a stranger can dial with no *verified-on-the-deployed-system* safety path behind it. "The graph already passed `C1` once, locally, in Phase 7" is not evidence about this Lambda; that reasoning is `D75` restated, not a new argument, and it is exactly the shape of the reasoning `_FINGERPRINT_SOURCES` existed to stop from going unmeasured |
+
+Phase 8's own exit criterion 1 — the real inbound call — follows Stage 4's close, not inside it. Stage 4
+ends when the number can be dialed safely; dialing it is the phase's own headline criterion and is reported
+separately, with its own transcript in `docs/evidence/`.
+
+**Cost, named rather than assumed covered.** Criterion 9's deployed re-verification is real `lexv2-runtime`
+requests plus the Bedrock calls inside the graph they trigger — cheap (`D52`'s local run was $0.0212 for a
+larger, k=5 sweep across all 43 items; this is a subset of that shape) but not telephony, and not covered
+by the Bedrock standing cap, which `CLAUDE.md` scopes to **Phases 3–7** by its literal wording, not Phase 8.
+Same pattern as the Stage 2 POC and the 20-call allowance: **its own line in `COSTS.md`, its own word before
+it runs.** Criterion 10's real inbound call is separately covered by the existing 20-call/≈$4 telephony
+allowance and is not this stage's to spend from.
+
+`ADR-009` binds throughout: no client at module load, SnapStart-compatible, lazily created and cached per
+instance.
 
 ### Stage 5 — cost controls, on the day the resources appear
 

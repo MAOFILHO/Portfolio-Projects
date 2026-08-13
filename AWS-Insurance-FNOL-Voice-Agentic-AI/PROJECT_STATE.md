@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; **Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 scoped, awaiting `APPROVED: Stage 4` — 2026-08-13**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2560,6 +2560,39 @@ to `terraform validate`/`plan` and to 488 pre-session unit tests, and visible on
 `aws_cloudformation_stack` and `aws_connect_contact_flow`'s content arguments are opaque strings to the
 provider — this is `D72`'s finding from the other side. A provider that cannot express Lex V2 natively
 also cannot validate what it is asked to submit on your behalf.
+
+### Stage 4 — scoped 2026-08-13, **awaiting `APPROVED: Stage 4`**
+
+Full scope, deliverables and the exit-criteria table live in `docs/phase8/BUILD-PLAN.md`'s Stage 4 section
+(replacing the one-paragraph stub written before Stage 3 ran). Summary:
+
+- **Closes what Stage 3 shipped incomplete and named as such**: `_dispatch()` replaced by the real
+  LangGraph invocation keyed on `contactId` (`ADR-005`); L1/L3 wired to `FallbackIntent`'s codehook per
+  `D74`; the fail-open/fail-closed split `lex_codehook.py`'s own docstring flagged as unexamined; the
+  sessionState contract completed to `Delegate`/`Close`/`ElicitSlot`; `ADR-009`'s lazy-client discipline
+  extended to the checkpointer and any Bedrock client the graph needs.
+- **`D43`/`NOT-FIXED.md` #2 re-scoped into this stage from its original Stage 6 slot**, named explicitly
+  rather than left to drift: the real Connect transfer needs the same flow content this stage already
+  touches for the greeting change, and building the transfer logic twice (once here, once in Stage 6)
+  is exactly the kind of split that lets half of it ship silently incomplete. Stage 6 keeps `NOT-FIXED.md`
+  #12 (guardrail version retention), which does not share this coupling.
+- **`_FINGERPRINT_SOURCES` widened a third time** — `lex_codehook.py` and its graph-invocation glue join
+  the composition `D53` already found the fingerprint blind to once.
+- **Ten exit criteria**, the last two carrying Marco's explicit ordering instruction: criterion 9 is
+  Phase 8's own exit criterion 12 (**`C1` re-verified on the deployed system**, not the local `D52` run) —
+  discharged in this stage because this is the first point `_FINGERPRINT_SOURCES` moves on a deployed
+  resource. Criterion 10 (routing the DID) is **last in the stage and gated on criterion 9 passing**, with
+  the precondition written into the criterion's own text, matching how Phase 8's criterion 12 was worded at
+  approval. Marco's instruction, verbatim: *"D75 kept the number unrouted because an FNOL bot without
+  injury detection admits no negotiation — that reasoning is only satisfied once L1/L2 are verified live,
+  not once they are merely deployed."*
+- **Cost named, not assumed covered**: criterion 9's deployed re-verification is real `lexv2-runtime` +
+  Bedrock spend, cheap but outside the Bedrock standing cap (`CLAUDE.md` scopes that cap to **Phases 3–7**
+  literally) and outside the existing 20-call telephony allowance (no telephony minutes involved). Needs
+  its own `COSTS.md` line and its own word, same pattern as the Stage 2 POC and the real-call allowance.
+
+Phase 8's own headline exit criterion — the real inbound call — follows Stage 4's close rather than sitting
+inside it; Stage 4 ends when the number can be dialed safely, dialing it is reported separately.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
