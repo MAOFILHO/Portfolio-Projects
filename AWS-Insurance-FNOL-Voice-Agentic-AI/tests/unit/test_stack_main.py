@@ -26,7 +26,7 @@ STACK = REPO_ROOT / "infra/terraform/stacks/main"
 EXPECTED_SLOT_ORDER = [
     "injuries_present",
     "policy_number",
-    "insured_vehicle",
+    "insured_vehicle_vin",
     "loss_datetime",
     "loss_location",
     "loss_type",
@@ -35,6 +35,9 @@ EXPECTED_SLOT_ORDER = [
     "police_report_filed",
     "police_report_number",
     "driver_name",
+    # `D78`, Stage 4: the graph/codehook's own confirm-then-file step, no Lex slot behind it before now
+    # -- see `bot.yaml.tftpl`'s comment at this exact entry.
+    "confirm_file_claim",
 ]
 
 #: `CLAUDE.md`: exactly six, no additions. `FallbackIntent` is required by the service and is not one.
@@ -51,14 +54,17 @@ EXPECTED_INTENTS = {
 #: absent — `DOMAIN-ARTIFACTS.md`'s taxonomy correction forbids blanket-redacting loss date/time.
 EXPECTED_OBFUSCATED = {
     "policy_number",
-    "insured_vehicle",
+    "insured_vehicle_vin",
     "loss_location",
     "damage_description",
     "police_report_number",
     "driver_name",
+    # `D78`: one name now, not two -- `claim_number` is declared independently by both CheckClaimStatus
+    # and RentalTowingEntitlement (renamed from `entitlement_claim_number`), both obfuscated, and this
+    # set is built from a regex scan across the whole template, not per-intent, so the two collapse into
+    # one entry the same way `policy_number` already did across FileAutoClaim and UpdateContactInfo.
     "claim_number",
-    "entitlement_claim_number",
-    "contact_new_value",
+    "new_value",
 }
 
 

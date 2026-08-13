@@ -64,6 +64,7 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 | **A. Provisioned resources** | `APPROVED: Phase 8`, **under $2** | **$0.00** |
 | **B. Real inbound calls** | **20 calls, ≈$4** — a distinct line from the Phases 3–7 Bedrock cap. Marco: *"different resource class, different authorization"* | **$0.00** — 0 of 20 calls used |
 | **C. `AWS::Lex::Bot` POC (Stage 2)** | Approved separately and on condition. Marco: *"A resource created to test whether we can create resources is exactly the thing that gets folded in silently and then never accounted for."* **Must be destroyed once the `ADR-007` gate resolves, pass or fail — it has no purpose after that** | **$0.00825** — ✅ **created, gate discharged, DESTROYED 2026-08-13** |
+| **D. Stage 4's deployed `C1` re-verification** | `APPROVED: Stage 4`, 2026-08-13. Outside both the Bedrock standing cap and line B (no telephony minutes) — real `lexv2-runtime` requests plus the Bedrock/guardrail calls they trigger. Estimated **≤$0.09** before running, per Marco's condition | **$0.00** — 0 of 43 items run yet |
 
 | Date | Stage | What ran | Real AWS call? | Units | Est. cost | Line |
 |---|---|---|---|---|---|---|
@@ -87,20 +88,53 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 
 | 2026-08-13 | 2 | **Tag-propagation probe (open item G).** Two `ce:GetCostAndUsage` calls grouped by `SERVICE` × `TAG:Project`. Every line reads `Project$` — untagged — including the AMCS-sold DID. **Inconclusive, not negative:** cost allocation tags are not retroactive and `Project` was activated during 08-12, so 08-11/08-12 would read untagged regardless. Re-check on 08-13's settled data | Yes | 2 CE requests | **$0.02** | A |
 
-| 2026-08-13 | 3 | **`stacks/main` written, `terraform init` + `validate` + `plan`.** 23 resources: the six-intent Lex bot and its published version/alias (2 nested CFN stacks), the Connect↔Lex integration association, an inbound contact flow, hours of operation, the escalation queue, the codehook Lambda + log group + 2 permissions + Connect association, 2 IAM roles and policies, 2 DynamoDB tables, the artifacts bucket and its 4 configuration resources, 2 `terraform_data` markers. **Plan only — no apply.** The harness's permission layer declined the apply, so this row is the plan and its projected delta, not a spend | Plan/read only | 23 planned | **$0.00** | A |
+| 2026-08-13 | 3 | **`stacks/main` written, `terraform init` + `validate` + `plan`.** 23 resources: the six-intent Lex bot and its published version/alias (2 nested CFN stacks), the Connect↔Lex integration association, an inbound contact flow, hours of operation, the escalation queue, the codehook Lambda + log group + 2 permissions + Connect association, 2 IAM roles and policies, 2 DynamoDB tables, the artifacts bucket and its 4 configuration resources, 2 `terraform_data` markers. Plan only at first — the harness's permission layer initially declined the apply | Plan/read only | 23 planned | **$0.00** | A |
+| 2026-08-13 | 3 | **`stacks/main` applied — 23 of 23.** Six defects surfaced and fixed against the live service along the way (`D76`, `D77`, `Synonyms` double-wrap, `CoverageQuestion` illegal utterance, `ConnectInstanceId` ARN shape, `BotAliasTags` array shape, `TagContact` missing `Errors` transition) — none visible to `plan`/`validate`. `terraform plan` reports no changes post-apply; `make verify-lex` passes against the live alias. Every read used to verify was a control-plane call (`Describe*`/`List*`/`GetTemplate`) — **no `RecognizeText`, no billable runtime request** | Yes | 23 created | **$0.00 at rest** | A |
 
-⏸ **Stage 3's projected delta is $0.00/month at rest, and the apply has not run.** Recorded here at the
-time it was planned rather than after it lands, per criterion 13 — *"every run logged in `COSTS.md` at
-the time it runs"* — because a cost row written retrospectively is a row written by someone who already
-knows the answer. Why $0.00: **Lex bills per runtime request and not for storing a bot** (measured at
-Stage 2, not assumed); Connect **contact flows, queues and hours of operation are not billed at all**;
-Lambda, DynamoDB on-demand, S3 and CloudWatch are inside always-free allowances at this volume. Nothing
-in this stage places a phone call, and a phone call is the only thing here that costs money. Line A stays
-at **$0.12 of $2** — the $0.10 audit and the $0.02 probe, both Cost Explorer, neither a provisioned
-resource.
+✅ **Stage 3's delta is $0.00/month at rest, applied and verified 2026-08-13.** Retroactively correcting
+this log's own previous row, which described a plan rather than the apply — this is the row criterion 13
+asks for, late by one session because the apply itself ran past the point this file was last touched. Why
+$0.00: **Lex bills per runtime request and not for storing a bot** (measured at Stage 2, not assumed);
+Connect **contact flows, queues and hours of operation are not billed at all**; Lambda, DynamoDB on-demand,
+S3 and CloudWatch are inside always-free allowances at this volume. Nothing in this stage placed a phone
+call, and a phone call is the only thing here that costs money. Line A stays at **$0.12 of $2** — the $0.10
+audit and the $0.02 probe, both Cost Explorer, neither a provisioned resource; the apply itself added
+resources, not spend.
 
 **Line C is closed at $0.00825.** The bot was free; the eleven sentences said to it were not. Everything
 this POC found is in `docs/phase8/LEXPOC-GATE.md`, which outlives the resource.
+
+### Line D — Stage 4's deployed `C1` re-verification, estimated before it runs
+
+**`APPROVED: Stage 4`, 2026-08-13.** Marco's condition: *"approved as its own cost line, outside both the
+Bedrock standing cap and the telephony allowance. Estimate it before running and log it separately."*
+
+Stage 4 exit criterion 9 re-measures composed escalation recall (`C1`) against the **deployed** Lex alias
+and Lambda — `D52`'s local run ($0.0212, 43 items × k=5) does not stand in for this, because this is the
+first point `_FINGERPRINT_SOURCES` moves on a deployed resource rather than a local one.
+
+**Protocol proposed, and why it is cheaper than repeating `D52`'s shape:** temperature 0.0 already makes
+the classification path deterministic (`D27`, `D35`) — `D52`'s k=5 was measuring *model* stochasticity,
+which is not what criterion 9 exists to catch. Criterion 9 exists to catch **deployment-specific**
+divergence (environment variables, IAM, cold start, a wrong table name) that a local call cannot see at
+all. One pass over the independent set, k=1, is the right instrument for that question; if any item
+disagrees with `D52`'s recorded verdict, that one item gets re-run at higher k to tell a Lambda-specific
+flake from a real regression, rather than paying for k=5 across all 43 up front.
+
+| Component | Basis | Units | Est. cost |
+|---|---|---|---|
+| `lexv2-runtime:RecognizeText`, 43 independent-set items, k=1 | $0.00075/text request | 43 requests | **$0.0323** |
+| Bedrock (router + guardrail path each item triggers) | Same per-item cost `D52` measured locally — identical model calls, different caller | 43 items | **≈$0.0212** |
+| Lambda invocations | 1M req / 400k GB-s free tier, 43 invocations, arm64, low memory | 43 invocations | **$0.00** |
+| Contingency: re-runs on disagreement, budgeted for up to 10 items at k=4 additional | Same per-item rate as above | ≤40 requests | **≤$0.037** |
+| **Total, worst case** | | | **≈$0.09** |
+
+**Estimate: ≈$0.05 expected, ≤$0.09 worst case.** Logged here before the run per Marco's instruction; the
+actual figure lands in the row below once criterion 9 executes, per criterion 13's per-run discipline.
+
+| Date | Stage | What ran | Real AWS call? | Units | Est. cost | Line |
+|---|---|---|---|---|---|---|
+| — | 4 | **Criterion 9, deployed `C1` re-verification — not yet run.** Estimate above | pending | pending | **pending, ≤$0.09** | **D** |
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that

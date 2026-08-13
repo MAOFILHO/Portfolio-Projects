@@ -91,6 +91,17 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 # part of the configuration. `graph.py` is over-inclusive on purpose -- an edit to an unrelated intent
 # node moves the hash -- and over-inclusive is the safe direction: it can only inflate the published
 # distinct-fingerprint count, which is the number designed to embarrass us.
+#
+# Widened a THIRD time at Phase 8 Stage 4, for the reason `D53` itself predicted: a defensible per-
+# component change moved the composition, and this project's own Lambda wrapper around the graph is
+# exactly that shape. `api/lex_codehook.py` decides whether L1 fires on the raw text before the graph is
+# even invoked (its own bypass path, see the module docstring), and `agents/l3_lexicon.py` is a new
+# detector this stage introduced that participates in the same pre-graph decision. `aws/checkpointer.py`
+# determines whether `filled_slots` persists correctly across turns at all -- and `D79`'s
+# `injuries_present`-confirmed-true escalation depends on that persistence working, not merely on the
+# graph's own code. Same over-inclusive philosophy as `graph.py` above: an edit to the checkpointer's
+# retry/backoff behaviour moves the hash even though it changes no detection logic, and that is the safe
+# direction to be wrong in.
 _FINGERPRINT_SOURCES = (
     "src/fnol_voice_agent/agents/lexicon.py",
     "src/fnol_voice_agent/aws/bedrock_router.py",
@@ -99,6 +110,9 @@ _FINGERPRINT_SOURCES = (
     "src/fnol_voice_agent/guardrails/client.py",
     "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
     "src/fnol_voice_agent/agents/graph.py",
+    "src/fnol_voice_agent/api/lex_codehook.py",
+    "src/fnol_voice_agent/agents/l3_lexicon.py",
+    "src/fnol_voice_agent/aws/checkpointer.py",
 )
 
 

@@ -98,21 +98,26 @@ Resources:
             VoiceId: "${voice_id}"
 
           SlotTypes:
+            # D78: values are Title Case ("Collision", not "collision") to match models/enums.py's
+            # LossType(StrEnum) exactly -- file_new_claim's validation is case-sensitive, and a lowercase
+            # resolution would have failed file_new_claim for every real call that picked a non-default
+            # loss type, silently, on the very last turn of the flagship intent. Synonyms carry the
+            # caller's actual spoken form; TOP_RESOLUTION still returns the canonical (now-matching) value.
             - Name: "LossTypeValues"
               Description: "Loss type enum, SLOT-DESIGN.md 1.2."
               SlotTypeValues:
                 - SampleValue:
-                    Value: collision
+                    Value: Collision
                 - SampleValue:
-                    Value: comprehensive
+                    Value: Comprehensive
                 - SampleValue:
-                    Value: theft
+                    Value: Theft
                 - SampleValue:
-                    Value: vandalism
+                    Value: Vandalism
                 - SampleValue:
-                    Value: weather
+                    Value: Weather
                 - SampleValue:
-                    Value: liability
+                    Value: Liability
               ValueSelectionSetting:
                 ResolutionStrategy: TOP_RESOLUTION
 
@@ -122,16 +127,25 @@ Resources:
               # object directly ({Value: ...}), not a SampleValue wrapping another SampleValue. An extra
               # wrapper here was CFN early-validation's 12 errors (D76 sweep found the em dash; this bug
               # is unrelated and was found only once the apply reached this resource for the first time).
+              #
+              # D78: the canonical Value of each entry is now models/enums.py's ContactField(StrEnum)
+              # value exactly ("phone", not "phone number"; "mailing_address", not "address") --
+              # update_contact_info.py calls `ContactField(filled["field"])`, which raises on anything
+              # else. "email" already matched by coincidence; the other two did not, and would have
+              # failed the write for every real caller who said "my address" or "my phone number", the
+              # two most natural phrasings, on the very last step of the write path. The natural spoken
+              # forms are still recognised -- they are Synonyms now, not the canonical Value.
               SlotTypeValues:
                 - SampleValue:
-                    Value: phone number
+                    Value: phone
                   Synonyms:
-                    - Value: phone
+                    - Value: phone number
                     - Value: mobile
                     - Value: cell
                 - SampleValue:
-                    Value: address
+                    Value: mailing_address
                   Synonyms:
+                    - Value: address
                     - Value: home address
                     - Value: mailing address
                 - SampleValue:
@@ -141,9 +155,29 @@ Resources:
               ValueSelectionSetting:
                 ResolutionStrategy: TOP_RESOLUTION
 
+            # D78: added alongside the RentalTowingEntitlement rename below -- `entitlement_type` had no
+            # Lex slot at all before Stage 4, even though `rental_towing.py` has required it since
+            # Phase 5. `agents/nodes/rental_towing.py` reads the two literal values "rental"/"towing".
+            - Name: "EntitlementTypeValues"
+              Description: "Rental or towing. SLOT-DESIGN.md 3."
+              SlotTypeValues:
+                - SampleValue:
+                    Value: rental
+                  Synonyms:
+                    - Value: rental car
+                    - Value: a rental
+                - SampleValue:
+                    Value: towing
+                  Synonyms:
+                    - Value: tow
+                    - Value: a tow
+              ValueSelectionSetting:
+                ResolutionStrategy: TOP_RESOLUTION
+
           Intents:
             # -----------------------------------------------------------------------------------------
-            # 1. FileAutoClaim; the slot-filling showcase. Eleven slots, explicit priorities.
+            # 1. FileAutoClaim; the slot-filling showcase. Eleven SLOT-DESIGN.md slots plus one Stage-4
+            #    codehook-only confirmation slot (`confirm_file_claim`, D78), explicit priorities.
             #
             # The priority order is `SLOT-DESIGN.md` section 1.1 and is a conversation-design decision, not an
             # infrastructure one. It is also the shape that makes native `aws_lexv2models_*` structurally
@@ -171,7 +205,7 @@ Resources:
                 - Priority: 2
                   SlotName: policy_number
                 - Priority: 3
-                  SlotName: insured_vehicle
+                  SlotName: insured_vehicle_vin
                 - Priority: 4
                   SlotName: loss_datetime
                 - Priority: 5
@@ -188,6 +222,15 @@ Resources:
                   SlotName: police_report_number
                 - Priority: 11
                   SlotName: driver_name
+                # D78: not part of SLOT-DESIGN.md's original 11 -- agents/nodes/file_auto_claim.py runs
+                # its own summary-then-confirm step entirely inside the codehook/graph, after Lex's own
+                # 11 slots are already filled, and that step has no declared Lex slot to elicit against
+                # at all unless one exists. Declared here purely so `ElicitSlot` has a legal target;
+                # the actual spoken prompt is always the codehook's own dynamic summary (same reason
+                # every other slot's PromptSpecification below is a fallback, not what callers hear --
+                # Stage 2 finding 3), never this slot's own PromptSpecification.
+                - Priority: 12
+                  SlotName: confirm_file_claim
 
               Slots:
                 # Asked first. No confirmation step, by rule: any affirmative escalates immediately
@@ -271,7 +314,12 @@ Resources:
                               EndTimeoutMs: ${dtmf_end_timeout_ms}
                               MaxLength: 4
 
-                - Name: "insured_vehicle"
+                # D78: named `insured_vehicle_vin`, not `insured_vehicle` -- Stage 4 found the two names
+                # had drifted apart (Lex authoring, Stage 2/3; the graph node, Phase 5) and had never
+                # been connected until the codehook that reads both existed. `file_auto_claim.py`'s
+                # `filled_slots` key is `insured_vehicle_vin`; this is the Lex-side declaration for it,
+                # not a separate field.
+                - Name: "insured_vehicle_vin"
                   Description: "Resolved against the policy's vehicle list by the codehook."
                   SlotTypeName: "AMAZON.FreeFormInput"
                   ObfuscationSetting:
@@ -446,6 +494,22 @@ Resources:
                       MaxRetries: 2
                       AllowInterrupt: true
 
+                # D78. Not asked by this PromptSpecification -- see the SlotPriorities comment above.
+                # Required so Lex's own native fallback (the codehook's fail-open path) still asks
+                # something rather than silently skipping straight to fulfilment.
+                - Name: "confirm_file_claim"
+                  Description: "The codehook's summarise-then-confirm step. Prompt is always dynamic."
+                  SlotTypeName: "AMAZON.Confirmation"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Should I go ahead and file this claim?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
             # -----------------------------------------------------------------------------------------
             # 2. CheckClaimStatus; one slot, then a tool call.
             # -----------------------------------------------------------------------------------------
@@ -588,14 +652,39 @@ Resources:
                 - Utterance: "I need a rental car"
 
               SlotPriorities:
+                # D78: entitlement_type asked first -- rental_towing.py's own first branch is on
+                # whether entitlement_type is filled at all, before it ever looks at claim_number.
                 - Priority: 1
-                  SlotName: entitlement_claim_number
+                  SlotName: entitlement_type
+                - Priority: 2
+                  SlotName: claim_number
 
               Slots:
+                # D78: added -- `rental_towing.py` has required this since Phase 5 and no Lex slot
+                # backed it. "Is this about rental, or towing?" is the exact fallback prompt the graph
+                # node itself uses when this slot is unfilled; declared here so ElicitSlot has a legal
+                # target and so Lex's own fail-open fallback asks a sensible question.
+                - Name: "entitlement_type"
+                  Description: "Rental or towing. Drives which branch rental_towing.py takes."
+                  SlotTypeName: "EntitlementTypeValues"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Is this about rental, or towing?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
                 # Optional: entitlement depends on an open claim, but a caller asking in general terms
                 # should get the corpus answer rather than an identifier demand. The codehook decides when
                 # the claim number is actually needed.
-                - Name: "entitlement_claim_number"
+                #
+                # D78: renamed from `entitlement_claim_number` -- `rental_towing.py`'s filled_slots key
+                # has been `claim_number` since Phase 5 (matching CheckClaimStatus's own slot name), and
+                # the two names had never been connected until the codehook that reads both existed.
+                - Name: "claim_number"
                   Description: "Claim the entitlement is being asked about. Optional; see the comment."
                   SlotTypeName: "AMAZON.AlphaNumeric"
                   ObfuscationSetting:
@@ -632,13 +721,43 @@ Resources:
                 - Utterance: "I have a new phone number"
 
               SlotPriorities:
+                # D78: policy_number asked first -- update_contact_info.py has required it since Phase 5
+                # (the write's own authentication field, `mcp/contact_server.py`'s first positional arg)
+                # and no Lex slot backed it; a write proceeding with an unauthenticated policy_number was
+                # never reachable through the declarative bot, only through a direct graph.invoke() call.
                 - Priority: 1
-                  SlotName: contact_field
+                  SlotName: policy_number
                 - Priority: 2
-                  SlotName: contact_new_value
+                  SlotName: field
+                - Priority: 3
+                  SlotName: new_value
+                - Priority: 4
+                  SlotName: confirm_update_contact_info
 
               Slots:
-                - Name: "contact_field"
+                # D78: added. Same slot shape as FileAutoClaim's own policy_number (AMAZON.AlphaNumeric,
+                # DTMF-capable digit entry) -- a write path needs the identifier at least as reliably as
+                # the read path already gets it, and re-declaring rather than referencing keeps this
+                # intent's Slots block self-contained, matching every other intent in this file.
+                - Name: "policy_number"
+                  Description: "PY####; the write's own authentication field, contact_server.py's first arg."
+                  SlotTypeName: "AMAZON.AlphaNumeric"
+                  ObfuscationSetting:
+                    ObfuscationSettingType: DefaultObfuscation
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "What's your policy number?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                # D78: renamed from `contact_field` -- update_contact_info.py's filled_slots key has been
+                # `field` since Phase 5, not `contact_field`; the two names had never been connected
+                # until the codehook that reads both existed.
+                - Name: "field"
                   Description: "Which detail is changing. Constrained enum, so no confirmation step."
                   SlotTypeName: "ContactFieldValues"
                   ValueElicitationSetting:
@@ -651,7 +770,9 @@ Resources:
                       MaxRetries: 2
                       AllowInterrupt: true
 
-                - Name: "contact_new_value"
+                # D78: renamed from `contact_new_value` -- update_contact_info.py's filled_slots key has
+                # been `new_value` since Phase 5.
+                - Name: "new_value"
                   Description: "The new value. Always confirmed by read-back before the write."
                   SlotTypeName: "AMAZON.FreeFormInput"
                   ObfuscationSetting:
@@ -663,6 +784,23 @@ Resources:
                         - Message:
                             PlainTextMessage:
                               Value: "What's the new information?"
+                      MaxRetries: 2
+                      AllowInterrupt: true
+
+                # D78: added, same reasoning as FileAutoClaim's confirm_file_claim above -- the codehook's
+                # own read-back confirmation step (SLOT-DESIGN.md 2's "always confirmed by read-back") has
+                # no Lex slot to elicit against unless one exists. Prompt is always the dynamic read-back
+                # ("That's {new_value} -- is that right?"), never this slot's own PromptSpecification.
+                - Name: "confirm_update_contact_info"
+                  Description: "The codehook's read-back confirmation step. Prompt is always dynamic."
+                  SlotTypeName: "AMAZON.Confirmation"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Is that right?"
                       MaxRetries: 2
                       AllowInterrupt: true
 

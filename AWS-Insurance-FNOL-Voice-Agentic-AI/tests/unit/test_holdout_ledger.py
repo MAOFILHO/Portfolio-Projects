@@ -213,3 +213,66 @@ def test_fingerprint_moves_when_the_guardrail_changes(tmp_path: Path, monkeypatc
         )
     )
     assert config_fingerprint() != before
+
+
+def test_fingerprint_moves_when_the_codehook_changes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Phase 8 Stage 4's own widening. `api/lex_codehook.py` decides whether L1 fires on raw text before
+    the graph is ever invoked -- a Lambda wrapper around the graph is exactly the "defensible per-
+    component change" `D53`'s own docstring predicted would move the composition next."""
+    import evals.holdout_ledger as ledger_module
+
+    assert "src/fnol_voice_agent/api/lex_codehook.py" in ledger_module._FINGERPRINT_SOURCES
+
+    before = config_fingerprint()
+    fake_root = tmp_path / "repo"
+    for relative in ledger_module._FINGERPRINT_SOURCES:
+        target = fake_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ledger_module._REPO_ROOT / relative).read_bytes())
+    monkeypatch.setattr(ledger_module, "_REPO_ROOT", fake_root)
+    assert config_fingerprint() == before
+
+    codehook = fake_root / "src/fnol_voice_agent/api/lex_codehook.py"
+    codehook.write_text(
+        codehook.read_text() + "\n# a change with no detection-logic content at all\n"
+    )
+    assert config_fingerprint() != before
+
+
+def test_fingerprint_moves_when_the_l3_lexicon_changes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """`D74`: L3 lives outside the graph entirely, called directly from the codehook. A fingerprint that
+    only widened for `lex_codehook.py` and missed the module it calls into would be the exact same
+    mistake `D53` already made once, one file over."""
+    import evals.holdout_ledger as ledger_module
+
+    assert "src/fnol_voice_agent/agents/l3_lexicon.py" in ledger_module._FINGERPRINT_SOURCES
+
+    before = config_fingerprint()
+    fake_root = tmp_path / "repo"
+    for relative in ledger_module._FINGERPRINT_SOURCES:
+        target = fake_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ledger_module._REPO_ROOT / relative).read_bytes())
+    monkeypatch.setattr(ledger_module, "_REPO_ROOT", fake_root)
+    assert config_fingerprint() == before
+
+    l3 = fake_root / "src/fnol_voice_agent/agents/l3_lexicon.py"
+    l3.write_text(l3.read_text() + '\n_EXTRA = "supervisor"\n')
+    assert config_fingerprint() != before
+
+
+def test_every_file_under_the_codehook_package_is_in_the_fingerprint() -> None:
+    """Stage 4 exit criterion 7, as a standing check rather than a one-time sweep: a future file added
+    under `src/fnol_voice_agent/api/` that participates in the pre-graph safety decision and is never
+    added here would silently stop moving the hash, the exact shape of `D53`."""
+    import evals.holdout_ledger as ledger_module
+
+    api_dir = ledger_module._REPO_ROOT / "src/fnol_voice_agent/api"
+    api_files = {
+        str(path.relative_to(ledger_module._REPO_ROOT))
+        for path in api_dir.glob("*.py")
+        if path.name != "__init__.py"
+    }
+
+    missing = api_files - set(ledger_module._FINGERPRINT_SOURCES)
+    assert not missing, f"api/ files not covered by _FINGERPRINT_SOURCES: {missing}"
