@@ -2277,6 +2277,69 @@ Done.
 | `.terraform.lock.hcl` | **Un-ignored.** It was gitignored, which made criterion 5's "rebuilds from clean in one command" unreproducible: `~> 6.0` lets a rebuild resolve a different 6.x than every result in this project was produced against |
 | `docs/phase8/COST-ATTRIBUTION-AUDIT.md` | New. The Stage 0 finding of record |
 
+### Stage 0.5 — application inference profiles (`ADR-016`), complete 2026-08-12
+
+Open decision A, approved by Marco. `infra/terraform/stacks/inference` — four application inference
+profiles (`router`, `generation`, `judge`, `embedding`) wrapping the `us.*` system profiles, tagged
+`Project` and `Role`. $0.00 at rest. `settings.py` reads each model ID from an env var with the `us.*`
+literal as the **default**, so the simulator, tests and Tier A evals need no AWS state and `make destroy`
+degrades cleanly. `CLAUDE.md` constraint 17 amended in place, pointing at the ADR.
+
+Marco's verification condition — *"verify the wrapped profile actually routes cross-region rather than
+pinning to one region"* — discharged against the live API, not Terraform state: all three cross-region
+wrappers report `us-east-1, us-east-2, us-west-2`, identical to the system profile's set. A real
+`Converse` through the router ARN returned at 7 in / 2 out, $0.00000053. `make verify-inference` encodes
+it with per-profile expected counts and was proven by negative control.
+
+### Stage 1 — the protected telephony stack, complete 2026-08-12
+
+`terraform apply`: **1 imported, 0 added, 0 changed, 0 destroyed.** No `default_tags` in this stack,
+deliberately, so a correct apply is a no-op and "no changes" is the proof the import was clean.
+
+**Criterion 3 discharged, and the first attempt at it was a false pass.** Pointing the stack at a
+nonexistent number ID does fail the run — but on `Cannot import non-existent remote object`, the import
+error, not the guard. That proves nothing about the guard. The real control was a valid import with an
+unsatisfiable tag condition, which fails at **plan** time with the guard's own message. `prevent_destroy`
+proven by running `terraform plan -destroy`. `make verify-destroy-scope` plus 8 unit tests, each with a
+negative control.
+
+### D36 — the log was the instrument that was never checked
+
+Marco declined to let the `COSTS.md` discrepancy wait for Stage 5: *"If our own logged token counts are
+right, one known call's cost is arithmetic — the question is whether CE is missing data or the log is
+inventing it."* It needed no new call. **CloudWatch `AWS/Bedrock` publishes token counts per `ModelId`,
+free, immediately, counted by AWS rather than by us.**
+
+| Instrument | August figure | Verdict |
+|---|---|---|
+| `COSTS.md`, self-reported | ≈$0.411 | **under-reports by 22%** |
+| CloudWatch, AWS's count | **$0.52540** | the reference |
+| Cost Explorer | $0.00124 | 0.24% of actual — **missing data**, 24–48h settling |
+
+**Cost Explorer is missing data; the log is not inventing it.** And the direction is the opposite of what
+`COST-ATTRIBUTION-AUDIT.md` §6.2 guessed: it reasoned 11.4M Nova Micro input tokens were implausible for
+this project's volume, so over-estimation was the likely cause. The real figure is **12.7M**. The
+arithmetic was checked against an intuition about volume and the intuition was the weaker of the two.
+
+**Standing cap corrected: ≈$0.525 of $5.00, not ≈$0.411.** Per-run rows stand as written; phase totals
+derived from them are floors.
+
+The instrument lesson outlives the number: `COSTS.md` is written by the code that makes the calls —
+§3.10's failure shape applied to accounting — and CloudWatch has been counting the same calls
+independently, for free, since Phase 3. Nothing ever looked. Criterion 13's per-run logging is reconciled
+against `AWS/Bedrock` from here on.
+
+### Contact tag schema — decided ahead of Stage 3, per Marco
+
+`docs/phase8/CONTACT-TAG-SCHEMA.md`. Three tags of the six available: `Project`, `Env`, `FlowVersion`.
+
+`Intent` and `Outcome` **rejected**, and the reason is domain-specific rather than procedural: one of the
+six intents is *injury or fatality mentioned*, so a contact tagged `Intent=InjuryEscalation`, joined to a
+contact record carrying the caller's phone number, is **a health-adjacent inference about an identifiable
+person sitting in the billing system** — outside `ADR-011`'s redaction boundary and unredactable after
+three hours. The tag value contains no PII; the tag in context is health information. Cost-per-intent is
+recovered offline by joining `contactId` inside the boundary, where the controls already are.
+
 ### D33 — activating a cost allocation tag is not the same as attributing a cost
 
 Marco made propagation a condition of the approval: *"A tag-filtered alarm that silently matches nothing
