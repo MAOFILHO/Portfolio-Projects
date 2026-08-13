@@ -293,6 +293,9 @@ def test_a_raw_text_l1_match_escalates_even_when_the_graph_cannot_be_reached(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    # `D81` item 4: the whole point of this test's failure mode -- fail-closed and a genuine detection
+    # must not be indistinguishable on the wire, which `escalate="true"` alone always was.
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "fail-closed"
     assert "911" in response["messages"][0]["content"]
 
 
@@ -310,6 +313,7 @@ def test_a_raw_text_l3_match_escalates_even_when_the_graph_cannot_be_reached(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "fail-closed"
     # The fail-closed script names the system trouble explicitly -- the graph never ran to say anything
     # else, and a caller who just asked for a human should not be told the safety-specific 911 line for
     # a request that was never about injury in the first place.
@@ -459,6 +463,7 @@ def test_l1_fires_without_any_graph_installed() -> None:
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
     assert "911" in response["messages"][0]["content"]
 
 
@@ -500,6 +505,7 @@ def test_l3_escalates_on_a_bare_override_word(monkeypatch: pytest.MonkeyPatch) -
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
 
 
 def test_l3_does_not_fire_on_an_ordinary_mention_of_the_callers_own_agent(
@@ -551,6 +557,7 @@ def test_injuries_present_confirmed_true_escalates_even_with_no_injury_words(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
     assert "911" in response["messages"][0]["content"]
 
 
@@ -573,6 +580,50 @@ def test_injuries_present_confirmed_false_does_not_escalate(
         )
 
     assert response["sessionState"].get("sessionAttributes", {}).get("escalate") != "true"
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D81` item 4 — escalation provenance, including the path that used to have none at all
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_the_graphs_own_in_band_escalation_carries_detection_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_respond_from_graph_result`'s escalation branch used to call `_close(..., escalated=True)`
+    directly, with no log line and no reason code -- the least observable of the three escalation paths,
+    per `D81`'s expanded entry. This drives an escalation through the GRAPH's own `L2` safety-flag route
+    (`agents/nodes/routing.py` -> `injury_escalation`), not any of the pre-graph L1/L3/`D79` checks, which
+    never reach this branch at all: the transcript below matches none of `agents/lexicon.py`'s or
+    `agents/l3_lexicon.py`'s raw-text patterns, so only the classifier's own `safety_flag=True` can be
+    what escalates this turn.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim", safety_flag=True)},
+            table_suffix="graph-escalation",
+        )
+        response = lex_codehook.handler(
+            _event(
+                transcript="the airbags went off and everything is chaos",
+                session_attributes={"contactId": "c-graph-escalation"},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection"
+
+
+def test_close_refuses_an_unattributed_escalation() -> None:
+    """`D81` item 4's other half: `escalation_reason` is a required argument in substance, not just in
+    name. A caller reaching `_close(escalated=True)` with no reason is a bug in this module -- exactly the
+    shape that let fail-closed and a genuine detection collapse into the same `escalate="true"` before this
+    fix -- so it must fail loudly here rather than silently emit an unattributed escalation."""
+    with pytest.raises(ValueError):
+        lex_codehook._close(_event(), "unused", escalated=True)
 
 
 # ---------------------------------------------------------------------------------------------------

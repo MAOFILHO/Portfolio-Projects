@@ -72,19 +72,40 @@ FAIL-OPEN / FAIL-CLOSED, SPLIT (Stage 4 owns what Stage 3's docstring flagged as
     escalation `Close`, built without the graph, from the pre-graph check alone): once L1/L3/
     `injuries_present` has fired, proceeding as if it hadn't is exactly the `C1` breach wearing a
     resilience argument the Stage 3 docstring named and declined to fix on the spot.
+
+`D81` ITEM 4 -- `escalation_reason` IS NOW A FIRST-CLASS `sessionAttributes` FIELD
+    `PROJECT_STATE.md`'s `D81` entry, on review: `escalate="true"` alone cannot distinguish a genuine
+    detection from the fail-closed default above, both of which set it identically. `_close()` now takes
+    a required `escalation_reason` whenever `escalated=True` -- there is no default, a caller that omits
+    it raises, because an unattributed escalation is exactly the silent case this fix exists to remove --
+    and writes it into `sessionAttributes["escalation_reason"]`, readable directly from the
+    `RecognizeText`/`lambda:Invoke` response with no CloudWatch correlation needed. Two values are ever
+    set by this module: `"detection"` for every path that fired on an actual signal (the pre-graph L1/L3
+    raw-text checks, `D79`'s confirmed-slot check, and the graph's own in-band `L1`/`L2` branch in
+    `_respond_from_graph_result`, which used to carry no provenance signal at all -- see that function);
+    `"fail-closed"` for the one path where nothing was detected except that the graph could not be
+    reached. `"other-default"` is reserved for the harness's own defensive classification of a shape this
+    module never actually emits, not a value this module writes.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 
 logger = logging.getLogger(__name__)
+
+# `D81` item 4. `"other-default"` is never written by this module -- it names the residual bucket the
+# HARNESS falls back to if it ever observes `escalate=true` with a missing or unrecognized reason, so
+# that shape has a name to be counted under rather than being silently folded into "detection" (which
+# would flatter a broken emitter) or "fail-closed" (which would blame this module for a shape it never
+# actually produced).
+EscalationReason = Literal["detection", "fail-closed", "other-default"]
 
 # DIALOGUE-POLICIES.md §5 step 1, verbatim -- the same fixed script injury_escalation.py speaks when the
 # graph itself catches the trigger. Spoken here too so a caller hears the identical line regardless of
@@ -223,17 +244,31 @@ def _delegate(event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _close(event: dict[str, Any], message: str, *, escalated: bool = False) -> dict[str, Any]:
+def _close(
+    event: dict[str, Any],
+    message: str,
+    *,
+    escalated: bool = False,
+    escalation_reason: EscalationReason | None = None,
+) -> dict[str, Any]:
     intent = _intent_from(event)
     intent["state"] = "Fulfilled"
 
     session_attributes = _session_attributes_from(event)
     if escalated:
+        if escalation_reason is None:
+            # `D81` item 4: every escalation this module produces must be attributable. This is not a
+            # defensive fallback to a default value -- a caller reaching this line without naming why
+            # is a bug in THIS module, and the fix for `D81` is exactly to stop letting that happen
+            # silently the way `escalate="true"` alone always did.
+            raise ValueError("_close(escalated=True) requires an explicit escalation_reason")
         # `D43`/`NOT-FIXED.md` #2: the signal the contact flow's own Check-Attributes branch acts on to
         # perform the real Connect transfer. Set here, at the one boundary that knows whether this
         # response is actually going to reach a live Connect flow -- not asserted by the graph, which has
         # no notion of Connect at all.
         session_attributes["escalate"] = "true"
+        # `D81` item 4: readable directly from the wire response, no CloudWatch correlation needed.
+        session_attributes["escalation_reason"] = escalation_reason
 
     return {
         "sessionState": {
@@ -323,14 +358,23 @@ def _escalate(
     route: int,
     message: str,
     context: dict[str, Any],
+    escalation_reason: EscalationReason,
 ) -> dict[str, Any]:
     result = initiate_escalation(
         contact_id=contact_id, triggering_layer=triggering_layer, context=context
     )
+    # `D81` item 4: `reason` added to the log line itself, not only to `sessionAttributes` -- the two
+    # channels answer different questions (the wire response is what the harness reads per-call; the log
+    # line is what a CloudWatch query over a whole window can group by) and before this fix neither one
+    # actually carried it.
     logger.info(
-        "escalating contact %s on layer %s route %s", contact_id, result.triggering_layer, route
+        "escalating contact %s on layer %s route %s reason %s",
+        contact_id,
+        result.triggering_layer,
+        route,
+        escalation_reason,
     )
-    return _close(event, message, escalated=True)
+    return _close(event, message, escalated=True, escalation_reason=escalation_reason)
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -373,8 +417,23 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
         "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
     )
 
-    if result.get("escalation"):
-        return _close(event, response_text, escalated=True)
+    escalation = result.get("escalation")
+    if escalation:
+        # `D81` item 4(b): this branch used to call `_close(..., escalated=True)` directly, with no
+        # logging and no provenance signal at all -- the least observable of the three escalation paths,
+        # not a baseline the other two merely fell short of. `injury_escalation()` (`agents/nodes/
+        # injury_escalation.py`) already called `initiate_escalation()` itself and returned the resulting
+        # `EscalationRecord` as `result["escalation"]`; logging it here is making an already-computed
+        # record observable through the same channel every other path uses, not a second escalation call
+        # -- calling `initiate_escalation()` again here would double-count it.
+        logger.info(
+            "escalating contact %s on layer %s route %s reason %s",
+            escalation.get("contact_id"),
+            escalation.get("triggering_layer"),
+            escalation.get("route"),
+            "detection",
+        )
+        return _close(event, response_text, escalated=True, escalation_reason="detection")
 
     active_slot = result.get("active_slot")
     if active_slot:
@@ -403,6 +462,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
             route=1,
             message=_SAFETY_SCRIPT,
             context={"triggering_utterance": turn_input, "matched_term": l1_term},
+            escalation_reason="detection",
         )
 
     # `D79`. Raw text alone didn't catch it -- the only way to know whether `injuries_present` was
@@ -427,6 +487,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
                 "triggering_utterance": turn_input,
                 "slot_confirmed": True,
             },
+            escalation_reason="detection",
         )
 
     if l3_fired:
@@ -441,6 +502,7 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
                 "triggering_utterance": turn_input,
                 "matched_term": l3_term,
             },
+            escalation_reason="detection",
         )
 
     result = _run_graph_turn(contact_id, turn_input, filled_slots, previous)
@@ -482,4 +544,5 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "matched_term": l3_term if l3_fired and not l1_fired else None,
                 "reason": "graph_invocation_failed",
             },
+            escalation_reason="fail-closed",
         )

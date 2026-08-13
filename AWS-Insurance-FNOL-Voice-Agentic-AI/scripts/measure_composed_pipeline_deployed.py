@@ -1,5 +1,6 @@
 """Stage 4 exit criterion 9 — `C1` re-verified against the DEPLOYED Lex alias and Lambda, not the local
-graph call `D52` measured. `docs/phase8/BUILD-PLAN.md` line 330; `COSTS.md` Line D.
+graph call `D52` measured. `docs/phase8/BUILD-PLAN.md` line 330; `COSTS.md` Line D (invalidated) / Line E
+(this protocol).
 
 WHY A SEPARATE SCRIPT FROM `measure_composed_pipeline.py`
     That script calls `classify_turn`/`ApplyGuardrail` directly, in-process. This is the first point in
@@ -17,13 +18,63 @@ PROTOCOL — Marco's, overriding the k=1/43-item proposal logged first in `COSTS
 
     So: the 26 `should_escalate=True` items of the independent held-out set, k=3 real `RecognizeText`
     calls each, fresh `sessionId` per call (an independent conversation, so no item's checkpoint state
-    leaks into another's). An item is scored `worst_case=True` only if all k samples escalated —
-    `measure_composed_pipeline.py`'s own `worst_case()` semantics, reused so the two numbers are
-    comparable. Composed recall is the fraction of the 26 that pass. `C1` requires 1.000.
+    leaks into another's). An item is scored `worst_case=True` only if all k samples escalated **with
+    `detection` provenance** — see D81 ITEM 4 below, this is not the same predicate `D52`'s in-process
+    run used, because the deployed system can fail in ways the in-process run structurally cannot.
+    Composed recall is the fraction of the 26 that pass. `C1` requires 1.000.
 
-    CONTINGENCY: any item whose k=3 samples are not unanimous — a real disagreement, not just "still
-    below 1.000" — gets 4 more samples (total k=7) before being called a regression rather than a
-    Lambda-specific flake, budgeted for up to 6 of the 26 items per `COSTS.md`.
+    CONTINGENCY: any item whose k=3 samples are not unanimous on the raw `escalate` wire flag — a real
+    disagreement, not just "still below 1.000" — gets 4 more samples (total k=7) before being called a
+    regression rather than a Lambda-specific flake, budgeted for up to 6 of the 26 items per `COSTS.md`.
+
+`D81` ITEM 1 — INVALID INVOCATIONS ARE THEIR OWN STATE, NOT SILENTLY SCORED AS `not-escalated`
+    The defect this criterion's first real run found (`D80`/`D81`): 78/78 calls crashed at cold-start
+    import, and every one came back as a normal-looking `RecognizeText` HTTP 200 with Lex's own native
+    `FallbackIntent`/`Failed` dialog state — no `ClientError`, no `FunctionError`, `escalate` simply
+    never set. The prior version of this script read one signal (`escalate == "true"`) and scored its
+    absence as a legitimate non-escalation, indistinguishable from a turn the system correctly classified
+    as not requiring escalation. `docs/RESULTS.md` §11.4 has the full account of what that failure mode
+    looks like at the wire, and its exact shape (`intent.name == "FallbackIntent"` AND
+    `intent.state == "Failed"`) is what `_classify_invocation` below checks for — verified against the
+    real 79/79-error run, not speculated. This project's own codehook never produces that combination
+    (`_intent_from`'s own fallback default sets `state: "InProgress"`, never `"Failed"`), so it is a
+    reliable signal that Lex fell back to its native handling rather than anything this system's own code
+    returned. **Any `invalid` classification aborts the run immediately — no partial credit, no scored
+    `composed_recall_deployed` from a run that saw one.** Stopping immediately (rather than continuing to
+    spend the full k=3/26-item budget once the outcome is already known to be uninterpretable) is also
+    the cheaper failure mode, which matters on a script every real call of which is billed (`ADR-013`).
+
+`D81` ITEM 4 — ESCALATION PROVENANCE, NOW READABLE DIRECTLY FROM THE WIRE
+    `api/lex_codehook.py::_close()` now writes `sessionAttributes["escalation_reason"]` alongside
+    `escalate="true"` on every escalation — `"detection"` for a path that fired on an actual signal
+    (pre-graph L1/L3 raw-text, `D79`'s confirmed-slot check, or the graph's own in-band `L1`/`L2`
+    branch), `"fail-closed"` for the one path where nothing was detected except that the graph itself
+    could not be reached. This script reads it per call, with no CloudWatch correlation needed — exactly
+    the fix `D81` specified. **An item whose only `escalate=true` samples carry `fail-closed` provenance
+    does not count toward `C1` recall**, scored via `worst_case_detection` below, not the raw wire flag
+    alone: a system that is catching injuries by crashing is not verified, it is unmonitored in a
+    different way. Every escalated sample's reason is recorded per item and rolled up into a
+    run-level `provenance_breakdown` attached to the reported number, not left as a bare recall figure.
+    A missing or unrecognized `escalation_reason` on an `escalate=true` sample is counted as
+    `"other-default"` — the residual bucket named in `PROJECT_STATE.md`'s `D81` entry specifically so
+    this shape has somewhere to be counted rather than silently folded into `detection` (which would
+    flatter an emitter that isn't setting the field) or `fail-closed` (which would blame the Lambda for
+    a shape it may not have actually produced — an old deployed version, for instance).
+
+`D81` ITEM 5 — NEGATIVE CONTROLS: ALL 17, NOT A SUBSET
+    Nothing in the k=3/26-must-escalate-item protocol above can produce a non-escalation at all — every
+    item in that population has `should_escalate=True`. A harness that always reports `escalated` (from
+    genuine detection or from a systemic fail-closed default) and one that behaves correctly are
+    indistinguishable by that protocol alone. This script also samples **all 17** `should_escalate=False`
+    items in the independent set, k=1 each (raised from an earlier 5-item draft that could not survive
+    being asked "why 5 over 17 already-vetted, already-free items" — see `PROJECT_STATE.md`'s `D81`
+    entry for the arithmetic). k=1, not k=3: the failure this control exists to catch — "the instrument
+    cannot return a negative at all" — is structural, not stochastic. **If every one of the 17 reads
+    `escalated`, the run is invalid, not a false-escalation defect** — the same `invalid` disposition as
+    item 1, because it means this run never demonstrated the harness (and the system under it) can
+    produce the negative outcome `C1`'s recall figure implicitly claims it can distinguish from. If some
+    but not all escalate, that is a real false-escalation finding on the deployed system, reported
+    alongside the recall figure, not fatal to the run.
 
 WHAT "ESCALATED" MEANS ON THE WIRE
     `api/lex_codehook.py::_close()` sets `sessionAttributes["escalate"] = "true"` at the one boundary
@@ -35,19 +86,27 @@ PATH ATTRIBUTION, READ NOT ASSUMED
     `D52`'s local run saw 19 of 26 positives caught only by L2 (guardrail+router), 7 by the raw-text L1
     pre-check alone. Whether the deployed Lambda's L1 lexicon fires on the same split is one of the exact
     things this criterion exists to check — so this script does not assume it. It reads the Lambda's own
-    log line (`"escalating contact %s on layer %s route %s"`, `api/lex_codehook.py::_escalate`) back from
-    CloudWatch Logs for the run's time window, per call, and reports the observed L1/L2 split. `D77`'s
-    lesson applies here too: a call that returned `escalate=true` is evidence the response said so, not
-    evidence of *why* — that "why" is a separate read.
+    log line (`"escalating contact %s on layer %s route %s reason %s"`, `api/lex_codehook.py::_escalate`
+    and `_respond_from_graph_result`) back from CloudWatch Logs for the run's time window, per call, and
+    reports the observed L1/L2 split. `D77`'s lesson applies here too: a call that returned
+    `escalate=true` is evidence the response said so, not evidence of *why* — the wire-level
+    `escalation_reason` field is the primary answer to "why" (D81 item 4, no CloudWatch needed for it);
+    this log-line read is a secondary, independent cross-check of *which layer*, kept for the same reason
+    `D52`'s local run reported it.
 
 COST
-    `lexv2-runtime:RecognizeText` cost is exact — this script counts every call it makes and multiplies
-    by the published $0.00075/text-request rate. The Bedrock/guardrail dollar rate applied to graph-path
-    calls is `D52`'s previously-measured per-call rate (guardrail 2 units + one L2 sample,
-    $0.0003387/call) — Bedrock itself is not re-instrumented by this run, only the path counts (L1 vs.
-    graph) are exact, from the CloudWatch read above. Where that read fails (log propagation lag, a
-    permissions gap), the script says so explicitly and reports the conservative all-graph-path estimate
-    rather than silently assuming `D52`'s ratio transfers.
+    `lexv2-runtime:RecognizeText` cost is exact — this script counts every call it makes (positives AND
+    the 17 negatives) and multiplies by the published $0.00075/text-request rate. The Bedrock/guardrail
+    dollar rate applied to graph-path calls is `D52`'s previously-measured per-call rate (guardrail 2
+    units + one L2 sample, $0.0003387/call). For POSITIVES, the exact L1-vs-graph split comes from the
+    CloudWatch log-line read above, when it captured every escalating call. **Every one of the 17
+    negatives is assumed graph-path for costing purposes, unconditionally** — a true negative cannot be
+    resolved by the raw-text L1 pre-check alone (silence from L1 just means "proceed"), so a correctly-
+    behaving negative call reaches the graph's L2 classifier to confirm `safety_flag=False`, and no log
+    line exists for a turn that reaches the graph without escalating, so there is nothing to read back
+    for these calls the way there is for the positives. Where the positives' CloudWatch read fails or is
+    incomplete, the script says so explicitly and falls back to the conservative all-graph-path estimate
+    for positives too, rather than silently assuming `D52`'s ratio transfers.
 
 `ADR-013`: no `mock_aws()` in this file. Every `RecognizeText` call is real and billed.
 """
@@ -61,7 +120,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import boto3
 
@@ -86,6 +145,22 @@ GRAPH_PATH_USD = GUARDRAIL_PER_CALL_USD + L2_PER_CALL_USD
 
 D52_BASELINE_PATH = REPO_ROOT / "evals" / "baselines" / "composed_pipeline_k5_v3_20260812.json"
 
+InvocationStatus = Literal["escalated", "not-escalated", "invalid"]
+# Mirrors `api/lex_codehook.py::EscalationReason` deliberately as an independent definition, not an
+# import of it — this harness verifies the DEPLOYED wire contract, not the local source, and a value
+# this project's Lambda never actually emits (a stale deploy, a future rename) must show up here as
+# `"other-default"` rather than crash the harness or silently pass validation against a shape the live
+# system isn't producing.
+EscalationReason = Literal["detection", "fail-closed", "other-default"]
+
+
+class RunInvalidError(RuntimeError):
+    """`D81` items 1 and 5: raised the moment this run can no longer produce a trustworthy
+    `composed_recall_deployed` figure — one `invalid` invocation, or every one of the 17 negative
+    controls reading `escalated`. Caught in `main()`; `verification_run` still records the run as
+    `status: "aborted"` in the ledger, with whatever `run.record`/`run.note` calls happened before the
+    raise preserved."""
+
 
 def terraform_outputs(stack_dir: Path = STACK_DIR) -> dict[str, Any]:
     result = subprocess.run(
@@ -106,54 +181,105 @@ def load_d52_verdicts(path: Path = D52_BASELINE_PATH) -> dict[str, bool]:
     return {item["text"]: bool(item["composed_worst_case"]) for item in baseline["items"]}
 
 
+def _classify_invocation(response: dict[str, Any]) -> tuple[InvocationStatus, EscalationReason | None]:
+    """`D81` items 1 and 4. Reads exactly two signals from the raw `RecognizeText` response:
+
+    1. Lex's own native-fallback shape, verified against `RESULTS.md` §11.4's real 79/79-error run
+       rather than speculated: `intent.name == "FallbackIntent"` AND `intent.state == "Failed"` together.
+       This project's own codehook cannot produce that combination (`_intent_from`'s fallback default is
+       `state: "InProgress"`), so seeing it means the codehook did not run to completion on this turn --
+       `invalid`, regardless of what `sessionAttributes` happens to contain.
+    2. `sessionAttributes.escalate`/`escalation_reason`, read only once (1) has ruled out the crash shape.
+    """
+    session_state = response.get("sessionState") or {}
+    intent = session_state.get("intent") or {}
+    if intent.get("name") == "FallbackIntent" and intent.get("state") == "Failed":
+        return "invalid", None
+
+    session_attributes = session_state.get("sessionAttributes") or {}
+    if session_attributes.get("escalate") != "true":
+        return "not-escalated", None
+
+    raw_reason = session_attributes.get("escalation_reason")
+    reason: EscalationReason = raw_reason if raw_reason in ("detection", "fail-closed") else "other-default"
+    return "escalated", reason
+
+
 def recognize(runtime: Any, *, bot_id: str, bot_alias_id: str, text: str) -> dict[str, Any]:
     session_id = f"criterion9-{uuid.uuid4()}"
     started = time.monotonic()
-    response = runtime.recognize_text(
-        botId=bot_id,
-        botAliasId=bot_alias_id,
-        localeId=LOCALE_ID,
-        sessionId=session_id,
-        text=text,
-    )
+    try:
+        response = runtime.recognize_text(
+            botId=bot_id,
+            botAliasId=bot_alias_id,
+            localeId=LOCALE_ID,
+            sessionId=session_id,
+            text=text,
+        )
+    except Exception as exc:  # noqa: BLE001 - a transport failure is itself an `invalid` invocation
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "session_id": session_id,
+            "status": "invalid",
+            "escalation_reason": None,
+            "invalid_detail": f"RecognizeText raised: {type(exc).__name__}: {exc}",
+            "elapsed_ms": elapsed_ms,
+            "messages": [],
+        }
+
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    session_attributes = (
-        response.get("sessionState", {}).get("sessionAttributes") or {}
-    )
-    escalated = session_attributes.get("escalate") == "true"
+    status, reason = _classify_invocation(response)
+    invalid_detail = None
+    if status == "invalid":
+        intent = (response.get("sessionState") or {}).get("intent") or {}
+        invalid_detail = (
+            f"Lex native fallback: intent.name={intent.get('name')!r} intent.state={intent.get('state')!r}"
+        )
     return {
         "session_id": session_id,
-        "escalated": escalated,
+        "status": status,
+        "escalation_reason": reason,
+        "invalid_detail": invalid_detail,
         "elapsed_ms": elapsed_ms,
         "messages": [m.get("content", "") for m in response.get("messages", [])],
     }
 
 
-def worst_case_positive(samples: list[bool]) -> bool:
-    """Matches `measure_composed_pipeline.py::worst_case(..., positive=True)`: any single miss on a
-    must-escalate item counts as a miss."""
-    return all(samples)
+def worst_case_detection(samples: list[dict[str, Any]]) -> bool:
+    """`D81` item 4's scoring rule: every sample must be `escalated` with `detection` provenance, not
+    merely `escalated`. One `fail-closed`- or `other-default`-provenance sample fails the item exactly
+    like a `not-escalated` sample does — a genuinely different rule from `D52`'s in-process
+    `worst_case(positive=True)`, which had no provenance axis to fail on because an in-process call
+    cannot fail closed in the first place."""
+    return all(s["status"] == "escalated" and s["escalation_reason"] == "detection" for s in samples)
 
 
-def measure(
+def measure_positives(
+    runtime: Any,
     phrasings: list[InjuryPhrasing],
     *,
     bot_id: str,
     bot_alias_id: str,
-    run_started_utc: datetime,
-) -> dict[str, Any]:
-    runtime = boto3.client("lexv2-runtime", region_name=REGION)
+) -> tuple[list[dict[str, Any]], int]:
     d52_verdicts = load_d52_verdicts()
-
     items: list[dict[str, Any]] = []
-    contingency_spent = 0
     total_calls = 0
+    contingency_spent = 0
 
     for phrasing in phrasings:
-        samples = [recognize(runtime, bot_id=bot_id, bot_alias_id=bot_alias_id, text=phrasing.text)
-                   for _ in range(BASE_K)]
+        samples = [
+            recognize(runtime, bot_id=bot_id, bot_alias_id=bot_alias_id, text=phrasing.text)
+            for _ in range(BASE_K)
+        ]
         total_calls += BASE_K
-        escalated_flags = [s["escalated"] for s in samples]
+        for sample in samples:
+            if sample["status"] == "invalid":
+                raise RunInvalidError(
+                    f"invalid invocation on must-escalate item {phrasing.text!r}: "
+                    f"{sample['invalid_detail']} (session {sample['session_id']})"
+                )
+
+        escalated_flags = [s["status"] == "escalated" for s in samples]
         unanimous = len(set(escalated_flags)) == 1
         contingency_used = False
 
@@ -163,13 +289,20 @@ def measure(
                 for _ in range(CONTINGENCY_K_ADDITIONAL)
             ]
             total_calls += CONTINGENCY_K_ADDITIONAL
+            for sample in extra:
+                if sample["status"] == "invalid":
+                    raise RunInvalidError(
+                        f"invalid invocation (contingency sample) on must-escalate item "
+                        f"{phrasing.text!r}: {sample['invalid_detail']} (session {sample['session_id']})"
+                    )
             samples = samples + extra
-            escalated_flags = [s["escalated"] for s in samples]
+            escalated_flags = [s["status"] == "escalated" for s in samples]
             contingency_spent += 1
             contingency_used = True
 
-        worst_case = worst_case_positive(escalated_flags)
+        worst_case = worst_case_detection(samples)
         d52_verdict = d52_verdicts.get(phrasing.text)
+        reasons = [s["escalation_reason"] for s in samples if s["status"] == "escalated"]
 
         items.append(
             {
@@ -178,6 +311,7 @@ def measure(
                 "k": len(samples),
                 "contingency_used": contingency_used,
                 "escalated_flags": escalated_flags,
+                "escalation_reasons": reasons,
                 "unstable": not unanimous and not (contingency_used and len(set(escalated_flags)) == 1),
                 "deployed_worst_case": worst_case,
                 "d52_worst_case": d52_verdict,
@@ -187,37 +321,139 @@ def measure(
             }
         )
 
+    return items, total_calls
+
+
+def measure_negatives(
+    runtime: Any,
+    phrasings: list[InjuryPhrasing],
+    *,
+    bot_id: str,
+    bot_alias_id: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """`D81` item 5. k=1 on all 17 `should_escalate=False` items — see the module docstring for why 1,
+    not 3, and why all 17, not a subset."""
+    items: list[dict[str, Any]] = []
+    total_calls = 0
+
+    for phrasing in phrasings:
+        sample = recognize(runtime, bot_id=bot_id, bot_alias_id=bot_alias_id, text=phrasing.text)
+        total_calls += 1
+        if sample["status"] == "invalid":
+            raise RunInvalidError(
+                f"invalid invocation on must-NOT-escalate item {phrasing.text!r}: "
+                f"{sample['invalid_detail']} (session {sample['session_id']})"
+            )
+        items.append(
+            {
+                "text": phrasing.text,
+                "kabco": phrasing.kabco.value,
+                "status": sample["status"],
+                "escalation_reason": sample["escalation_reason"],
+                "falsely_escalated": sample["status"] == "escalated",
+                "elapsed_ms": sample["elapsed_ms"],
+                "session_id": sample["session_id"],
+            }
+        )
+
+    if items and all(i["falsely_escalated"] for i in items):
+        raise RunInvalidError(
+            "negative control saturation: all 17 must-NOT-escalate items read escalated=true. This is "
+            "an instrument defect, not a false-escalation finding (D81 item 5) -- the run has not "
+            "demonstrated the deployed system, or this harness, is capable of returning a negative."
+        )
+
+    return items, total_calls
+
+
+def provenance_breakdown(
+    positive_items: list[dict[str, Any]], negative_items: list[dict[str, Any]]
+) -> dict[str, int]:
+    """`D81` item 4: rolled up once per run and attached to the reported `C1` number, not left as
+    per-item detail nobody aggregates."""
+    counts: dict[str, int] = {"detection": 0, "fail-closed": 0, "other-default": 0}
+    for item in positive_items:
+        for reason in item["escalation_reasons"]:
+            counts[reason] = counts.get(reason, 0) + 1
+    for item in negative_items:
+        if item["falsely_escalated"]:
+            reason = item["escalation_reason"] or "other-default"
+            counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
+def measure(
+    positive_phrasings: list[InjuryPhrasing],
+    negative_phrasings: list[InjuryPhrasing],
+    *,
+    bot_id: str,
+    bot_alias_id: str,
+    run_started_utc: datetime,
+) -> dict[str, Any]:
+    runtime = boto3.client("lexv2-runtime", region_name=REGION)
+
+    positive_items, positive_calls = measure_positives(
+        runtime, positive_phrasings, bot_id=bot_id, bot_alias_id=bot_alias_id
+    )
+    negative_items, negative_calls = measure_negatives(
+        runtime, negative_phrasings, bot_id=bot_id, bot_alias_id=bot_alias_id
+    )
+    total_calls = positive_calls + negative_calls
+
     run_finished_utc = datetime.now(UTC)
-    passed = sum(1 for i in items if i["deployed_worst_case"])
-    recall = passed / len(items) if items else None
-    divergences = [i for i in items if i["diverges_from_d52"]]
+    passed = sum(1 for i in positive_items if i["deployed_worst_case"])
+    recall = passed / len(positive_items) if positive_items else None
+    divergences = [i for i in positive_items if i["diverges_from_d52"]]
+    false_escalations = [i for i in negative_items if i["falsely_escalated"]]
+
+    escalated_positive_calls = sum(
+        1 for i in positive_items for flag in i["escalated_flags"] if flag
+    )
 
     path_attribution = read_path_attribution(
         function_name="fnol-codehook",
         start=run_started_utc,
         end=run_finished_utc,
     )
-    cost = estimate_cost(total_calls=total_calls, path_attribution=path_attribution)
+    cost = estimate_cost(
+        positive_calls=positive_calls,
+        negative_calls=negative_calls,
+        escalated_positive_calls=escalated_positive_calls,
+        path_attribution=path_attribution,
+    )
 
     return {
         "protocol": {
-            "population": "evals/holdout/injury_phrasings_independent.yaml (should_escalate=True only)",
+            "positive_population": (
+                "evals/holdout/injury_phrasings_independent.yaml (should_escalate=True only)"
+            ),
+            "negative_population": (
+                "evals/holdout/injury_phrasings_independent.yaml (should_escalate=False only, D81 item 5)"
+            ),
             "base_k": BASE_K,
+            "negative_k": 1,
             "contingency_k_additional": CONTINGENCY_K_ADDITIONAL,
             "contingency_item_budget": CONTINGENCY_ITEM_BUDGET,
-            "contingency_items_used": contingency_spent,
-            "scoring": "all-k-samples-must-escalate on each must-escalate item (worst_case_positive)",
+            "contingency_items_used": sum(1 for i in positive_items if i["contingency_used"]),
+            "scoring": "worst_case_detection: every sample escalated=true with escalation_reason=detection",
             "target": "d52 baseline: evals/baselines/composed_pipeline_k5_v3_20260812.json",
         },
-        "items": items,
-        "positives": len(items),
+        "positive_items": positive_items,
+        "negative_items": negative_items,
+        "positives": len(positive_items),
+        "negatives": len(negative_items),
         "composed_recall_deployed": recall,
-        "composed_recall_deployed_counts": [passed, len(items)],
-        "unstable_item_count": sum(1 for i in items if i["unstable"]),
+        "composed_recall_deployed_counts": [passed, len(positive_items)],
+        "unstable_item_count": sum(1 for i in positive_items if i["unstable"]),
         "divergences_from_d52": [
             {"text": i["text"], "d52": i["d52_worst_case"], "deployed": i["deployed_worst_case"]}
             for i in divergences
         ],
+        "false_escalation_count": len(false_escalations),
+        "false_escalation_items": [
+            {"text": i["text"], "escalation_reason": i["escalation_reason"]} for i in false_escalations
+        ],
+        "provenance_breakdown": provenance_breakdown(positive_items, negative_items),
         "total_recognize_text_calls": total_calls,
         "path_attribution": path_attribution,
         "cost": cost,
@@ -227,8 +463,10 @@ def measure(
 
 
 def read_path_attribution(*, function_name: str, start: datetime, end: datetime) -> dict[str, Any]:
-    """Reads the Lambda's own `"escalating contact %s on layer %s route %s"` log line for the run's
-    window — the L1-vs-graph split, from the deployed system's own record, not assumed from `D52`.
+    """Reads the Lambda's own `"escalating contact %s on layer %s route %s reason %s"` log line for the
+    run's window — the L1-vs-graph split, from the deployed system's own record, not assumed from `D52`.
+    Secondary to the per-call `escalation_reason` wire field (`D81` item 4) for the detection/fail-closed
+    question; this answers a different question (which LAYER), same as `D52`'s local run reported.
 
     Logs can lag their write by a few seconds; this polls briefly rather than accepting an
     under-count on the first read, and says plainly if it gives up short of every call.
@@ -278,18 +516,39 @@ def read_path_attribution(*, function_name: str, start: datetime, end: datetime)
     }
 
 
-def estimate_cost(*, total_calls: int, path_attribution: dict[str, Any]) -> dict[str, Any]:
+def estimate_cost(
+    *,
+    positive_calls: int,
+    negative_calls: int,
+    escalated_positive_calls: int,
+    path_attribution: dict[str, Any],
+) -> dict[str, Any]:
+    total_calls = positive_calls + negative_calls
     lex_usd = round(total_calls * LEX_TEXT_REQUEST_USD, 6)
 
-    if path_attribution.get("read_ok") and path_attribution.get("log_events_matched", 0) >= total_calls:
-        graph_path_calls = path_attribution["graph_path_count"]
-        basis = "exact: CloudWatch log line per call, D52's per-call dollar rate"
+    # The exactness check is against the number of calls that actually ESCALATED (only an escalating
+    # call logs the line this reads), not against `total_calls` -- unlike the single-population version
+    # of this script, `total_calls` now includes the 17 negatives, which produce no log line at all when
+    # the system behaves correctly. Comparing against `total_calls` here would make a fully successful
+    # run look like an incomplete CloudWatch read every time.
+    if (
+        path_attribution.get("read_ok")
+        and path_attribution.get("log_events_matched", 0) >= escalated_positive_calls
+    ):
+        graph_path_calls_from_positives = path_attribution["graph_path_count"]
+        basis = (
+            "positives exact: CloudWatch log line per escalating call, D52's per-call rate; "
+            "negatives assumed graph-path unconditionally (see module docstring -- no log line exists "
+            "for a correctly non-escalating call)"
+        )
     else:
-        # CloudWatch read incomplete or failed — report the conservative worst case, not D52's ratio,
-        # per the module docstring: an assumed split must never masquerade as a measured one.
-        graph_path_calls = total_calls
-        basis = "CONSERVATIVE: CloudWatch path read incomplete, assumed every call was graph-path"
+        graph_path_calls_from_positives = positive_calls
+        basis = (
+            "CONSERVATIVE: CloudWatch path read incomplete for positives, assumed every positive call "
+            "was graph-path; negatives assumed graph-path unconditionally regardless"
+        )
 
+    graph_path_calls = graph_path_calls_from_positives + negative_calls
     bedrock_usd = round(graph_path_calls * GRAPH_PATH_USD, 6)
     return {
         "lex_usd": lex_usd,
@@ -305,7 +564,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=REPO_ROOT / "evals" / "baselines" / "composed_pipeline_deployed_k3_20260813.json",
+        default=REPO_ROOT / "evals" / "baselines" / "composed_pipeline_deployed_k3_lineE.json",
     )
     args = parser.parse_args(argv)
 
@@ -313,26 +572,33 @@ def main(argv: list[str] | None = None) -> int:
     bot_id = str(outputs["bot_id"])
     bot_alias_id = str(outputs["bot_alias_id"])
 
-    phrasings = [p for p in load_holdout(HoldoutKind.INDEPENDENT) if p.should_escalate]
+    all_phrasings = load_holdout(HoldoutKind.INDEPENDENT)
+    positive_phrasings = [p for p in all_phrasings if p.should_escalate]
+    negative_phrasings = [p for p in all_phrasings if not p.should_escalate]
     print(
-        f"=== Criterion 9: composed pipeline, DEPLOYED (bot {bot_id}, alias {bot_alias_id}): "
-        f"{len(phrasings)} must-escalate items, base k={BASE_K} ==="
+        f"=== Criterion 9 (Line E): composed pipeline, DEPLOYED (bot {bot_id}, alias {bot_alias_id}): "
+        f"{len(positive_phrasings)} must-escalate items at base k={BASE_K}, "
+        f"{len(negative_phrasings)} must-NOT-escalate items at k=1 (D81 item 5) ==="
     )
 
-    with verification_run(
-        reason=(
-            "Stage 4 exit criterion 9 — C1 re-verified against the DEPLOYED Lex alias and Lambda, "
-            "the first point _FINGERPRINT_SOURCES moves on a deployed resource rather than a local "
-            "call. Marco's protocol: k=3 on the 26 must-escalate items (his own correction of an "
-            "earlier k=1/43-item proposal — D32 showed temperature 0.0 does not make the generation "
-            "path reproducible, and a deployed-only k measures cold starts/concurrency/session "
-            "handling, not model stochasticity). Composed recall must not fall below D52's 1.000 "
-            "(26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 "
-            "(DID routing)."
-        ),
-        samples_per_item=BASE_K,
-    ) as run:
-        return _run(args, run, bot_id, bot_alias_id, phrasings)
+    try:
+        with verification_run(
+            reason=(
+                "Stage 4 exit criterion 9 (Line E) — C1 re-verified against the DEPLOYED Lex alias and "
+                "Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with "
+                "abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason "
+                "and required for an item to count toward recall, and all 17 independent-set negatives "
+                "sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's "
+                "1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates "
+                "criterion 10 (DID routing)."
+            ),
+            samples_per_item=BASE_K,
+        ) as run:
+            return _run(args, run, bot_id, bot_alias_id, positive_phrasings, negative_phrasings)
+    except RunInvalidError as exc:
+        print(f"\n  *** RUN INVALID (D81): {exc} ***")
+        print("  No composed_recall_deployed emitted. Not a C1 breach -- an instrument/infra defect.")
+        return 2
 
 
 def _run(
@@ -340,10 +606,12 @@ def _run(
     run: VerificationRun,
     bot_id: str,
     bot_alias_id: str,
-    phrasings: list[InjuryPhrasing],
+    positive_phrasings: list[InjuryPhrasing],
+    negative_phrasings: list[InjuryPhrasing],
 ) -> int:
     result = measure(
-        phrasings,
+        positive_phrasings,
+        negative_phrasings,
         bot_id=bot_id,
         bot_alias_id=bot_alias_id,
         run_started_utc=datetime.now(UTC),
@@ -351,19 +619,24 @@ def _run(
     result["bot_id"] = bot_id
     result["bot_alias_id"] = bot_alias_id
 
-    print(f"\n  positives {result['positives']}")
+    print(f"\n  positives {result['positives']}  negatives {result['negatives']}")
     print(
         f"  DEPLOYED composed recall {result['composed_recall_deployed']} "
         f"{tuple(result['composed_recall_deployed_counts'])}"
     )
     print(f"  contingency items used {result['protocol']['contingency_items_used']}")
     print(f"  unstable items {result['unstable_item_count']}")
+    print(f"  provenance breakdown (all escalate=true samples, positives+negatives): "
+          f"{result['provenance_breakdown']}")
+    print(
+        f"  false escalations on the {result['negatives']} negatives: {result['false_escalation_count']}"
+    )
     attribution = result["path_attribution"]
     if attribution.get("read_ok"):
         print(
-            f"  path attribution (CloudWatch, exact): L1={attribution['l1_count']} "
-            f"graph-path={attribution['graph_path_count']} "
-            f"matched={attribution['log_events_matched']}/{result['total_recognize_text_calls']}"
+            f"  path attribution (CloudWatch, positives only, exact): "
+            f"L1={attribution['l1_count']} graph-path={attribution['graph_path_count']} "
+            f"matched={attribution['log_events_matched']}"
         )
     else:
         print(f"  path attribution: READ FAILED — {attribution.get('error')}")
@@ -391,6 +664,8 @@ def _run(
         contingency_items_used=result["protocol"]["contingency_items_used"],
         unstable_item_count=result["unstable_item_count"],
         divergences_from_d52=result["divergences_from_d52"],
+        provenance_breakdown=result["provenance_breakdown"],
+        false_escalation_count=result["false_escalation_count"],
         total_recognize_text_calls=result["total_recognize_text_calls"],
         path_attribution=result["path_attribution"],
         cost_usd=cost["total_usd"],
@@ -398,8 +673,8 @@ def _run(
         bot_alias_id=result["bot_alias_id"],
     )
     run.note(
-        "Deployed re-verification (criterion 9), not a component measurement — real RecognizeText "
-        "calls against the live alias, matching the shape D52 measured only in the graph."
+        "Deployed re-verification (criterion 9, Line E, post-D81 fix) — real RecognizeText calls "
+        "against the live alias, three-state classification, provenance-gated recall, all 17 negatives."
     )
 
     recall = result["composed_recall_deployed"]
@@ -412,6 +687,12 @@ def _run(
         return 1
     if result["divergences_from_d52"]:
         run.note("Deployed result diverges from D52 on at least one item despite recall holding at 1.000.")
+    if result["false_escalation_count"]:
+        run.note(
+            f"{result['false_escalation_count']}/{result['negatives']} negatives falsely escalated -- "
+            "not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed "
+            "system, worth its own line before criterion 10 if it recurs."
+        )
     return 0
 
 

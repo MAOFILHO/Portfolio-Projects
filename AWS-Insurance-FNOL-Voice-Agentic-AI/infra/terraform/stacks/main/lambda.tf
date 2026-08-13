@@ -22,6 +22,14 @@
 locals {
   repo_root   = abspath("${path.module}/../../../..")
   package_zip = "${path.module}/.terraform-build/lex-codehook.zip"
+
+  # `D80`/`D81`. Built by `make build-lambda-layer` (`docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md` §7) --
+  # cross-platform pip resolution against Linux/`arm64`/`cp312` wheels, not a bare `pip install` on this
+  # (Darwin) dev machine, which would silently produce macOS binaries. `deps_dir` must exist and be
+  # populated before `terraform plan` can even read `data.archive_file.codehook_deps` below; an empty or
+  # missing directory is a build-step failure, not a Terraform one, and must be diagnosed there first.
+  deps_dir = "${path.module}/.terraform-build/layer/python"
+  deps_zip = "${path.module}/.terraform-build/lex-codehook-deps.zip"
 }
 
 /*
@@ -32,9 +40,14 @@ locals {
  * the extra files cost bytes and not milliseconds -- `ADR-009`'s "smaller package" step is about what is
  * IMPORTED on the init path, not about what is present on disk.
  *
- * Third-party dependencies are not in here and are not needed yet: the Stage 3 handler is pure stdlib.
- * Stage 4's langgraph/boto3 requirements land as a Lambda layer, which is the change that makes package
- * size a real number rather than a rounding error.
+ * Third-party dependencies are NOT in here. `D80`: an earlier version of this comment said Stage 4's
+ * langgraph/boto3/pydantic requirements "land as a Lambda layer" while no layer, or any other
+ * dependency-bundling mechanism, existed anywhere in this file -- a forward-looking sentence that was
+ * never corrected once the thing it described didn't happen, and the deployed function crashed on
+ * `ImportModuleError: No module named 'pydantic'` at cold-start import for the entire time it was live.
+ * A comment asserting a resource exists is not itself evidence one does; `PROJECT_STATE.md`'s `D80`
+ * entry is the fuller account. They land in `aws_lambda_layer_version.codehook_deps` below, now a real
+ * resource in this file, not a sentence describing an intention.
  */
 data "archive_file" "codehook" {
   type        = "zip"
@@ -46,6 +59,65 @@ data "archive_file" "codehook" {
     "**/__pycache__/**",
     "**/*.pyc",
   ]
+}
+
+# ---------------------------------------------------------------------------------------------------
+# Dependency layer -- `D80`/`D81`. `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md` §2-§3 has the full account:
+# platform-matched wheels (Linux/`arm64`/`cp312`, not this dev machine's), the two real manylinux-tag
+# failures hit building it, and the size measurement (162 MB unzipped / 54.0 MB zipped -- over the 50 MB
+# direct-upload cap, hence S3 rather than `filename` below).
+# ---------------------------------------------------------------------------------------------------
+
+/*
+ * `local.deps_dir` is built by `make build-lambda-layer` (plan §7), NOT by this data source -- the
+ * cross-platform pip install is not something `archive_file` or any other Terraform data source does.
+ * This only zips what is already on disk, deterministically, so the resulting hash is content-addressed
+ * the same way `data.archive_file.codehook` already is above.
+ */
+data "archive_file" "codehook_deps" {
+  type        = "zip"
+  source_dir  = local.deps_dir
+  output_path = local.deps_zip
+}
+
+/*
+ * Content-hash-in-key, not `etag`-based change detection on a fixed key -- the mechanism plan §6 spells
+ * out as a five-step chain so a changed layer is never mistaken for an unchanged one:
+ *
+ *   1. `output_md5` hashes the actual zip bytes this run produced; it changes iff the layer's contents
+ *      change. (`output_md5`, not `output_base64sha256`, deliberately -- the latter's alphabet includes
+ *      `/` and `+`, which are legal in an S3 key but produce awkward implicit "subfolders" and characters
+ *      that need URL-encoding to reference directly; this key exists purely for content-addressing, not
+ *      for its cryptographic strength, so the hex digest is the better fit.)
+ *   2. That hash is embedded IN the key, so a content change is a NEW object at a NEW key, never an
+ *      in-place overwrite Terraform would have to notice via a remote read.
+ *   3. `aws_lambda_layer_version.codehook_deps.s3_key` references that key directly -- a changed key is a
+ *      changed input attribute Terraform's plan cannot miss, because it compares a value it computed
+ *      itself against state rather than inferring drift from a remote read.
+ *   4. A changed `s3_key` means `PublishLayerVersion` runs again, which returns a new, distinct,
+ *      immutable layer ARN -- there is no "update a layer version in place."
+ *   5. `aws_lambda_function.codehook.layers` references that ARN directly (below), so the new version
+ *      flows into the function's own plan automatically, in the same apply that published it.
+ *
+ * `etag` is kept as belt-and-suspenders for the out-of-band case (something changes the S3 object without
+ * changing the local artifact), not the mechanism this depends on for the ordinary "rebuilt the layer"
+ * case, which is steps 1-2 alone.
+ */
+resource "aws_s3_object" "codehook_deps_layer" {
+  bucket = aws_s3_bucket.artifacts.id
+  key    = "lambda-layers/codehook-deps-${data.archive_file.codehook_deps.output_md5}.zip"
+  source = data.archive_file.codehook_deps.output_path
+  etag   = data.archive_file.codehook_deps.output_md5
+}
+
+resource "aws_lambda_layer_version" "codehook_deps" {
+  layer_name  = "${local.name_prefix}-codehook-deps"
+  description = "Third-party runtime dependencies for the codehook Lambda. D80/D81."
+  s3_bucket   = aws_s3_bucket.artifacts.id
+  s3_key      = aws_s3_object.codehook_deps_layer.key
+
+  compatible_runtimes      = ["python3.12"]
+  compatible_architectures = ["arm64"]
 }
 
 # ---------------------------------------------------------------------------------------------------
@@ -186,6 +258,12 @@ resource "aws_lambda_function" "codehook" {
   timeout     = var.lambda_timeout_seconds
 
   architectures = ["arm64"]
+
+  # `D80`/`D81`. Without this, `data.archive_file.codehook` (this function's own code zip, `src/` only)
+  # is the entire deployed package -- exactly the configuration that crashed 100% of its invocations at
+  # cold-start import for as long as it was live. One layer named directly by ARN, not a hardcoded
+  # version number, so a rebuilt layer's new ARN (§6 above) flows into this function's plan automatically.
+  layers = [aws_lambda_layer_version.codehook_deps.arn]
 
   /*
    * `ADR-016`: the application inference profile ARNs are supplied here, at deployment time, while

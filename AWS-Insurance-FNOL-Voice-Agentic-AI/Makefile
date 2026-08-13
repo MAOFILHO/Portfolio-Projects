@@ -1,5 +1,6 @@
 .PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
-        verify-destroy-scope verify-flows verify-lex verify-charset deploy provision destroy teardown
+        verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
+        deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -139,6 +140,19 @@ verify-charset:
 # Control-plane reads only. Lex bills per runtime request; this costs $0.00.
 verify-lex:
 	@$(VENV)/python scripts/verify_lex_release.py
+
+# `D80`/`D81`'s permanent execution gate: real `lambda:Invoke` calls against a 9-event matrix, asserting
+# `FunctionError` absence and a path-specific marker per event -- not a bare `StatusCode: 200`, which is
+# returned identically for a normal return and an unhandled exception (`D80`'s own diagnostic call missed
+# this the first time, one layer up at the Lex boundary).
+#
+# Deliberately NOT a dependency of `deploy` in this pass, unlike the layer plan's original proposal --
+# see scripts/verify_lambda_execution.py's own module docstring for why: 6 of its 9 events make real,
+# small (~$0.002 total) Bedrock calls, and whether the Phase 3-7 Bedrock standing approval's wording
+# extends to Phase 8 is Marco's call, not assumed here. Run it explicitly, after a deploy, until that is
+# settled.
+verify-lambda-execution:
+	@$(VENV)/python scripts/verify_lambda_execution.py
 
 # Chunk + embed the policy corpus, load it into the vector store. Free by default: mock embeddings + a
 # local in-memory table (see src/fnol_voice_agent/knowledge/ingest.py's module docstring). Real Bedrock

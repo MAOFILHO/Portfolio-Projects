@@ -58,15 +58,27 @@ satisfies the requirement`), not silent, because `--only-binary=:all:` was set f
 
 ## 3. Size — measured, not asserted
 
-Built and zipped locally (see §7 for exact commands), then measured directly:
+Built and zipped locally (see §7 for exact commands), then measured directly. **Re-measured 2026-08-13
+against the build now actually referenced by `lambda.tf`'s `data.archive_file.codehook_deps`**
+(`infra/terraform/stacks/main/.terraform-build/layer/python` — the earlier 162 MB / 54.0 MB figures came
+from a build in a session scratch directory, never wired into Terraform; this is the artifact `terraform
+plan` in this session actually reads):
 
 | Component | Unzipped | Zipped |
 |---|---|---|
-| Dependency layer (9 pinned top-level packages + their real transitive closure) | **162 MB** | **54.0 MB** |
-| Function code (`src/fnol_voice_agent`, unchanged) | 0.84 MB | 0.128 MB |
-| **Combined total** | **≈163 MB** | — |
+| Dependency layer (8 pinned top-level packages + their real transitive closure) | **122 MB** | **41 MB** |
+| Function code (`src/fnol_voice_agent`, unchanged) | 0.86 MB | 0.128 MB |
+| **Combined total** | **≈123 MB** | — |
 | **Lambda's unzipped budget (function + all layers combined)** | 250 MB | — |
-| **Headroom** | **≈87 MB (35%)** | — |
+| **Headroom** | **≈127 MB (51%)** | — |
+
+The two builds are not a contradiction — `pip`'s resolver is not required to be deterministic across
+runs against an unpinned transitive closure (only the 8 top-level packages in `EXPECTED_PACKAGES` are
+pinned; their own dependencies resolve to whatever satisfies the constraint at build time, and this
+project's build has no lockfile pinning those). Both numbers are real measurements of an artifact that
+passed `verify_layer_contents.py` at 8/8; this table reports the one that is actually live in
+`.terraform-build`, not the larger of the two chosen for a bigger safety margin. The absence of a
+transitive lockfile is scope for a later pass, not fixed in this one.
 
 Source, checked against the AWS Lambda troubleshooting guide rather than assumed: *"The maximum size for
 a .zip deployment package for Lambda is 250 MB (unzipped)... this limit applies to the combined size of
@@ -171,18 +183,33 @@ own downstream codehook invocation fails). **Specification, not left implicit:**
   named `slotToElicit` for a slot-eliciting event) proving the intended branch of `_dispatch()` ran, not
   merely that *some* branch returned *something*.
 * **The event matrix, not a single no-signal turn — this is also §3's `mcp`-exclusion mitigation, not a
-  separate mechanism.** One event per: each of the six in-scope intents' first turn, `FallbackIntent`,
+  separate mechanism.** **Corrected while implementing the script, 2026-08-13: 9 events, not 10.**
+  `CLAUDE.md`'s sixth in-scope intent ("injury or fatality mentioned") has no "first turn via ordinary
+  classification" event to construct — `aws/bedrock_router.py` deliberately has no `InjuryEscalation`
+  value in its classifier's intent enum (`ADR-010`'s dominance requirement), so that intent's only two
+  entry points are the raw-text L1 trigger and the graph's own in-band `L2` safety-flag branch, already
+  in the matrix below. Actual matrix: the five ORDINARY intents' first turn (`FileAutoClaim`,
+  `CheckClaimStatus`, `CoverageQuestion`, `RentalTowingEntitlement`, `UpdateContactInfo`), `FallbackIntent`,
   the raw-text L1 trigger, the raw-text L3 (`agent`) trigger, and the `injuries_present`-confirmed-true
   path (`D79`). Every code path this project has that could contain a conditional or lazily-triggered
   import is exercised by construction, not by hoping a single smoke event happens to cover it.
-* Wired into `make deploy` as a **required** step after `terraform apply`, not an optional or manual one.
-  A non-zero exit here fails the target. This is the mechanism difference from what happened this
-  session: the D77-safe read-back existed and passed; it was never going to catch this, because it
-  wasn't asking whether the function executes. This gate asks that question directly, every deploy.
-* Real cost of running it: roughly a dozen `lambda:Invoke` calls, no Lex, no Bedrock reached by any
-  synthetic event (none are injury phrasings, and the intent-opener events are chosen to resolve before
-  any generation step) — effectively free, and orders of magnitude cheaper than finding the same class of
-  defect via criterion 9's real `RecognizeText`/Bedrock calls, which is what happened this time.
+* **Deliberately NOT wired into `make deploy` as written, on review of this plan's own claim below.**
+  The original spec here said "required step after `terraform apply`." Implemented as its own target,
+  `make verify-lambda-execution`, invocable independently — see the cost correction immediately below for
+  why: chaining it into every future `make deploy` means every future deploy silently spends real
+  Bedrock money, and whether that is already covered by the Phase 3-7 standing approval's wording is
+  Marco's call, not this script's to assume. Revisit the chaining once that is settled.
+* **Cost, corrected while implementing the script, 2026-08-13: NOT effectively free.** The original claim
+  here — "no Bedrock reached by any synthetic event" — does not survive checking against
+  `agents/nodes/routing.py`'s own docstring: every turn that reaches the graph passes through
+  `guardrails_input_check` (`ApplyGuardrail`) and `route_and_classify` (`classify_turn`, a real Bedrock
+  Converse call) **unconditionally**, regardless of which intent Lex's own NLU already guessed — only the
+  three pre-graph events (L1, L3, `D79`) are actually Bedrock-free. The five ordinary-intent events and
+  `FallbackIntent` — 6 of 9 — each cost roughly $0.0003 (guardrail) plus a fraction of a cent (Nova Micro
+  router), **~$0.002 total for one full run of this gate**. Genuinely negligible against the $25 ceiling,
+  and still orders of magnitude cheaper than finding the same class of defect via criterion 9's real
+  `RecognizeText` calls (as happened this time) — but the claim was wrong, not merely optimistic, and is
+  corrected here rather than left standing, same discipline as `D80`'s own comment-as-evidence finding.
 
 ## 5. Ordering — `D81`'s fix lands first, independent of this layer work
 
