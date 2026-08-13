@@ -523,10 +523,10 @@ cannot be both."*
 | 2 | **`ADR-014` written before any code**, superseding `ADR-004`'s merge decision or explicitly declining to. Must record that ADR-004's alternatives table rejected separate **sequential** calls and never evaluated separate **parallel** ones, while `SUCCESS-METRICS.md` §2 had already specified L2 as a parallel single-purpose call | ✅ Stage 1 — `docs/adr/ADR-014-router-l2-split.md`. **Supersedes `ADR-004` §1 only.** It does *not* pre-decide the split: two explanations (the merge, the label space) fit the data equally well and one is a one-line change, so recording the split as decided would make the ladder ceremonial. Instead it withdraws the merge's default status, pre-commits the decision rule, tie-break and refutation readings, and binds five invariants (`I1`–`I5`) whichever rung wins. Requires `ADR-015` to record the outcome |
 | 3 | **A Phase 7 tuning set, isolated-author, frozen before rung A runs.** Same protocol as the Phase 6 independent set, different seed vocabulary, ~80 items both polarities, including the false-positive shapes L2 actually failed on. **All tuning happens against this set and nothing else** | ✅ Stage 2 — `evals/tuning/injury_phrasings_tuning.yaml`, **80 items, 45 positives / 35 negatives**, all five KABCO codes, zero duplicates. **Zero exact and zero near-duplicate (ratio ≥ 0.80) overlap with either held-out set**, enforced by `tests/unit/test_tuning_set.py` rather than verified once by hand — the isolation protocol prevents the author from checking it themselves, so the check has to live where it runs without them |
 | 4 | **C2 made structural, not remembered** — `load_holdout(INDEPENDENT)` raises outside a declared verification run; an **append-only fingerprint ledger** records every independent-set run with a config hash; `RESULTS.md` publishes the count of distinct fingerprints ever measured against the set. One is a verification, six is de-facto tuning, and the reader can see which without taking anyone's word | ✅ Stage 2 — `evals/holdout_ledger.py` + `evals/holdout_ledger.json`, **1 distinct fingerprint**, published in `RESULTS.md` §2.1. **The guard fires on the *pair*, not the read** (`D33`) — locking the read broke the regression gate, and the gate was right. Guard and recorder are one context manager so the ledger cannot be skipped; aborted runs are still recorded |
-| 5 | **The k-sample protocol for C1 settled and the *current merged* configuration measured under it first** — before any candidate exists to be flattered by the comparison. Recommended: k=5, an item missed on any sample counts as a miss. **If 1.000 does not survive repetition, that is reported as a correction to Phase 6's n=1 figure** and C1 attaches to the measured baseline | ✅ Stage 2 — k=5, any-sample-miss, on the **unchanged merged** configuration. **Union recall 1.000 (26/26) holds; 0 of 43 items unstable; no correction owed** (`D34`). 215 calls, $0.0083. Union false-escalation reproduced at **0.529 on a complete rule-based denominator** |
+| 5 | **The k-sample protocol for C1 settled and the *current merged* configuration measured under it first** — before any candidate exists to be flattered by the comparison. Recommended: k=5, an item missed on any sample counts as a miss. **If 1.000 does not survive repetition, that is reported as a correction to Phase 6's n=1 figure** and C1 attaches to the measured baseline | ✅ Stage 2 — k=5, any-sample-miss, on the **unchanged merged** configuration. **Union recall 1.000 (26/26) holds; 0 of 43 items unstable; no correction owed** (`D34`). 215 calls, $0.0083. Union false-escalation reproduced at **0.529 on a complete rule-based denominator**. *Local graph call — Phase 8 Stage 4 found the deployed system unverified, `D80`/`D81`* |
 | 6 | **The ablation ladder A→D run on the tuning set**, each rung reported at its real value including rungs that move nothing. **The hypothesis reported as confirmed or refuted**, with the refutation condition fixed in advance (`BUILD-PLAN.md` §1) | ⬜ Stage 4 — mid-phase gate |
 | 7 | **The split built with concurrent invocation and a construction-time dominance invariant** for the detector, analogous to L1's existing `assert_dominates`: its output cannot be bypassed, overridden or vetoed by the classifier, the graph or Guardrails. **Q10 stays closed** — the detector remains unreachable from the generation-tier flag. Agent-internal latency **measured** on both configurations, not asserted | ⬜ Stage 3 |
-| 8 | **C1 verified against the independent set on one frozen configuration**, k-sampled. Any candidate below the baseline union recall is **rejected regardless of what it buys** | ✅ Stage 8 — **scope widened by Marco from the router to the COMPOSED pipeline** (`L1 → guardrail v2 → L2`). **Composed escalation recall 1.000 (26/26)** at k=5, 0 blocked, 0 unstable. Ledger entry #4, fingerprint `55b7054762da8ae2`, published count **3** |
+| 8 | **C1 verified against the independent set on one frozen configuration**, k-sampled. Any candidate below the baseline union recall is **rejected regardless of what it buys** | ✅ Stage 8 — **scope widened by Marco from the router to the COMPOSED pipeline** (`L1 → guardrail v2 → L2`). **Composed escalation recall 1.000 (26/26)** at k=5, 0 blocked, 0 unstable. Ledger entry #4, fingerprint `55b7054762da8ae2`, published count **3**. *Local graph call — Phase 8 Stage 4 found the deployed system unverified, `D80`/`D81`* |
 | 9 | **False-escalation, intent macro-F1 and out-of-scope re-measured** and reported at their real values. Intent macro-F1 scored on the system's **effective** intent, with the classifier's raw output reported alongside so the split cannot be credited by a scoring convention | ⬜ Stage 8 |
 | 10 | **Bedrock Guardrails as real IaC, input and output** — content filters, denied topics, PII entities, contextual grounding. Replaces the mock rule engine in every measurement. **The L1-before-input-guardrail ordering (`ADR-010`) verified by a test, not by reading the code** — that ordering survives a refactor only if something fails when it breaks | ⬜ Stage 5 |
 | 11 | **Prompt-injection defence demonstrated against real attacks** through both channels the threat model names: retrieved KB chunks (a poisoned chunk planted in our own corpus) and tool responses (the mock claims system returning adversarial content) | ⬜ Stage 6 |
@@ -2089,7 +2089,7 @@ first time, which is luck rather than evidence.
 times over.** Each of the three findings below was invisible to every component measurement taken in
 this phase.
 
-### `D52` — the composed verification. `C1` holds
+### `D52` — the composed verification. `C1` holds *(local graph call — see the Phase 8 Stage 4 section below; unverified on any deployed build as of `D80`/`D81`)*
 
 `L1 → ApplyGuardrail(INPUT) v2 → L2`, all 43 independent-set items, k=5 on L2, temperature 0.0.
 **Composed escalation recall 1.000 (26/26)**; router-only recomputed same-run at 1.000; guardrail-first
@@ -2724,9 +2724,12 @@ import statements.
 *"0/26 is not a measurement. The instrument returned nothing; it did not return zero."* Accepted, and
 applied everywhere the number appeared (this file, `COSTS.md` Line D, the run artifact, the ledger entry
 — raw values preserved under `_RAW_UNSCORED` fields rather than deleted, corrections appended rather than
-silently rewritten). **`C1`'s status on the deployed system: unverified since the Stage 4 Lambda deploy —
-not failed.** Named plainly: **no build, local or deployed, has ever verified `C1` end-to-end through the
-code that is now shipped.** The last end-to-end pass of any kind was the LOCAL graph composition at
+silently rewritten). **`C1`'s status on the deployed system: unverified — not failed, and not a
+regression from a working state, because no such state exists.** Corrected further on a second review:
+79 invocations / 79 errors total against `fnol-codehook` since it went live (§3, below) means the
+deployed system **has never once executed successfully**, not "became non-functional since Stage 4" —
+that phrasing implies a working baseline the Stage 4 deploy broke, and there isn't one. Named plainly:
+**no build, local or deployed, has ever verified `C1` end-to-end through the code that is now shipped.** The last end-to-end pass of any kind was the LOCAL graph composition at
 fingerprint `cec0cfcba5dd133c` (2026-08-13T01:56 UTC, recall 1.000/26/26, Stage 8's guardrail v2→v3
 re-verification) — and that fingerprint's six-file set predates `api/lex_codehook.py`,
 `agents/l3_lexicon.py` and `aws/checkpointer.py` entirely; none of them existed yet. `D80` and a second,
@@ -2759,8 +2762,12 @@ number"* — and no layer, or any other dependency-bundling mechanism, exists an
 `python-dateutil`, `PyYAML`) ship in the deployed package. `pydantic` surfaces first only because
 `api/lex_codehook.py` imports `mcp.escalation_server` at module level and that module imports `pydantic`
 at its own module level — every other undeclared dependency would fail the same way the moment import
-order reached it. **This has been true since this session's own Stage 4 Lambda deploy**, i.e. the
-deployed system has been completely non-functional the entire time it has been live, on every intent.
+order reached it. **The deployed system has never once executed successfully — not "broke at Stage 4,"
+there is no prior working deployed state to have broken from.** Stage 3's Lambda was a stub dispatch with
+no graph, no third-party imports, and nothing to verify; the code that first needed these dependencies is
+the code that has been failing 100% of its invocations since the moment it went live, confirmed exactly
+(§3, below: 79 invocations, 79 errors, no exceptions). Every ordinary intent, not only the safety path
+this measurement happened to be checking, has been unreachable this entire time.
 
 Same shape as the `RESULTS.md` §3.5 family and `D77` one layer up: a check (the D77 read-back) that was
 correct about what it inspected — the bytes, the deploy status — and silent about the layer above it,
@@ -2831,10 +2838,53 @@ sampled through 78 consecutive non-substantive responses and still emitted a sco
 3. **Zero invalid invocations is a stated precondition of any reportable `C1` number**, printed and
    recorded in the ledger entry alongside the recall figure, not left implicit in a clean run.
 
+**Expanded on review, 2026-08-13 — items 1–3 above do not close `D81` by themselves.** Marco's own
+observation, applied against the triple directly: `_close()`'s fail-closed path sets the identical
+`escalate="true"` attribute a genuine `L1`/`L2` detection sets. `escalated` / `not-escalated` / `invalid`
+has no way to tell them apart. **Under that triple, a system whose detector is completely broken but
+whose fail-closed path fires on every turn — a plausible failure mode, not a contrived one, since
+fail-closed is *designed* to catch exactly "something failed" — scores composed recall 1.000: a passing
+measurement of a non-functional detector.** Two more requirements, both required before `D81` is closed:
+
+4. **Escalation provenance.** Every `escalate=true` the harness observes carries a reason code naming
+   which path set it: `detection` (the graph's own `L1`/`L2` classification reached `_respond_from_graph_
+   result` and escalated on its own evidence), `fail-closed` (`handler()`'s `except` branch fired), or
+   `other-default` (any shape not accounted for by the first two — a residual category the harness must
+   be able to name rather than silently fold into one of the other two). This requires the harness to
+   read more than `sessionAttributes.escalate` — at minimum, the Lambda's own log line
+   (`"escalating contact %s on layer %s route %s"`, already used to root-cause `D80`) or an equivalent
+   structured signal the codehook emits for exactly this purpose. **Any `C1` number is reported with its
+   provenance breakdown attached, not as a bare recall figure.** An item whose only `escalate=true`
+   samples carry `fail-closed` provenance does **not** count toward `C1` recall — a system that is
+   catching injuries by crashing is not verified, it is unmonitored in a different way.
+5. **Negative controls, with a stated minimum.** Nothing in criterion 9's k=3/26-must-escalate-item
+   protocol can currently produce a non-escalation at all — the set contains no item where `escalated=
+   false` is the CORRECT answer, so a harness that always reports `escalated=true` (whether from
+   detection or from a systemic fail-closed default) and one that behaves correctly are indistinguishable
+   by this protocol. **Minimum: 5 must-not-escalate items, k=1 each, drawn from the 17 negatives already
+   in `evals/holdout/injury_phrasings_independent.yaml`** (no new authoring — `D52`'s own local run
+   already established these 17 as true negatives on the composed pipeline; reusing them here checks
+   whether the DEPLOYED path agrees, which is exactly this criterion's purpose). k=1 rather than k=3
+   because the failure this control exists to catch — "the instrument cannot return a negative at all" —
+   is structural, not stochastic; if the deployed path shows real per-sample variance on negatives, that
+   is itself worth escalating to k=3 at that point, not assumed away in advance. **If every sampled
+   negative still reads `escalated=true`, the run is invalid — not a false-escalation defect, an
+   instrument defect** — the same `invalid` classification as item 1, because it means the harness has
+   not demonstrated it is capable of the negative outcome `C1`'s recall figure implicitly claims it can
+   distinguish from.
+
+**Until both exist, `C1` is unverifiable regardless of layer or Lambda state.** A perfectly-packaged
+Lambda measured by the harness as it stood after items 1–3 alone would report 1.000 with no more
+evidentiary weight than this run's invalidated 0.000 had — the harness would still be unable to
+distinguish "the detector works" from "the fail-closed path is doing all the work," and would still have
+never demonstrated it can report a negative. This work is independent of the layer plan (item 5, below)
+and lands before any re-run regardless of which finishes first.
+
 Filed separately from `D80` by design: `D80` is about trusting a write (this session's own read-back
 pattern, one layer further); `D81` is about a check that cannot tell "the system ran" from "the system
-returned something," which is a defect in the checking mechanism itself and would recur against a
-perfectly-packaged Lambda if it failed in a different way.
+returned something" — or, after this expansion, "the detector fired" from "the failure handler fired" —
+which is a defect in the checking mechanism itself and would recur against a perfectly-packaged Lambda if
+it failed in a different way.
 
 ### Contamination window — every run against the deployed function, Stage 4 Lambda deploy → Criterion 9
 

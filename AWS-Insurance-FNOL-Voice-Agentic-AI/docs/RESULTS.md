@@ -198,6 +198,23 @@ rather than overlooked: pinning it would invalidate Phase 6's generation baselin
 *spoken* response should be deterministic is a design question, not a hygiene one. **Named here as an open
 item** (`Q12`), owned by Phase 7's verification stage.
 
+## 0.2 The third correction — every `C1` figure in this report is LOCAL-graph scope, added retroactively at Phase 8
+
+**Added 2026-08-13, on review, retroactive to every `C1`/"holds"/"1.000" claim below.** Every measurement
+in this document — including "`C1` holds on the shipped system" (§5.3) and every "Union escalation recall
+1.000 (26/26)" row — was produced by calling `agents/graph.py` (and, from §5.3 on, `ApplyGuardrail`)
+**directly, in-process.** "Shipped" and "the shipped system," used throughout this report, meant *the
+graph's own code*, which was accurate when written — Phase 8's Lambda wrapper (`api/lex_codehook.py`,
+`agents/l3_lexicon.py`, `aws/checkpointer.py`) did not exist yet, so there was no other "shipped" to mean.
+
+**It no longer disambiguates.** Phase 8 Stage 4 found (`D80`/`D81`, `PROJECT_STATE.md`) that the deployed
+Lambda has never once executed successfully — every `C1` figure in this report remains true **of the
+composition it actually measured**, and **none of them are evidence about the currently-deployed system**,
+which is untested and has been failing 100% of its real invocations. Read every `1.000 (26/26)` below as
+scoped to the local graph call, not to a phone call. §11 has the full account, and §11.4 records what a
+100%-broken deployment actually looks like at the Lex boundary — which is not an obvious failure a reader
+would otherwise expect "C1 unverified" to mean.
+
 ---
 
 ## 1. Rule-shaped and vocabulary-shaped defects
@@ -287,7 +304,7 @@ comparison — 43 items × k=5 = **215 real Nova Micro calls, $0.0083**
 
 | | k=5, any-sample-miss |
 |---|---|
-| **Union (L1 ∪ L2) escalation recall** | **1.000 (26/26)** — holds |
+| **Union (L1 ∪ L2) escalation recall** | **1.000 (26/26)** — holds *(local graph call only — §0.2)* |
 | Union false-escalation, **rule-based** denominator | **0.529 (9/17)** |
 | L1 alone | recall 0.269, false-escalation 0.059 |
 | Items whose L2 verdict varied across five samples | **0 of 43** |
@@ -1280,13 +1297,13 @@ scope and the reasoning is the phase's headline finding, not a preference:
 > measured against the independent set. The tuning-set 0/45 is not that number. Declining on 'the router
 > is unchanged' would repeat §3.9's error one section after documenting it."*
 
-### The result — `C1` holds on the shipped system
+### The result — `C1` holds on the shipped system *(the shipped graph, in-process — not the deployed Lambda; see §0.2, `D80`/`D81`)*
 
 43 items × k=5, temperature 0.0, guardrail `zl5ppnyorwd2` v2, live config sha `4f42baaf29042046`.
 
 | Composition | Escalation recall | Read |
 |---|---|---|
-| **`L1 → guardrail → L2`, the shipped order** | **1.000 (26/26)** ✅ | **`C1` holds on the composed system.** Phase 7 closes |
+| **`L1 → guardrail → L2`, the shipped order** | **1.000 (26/26)** ✅ | **`C1` holds on the composed system** *(local graph, not the deployed Lambda — §0.2)*. Phase 7 closes |
 | `L1 ∪ L2`, guardrail removed | 1.000 (26/26) | Entry #1's metric, recomputed same-run |
 | `guardrail → L1 → L2`, counterfactual | 1.000 (26/26) | See below |
 
@@ -1587,7 +1604,7 @@ moves 0.063 between identical runs, and must not be read to three decimals or us
 |---|---|---|---|---|---|
 | L1 escalation recall, labelled set | GATE | 1.00 | 1.000 | ✅ | deterministic |
 | Union escalation recall, independent set | — | — | 1.000 | ✅ | **k=5** (§2.1) |
-| **Composed escalation recall** (`L1 → guardrail v3 → L2`), independent set | **`C1`** | **1.000** | **1.000 (26/26)** | ✅ | **k=5** on L2, **k=1** on the guardrail (§5.3) — the number that verifies the shipped system. Re-measured after the v2→v3 guardrail change; identical |
+| **Composed escalation recall** (`L1 → guardrail v3 → L2`), independent set | **`C1`** | **1.000** | **1.000 (26/26)** | ✅ | **k=5** on L2, **k=1** on the guardrail (§5.3) — verifies the shipped *graph*, not the deployed Lambda (§0.2, `D80`/`D81`). Re-measured after the v2→v3 guardrail change; identical |
 | **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**; reproduced at 0.529 on a complete rule-based denominator (§2.1) |
 | **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ | **1×**, and ~4.3 sd high (§3.3) |
 | **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ | **1×**; 0.000 in all ten runs since |
@@ -1755,3 +1772,43 @@ of efficiency until checked — it is as likely to be evidence that part of the 
 unexplained cost-below-estimate result should trigger a liveness check (did every expected downstream
 call actually happen) before any accuracy or recall number from the same run is read at all.** This
 project had no such rule before Phase 8 Stage 4; it has one now.
+
+### 11.4 A total outage that returns HTTP 200 is not a degraded conversation, it is a normal-looking one
+
+This was reported once already, as an aside explaining an arithmetic reconciliation in `D81`. It is not
+an aside. It is the most consequential fact this incident produced, and it is promoted here on its own.
+
+**The fact.** `fnol-codehook` failed **100%** of its real invocations for the entire time it has existed
+(`D80`). At the Lex boundary, every one of those 79 failures produced a normal `RecognizeText` response:
+HTTP 200, `dialogAction.type: "Close"`, `intent.name: "FallbackIntent"`, `intent.state: "Failed"` —
+**Lex's own built-in no-match handling, indistinguishable on the wire from a caller who simply said
+something the bot didn't recognize.** No `ClientError`. No `FunctionError`. Nothing propagated to
+`boto3`, because from Lex's perspective nothing failed — the codehook it tried to invoke errored at
+cold-start import, Lex's integration with a codehook that cannot run degrades to its own native fallback,
+and a native fallback is not, itself, an error condition.
+
+**Say plainly what this means for the actual caller.** During the entire window this Lambda has been
+live, **a caller who disclosed an injury would have heard a generic fallback prompt and continued a
+normal-sounding conversation** — not a crash, not silence, not an error tone. `CheckEscalation`'s
+`$.Attributes.escalate` would read empty, because nothing ever set it. The one intent this whole project
+exists to guarantee (`CLAUDE.md`: "immediate hard-coded escalation from any state") fails **open and
+silent** under exactly the failure mode this incident produced. This is not hypothetical extrapolation —
+criterion 9 sent real injury phrasings, real synthetic calls, through this exact broken system, and this
+is verifiably what came back, per the raw `escalated_flags: [false, false, false]` recorded against every
+one of the 26 must-escalate items in the run artifact.
+
+**Say plainly what this means for detectability.** The outage was invisible from every vantage point
+this project instruments **except CloudWatch metrics on the function itself**, on which no alarm exists
+(§3 of `PROJECT_STATE.md`'s Phase 8 Stage 4 section). Not from the caller's experience (indistinguishable
+from an ordinary no-match turn). Not from Lex's own service health. Not from the D77-style deploy
+read-back (§11.1 — it checks deployment status, not execution). Not from cost (§11.3 — underspend was the
+signal, but only once someone thought to check it against the estimate). The only instrument that ever
+saw this was a metric nobody was alerting on.
+
+**Criterion 9's run was, incidentally, an unplanned total-dependency-failure drill, and its result is
+worth recording as one independent of anything about `C1`.** The observed system behavior under total
+codehook failure is: **silent degradation to a generic fallback, with no signal reaching the caller, the
+operator, or any instrument except an unmonitored metric.** For a system whose one non-negotiable
+guarantee is a safety escalation reachable from any state, "fails safe" would mean the opposite of what
+was actually observed here — this system, under this failure mode, fails exactly the way it is not
+allowed to.

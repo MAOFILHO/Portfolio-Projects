@@ -44,7 +44,7 @@ and it is not recoverable by re-running anything.
 | | |
 |---|---|
 | Shipped and verified | The graph, L1/L2, the guardrail at **v3**, the eval harness, 377 tests |
-| `C1` | **Composed escalation recall 1.000 (26/26)** on the shipped `L1 → guardrail v3 → L2` path |
+| `C1` | **Composed escalation recall 1.000 (26/26)** on the shipped `L1 → guardrail v3 → L2` path — accurate as Phase 7's handover, local graph only. **Stage 4 update, not a Phase 7 correction:** the Lambda wrapper this phase adds broke that path entirely (`D80`/`D81`, `PROJECT_STATE.md`); as of Stage 4, `C1` is unverified on any deployed build, see `RESULTS.md` §0.2/§11 |
 | Known-open | `NOT-FIXED.md` — 12 entries, of which **#2 (`D43`) and #12 are Phase 8's** |
 | Spend | ≈$0.397 of Phase 7's $1.25; standing Bedrock cap ≈$0.411 of $5.00 |
 

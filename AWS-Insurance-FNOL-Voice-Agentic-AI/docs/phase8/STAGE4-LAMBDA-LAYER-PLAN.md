@@ -75,15 +75,49 @@ at **50 MB zipped** (approximate, base64 framing adds ~30% to the actual request
 MB zip exceeds that** and must be uploaded via S3 (`S3Bucket`/`S3Key`), not Terraform's `filename`
 argument — a concrete consequence for §6 below, not a formality.
 
-**`mcp==2.0.0` is excluded from the layer, and this is checked, not assumed.** `pyproject.toml`'s own
-comment says it is "not used on the runtime hot path (`ADR-012` keeps that in-process)." Verified: no
-file under `src/fnol_voice_agent/` imports the `mcp` SDK package (`grep` for `import mcp`/`from mcp.`
-outside the project's own `fnol_voice_agent.mcp` namespace returns nothing); only
-`tests/unit/test_mcp_wire_protocol.py` does, which never runs in Lambda. Including it would have cost
-**28 MB unzipped / 9 MB zipped** (it pulls a whole ASGI stack — `starlette`, `uvicorn`, `sse-starlette`,
-a second `httpx`, `jsonschema`, `cryptography`, `pyjwt`, `websockets` — for a wire-protocol test the
-Lambda never runs). `mcp` stays in `pyproject.toml`'s main dependency list (tests need it); it is simply
-not one of the packages this layer installs.
+**`mcp==2.0.0` is excluded from the layer. The method used to decide that, and its blind spot, are stated
+explicitly rather than left as "verified" — evidence, not confirmation:**
+
+* **Method: a static source grep.** `grep -rn "^import mcp\b\|^from mcp\." src/ tests/`, restricted to
+  imports of the third-party SDK (excluding the project's own `fnol_voice_agent.mcp` namespace). Result:
+  zero matches under `src/`; the only match anywhere is `tests/unit/test_mcp_wire_protocol.py`, which
+  never runs in Lambda. `pyproject.toml`'s own comment corroborates it independently: `mcp` is "not used
+  on the runtime hot path (`ADR-012` keeps that in-process)."
+* **The blind spot, named rather than assumed away:** a static grep for `import` statements at the top of
+  a file **cannot see a lazy or conditional import** — `if some_condition: import mcp` inside a function
+  body, reached only under a runtime condition this grep, and possibly every test, never exercises. That
+  shape would produce a `D80`-identical failure: clean build, clean deploy, clean D77-style read-back,
+  and a crash the first time a caller's turn happens to take the one branch nobody statically checked —
+  possibly the safety path itself, which is the worst place for this exact failure mode to reappear.
+* **Mitigation chosen, not merely disclosed: the static claim is backed by a dynamic check, not left to
+  stand alone.** §4's execution gate exercises an event matrix covering every code path this project
+  has (all six intents, `FallbackIntent`, L1, L3, `injuries_present`) on every deploy. If any of those
+  paths contains a conditional `import mcp` the grep missed, that specific gate invocation fails loudly,
+  at deploy time, before the layer is ever trusted — not quietly, at an unlucky moment in production,
+  which is `D80`'s failure shape exactly. **28 MB against a budget already at 65% utilization does not
+  justify shipping `mcp` "to be safe" instead of closing the actual gap** — the gap is closed by the gate
+  covering every path, not by the size of what's excluded.
+
+Including `mcp` would have cost **28 MB unzipped / 9 MB zipped** (it pulls a whole ASGI stack —
+`starlette`, `uvicorn`, `sse-starlette`, a second `httpx`, `jsonschema`, `cryptography`, `pyjwt`,
+`websockets` — for a wire-protocol test the Lambda never runs). It stays in `pyproject.toml`'s main
+dependency list (tests need it); it is simply not one of the packages this layer installs.
+
+**Layer contents verified directly, not inferred from a successful build exit code — the sibling risk
+to the manylinux finding in §2.** `pip install` exiting 0 is evidence the resolver was satisfied with
+*something*, not evidence every expected package landed at the pinned version; a resolver silently
+substituting a compatible-but-different version, or a partial/corrupted extraction, would look identical
+to success at the shell level. `scripts/verify_layer_contents.py` (new, committed, run against the real
+built artifact — not a hypothetical) checks two things per retained package, directly against the
+`python/` directory on disk: (1) a `dist-info` entry exists at **exactly** the pinned version, not merely
+*a* version; (2) the actual importable module (directory or `.py` file) the metadata claims to provide is
+really present, catching a partial extraction that metadata alone would miss. **Real result, this
+session, against the built layer: `8/8 expected packages present at pinned versions, with importable
+modules on disk`.** This does not prove the packages *import successfully* under the real arm64/Linux
+interpreter (this dev machine cannot execute those binaries at all) — that is §4's execution gate's job,
+against the real deployed function, or the container-image check in §7 as a pre-deploy alternative. This
+script closes the narrower, cheaper, zero-AWS-cost gap: did the build put the right things in the box at
+all.
 
 **Not attempted: hand-pruning `langgraph`'s own transitive dependencies** (`langsmith`/`langchain-core`
 pull in `zstandard` at 21 MB, the single largest non-numpy/botocore component). Unlike `mcp`, these are
@@ -100,26 +134,44 @@ start; this change moves directly against that, because the alternative is a pac
 all. Phase 9's cold-start measurement (already scoped) should treat this package's actual cold-start
 number as new information, not assume `ADR-009`'s existing framing still describes it.
 
-## 4. Permanent import gate — not a throwaway probe
+## 4. Permanent import gate — not a throwaway probe, and not fooled by `StatusCode: 200`
 
 **A one-off post-deploy probe fixes today and guarantees `D80` recurs on the next dependency change.**
-The gate has to be permanent, in the deploy path, and has to invoke the function:
+The gate has to be permanent, in the deploy path, and has to invoke the function.
+
+**The gate cannot trust a 200, and this is stated explicitly rather than left to be discovered the way
+`D80` was.** `lambda:Invoke`'s synchronous response carries `StatusCode: 200` for **both** a normal
+return **and** an unhandled exception in the function — the failure signal is a separate
+`FunctionError` header (`"Unhandled"`/`"Handled"`) plus a structured error object in the payload body,
+not the HTTP-adjacent status code. A gate written as `if response["StatusCode"] == 200: pass` would
+reproduce `D80` exactly: this session's own diagnostic `boto3.recognize_text()` call never raised either,
+for the identical reason one layer up (Lex's `RecognizeText` also returns a normal-looking 200 when its
+own downstream codehook invocation fails). **Specification, not left implicit:**
 
 * New script, `scripts/verify_lambda_execution.py`, `make verify-lambda-execution`: real `lambda:Invoke`
-  (not `RecognizeText` — this checks the function executes, not that Lex routes to it) with a minimal
-  synthetic Lex codehook event, asserting: (a) no `FunctionError` in the `Invoke` response, (b) the
-  response body is a well-formed `sessionState` object (not Lex's own native fallback shape), and (c) a
-  literal string marker proving `_dispatch()` ran (e.g. the fixed `NoInput`/`Delegate` wire shape for a
-  no-signal turn). This is a stronger assertion than "no exception" — it is the same "read what is
-  actually running" discipline as the `D77` read-back, applied to execution rather than deployment
-  status, which is exactly the gap `D80`/§11.1 of `RESULTS.md` names.
+  (not `RecognizeText` — this checks the function executes, not that Lex routes to it) against a **matrix**
+  of synthetic Lex codehook events, not one. Per invocation, the gate asserts, in order: (a) **`Function
+  Error` is absent from the `Invoke` response** — checked first and explicitly, not inferred from the
+  absence of a Python exception in the calling script; (b) the response **payload parses** and contains
+  the expected `sessionState.dialogAction.type` key with a legal value (`Delegate`/`ElicitSlot`/`Close`) —
+  a well-formed-looking body with the wrong shape (e.g. Lambda's own `errorMessage`/`errorType` JSON,
+  which *is* valid JSON and would pass a bare "did it parse" check) fails here; (c) a literal marker
+  specific to the exercised path (e.g. the `escalate` session attribute for an injury-trigger event, the
+  named `slotToElicit` for a slot-eliciting event) proving the intended branch of `_dispatch()` ran, not
+  merely that *some* branch returned *something*.
+* **The event matrix, not a single no-signal turn — this is also §3's `mcp`-exclusion mitigation, not a
+  separate mechanism.** One event per: each of the six in-scope intents' first turn, `FallbackIntent`,
+  the raw-text L1 trigger, the raw-text L3 (`agent`) trigger, and the `injuries_present`-confirmed-true
+  path (`D79`). Every code path this project has that could contain a conditional or lazily-triggered
+  import is exercised by construction, not by hoping a single smoke event happens to cover it.
 * Wired into `make deploy` as a **required** step after `terraform apply`, not an optional or manual one.
   A non-zero exit here fails the target. This is the mechanism difference from what happened this
   session: the D77-safe read-back existed and passed; it was never going to catch this, because it
   wasn't asking whether the function executes. This gate asks that question directly, every deploy.
-* Real cost of running it: one `lambda:Invoke`, no Lex, no Bedrock reached by the synthetic event (it is
-  deliberately not an injury phrasing) — effectively free, and orders of magnitude cheaper than finding
-  the same defect via criterion 9's real `RecognizeText`/Bedrock calls, which is what happened this time.
+* Real cost of running it: roughly a dozen `lambda:Invoke` calls, no Lex, no Bedrock reached by any
+  synthetic event (none are injury phrasings, and the intent-opener events are chosen to resolve before
+  any generation step) — effectively free, and orders of magnitude cheaper than finding the same class of
+  defect via criterion 9's real `RecognizeText`/Bedrock calls, which is what happened this time.
 
 ## 5. Ordering — `D81`'s fix lands first, independent of this layer work
 
@@ -131,15 +183,20 @@ gated on it — they can and should be implemented and tested (against the curre
 function, which is a perfect adversarial fixture for exercising the `invalid` path) before or in
 parallel with the layer work, not after it. **Sequencing for the actual re-run:**
 
-1. `D81` fix implemented and tested (including a test that today's broken function correctly aborts the
-   harness with `invalid`, not a scored 0.000 — the regression test for this exact incident).
-2. This layer plan approved by Marco, then applied (`terraform apply`, Marco's to run).
-3. §4's permanent gate passes post-apply.
-4. Criterion 9 re-run.
+1. `D81` fix implemented and tested — the three-state classification, provenance tagging, and the
+   negative-control minimum from `PROJECT_STATE.md`'s expanded `D81` entry, including a test that
+   today's broken function correctly aborts the harness with `invalid`, not a scored 0.000 (the
+   regression test for this exact incident).
+2. Layer built (`make build-lambda-layer`) and `scripts/verify_layer_contents.py` passes locally —
+   zero AWS cost, catches a silent partial-resolution before anything is uploaded.
+3. This layer plan approved by Marco, then applied (`terraform apply`, Marco's to run).
+4. §4's permanent execution gate (the full event matrix, not one smoke event) passes post-apply.
+5. Criterion 9 re-run.
 
-Step 4 cannot produce a reportable number without step 1, regardless of how clean steps 2–3 are — a
+Step 5 cannot produce a reportable number without step 1, regardless of how clean steps 2–4 are — a
 perfect layer measured by the current harness would report 1.000 with no more evidentiary weight than
-this run's 0.000 had, per `D81`'s "a passing run would not have been trustworthy either."
+this run's 0.000 had, per `D81`'s "a passing run would not have been trustworthy either." Steps 1 and
+2–4 are independent and can proceed in either order or in parallel; step 5 is the only one gated on both.
 
 ## 6. Terraform shape (sketch — not written into `lambda.tf`, not applied)
 
@@ -179,6 +236,30 @@ resource "aws_lambda_function" "codehook" {
 Combined unzipped total (§3) stays well inside 250 MB with this shape; no other `lambda.tf` resource
 needs to change beyond adding `layers = [...]`.
 
+**How this avoids the drift Marco named — "Terraform can miss a changed object" — stated as a chain, not
+left implicit.** The mechanism is content-hashing the **object key itself**, not `etag`-based
+change-detection on a fixed key:
+
+1. `output_base64sha256` is a hash of the actual zip bytes `archive_file` produced. It changes if and
+   only if the layer's contents change.
+2. That hash is embedded IN the S3 key (`lambda-layers/codehook-deps-<hash>.zip`), so a content change
+   produces a **new object at a new key**, never an in-place overwrite of an old one. There is no
+   "did the object at this key change" question for Terraform to get wrong, because a changed layer is,
+   by construction, never at the same key as the old one.
+3. `aws_lambda_layer_version.codehook_deps`'s `s3_key` argument is a direct reference to that key. A new
+   key is a changed input attribute on that resource, which Terraform's plan **cannot** miss — it is not
+   inferring drift from a remote read, it is comparing a value it computed itself against state.
+4. A changed `s3_key` means `PublishLayerVersion` is called again, which returns a **new, distinct layer
+   ARN** (Lambda layer versions are immutable and numbered; there is no "update in place").
+5. `aws_lambda_function.codehook.layers` references `aws_lambda_layer_version.codehook_deps.arn`
+   directly — not a hardcoded ARN, not a data source re-read — so the new ARN flows into the function's
+   own plan automatically, and `terraform apply` updates the function to point at the new layer version
+   in the same apply that published it.
+
+The `etag` argument on `aws_s3_object` is kept anyway, but it is belt-and-suspenders for the case where
+someone/something changes the S3 object out-of-band without changing the local artifact — not the
+mechanism this plan is relying on for the ordinary "I rebuilt the layer" case, which is step 1–2 alone.
+
 ## 7. Exact build commands used to produce §3's numbers (reproducible, zero AWS cost)
 
 ```bash
@@ -190,13 +271,17 @@ pip install \
   "numpy==2.5.2" "langgraph==1.2.11" "langgraph-checkpoint-aws==1.2.1" "PyYAML==6.0.2"
 find python -type d -name "__pycache__" -exec rm -rf {} +
 find python -type d -name "tests" -exec rm -rf {} +
+python3 scripts/verify_layer_contents.py ./python   # 8/8 passed, real output, §3
 zip -qr9 lambda-deps-layer.zip python
 ```
 
-Not yet promoted to a `Makefile`/`scripts/` target — proposed as `make build-lambda-layer`, wrapping
-exactly this, reading the package list from `pyproject.toml` rather than duplicating the pin list by
-hand (a second, hand-copied requirement list is its own future `D80` — the pins would drift the moment
-`pyproject.toml` changes and nobody remembers to update this file).
+`scripts/verify_layer_contents.py` (§3) is committed now, run this session against the real built
+artifact — it is not a proposed check, it is one already written and exercised. Not yet promoted into a
+`Makefile` target: proposed as `make build-lambda-layer`, wrapping exactly the sequence above (build,
+verify contents, zip) and reading its package list from `pyproject.toml` at build time. The verification
+script's own `EXPECTED_PACKAGES` dict stays hand-written and reviewable rather than parsed from
+`pyproject.toml`, deliberately — see the script's module docstring — with a proposed unit test asserting
+the two stay in sync, so drift between them is a fast local test failure, not a silent gap in the check.
 
 **Recommended, not yet run — a stronger validation than what produced §3's numbers:** the AWS-published
 `public.ecr.aws/lambda/python:3.12` container image (`arm64` variant) can run the built layer directory

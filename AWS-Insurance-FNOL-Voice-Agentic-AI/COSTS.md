@@ -179,10 +179,13 @@ file.** `data.archive_file.codehook` zips `src/` only. `pyproject.toml`'s runtim
 `PyYAML` — ship in none of them. `pydantic` surfaces first only because
 `api/lex_codehook.py` imports `mcp.escalation_server` at module level (line 85) and that module imports
 `pydantic` at ITS module level; every other undeclared dependency is equally absent and would fail the
-same way the moment the import order reached it. **This has been true since the Stage 4 Lambda deploy
-earlier in this session — every ordinary intent (`FileAutoClaim`, `CoverageQuestion`, all six), not only
-the safety path, has been non-functional the whole time**, which the D77 read-back (`LastUpdateStatus:
-Successful`, `State: Active`, `CodeSha256` match) could not and did not catch: that check verified the
+same way the moment the import order reached it. **The deployed system has never once executed
+successfully — not "broke," there is no prior working deployed state.** Stage 3's Lambda was a pure-stdlib
+stub with nothing to import and nothing to verify; the first code that needed these dependencies is the
+code that has failed 100% of its invocations (79/79, confirmed via CloudWatch) for the entire time it has
+been live — every ordinary intent (`FileAutoClaim`, `CoverageQuestion`, all six), not only the safety
+path. None of this was caught by the D77 read-back (`LastUpdateStatus:
+Successful`, `State: Active`, `CodeSha256` match): that check verified the
 right bytes were deployed and the function was schedulable, not that the function could execute past its
 own import statements. Same shape as `RESULTS.md` §3.5's family — a check that is correct about what it
 inspected and silent about the one layer up.

@@ -242,7 +242,8 @@ set: one fingerprint, ledger entry #1, and the number C1 actually attaches to.
 - **Union baseline: recall 1.000 (26/26) at k=5, 0 of 43 items unstable, $0.0083.** C1 holds; **no
   correction to Phase 6 is owed.** Union false-escalation reproduced at **0.529 on a complete rule-based
   denominator**, versus the original 0.529 over a partly hand-picked one — the finding is about the
-  detector, not the case selection. `RESULTS.md` §2.1.
+  detector, not the case selection. `RESULTS.md` §2.1. *Local graph call — Phase 8 Stage 4 found the
+  deployed system unverified, `D80`/`D81`, `RESULTS.md` §0.2.*
 
 ### Stage 3 — build the split ✅ 2026-08-12
 
@@ -336,7 +337,8 @@ the kind of overclaim this project has spent six phases avoiding.
 ### Stage 8 — verification, promotion, and the register ✅ 2026-08-12
 
 **Outcome: `C1` holds on the composed system — escalation recall 1.000 (26/26), ledger entry #4,
-published distinct-fingerprint count 3.** Marco widened the scope from the router to the composition:
+published distinct-fingerprint count 3.** *Local graph call — Phase 8 Stage 4 found the deployed system
+unverified, `D80`/`D81`, `RESULTS.md` §0.2.* Marco widened the scope from the router to the composition:
 *"declining on 'the router is unchanged' would repeat §3.9's error one section after documenting it."*
 Doing so found that the fingerprint itself was blind to the guardrail (v1 and v2 hashed identically),
 that `ApplyGuardrail`'s mask was being read as a block — refusing the claim-status readback in the
