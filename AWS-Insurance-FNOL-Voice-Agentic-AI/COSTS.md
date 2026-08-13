@@ -113,28 +113,78 @@ Stage 4 exit criterion 9 re-measures composed escalation recall (`C1`) against t
 and Lambda — `D52`'s local run ($0.0212, 43 items × k=5) does not stand in for this, because this is the
 first point `_FINGERPRINT_SOURCES` moves on a deployed resource rather than a local one.
 
-**Protocol proposed, and why it is cheaper than repeating `D52`'s shape:** temperature 0.0 already makes
-the classification path deterministic (`D27`, `D35`) — `D52`'s k=5 was measuring *model* stochasticity,
-which is not what criterion 9 exists to catch. Criterion 9 exists to catch **deployment-specific**
-divergence (environment variables, IAM, cold start, a wrong table name) that a local call cannot see at
-all. One pass over the independent set, k=1, is the right instrument for that question; if any item
-disagrees with `D52`'s recorded verdict, that one item gets re-run at higher k to tell a Lambda-specific
-flake from a real regression, rather than paying for k=5 across all 43 up front.
+**Protocol REJECTED by Marco, 2026-08-13, before any spend — the k=1 reasoning above does not hold.**
+Verbatim: *"D32's qualification, in the boxed warning at the head of RESULTS.md, records that temperature
+0.0 did NOT make the generation path reproducible — 2 to 3 different answers from 3 identical calls. The
+router held; the generation path did not. And k on a deployed path is not measuring model stochasticity.
+It is measuring cold starts, Lambda concurrency, Lex session handling, and timeouts — the variables that
+do not exist locally and are precisely what this criterion exists to catch. k=1 cannot distinguish a
+sound deployment from one that worked once."* Left the paragraph above unedited rather than rewritten —
+the wrong reasoning is the record, same as the recording-behavior amendment in `CLAUDE.md` constraint 18.
+
+**Protocol actually run, per Marco's instruction:** k=3 on the 26 must-escalate items only (not all 43;
+criterion 9's own text gates on the 1.000 (26/26) recall figure, which is a statement about the
+positives, and false-escalation on the negatives is not what this criterion checks). 78 base
+`RecognizeText` calls. Path attribution (L1 pre-graph short-circuit vs. the graph's guardrail+L2 path) is
+read back from the Lambda's own CloudWatch log line (`"escalating contact %s on layer %s route %s"`) for
+each call, not assumed from `D52`'s local 7-L1/19-L2 split — that split is what local measurement saw;
+whether the deployed Lambda's L1 lexicon fires identically is one of the exact things criterion 9 exists
+to check, so it is read per call, not carried over as a given. The per-call dollar rate applied to
+graph-path calls (guardrail 2 units + one L2 sample, $0.0003387) is still `D52`'s measured rate — Bedrock
+itself was not re-instrumented for this run; only the path counts are exact.
 
 | Component | Basis | Units | Est. cost |
 |---|---|---|---|
-| `lexv2-runtime:RecognizeText`, 43 independent-set items, k=1 | $0.00075/text request | 43 requests | **$0.0323** |
-| Bedrock (router + guardrail path each item triggers) | Same per-item cost `D52` measured locally — identical model calls, different caller | 43 items | **≈$0.0212** |
-| Lambda invocations | 1M req / 400k GB-s free tier, 43 invocations, arm64, low memory | 43 invocations | **$0.00** |
-| Contingency: re-runs on disagreement, budgeted for up to 10 items at k=4 additional | Same per-item rate as above | ≤40 requests | **≤$0.037** |
-| **Total, worst case** | | | **≈$0.09** |
+| `lexv2-runtime:RecognizeText`, 26 must-escalate items, k=3 | $0.00075/text request | 78 requests | **$0.0585** |
+| Bedrock (router + guardrail), graph-path calls only | `D52`'s per-call rate, applied to `D52`'s observed 19/26 L2-dependent ratio as a planning assumption — the real run reads this per call, see above | ≈57 of 78 calls | **≈$0.0193** |
+| Lambda invocations | 1M req / 400k GB-s free tier, ≤102 invocations, arm64, low memory | ≤102 invocations | **$0.00** |
+| Contingency: any item whose 3 samples are not unanimous gets 4 more samples, budgeted for up to 6 of the 26 items | Same per-call rates as above, worst case assumes all extra calls are graph-path | ≤24 requests | **≤$0.0299** |
+| **Total, worst case** | | | **≈$0.107** |
 
-**Estimate: ≈$0.05 expected, ≤$0.09 worst case.** Logged here before the run per Marco's instruction; the
-actual figure lands in the row below once criterion 9 executes, per criterion 13's per-run discipline.
+**Estimate: ≈$0.078 expected, ≈$0.107 worst case.** Both inside Marco's "roughly double" expectation
+(the original k=1/43-item line was ≈$0.05/≤$0.09) and, per his instruction, reported rather than trimmed
+to fit — still 5.4% of the $2 provisioned line and 0.4% of the $25 hard ceiling. Logged here before the
+run; the actual figure lands in the row below once criterion 9 executes, per criterion 13's per-run
+discipline.
 
-| Date | Stage | What ran | Real AWS call? | Units | Est. cost | Line |
+**RAN 2026-08-13. Result: `C1` BREACH on the deployed system — composed recall 0.000 (0/26), not the
+1.000 D52 established. Root cause is NOT the safety logic; it is that the deployed Lambda has been unable
+to execute ANY code, on ANY turn, since Stage 4's deploy.** `scripts/measure_composed_pipeline_deployed.py`,
+result at `evals/baselines/composed_pipeline_deployed_k3_20260813.json`.
+
+Diagnosed the same way the flow-content bug was, earlier this stage: a real API probe, not a guess.
+`aws cloudwatch get-metric-statistics` on `fnol-codehook` for the run's exact window shows **78
+invocations, 78 errors — 100%**, not a partial or stochastic failure. `aws logs filter-log-events` on the
+same window gives the actual cause: `"errorType": "Runtime.ImportModuleError", "errorMessage": "Unable to
+import module 'fnol_voice_agent.api.lex_codehook': No module named 'pydantic'"`, on `platform.initStart`
+— the crash is at **cold-start import time**, before `handler()` is ever entered, so `handler()`'s own
+fail-open/fail-closed split (Stage 4's whole design for a graph failure) never runs either; there is no
+code left to fail open or closed with.
+
+Root cause, found in `infra/terraform/stacks/main/lambda.tf`: **the file's own header comment says
+*"Stage 4's langgraph/boto3 requirements land as a Lambda layer, which is the change that makes package
+size a real number"* — and no such layer, or any other dependency-bundling mechanism, exists in the
+file.** `data.archive_file.codehook` zips `src/` only. `pyproject.toml`'s runtime dependencies —
+`pydantic`, `langgraph`, `langgraph-checkpoint-aws`, `mcp`, `numpy`, `openfeature-sdk`, `python-dateutil`,
+`PyYAML` — ship in none of them. `pydantic` surfaces first only because
+`api/lex_codehook.py` imports `mcp.escalation_server` at module level (line 85) and that module imports
+`pydantic` at ITS module level; every other undeclared dependency is equally absent and would fail the
+same way the moment the import order reached it. **This has been true since the Stage 4 Lambda deploy
+earlier in this session — every ordinary intent (`FileAutoClaim`, `CoverageQuestion`, all six), not only
+the safety path, has been non-functional the whole time**, which the D77 read-back (`LastUpdateStatus:
+Successful`, `State: Active`, `CodeSha256` match) could not and did not catch: that check verified the
+right bytes were deployed and the function was schedulable, not that the function could execute past its
+own import statements. Same shape as `RESULTS.md` §3.5's family — a check that is correct about what it
+inspected and silent about the one layer up.
+
+**Actual cost, exact, and lower than either estimate above:** because every one of the 78 run calls (plus
+1 earlier diagnostic probe, same session) crashed at import time, **zero** reached Bedrock or the
+guardrail — the conservative $0.0264 Bedrock line never happened. Cost is Lex-only: 79 `RecognizeText`
+requests × $0.00075 = **$0.05925 exact**, no estimation involved on either side of it.
+
+| Date | Stage | What ran | Real AWS call? | Units | Actual cost | Line |
 |---|---|---|---|---|---|---|
-| — | 4 | **Criterion 9, deployed `C1` re-verification — not yet run.** Estimate above | pending | pending | **pending, ≤$0.09** | **D** |
+| 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. BREACH — 0/26, root cause is a missing Lambda dependency layer, not a safety-logic regression.** 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that

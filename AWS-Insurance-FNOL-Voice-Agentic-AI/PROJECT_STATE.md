@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, criteria 1/2/3/4/5/6/7/8 built and tested, apply pending**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, applied same day (flow-content bug found and fixed, commit `7ec731e`), D77-safe Lambda read-back passed, criterion 9 RUN and BREACHED 0/26 — root cause `D80`, a missing Lambda dependency layer, not a safety-logic regression; DID stays unrouted, fix and re-run pending**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2684,6 +2684,88 @@ its own word — none is covered by `APPROVED: Stage 4` alone, per the auto-exec
 
 Phase 8's own headline exit criterion — the real inbound call — follows Stage 4's close rather than sitting
 inside it; Stage 4 ends when the number can be dialed safely, dialing it is reported separately.
+
+### Stage 4 apply, the flow-content bug found by it, and the D77-safe Lambda read-back — 2026-08-13
+
+**The apply queued above failed on its first real attempt**, not on `terraform plan`/`validate` (both
+clean) but on Connect's own server-side flow validation: `InvalidContactFlowException`, HTTP 400, empty
+message body. Root-caused the same way every live-service-only defect in this project has been: a direct
+`aws connect create-contact-flow` probe against the rendered flow content, against a throwaway-named
+resource, deleted immediately after and its absence confirmed. Two structured `problems` came back,
+neither visible to `terraform validate`, the JSON parser, or `check_charset.py`, because none of them
+render or apply against the live service:
+
+1. `Compare`'s `Errors` array illegally included `NoMatchingError` — the only legal error type for
+   `Compare` is `NoMatchingCondition`.
+2. `TransferContactToQueue`'s `Parameters` illegally included `QueueId` — that action takes no parameters
+   at all; the queue has to be set by a preceding `UpdateContactTargetQueue` action instead.
+
+Fixed by splitting the single transfer block into three actions — `CheckEscalation` (`Compare`) →
+`SetEscalationQueue` (`UpdateContactTargetQueue`) → `TransferToQueue` (`TransferContactToQueue`, empty
+`Parameters`) — verified against a second, successful probe before being trusted. Commit `7ec731e`.
+
+**Applied live, Marco running the command himself per this session's auto-execute boundary: 1 added, 1
+changed, 2 destroyed.** New flow `fnol-inbound-b8ee6775` (`contact_flow_id`
+`d2509aa8-eb23-4162-bea7-0e309cd64b79`); the old flow and a `terraform_data.bot_built` deposed object
+(left over from the earlier failed apply's partial replacement) both cleaned up with no real AWS
+footprint. `did_routed` still `false`.
+
+**D77-safe Lambda read-back, Marco's second Stage 4 condition, discharged the way he specified — reading
+what is running, not what the deploy call returned.** `aws lambda get-function-configuration` showed
+`LastUpdateStatus: Successful`, `State: Active`; independently, `openssl dgst -sha256` on the actual local
+build artifact (`.terraform-build/lex-codehook.zip`, path read via `terraform console` since
+`terraform state show` is denied by this session's own deny-list, read-only or not) matched the deployed
+`CodeSha256` bit-for-bit. **This check was necessary and, as `D80` below shows, not sufficient** — it
+proves the right bytes are deployed and schedulable, not that the function can execute past its own
+import statements.
+
+### `D80` — criterion 9 found a total outage, not a safety regression, and the D77 read-back could not have caught it
+
+Marco rejected the first Line D protocol (k=1 across all 43 items) before any spend: *"k on a deployed
+path is not measuring model stochasticity. It is measuring cold starts, Lambda concurrency, Lex session
+handling, and timeouts... k=1 cannot distinguish a sound deployment from one that worked once."* Revised
+protocol run instead: k=3 on the 26 must-escalate items only, `scripts/measure_composed_pipeline_deployed.py`
+against the live alias.
+
+**Result: composed recall 0.000 (0/26) on the deployed system — `D52`'s 1.000 (26/26) does not hold.**
+Every one of the 26 items diverged from `D52`. Diagnosed the same way, again: `aws cloudwatch
+get-metric-statistics` on `fnol-codehook` for the run's exact window shows **78 invocations, 78 errors —
+100%, not partial or stochastic**. `aws logs filter-log-events` on the same window gives the cause:
+`Runtime.ImportModuleError: No module named 'pydantic'`, at `platform.initStart` — the crash is at
+**cold-start import time**, before `handler()` is ever entered. Stage 4's whole fail-open/fail-closed
+design lives inside `handler()`'s `try/except`; there is no code left running to fail open or closed
+with, so every ordinary intent has been just as broken as the safety path, not only the one this
+measurement happened to be checking.
+
+Root cause, in `infra/terraform/stacks/main/lambda.tf` itself: its own header comment says *"Stage 4's
+langgraph/boto3 requirements land as a Lambda layer, which is the change that makes package size a real
+number"* — and no layer, or any other dependency-bundling mechanism, exists anywhere in the file.
+`data.archive_file.codehook` zips `src/` only. None of `pyproject.toml`'s runtime dependencies
+(`pydantic`, `langgraph`, `langgraph-checkpoint-aws`, `mcp`, `numpy`, `openfeature-sdk`,
+`python-dateutil`, `PyYAML`) ship in the deployed package. `pydantic` surfaces first only because
+`api/lex_codehook.py` imports `mcp.escalation_server` at module level and that module imports `pydantic`
+at its own module level — every other undeclared dependency would fail the same way the moment import
+order reached it. **This has been true since this session's own Stage 4 Lambda deploy**, i.e. the
+deployed system has been completely non-functional the entire time it has been live, on every intent.
+
+Same shape as the `RESULTS.md` §3.5 family and `D77` one layer up: a check (the D77 read-back) that was
+correct about what it inspected — the bytes, the deploy status — and silent about the layer above it,
+whether those bytes can run at all. Recorded as its own numbered finding rather than folded into `D77`
+because the gap is different in kind: `D77` was about trusting a write; this is about a check that
+structurally cannot see past a module's first `import` statement no matter how carefully it reads back
+what was written.
+
+**Actual cost, exact and lower than either logged estimate, because nothing ever reached Bedrock:** 79
+`RecognizeText` requests (78 from the run + 1 diagnostic probe) × $0.00075 = **$0.05925**, zero Bedrock
+spend. `COSTS.md` Line D updated with the real figure in place of both estimates.
+
+**Consequence: criterion 9 is not just unmet, it is unmeetable until the Lambda can execute at all.**
+Criterion 10 (DID routing) stays blocked — correctly, `did.tf`'s gate never needed to move. Fix required
+before any re-run: a Lambda layer (or equivalent bundling) carrying the missing runtime dependencies,
+size-checked against Lambda's 250 MB unzipped limit, applied via `terraform apply` (Marco's to run, per
+this session's boundary), re-verified with a throwaway probe before trusting it, and criterion 9 re-run
+as its own new `COSTS.md` line — not a continuation of this one, since the system under test will have
+changed. None of this is done yet.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
