@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 scoped, awaiting `APPROVED: Stage 4` — 2026-08-13**)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 applied, 23 of 23, `make verify-lex` and `terraform plan` both clean — 2026-08-13; **Stage 4 `APPROVED: Stage 4` 2026-08-13, criteria 1/2/3/4/5/6/7/8 built and tested, apply pending**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2561,7 +2561,7 @@ to `terraform validate`/`plan` and to 488 pre-session unit tests, and visible on
 provider — this is `D72`'s finding from the other side. A provider that cannot express Lex V2 natively
 also cannot validate what it is asked to submit on your behalf.
 
-### Stage 4 — scoped 2026-08-13, **awaiting `APPROVED: Stage 4`**
+### Stage 4 — scoped 2026-08-13, **`APPROVED: Stage 4` same day**
 
 Full scope, deliverables and the exit-criteria table live in `docs/phase8/BUILD-PLAN.md`'s Stage 4 section
 (replacing the one-paragraph stub written before Stage 3 ran). Summary:
@@ -2590,6 +2590,97 @@ Full scope, deliverables and the exit-criteria table live in `docs/phase8/BUILD-
   Bedrock spend, cheap but outside the Bedrock standing cap (`CLAUDE.md` scopes that cap to **Phases 3–7**
   literally) and outside the existing 20-call telephony allowance (no telephony minutes involved). Needs
   its own `COSTS.md` line and its own word, same pattern as the Stage 2 POC and the real-call allowance.
+
+### Stage 4 build — 2026-08-13. Criteria 1, 2, 3, 4, 5, 6, 7, 8 built and tested; apply pending
+
+Marco's approval added two conditions: estimate criterion 9's cost before running it and log it
+separately (done — `COSTS.md` §Line D, ≈$0.05 expected/≤$0.09 worst case, k=1 not k=5 since temperature
+0.0 already makes classification deterministic and criterion 9 exists to catch deployment-specific
+divergence, not model stochasticity); and report ANY difference from `D52`'s local measurement once
+criterion 9 runs, not only a below-baseline one — carried into criterion 9's own protocol, not yet
+executed.
+
+**`lex_codehook._dispatch` now invokes the real graph**, `thread_id = contactId` (`ADR-005`). Response
+shape (`Delegate`/`ElicitSlot`/`Close`) is a function of the graph's returned state, not of
+`invocationSource` — a deliberate departure from Stage 3, documented in the module and test-file
+docstrings rather than left implicit. L1 (raw-text) and L3 (`agents/l3_lexicon.py`, new) both run before
+the graph; L1 bypasses the checkpointer entirely when it fires (no AWS dependency at all, matching the
+module's own claim about it).
+
+**`D78`** — wiring the codehook to the real graph for the first time found the same shape of defect every
+other Stage 3 boundary did: `bot.yaml.tftpl`'s declared slot names had drifted from the `filled_slots`
+keys `agents/nodes/*.py` have used since Phase 5. Renamed: `insured_vehicle`→`insured_vehicle_vin`,
+`contact_field`/`contact_new_value`→`field`/`new_value`, `entitlement_claim_number`→`claim_number`. Added:
+`policy_number` to `UpdateContactInfo` (the write's own authentication field, missing entirely),
+`entitlement_type` to `RentalTowingEntitlement` (`rental_towing.py`'s own first branch, missing entirely,
+with a new `EntitlementTypeValues` slot type), and two pseudo-slots (`confirm_file_claim`,
+`confirm_update_contact_info`) so the graph's own confirm-then-act steps have a legal `ElicitSlot`
+target. Two enum-casing mismatches found the same way, caught by a real full-conversation test rather
+than by inspection: `LossTypeValues` declared lowercase, `models.enums.LossType` requires Title Case —
+would have failed `file_new_claim` for every real call on a non-default loss type, on the last turn of
+the flagship intent. `ContactFieldValues` declared "phone number"/"address", `ContactField` requires
+"phone"/"mailing_address" — would have failed the write for the two most natural phrasings a caller
+would actually say. Every rename verified against a real `templatefile()` render: every intent's
+`SlotPriorities` set equals its declared `Slots` set, checked by script, not by inspection.
+
+**`D79`** — `injuries_present` confirmed `True` had no path to L1. L1 is a pure function of raw turn
+text; a caller answering Lex's own `injuries_present` slot with the single word "yes" produces text with
+no injury vocabulary in it at all. `bot.yaml.tftpl`'s own comment on this slot already stated the
+requirement ("any affirmative escalates immediately... a confirm step would be a negotiation"); no code
+met it before this stage. Closed as its own check, evaluated on the merged slot state so a prior turn's
+confirmation is caught too, not only the current turn's.
+
+**Fail-open/fail-closed split** — the exact thing Stage 3's docstring flagged and declined to fix.
+Writing the negative-control test for it found a real bug: the fail-closed script for an L3-only failure
+(caller asked for a human, graph unreachable) was reusing the L1 script and spoke the 911 line to a
+caller who never mentioned injury. Fixed; two distinct fallback scripts now, one of them added because
+the test that should have existed from the start did.
+
+**`D43`/`NOT-FIXED.md` #2, re-scoped from Stage 6, wired for real.** `fnol-inbound.json.tftpl` gained
+`CheckEscalation` (reads `$.Attributes.escalate`, populated by Connect's documented auto-sync of a Lex
+session attribute onto contact attributes) and `TransferContactToQueue` targeting the real escalation
+queue Stage 3 provisioned. **Named plainly, not left implied: this project has no staffed agents.** The
+transfer is a real, working platform-level mechanism — qualitatively different from the branch it
+replaces, which ended at `END` with no `initiate_escalation()`, no `EscalationRecord`, no retry-ladder
+entry (`D43`'s original finding) — but whether a human answers is a staffing fact this portfolio project
+has never claimed to provide. Recorded in `connect.tf`'s own resource comment.
+
+**Greeting (`D75`)** now says *"if you'd like to speak with a person at any point, just say 'agent'"* —
+withheld at Stage 3 for exactly the reason `NOT-FIXED.md` #2 states, true now that L3 and the real
+transfer both exist in the same commit. Single quotes around the spoken word: `templatefile()` does
+plain string substitution into the flow's `"Text": "${greeting}"` with no JSON-escaping step, so a
+literal `"` would have broken the flow's JSON silently. A test asserts the default line carries exactly
+two `"` characters (the HCL delimiters).
+
+**`_FINGERPRINT_SOURCES` widened a third time** — `lex_codehook.py`, `agents/l3_lexicon.py`,
+`aws/checkpointer.py` added, plus a standing test asserting every file under `api/` is covered rather
+than a one-time sweep (the exact shape `D53` was).
+
+**Criterion 10 written, not enabled.** `did.tf`: `aws_connect_phone_number_contact_flow_association` and
+the `terraform_remote_state` read into `stacks/telephony` it needs, both gated by
+`count = var.route_did ? 1 : 0`, `var.route_did` defaulting `false`. The gate is Terraform-enforced, not
+procedural — `count = 0` means the data source is never evaluated, not merely that nothing is created —
+so a routine apply reads nothing from the protected stack's state regardless of who runs it or when.
+`stacks/telephony/outputs.tf`'s own header comment anticipated this exact mechanism, written before
+`did.tf` existed. `test_stack_main.py`'s guard test is renamed and rewritten, not deleted, to match: the
+property worth protecting was never "no reference exists," it is "the reference cannot fire without an
+explicit, defaulted-off flag."
+
+**`terraform plan` against current state**: 2 to add / 5 to change / 2 to destroy, entirely inside
+`stacks/main`'s already-approved resource set — bot CFN content update (`D78` renames, `D77`-safe ASCII
+throughout), Lambda code update, contact flow replaced via its existing `create_before_destroy` mechanism.
+`did_routed` output reads `false`. **Cost delta $0.00/month at rest**, same reasoning as every prior
+stage. No new resource class. **Plan shown, apply not yet run** — this session's own auto-execute
+boundary (`.claude/settings.json`, Marco's instruction) denies `terraform apply` regardless of mode.
+
+**567 tests** (from 523 at Stage 3's close), ruff/black/mypy strict/`make verify-charset`/
+`make verify-flows`/`terraform validate` all clean. Commits `49f7f24`, `41297a3`, `60d84a5`.
+
+**Remaining in Stage 4, in order**: apply (Lambda code + flow, `var.route_did` still `false`) → verify
+the deployed Lambda via read-back per `D77`'s lesson (an API returning success is evidence the request
+was accepted, not that the value is stored) → criterion 9, the deployed `C1` re-verification, cost
+estimated above → only if that passes cleanly, one apply with `-var route_did=true`. Each of these needs
+its own word — none is covered by `APPROVED: Stage 4` alone, per the auto-execute boundary above.
 
 Phase 8's own headline exit criterion — the real inbound call — follows Stage 4's close rather than sitting
 inside it; Stage 4 ends when the number can be dialed safely, dialing it is reported separately.
