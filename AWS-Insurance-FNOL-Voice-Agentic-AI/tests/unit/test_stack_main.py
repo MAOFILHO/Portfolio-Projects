@@ -136,13 +136,25 @@ def test_the_stack_declares_no_phone_number_resource(terraform_source: str) -> N
     assert re.search(r'^resource\s+"aws_connect_phone_number"', terraform_source, re.M) is None
 
 
-def test_the_stack_does_not_read_the_protected_stacks_state(terraform_source: str) -> None:
-    """Stage 3 does not point the DID at a flow, so it has no reason to know the number at all.
-
-    Asserted rather than left to habit: the moment this stack has an edge into the protected stack is the
-    moment a routine apply has a path toward it, and Stage 4 should add that edge deliberately.
+def test_the_stack_reads_the_protected_stacks_state_only_behind_route_did(
+    terraform_source: str,
+) -> None:
+    """`D75`'s second-order finding, updated rather than left stale: Stage 3 had no reason to know the
+    number at all, and asserted its total absence. Stage 4 deliberately adds the edge (`did.tf`) --
+    `stacks/telephony/outputs.tf`'s own header comment anticipated exactly this — so the property worth
+    protecting is no longer "the reference does not exist," it is "the reference cannot fire without an
+    explicit flag, defaulted off." A routine apply (default `var.route_did = false`) still reads nothing:
+    `count = 0` means the data source is never evaluated, not merely that nothing is created from it.
     """
-    assert "stacks/telephony/terraform.tfstate" not in terraform_source
+    assert (
+        "stacks/telephony/terraform.tfstate" in terraform_source
+    ), "did.tf should read the protected stack's state, gated behind var.route_did"
+
+    did_tf = (STACK / "did.tf").read_text(encoding="utf-8")
+    assert "count   = var.route_did ? 1 : 0" in did_tf or "count = var.route_did ? 1 : 0" in did_tf
+    assert re.search(
+        r'variable\s+"route_did"\s*\{.*?default\s*=\s*false', did_tf, re.S
+    ), "var.route_did must default to false"
 
 
 # ---------------------------------------------------------------------------------------------------
