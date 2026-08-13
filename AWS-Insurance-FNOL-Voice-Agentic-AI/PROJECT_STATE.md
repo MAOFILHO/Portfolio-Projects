@@ -2360,7 +2360,7 @@ The generalisation worth keeping: **a decision that survives evidence its author
 supported than one that survives the evidence they chose.** The original three bug reports were selected
 by someone who had already formed a view. These two gaps were not.
 
-### D73 — constraint 18's CI check, as worded, has a hole; widened and reported
+### D73 — constraint 18 names all three recording switches (ACCEPTED 2026-08-13, `CLAUDE.md` amended)
 
 `CLAUDE.md` specifies the recording check as *"`RecordedParticipants` is non-empty"*. The
 `UpdateContactRecordingBehavior` parameter reference shows the behaviour object carries **three
@@ -2374,9 +2374,32 @@ green over the precise failure it exists to prevent.
 
 `scripts/check_flows.py` fails on all three, plus an `UpdateContactRecordingBehavior` with no behaviour
 object at all — absent is not off, it is unspecified. Each has a negative control in
-`tests/unit/test_check_flows.py`. **This is a proposed amendment to constraint 18's wording and is
-flagged rather than silently applied**; the checker is wider than the constraint until Marco says
-otherwise.
+`tests/unit/test_check_flows.py`.
+
+**Marco accepted the amendment 2026-08-13 and gave the reason the discrepancy could not be left open:**
+
+> The checker must not stay wider than the constraint. A constraint that names one switch while the
+> checker enforces three is a discrepancy that gets closed in the wrong direction the first time someone
+> reads `CLAUDE.md` and makes the checker match it. **The constraint is what people read; the checker is
+> what people edit to get green.**
+
+That asymmetry is the load-bearing part. A gap between a rule and its enforcement is not neutral: it has
+a direction, set by which document a person consults and which artifact a person modifies. Leaving the
+checker stricter than the constraint looks conservative and is not — it stores a future edit that removes
+two switches from the check and can cite `CLAUDE.md` while doing it.
+
+`CLAUDE.md` §"Recording stays off (constraint 18)" now names all four failure conditions
+(`RecordedParticipants`, `ScreenRecordedParticipants`, `IVRRecordingBehavior`, absent behaviour object),
+the deliberate absent-key/absent-object asymmetry, and `--require-at-least 1`. Checker and constraint now
+say the same thing; `check_flows.py`'s docstring says so too, so a reader of either lands in the same place.
+
+**On the original wording, for the record.** It was derived in Phase 0 from the live instance's own
+`Sample recording behavior` flow. That flow exercised one switch, so one switch is what the schema
+appeared to have — the wording was **accurate about what it inspected and incomplete about what exists**.
+Not an error, and calling it one would lose the transferable part: a constraint derived from a working
+artifact inherits that artifact's coverage, and a working example is a lower bound on a service's surface,
+never a description of it. The fix is to check the parameter reference before treating an
+artifact-derived rule as complete.
 
 Same family as `D67` and `D69`: the check was written against the mechanism someone had in mind, and the
 service had three.

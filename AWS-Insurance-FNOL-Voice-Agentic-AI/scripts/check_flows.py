@@ -19,20 +19,23 @@ WHY GLOBBING IS BY CONTENT AND NOT BY EXTENSION
     zero files passes. This walks the tree, parses what parses, and treats anything carrying an `Actions`
     or `modules` key as a flow.
 
-CHECK 1 IS WIDER THAN `CLAUDE.md` SPECIFIES, AND THAT IS A FINDING
-    `CLAUDE.md` states the check as *"`RecordedParticipants` is non-empty"*. Reading the
-    `UpdateContactRecordingBehavior` parameter reference while writing this stage showed the recording
-    behaviour object carries **three independent switches**, not one:
+CHECK 1 COVERS THREE SWITCHES BECAUSE THE SERVICE HAS THREE
+    Constraint 18 originally read *"`RecordedParticipants` is non-empty"*, derived in Phase 0 from the
+    live instance's own sample flow — accurate about what it inspected, incomplete about what exists. The
+    `UpdateContactRecordingBehavior` parameter reference shows the recording behaviour object carries
+    **three independent switches**:
 
         RecordedParticipants        — Agent / Customer call audio
         ScreenRecordedParticipants  — Agent screen recording
         IVRRecordingBehavior        — "Enabled" | "Disabled", the IVR leg
 
     An empty `RecordedParticipants` does not disable the other two. A flow with
-    `{"RecordedParticipants": [], "IVRRecordingBehavior": "Enabled"}` would pass the check exactly as
-    `CLAUDE.md` words it **while recording the caller's entire self-service conversation** — which is the
-    only leg this system has, since there are no agents. This checker fails on all three, and the gap is
-    reported in `docs/phase8/BUILD-PLAN.md` rather than silently widened.
+    `{"RecordedParticipants": [], "IVRRecordingBehavior": "Enabled"}` would have passed the original
+    wording **while recording the caller's entire self-service conversation** — which is the only leg this
+    system has, since there are no agents. Constraint 18 was amended to name all three plus a missing
+    behaviour object (`D73`, 2026-08-13), so this checker and `CLAUDE.md` now say the same thing. Keep
+    them that way: a constraint narrower than its checker gets reconciled by widening the constraint or by
+    narrowing the checker, and only one of those is safe.
 
 TEMPLATES
     The shipped flow is a `templatefile()` source carrying `$${...}` placeholders, all of which sit inside

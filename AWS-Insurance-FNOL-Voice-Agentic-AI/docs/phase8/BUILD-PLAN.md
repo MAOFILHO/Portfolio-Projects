@@ -218,7 +218,10 @@ A flow with `{"RecordedParticipants": [], "IVRRecordingBehavior": "Enabled"}` **
 as worded while recording the caller's entire self-service conversation** — and the IVR leg is the only
 leg this system has, because there are no agents. `scripts/check_flows.py` fails on all three.
 `tests/unit/test_check_flows.py::test_ivr_recording_fails_even_with_an_empty_participant_list` is the
-negative control. **This is a proposed amendment to constraint 18's wording, not a done deal.**
+negative control. **Amendment accepted by Marco 2026-08-13; `CLAUDE.md`'s constraint 18 now names all
+three switches plus a missing behaviour object, and checker and constraint agree.** See `D73` — the
+reason the gap could not be left open is that it had a direction: the constraint is what people read, the
+checker is what people edit to get green.
 
 **4. The DID is deliberately not pointed at the flow, and the flow's greeting deliberately promises
 nothing.** The Stage 3 codehook implements the Lex wire contract and does not yet run L1/L2. A number

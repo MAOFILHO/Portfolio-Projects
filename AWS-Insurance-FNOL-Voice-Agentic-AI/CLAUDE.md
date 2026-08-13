@@ -89,18 +89,48 @@ keeps the `us.*` literal as the **default**, with the ARN supplied by environmen
 in the local/simulator/test path depends on provisioned infrastructure.
 
 ### Recording stays off (constraint 18)
-No contact flow may enable call or screen recording. In the modern (2019-10-30) flow schema there is **no
-`RecordingBehaviorOption`** — recording state is purely the participants array:
+**Amended 2026-08-13, Phase 8 Stage 3, `D73`.** No contact flow may enable call, screen, or **IVR**
+recording. In the modern (2019-10-30) flow schema there is **no `RecordingBehaviorOption`** — recording
+state lives entirely in the `RecordingBehavior` object, which carries **three independent switches**:
 
 ```json
 { "Type": "UpdateContactRecordingBehavior",
-  "Parameters": { "RecordingBehavior": { "RecordedParticipants": [] } } }
+  "Parameters": { "RecordingBehavior": {
+    "RecordedParticipants": [],            // call audio  — empty = off
+    "ScreenRecordedParticipants": [],      // agent screen — empty = off
+    "IVRRecordingBehavior": "Disabled"     // the self-service leg
+  } } }
 ```
 
-Empty array = off. **CI check** fails the build if any flow contains an `UpdateContactRecordingBehavior`
-action whose `RecordedParticipants` is non-empty, or if any flow file contains `AnalyticsBehavior`,
-`ContactLens`, or `RealTimeContactAnalysis`. Flow files are globbed **by content** (presence of an `Actions`
-or `modules` key), **not by `.json` extension** — some upstream exports have no extension.
+**An empty `RecordedParticipants` disables none of the other two.** `IVRRecordingBehavior: "Enabled"`
+alongside an empty participants list records the caller's entire self-service conversation — and the IVR
+leg is the *only* leg this system has, because there are no agents.
+
+**CI check** (`scripts/check_flows.py`, wired into `make lint` as `make verify-flows`) fails the build if
+any flow contains an `UpdateContactRecordingBehavior` action where **any** of the following holds:
+
+1. `RecordedParticipants` is non-empty;
+2. `ScreenRecordedParticipants` is non-empty;
+3. `IVRRecordingBehavior` is present and is anything other than `"Disabled"`;
+4. the `RecordingBehavior` object is **absent or not an object** — recording state is entirely this
+   object, so its absence is not "off", it is unspecified.
+
+An **absent** `IVRRecordingBehavior` key inside a present `RecordingBehavior` object passes, because the
+service default for that switch is off; an absent object does not, because then nothing has been said
+about any of the three. That asymmetry is deliberate — do not "tidy" it in either direction.
+
+The check also fails on any flow file containing `AnalyticsBehavior`, `ContactLens`, or
+`RealTimeContactAnalysis`, and fails if it inspects **zero** flow files (`--require-at-least 1`) — finding
+nothing must never read as passing. Flow files are globbed **by content** (presence of an `Actions` or
+`modules` key), **not by `.json` extension** — some upstream exports have no extension.
+
+> **Why this was amended rather than corrected.** The original wording — *"fails if `RecordedParticipants`
+> is non-empty"* — was derived in Phase 0 from the live instance's own `Sample recording behavior` flow.
+> It was **accurate about what it inspected and incomplete about what exists**: that sample exercised one
+> switch, so one switch is what the schema appeared to have. A working example is a lower bound on a
+> service's surface, never a description of it. The honest lesson is not "the wording was wrong" — it is
+> that a constraint derived from an artifact inherits that artifact's coverage, and needs a check against
+> the parameter reference before it is trusted as complete. Same family as `D67` and `D69`.
 
 ---
 
