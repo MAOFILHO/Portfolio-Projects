@@ -394,22 +394,33 @@ def test_the_queue_id_passed_to_the_flow_is_the_real_escalation_queue() -> None:
 def test_the_flow_checks_the_escalate_attribute_and_transfers_on_it(
     flow_document: dict[str, Any],
 ) -> None:
+    """`Compare`'s reference page allows exactly one error type (`NoMatchingCondition`) and
+    `TransferContactToQueue` takes no parameters at all -- both confirmed against a real
+    `create-contact-flow` call after the first attempt came back `InvalidContactFlowException` with an
+    empty message. The queue is set by a preceding `UpdateContactTargetQueue` action instead, which is
+    what this test actually asserts on now."""
     actions = {a["Identifier"]: a for a in flow_document["Actions"]}
 
     check = actions["CheckEscalation"]
     assert check["Type"] == "Compare"
     assert check["Parameters"]["ComparisonValue"] == "$.Attributes.escalate"
+    assert {e["ErrorType"] for e in check["Transitions"]["Errors"]} == {"NoMatchingCondition"}
     condition_targets = {c["NextAction"] for c in check["Transitions"].get("Conditions", [])}
-    assert "TransferToQueue" in condition_targets
+    assert "SetEscalationQueue" in condition_targets
 
-    transfer = actions["TransferToQueue"]
-    assert transfer["Type"] == "TransferContactToQueue"
+    set_queue = actions["SetEscalationQueue"]
+    assert set_queue["Type"] == "UpdateContactTargetQueue"
+    assert set_queue["Transitions"]["NextAction"] == "TransferToQueue"
     # `parse_flow` substitutes every `${...}` with a marker (see its own docstring), so the variable
     # NAME has to be checked against the raw template text instead.
-    assert transfer["Parameters"]["QueueId"] == "TEMPLATED"
+    assert set_queue["Parameters"]["QueueId"] == "TEMPLATED"
     raw_text = (STACK / "flows" / "fnol-inbound.json.tftpl").read_text(encoding="utf-8")
     queue_id_line = next(line for line in raw_text.splitlines() if '"QueueId"' in line)
     assert "escalation_queue_id" in queue_id_line
+
+    transfer = actions["TransferToQueue"]
+    assert transfer["Type"] == "TransferContactToQueue"
+    assert transfer["Parameters"] == {}
 
 
 def test_a_normal_call_that_never_escalates_still_reaches_goodbye(

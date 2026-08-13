@@ -97,7 +97,7 @@
         "NextAction": "Goodbye",
         "Conditions": [
           {
-            "NextAction": "TransferToQueue",
+            "NextAction": "SetEscalationQueue",
             "Condition": {
               "Operator": "Equals",
               "Operands": [
@@ -108,10 +108,6 @@
         ],
         "Errors": [
           {
-            "ErrorType": "NoMatchingError",
-            "NextAction": "Goodbye"
-          },
-          {
             "ErrorType": "NoMatchingCondition",
             "NextAction": "Goodbye"
           }
@@ -119,11 +115,25 @@
       }
     },
     {
-      "Identifier": "TransferToQueue",
-      "Type": "TransferContactToQueue",
+      "Identifier": "SetEscalationQueue",
+      "Type": "UpdateContactTargetQueue",
       "Parameters": {
         "QueueId": "${escalation_queue_id}"
       },
+      "Transitions": {
+        "NextAction": "TransferToQueue",
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Trouble"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "TransferToQueue",
+      "Type": "TransferContactToQueue",
+      "Parameters": {},
       "Transitions": {
         "NextAction": "Hangup",
         "Errors": [
