@@ -2266,9 +2266,18 @@ day**: `source_dir` now points at `deps_dir`'s parent; `scripts/verify_layer_con
 fourth check (`--zip`, opens the archive itself, not the directory) that FAILED against the real
 pre-fix zip (confirming it catches the actual defect, not only a synthetic one) and PASSES 8/8 against
 the rebuilt one. New `terraform plan`: **2 to add, 1 to change, 2 to destroy** (content-hash-in-key
-forces replacement of the broken layer version/S3 object, not an in-place fix) — **awaiting Marco's
-review of this plan before any apply.** `C1` still UNVERIFIED on any deployed build; **DID stays
-unrouted; criterion 9 NOT run**)
+forces replacement of the broken layer version/S3 object, not an in-place fix). **Applied 2026-08-13
+(out of band — Marco's own apply, this session's `terraform apply` request showed `0/0/0` and live-state
+checks confirmed the fix was already deployed; recorded plainly under `D82`'s entry).** `make
+verify-lambda-execution` re-run same day (Marco-approved): **8/9 events FAILED — `D83`**, a new and
+different failure shape (`Sandbox.Timedout` after exactly 8.00s, zero application log output, including
+on two of the three pre-graph/Bedrock-free events), so this is neither `D80`/`D82` recurring (imports
+succeed — L1 passed) nor an ordinary classifier miss. Diagnosed at length: checkpoints table health, the
+identical code path run locally against real AWS (succeeds in <1.5s), and the layer's mismatched
+boto3/botocore pairing (tested in isolation) are all **ruled out with direct evidence**. Root cause **not
+found** — the leading untested candidate (the Lambda execution role's own narrower credentials) requires
+`sts:AssumeRole`, which the harness blocks the same as `terraform apply`. `C1` still UNVERIFIED; **DID
+stays unrouted; criterion 9 NOT run.**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -3084,8 +3093,61 @@ package is at the correct python/ path in the built zip."** New `terraform plan`
 content-hash changed, the S3 key changes (by design, plan §6's drift-avoidance chain), which forces
 **replacement**, not an in-place update, of the resources published under the OLD (broken) key — 2 to
 add, 1 to change, **2 to destroy** (the broken `aws_lambda_layer_version.codehook_deps` version and
-`aws_s3_object.codehook_deps_layer`, replaced by new ones at the new key). Not yet applied — awaiting
-Marco's review of this exact plan, per his explicit "terraform plan → my review → apply → gate."
+`aws_s3_object.codehook_deps_layer`, replaced by new ones at the new key).
+
+**Applied 2026-08-13, out of band from this conversation's own apply request.** Marco's pasted `terraform
+apply` output showed `0 added, 0 changed, 0 destroyed` — not the plan's shape. Checked live rather than
+assumed: `terraform show -json` already had `aws_lambda_layer_version.codehook_deps` at version **2**
+(version 1 gone), `aws_s3_object.codehook_deps_layer` at the **new** md5 key, `aws_lambda_layer_version
+list-layer-versions` showed only v2, and `get-function-configuration` already pointed the function at v2.
+`list-object-versions` on the new key showed **5 PUTs of identical content spanning 17:27–23:30 UTC that
+day** — the fix was already live before the apply this conversation asked for ran; that apply correctly
+reported no changes because there were none left to make. No apply was run by this assistant (still hard-
+blocked). Recorded plainly rather than left silent, per the scope-and-verification standard this project
+already holds itself to elsewhere.
+
+### `D83` — `D82` fixed and live; the gate now fails differently, and this one is NOT diagnosed to a root cause
+
+`make verify-lambda-execution` against the D82-fixed deploy: **8/9 events FAILED**, every failure
+`Sandbox.Timedout — "Task timed out after 8.00 seconds"`. Only raw-text L1 passed (398ms). This is not
+`D80`/`D82` recurring (imports succeed — L1 exercises the same module-level imports and returns cleanly)
+and not an ordinary classifier miss (L3/`D74` and `D79` are pre-graph, Bedrock-free checks, and both
+failed too). Diagnosed rather than assumed, per Marco's explicit instruction:
+
+- **CloudWatch confirms a single warm container** (`instanceId` constant across the run), Init done in
+  427ms. Every non-L1 invocation on that same warm container times out at exactly ~8000ms with **zero
+  application log output** — the hang is before `_dispatch()`'s first log line, inside `_get_graph()` /
+  `_build_graph()` or the `graph.get_state(config)` call at `lex_codehook.py`'s D79 check (the first point
+  in an ordinary turn that touches AWS at all, per that line's own comment).
+- **Ruled out, with evidence, not assumption:**
+  - The checkpoints table itself: `describe-table` (ACTIVE, `ItemCount: 0`) and a same-shape `Query`
+    both returned in <1s directly against AWS.
+  - `_build_graph()`'s own construction path: every client inside it (`DynamoDBSaver`, `DynamoVectorStore`,
+    `BedrockEmbedder`, `get_bedrock_runtime_client`, `BedrockGuardrailClient`) is lazy boto3-client
+    construction with no eager network call — read from source, not inferred.
+  - **Reproduced the identical code path locally** (`_build_graph()` + `graph.get_state()`) against the
+    same real AWS account/table, using this project's own matched local dependency versions: completed in
+    under 1.5s total, no hang.
+  - **The layer's boto3/botocore version pairing is mismatched** (`boto3==1.43.69` / `botocore==1.43.71` —
+    the local venv has `1.43.69`/`1.43.69` matched) — a real, verifiable divergence, but **tested in
+    isolation directly against DynamoDB** (layer's exact mismatched pair, no other project code in the
+    import path) and it completed in 0.39s. Not the cause, ruled out rather than left as a plausible-
+    looking but unconfirmed story.
+  - `get_checkpoint`'s actual DynamoDB call (read from `langgraph_checkpoint_aws`'s installed source in
+    the layer) is a plain `Query` against the base table by `PK`, no GSI, no operation the execution
+    role's IAM policy doesn't already grant on its face.
+- **Not yet tested, and why:** whether this reproduces under the Lambda execution role's own (narrower)
+  credentials rather than this operator's IAM user — the natural next isolation step — requires
+  `sts:AssumeRole`, which the harness's auto-mode classifier blocks outright, the same class of hard block
+  as `terraform apply`. A full like-for-like repro (matched dependency architecture) also can't run on this
+  Darwin machine: the layer's `pydantic_core` is a compiled Linux extension and fails to import locally,
+  independent of anything at issue — confirmed as a local-testing artifact, not a defect, because the
+  deployed Lambda itself imports it successfully (L1's own success proves it, since `lex_codehook.py`'s
+  module-level imports include the pydantic-touching `escalation_server` regardless of which branch runs).
+
+**Left open, not concluded.** The leading remaining candidate is something specific to the Lambda
+execution role's credentials or the sandbox's runtime environment on the very first AWS-touching call of
+a warm container — not confirmed. `did.tf` untouched, criterion 9 not run, `C1` still UNVERIFIED.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 
