@@ -76,6 +76,9 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 | 2026-08-12 | 0.5 | **One real `Converse` through the `router` profile ARN** — the check that the ARN is a working invocation path and not merely a well-formed resource. `us.amazon.nova-micro-v1:0` via `application-inference-profile/e55shbc6xaks` | Yes | 7 in / 2 out | **$0.00000053** | Bedrock standing cap |
 | 2026-08-12 | 0.5 | **`GetInferenceProfile` region-set verification**, Marco's condition on `ADR-016`. Control-plane reads, no model calls. All three cross-region wrappers report `us-east-1, us-east-2, us-west-2` — the region set is inherited, not collapsed | Yes | control plane | **$0.00** | — |
 
+| 2026-08-12 | 1 | **Protected telephony stack — DID imported.** `1 imported, 0 added, 0 changed, 0 destroyed`. No resource created, no tag modified. The number was already billing at $0.06/day since 2026-08-11 and continues to; importing it changes nothing about that | Yes | 1 import | **$0.00** | A |
+| 2026-08-12 | 1 | **Import-guard and `prevent_destroy` demonstrations.** Scratch-copy plans against a wrong number ID and against an unsatisfiable tag condition, plus `terraform plan -destroy` on the real stack. Plans only — no apply, no resource touched | Yes (plan/read) | 3 plans | **$0.00** | — |
+
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that
 *looking* at spend is free: an automated poller over Cost Explorer would be a genuinely stupid way to

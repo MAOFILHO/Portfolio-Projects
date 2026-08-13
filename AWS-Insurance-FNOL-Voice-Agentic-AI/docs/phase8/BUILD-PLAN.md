@@ -82,7 +82,22 @@ Then **migrate the guardrail stack off local state**, which is the debt Phase 7 
 residual risk was stated at the time as *"lose the local state and the guardrail is orphaned — a $0/mo
 orphan, findable by name."* Migration is the routine `terraform init -migrate-state`.
 
-### Stage 1 — `stacks/telephony`, the protected stack
+### Stage 1 — `stacks/telephony`, the protected stack ✅ **DONE 2026-08-12**
+
+`terraform apply`: **1 imported, 0 added, 0 changed, 0 destroyed.** The number is under Terraform
+management with zero modification to it — no `default_tags` block in this stack, deliberately, so the
+tags in config are exactly the three the number already carried and a correct apply is a no-op.
+
+| Property | How it was established |
+|---|---|
+| Import guard fails without the tag | **Demonstrated, criterion 3.** Two scratch runs: a wrong number ID fails on import; a valid import whose tag condition cannot be satisfied fails at **plan** time with the guard's own message, before anything is imported. The first run alone would have been a false pass — it failed on `Cannot import non-existent remote object`, not on the guard |
+| `prevent_destroy` | `terraform plan -destroy` → `Error: Instance cannot be destroyed`. Run, not asserted |
+| Separate state | `stacks/telephony/terraform.tfstate`, and `make verify-destroy-scope` fails if any other stack shares the key |
+| `make destroy` cannot reach it | `make verify-destroy-scope` + 8 unit tests, each with a negative control. There is no `destroy` target yet, so that check currently passes with nothing to find — which is exactly when it has to be written |
+
+The guard reads `Protected` from the Resource Groups Tagging API rather than from a variable, and is
+fail-closed: an absent tag, an absent resource, or an unrecognised response shape all evaluate to
+something that is not `"true"` and all stop the run. Same asymmetry as Phase 7's mask-vs-block parser.
 
 The DID, imported and never created. **The import guard asserts `Protected=true` on the number's tags
 before proceeding** — that assertion is why the tag exists (`PROJECT_STATE.md`, Phase 0), and it must fail

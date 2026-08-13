@@ -1,4 +1,5 @@
-.PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference
+.PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
+        verify-destroy-scope
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -73,6 +74,15 @@ test:
 # us.* profile to inherit from, which is a documented single-region wrap and not a regression.
 verify-inference:
 	@$(VENV)/python scripts/verify_inference_profiles.py
+
+# Constraint 16. Asserts that nothing destroyable can reach the protected DID: prevent_destroy is on the
+# phone-number resource, its state key is unique, and no Makefile recipe names its directory. Static, no
+# AWS calls, and it also runs inside `make test` -- see tests/unit/test_destroy_scope.py.
+#
+# There is no `destroy` target yet, so the third check currently passes with nothing to find. That is
+# precisely when it has to be written: the moment the target appears is the moment nobody is looking.
+verify-destroy-scope:
+	@$(VENV)/python scripts/verify_destroy_scope.py
 
 # ruff + black --check
 # Everything that is checked. `evals` and `scripts` were outside this list until Phase 7
