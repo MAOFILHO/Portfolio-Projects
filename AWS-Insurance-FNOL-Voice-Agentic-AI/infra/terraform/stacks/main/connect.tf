@@ -69,21 +69,24 @@ resource "aws_connect_hours_of_operation" "always" {
 # ---------------------------------------------------------------------------------------------------
 
 /*
- * Created here and UNUSED BY THE FLOW at Stage 3, deliberately.
+ * Created at Stage 3, UNUSED by the flow until Stage 4 -- and the caveat below still applies to what
+ * "used" means here.
  *
- * `NOT-FIXED.md` #2 / `D43` is Phase 8's to fix: the blocked-turn branch promises a human and delivers
- * nothing. Phase 7 declined to write a fake `EscalationRecord` behind a stub transfer, on the grounds
- * that *"a record with no transfer behind it is a different lie, not a smaller one."* Transferring a
- * caller into a queue with nobody in it would be that same lie one layer down — the transfer would
- * succeed, and the caller would wait for an agent who does not exist.
- *
- * So the queue exists, the flow does not route to it, and Stage 6 connects the two once there is
- * something on the other end. A queue at rest is free.
+ * `NOT-FIXED.md` #2 / `D43`: the blocked-turn branch used to promise a human and deliver nothing. Phase 7
+ * declined to write a fake `EscalationRecord` behind a stub transfer, on the grounds that *"a record with
+ * no transfer behind it is a different lie, not a smaller one."* Transferring a caller into a queue with
+ * nobody in it would be that same lie one layer down — the transfer succeeds, and the caller waits for an
+ * agent who does not exist. This project has no agents at all (it is a portfolio prototype, not a staffed
+ * call centre) — the queue below has default routing profile membership and 24/7 hours, and a call routed
+ * to it will ring with no one to answer. Re-scoped from Stage 6 to Stage 4 because the transfer logic is
+ * coupled to the same flow content this stage already has to touch for the greeting change (D75); NOT
+ * re-scoped is the honest reading of what "fixed" means here: the transfer is real, the queue is empty,
+ * and both facts are true at once.
  */
 resource "aws_connect_queue" "escalation" {
   instance_id           = local.instance_id
   name                  = "${local.name_prefix}-escalation"
-  description           = "Human escalation target. Wired to the flow at Stage 6 with D43, not before."
+  description           = "Human escalation target. Wired to the flow at Stage 4 with D43. Queue has no agents -- see the resource comment."
   hours_of_operation_id = aws_connect_hours_of_operation.always.hours_of_operation_id
   status                = "ENABLED"
 
@@ -111,6 +114,10 @@ locals {
     trouble_message             = var.trouble_message
     bot_alias_arn               = aws_cloudformation_stack.release.outputs["BotAliasArn"]
     lex_session_timeout_seconds = var.lex_session_timeout_seconds
+    # D43, Stage 4: the real Connect transfer. `_close(..., escalated=True)` in lex_codehook.py sets the
+    # `escalate` session attribute on close; Connect auto-syncs a Lex session attribute onto the
+    # contact's own attributes, which is what `CheckEscalation`'s `$.Attributes.escalate` reads.
+    escalation_queue_id = aws_connect_queue.escalation.queue_id
   }
 
   flow_body_unversioned = templatefile(

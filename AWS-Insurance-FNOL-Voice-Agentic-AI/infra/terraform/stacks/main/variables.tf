@@ -216,14 +216,20 @@ variable "greeting" {
   description = <<-EOT
     First thing the caller hears. Carries the AI disclosure `CLAUDE.md`'s Responsible AI section requires.
 
-    **It deliberately does not yet advertise the "say agent" override.** Escalation route L3 is
-    implemented in the codehook at Stage 4; announcing it here first would put a promise in the greeting
-    that the deployed code does not honour, which is `NOT-FIXED.md` #2 — *"a record with no transfer
-    behind it is a different lie, not a smaller one"* — committed in the first sentence of the call.
-    Stage 4 changes this default, and the flow's content hash makes that a new flow rather than an edit.
+    **Now advertises the "say agent" override (`D75`), because it is true.** Route L3
+    (`agents/l3_lexicon.py`) is implemented in the codehook, and the real Connect transfer (`D43`) is
+    wired into this flow's `CheckEscalation`/`TransferToQueue` actions -- both landed in the same Stage 4
+    commit as this default's change, not before it. Stage 3's default deliberately withheld this line for
+    exactly the reason `NOT-FIXED.md` #2 states: *"a record with no transfer behind it is a different
+    lie, not a smaller one."* The flow's content hash makes this change a new flow, not an edit to the one
+    that was serving.
   EOT
   type        = string
-  default     = "Thanks for calling claims. Just so you know, you're speaking with an automated assistant, not a person."
+  # No double quotes in the value -- this string is interpolated directly into fnol-inbound.json.tftpl's
+  # "Text": "${greeting}" with no JSON-escaping step in between (templatefile() does plain string
+  # substitution), so a literal `"` here would terminate the JSON string early and break the flow's own
+  # syntax. Single quotes around the spoken word instead of double quotes, deliberately.
+  default = "Thanks for calling claims. Just so you know, you're speaking with an automated assistant, not a person. If you'd like to speak with a person at any point, just say 'agent'."
 }
 
 variable "opening_question" {
@@ -234,10 +240,10 @@ variable "opening_question" {
 
 variable "trouble_message" {
   description = <<-EOT
-    Played when the Lex block errors out.
-
-    Says what happened and what to do, and promises nothing it cannot deliver — there is no agent behind
-    this branch until Stage 6 wires `D43`.
+    Played when the Lex block itself errors out (`NoMatchingError`/timeout at the flow level, not an
+    escalation -- an escalation now routes through `CheckEscalation`/`TransferToQueue`, `D43`, wired at
+    Stage 4). This branch still promises nothing it cannot deliver: it tells the caller to call back,
+    which costs nothing to be true.
   EOT
   type        = string
   default     = "I'm sorry, I'm having trouble on my end. Please call back and we'll try again."

@@ -70,7 +70,7 @@
         }
       },
       "Transitions": {
-        "NextAction": "Goodbye",
+        "NextAction": "CheckEscalation",
         "Errors": [
           {
             "ErrorType": "InputTimeLimitExceeded",
@@ -82,7 +82,58 @@
           },
           {
             "ErrorType": "NoMatchingCondition",
+            "NextAction": "CheckEscalation"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "CheckEscalation",
+      "Type": "Compare",
+      "Parameters": {
+        "ComparisonValue": "$.Attributes.escalate"
+      },
+      "Transitions": {
+        "NextAction": "Goodbye",
+        "Conditions": [
+          {
+            "NextAction": "TransferToQueue",
+            "Condition": {
+              "Operator": "Equals",
+              "Operands": [
+                "true"
+              ]
+            }
+          }
+        ],
+        "Errors": [
+          {
+            "ErrorType": "NoMatchingError",
             "NextAction": "Goodbye"
+          },
+          {
+            "ErrorType": "NoMatchingCondition",
+            "NextAction": "Goodbye"
+          }
+        ]
+      }
+    },
+    {
+      "Identifier": "TransferToQueue",
+      "Type": "TransferContactToQueue",
+      "Parameters": {
+        "QueueId": "${escalation_queue_id}"
+      },
+      "Transitions": {
+        "NextAction": "Hangup",
+        "Errors": [
+          {
+            "ErrorType": "QueueAtCapacity",
+            "NextAction": "Trouble"
+          },
+          {
+            "ErrorType": "NoMatchingError",
+            "NextAction": "Trouble"
           }
         ]
       }

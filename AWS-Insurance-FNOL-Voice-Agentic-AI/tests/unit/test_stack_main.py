@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -350,3 +351,74 @@ def test_the_flow_version_tag_and_the_flow_name_use_one_hash() -> None:
 
     assert connect_tf.count("local.flow_version") >= 3
     assert "flow_version = local.flow_version" in connect_tf
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D43`, Stage 4 — the real transfer
+# ---------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def flow_document() -> dict[str, Any]:
+    """Parses the shipped flow template exactly the way `scripts/check_flows.py` does -- placeholders
+    substituted with a marker, not resolved by a real `terraform console` call, so this stays as fast and
+    dependency-free as the rest of this file."""
+    from scripts.check_flows import parse_flow
+
+    text = (STACK / "flows" / "fnol-inbound.json.tftpl").read_text(encoding="utf-8")
+    document = parse_flow(text)
+    assert document is not None
+    return document
+
+
+def test_the_queue_id_passed_to_the_flow_is_the_real_escalation_queue() -> None:
+    """Not a second queue, not a hardcoded ID -- the same resource `aws_connect_queue.escalation`
+    declares, so a caller who is transferred reaches the queue this stack actually provisions."""
+    connect_tf = (STACK / "connect.tf").read_text(encoding="utf-8")
+
+    assert "escalation_queue_id = aws_connect_queue.escalation.queue_id" in connect_tf
+
+
+def test_the_flow_checks_the_escalate_attribute_and_transfers_on_it(
+    flow_document: dict[str, Any],
+) -> None:
+    actions = {a["Identifier"]: a for a in flow_document["Actions"]}
+
+    check = actions["CheckEscalation"]
+    assert check["Type"] == "Compare"
+    assert check["Parameters"]["ComparisonValue"] == "$.Attributes.escalate"
+    condition_targets = {c["NextAction"] for c in check["Transitions"].get("Conditions", [])}
+    assert "TransferToQueue" in condition_targets
+
+    transfer = actions["TransferToQueue"]
+    assert transfer["Type"] == "TransferContactToQueue"
+    # `parse_flow` substitutes every `${...}` with a marker (see its own docstring), so the variable
+    # NAME has to be checked against the raw template text instead.
+    assert transfer["Parameters"]["QueueId"] == "TEMPLATED"
+    raw_text = (STACK / "flows" / "fnol-inbound.json.tftpl").read_text(encoding="utf-8")
+    queue_id_line = next(line for line in raw_text.splitlines() if '"QueueId"' in line)
+    assert "escalation_queue_id" in queue_id_line
+
+
+def test_a_normal_call_that_never_escalates_still_reaches_goodbye(
+    flow_document: dict[str, Any],
+) -> None:
+    """`CheckEscalation`'s un-matched path (the overwhelming majority of calls) must still end the call
+    normally -- a `Compare` action with no fallback would strand every non-escalated caller."""
+    actions = {a["Identifier"]: a for a in flow_document["Actions"]}
+
+    assert actions["CheckEscalation"]["Transitions"]["NextAction"] == "Goodbye"
+
+
+def test_the_greeting_now_names_the_agent_override() -> None:
+    """`D75`: this line is only true once `D43`'s real transfer and L3 both exist, which is why it was
+    withheld until this exact commit rather than at Stage 3."""
+    variables_tf = (STACK / "variables.tf").read_text(encoding="utf-8")
+    block = variables_tf[variables_tf.index('variable "greeting"') :]
+    default_line = next(line for line in block.splitlines() if line.strip().startswith("default"))
+
+    assert "agent" in default_line.lower()
+    # `templatefile()` does plain string substitution with no JSON-escaping step -- a literal `"`
+    # anywhere inside the value would break `fnol-inbound.json.tftpl`'s own "Text": "${greeting}" syntax.
+    # The line is `default = "...value..."`, so exactly two `"` characters are expected: the delimiters.
+    assert default_line.count('"') == 2, default_line
