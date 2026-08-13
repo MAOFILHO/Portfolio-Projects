@@ -111,13 +111,24 @@ to success at the shell level. `scripts/verify_layer_contents.py` (new, committe
 built artifact — not a hypothetical) checks two things per retained package, directly against the
 `python/` directory on disk: (1) a `dist-info` entry exists at **exactly** the pinned version, not merely
 *a* version; (2) the actual importable module (directory or `.py` file) the metadata claims to provide is
-really present, catching a partial extraction that metadata alone would miss. **Real result, this
-session, against the built layer: `8/8 expected packages present at pinned versions, with importable
-modules on disk`.** This does not prove the packages *import successfully* under the real arm64/Linux
-interpreter (this dev machine cannot execute those binaries at all) — that is §4's execution gate's job,
-against the real deployed function, or the container-image check in §7 as a pre-deploy alternative. This
-script closes the narrower, cheaper, zero-AWS-cost gap: did the build put the right things in the box at
-all.
+really present, catching a partial extraction that metadata alone would miss.
+
+**Revised on review, 2026-08-13 — presence-and-version is the weaker claim, named directly:** the
+manylinux failure in §2 already produced correctly-named files on disk that would have failed to import;
+presence alone would not have caught that class of defect if it had landed one platform tag off instead of
+zero. The script now attempts a real `importlib.import_module()` of each package, **gated on the running
+interpreter actually matching Lambda's target** (`Linux`/`aarch64`/CPython 3.12) — several of these 8
+packages ship compiled extensions (`numpy`, `pydantic`'s Rust `pydantic-core`), so an import attempted
+under a mismatched platform doesn't degrade to weaker evidence, it fails unconditionally on every possible
+input and would train its own reader to ignore it. On a mismatch the import check is **skipped and
+reported as skipped**, never silently treated as a pass. **Real result, this session, run against the
+built layer on this dev machine (`Darwin arm64, CPython 3.12.13`):** `8/8 expected packages present at
+pinned versions`, import check **SKIPPED** — this machine is not the target platform, so nothing has
+confirmed these packages import under Lambda. That gap is real and still open; it is closed by §4's
+execution gate against the real deployed function, or by the container-image check in §7 as a pre-deploy
+alternative — not by this script, on this machine, regardless of how it is written. This script's
+contribution is real and narrower than that: did the build put the right things in the box, at the right
+version, and (only when it can honestly say so) do they import.
 
 **Not attempted: hand-pruning `langgraph`'s own transitive dependencies** (`langsmith`/`langchain-core`
 pull in `zstandard` at 21 MB, the single largest non-numpy/botocore component). Unlike `mcp`, these are

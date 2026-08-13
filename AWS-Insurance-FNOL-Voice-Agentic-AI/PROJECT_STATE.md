@@ -2850,28 +2850,61 @@ measurement of a non-functional detector.** Two more requirements, both required
    which path set it: `detection` (the graph's own `L1`/`L2` classification reached `_respond_from_graph_
    result` and escalated on its own evidence), `fail-closed` (`handler()`'s `except` branch fired), or
    `other-default` (any shape not accounted for by the first two — a residual category the harness must
-   be able to name rather than silently fold into one of the other two). This requires the harness to
-   read more than `sessionAttributes.escalate` — at minimum, the Lambda's own log line
-   (`"escalating contact %s on layer %s route %s"`, already used to root-cause `D80`) or an equivalent
-   structured signal the codehook emits for exactly this purpose. **Any `C1` number is reported with its
-   provenance breakdown attached, not as a bare recall figure.** An item whose only `escalate=true`
-   samples carry `fail-closed` provenance does **not** count toward `C1` recall — a system that is
-   catching injuries by crashing is not verified, it is unmonitored in a different way.
+   be able to name rather than silently fold into one of the other two). **Any `C1` number is reported
+   with its provenance breakdown attached, not as a bare recall figure.** An item whose only
+   `escalate=true` samples carry `fail-closed` provenance does **not** count toward `C1` recall — a
+   system that is catching injuries by crashing is not verified, it is unmonitored in a different way.
+
+   **Verified against `api/lex_codehook.py` on review, 2026-08-13 — this is a spec, not a capability
+   today.** The Lambda emits none of the three reason codes anywhere the harness can read them, on any
+   path:
+   - The pre-graph `L1`/`D79`/`L3` detections (`_escalate()`, called from `_dispatch()`) log
+     `"escalating contact %s on layer %s route %s"` — `triggering_layer` and `route` only, not a reason.
+     A `context` dict (which, on the fail-closed path only, contains `"reason": "graph_invocation_
+     failed"`) is passed into `initiate_escalation()` and returned in its `EscalationResult`, but that
+     result is **never logged, never forwarded into `sessionAttributes`, and never written anywhere the
+     harness's `RecognizeText` response or a `filter-log-events` query on `route`/`triggering_layer`
+     alone could recover it.** The log line's text is **identical** for a genuine `L1` detection and a
+     fail-closed escalation triggered by an `L1`-shaped raw-text signal — both produce `"...layer L1
+     route 1"`. Correlating a fail-closed case today requires matching timestamps against a separate,
+     uncorrelated `logger.exception("codehook failed")` line, which carries no `contact_id` — fragile,
+     not a queryable signal, and not what item 4 specified.
+   - `_respond_from_graph_result()`'s own escalation branch (`result.get("escalation")` → `_close(...,
+     escalated=True)`) — the graph's own in-band detection, presumably the primary `detection`-provenance
+     path — **does not call `_escalate()`/`initiate_escalation()` at all.** No log line, no context, no
+     provenance signal of any kind. This path is currently the *least* observable of the three, not a
+     baseline the other two fall short of.
+
+   **What has to change in the Lambda before item 4 is implementable, not just specified:**
+   (a) add an explicit reason code as a first-class `sessionAttributes` field (e.g.
+   `escalation_reason`) at the one boundary (`_close()`) every escalation path already funnels through,
+   sourced from a required caller-supplied argument rather than inferred from which log line is nearby —
+   this makes it readable directly from the `RecognizeText` response the harness already receives, with
+   no CloudWatch correlation needed; (b) route the graph-driven escalation branch in
+   `_respond_from_graph_result()` through the same tagging point so it is no longer the one path with
+   zero provenance signal. Until (a) and (b) land, the harness has no reason code to read regardless of
+   how it is written, and item 4 is not satisfiable by changing the harness alone.
 5. **Negative controls, with a stated minimum.** Nothing in criterion 9's k=3/26-must-escalate-item
    protocol can currently produce a non-escalation at all — the set contains no item where `escalated=
    false` is the CORRECT answer, so a harness that always reports `escalated=true` (whether from
    detection or from a systemic fail-closed default) and one that behaves correctly are indistinguishable
-   by this protocol. **Minimum: 5 must-not-escalate items, k=1 each, drawn from the 17 negatives already
-   in `evals/holdout/injury_phrasings_independent.yaml`** (no new authoring — `D52`'s own local run
-   already established these 17 as true negatives on the composed pipeline; reusing them here checks
-   whether the DEPLOYED path agrees, which is exactly this criterion's purpose). k=1 rather than k=3
-   because the failure this control exists to catch — "the instrument cannot return a negative at all" —
-   is structural, not stochastic; if the deployed path shows real per-sample variance on negatives, that
-   is itself worth escalating to k=3 at that point, not assumed away in advance. **If every sampled
-   negative still reads `escalated=true`, the run is invalid — not a false-escalation defect, an
-   instrument defect** — the same `invalid` classification as item 1, because it means the harness has
-   not demonstrated it is capable of the negative outcome `C1`'s recall figure implicitly claims it can
-   distinguish from.
+   by this protocol. **Minimum, raised on review, 2026-08-13: all 17 negatives already in
+   `evals/holdout/injury_phrasings_independent.yaml`, k=1 each** — not 5. The first draft of this entry
+   set the minimum at 5 and could not, on review, produce a defensible reason for 5 over the 17 already
+   available at zero authoring cost: `D52`'s own local run already established all 17 as true negatives
+   on the composed pipeline, so reusing a subset was pure sample economy, not a methodological choice,
+   and the marginal cost of the other 12 is 12 more `RecognizeText` calls — about **$0.048** at $0.004
+   each, against a run whose full Line D cost was $0.05925. That is not a trade worth making on a
+   non-tradeable constraint: 5-of-17 leaves 12 already-vetted, already-free negatives unused for no
+   reason that survives being asked, and a narrower sample is *exactly* where a partially-broken negative
+   path (one that over-escalates on some but not all true negatives) would be most likely to hide. k=1
+   rather than k=3 per item is unchanged — the failure this control exists to catch, "the instrument
+   cannot return a negative at all," is structural, not stochastic; if the deployed path shows real
+   per-sample variance on negatives, that is itself worth escalating to k=3 at that point, not assumed
+   away in advance. **If every sampled negative still reads `escalated=true`, the run is invalid — not a
+   false-escalation defect, an instrument defect** — the same `invalid` classification as item 1, because
+   it means the harness has not demonstrated it is capable of the negative outcome `C1`'s recall figure
+   implicitly claims it can distinguish from.
 
 **Until both exist, `C1` is unverifiable regardless of layer or Lambda state.** A perfectly-packaged
 Lambda measured by the harness as it stood after items 1–3 alone would report 1.000 with no more

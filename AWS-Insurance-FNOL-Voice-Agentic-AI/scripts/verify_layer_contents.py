@@ -21,18 +21,61 @@ Excluded on purpose: `mcp`. See `STAGE4-LAMBDA-LAYER-PLAN.md` §3 for why it is 
 retained runtime dependencies, and §4 for the limits of the static analysis that established that and the
 dynamic check (the deploy-time execution gate, `scripts/verify_lambda_execution.py`) that backs it up.
 
-This script does NOT prove the packages IMPORT successfully under the target interpreter (arm64 Linux,
-Python 3.12) -- it cannot, running on this dev machine. That is `verify_lambda_execution.py`'s job,
-against the real deployed function, and the AWS-published container image is the recommended pre-deploy
-alternative (see the plan §7). This script closes the narrower, cheaper gap: did the build even put the
-right things in the box.
+A THIRD check, gated on platform, attempts a real `importlib.import_module()` of each package with the
+layer root on `sys.path`. Marco's review of the first version of this script named the gap directly: check
+1 alone is the WEAKER claim, because the manylinux failure mode already hit once this session (`PyYAML`/
+`numpy` resolving zero versions under one platform tag) puts real, correctly-named files on disk that
+still fail to import -- metadata and even the presence check can both be satisfied by a wheel built for
+the wrong ABI. Presence is necessary, not sufficient.
+
+That check is only meaningful if it runs under the TARGET interpreter and architecture (`aarch64`-Linux,
+CPython 3.12 -- Lambda's `arm64` runtime). Several of these 8 packages ship compiled extensions (`numpy`,
+`pydantic`'s Rust `pydantic-core` core). Importing `aarch64`-Linux `.so` files under a different platform's
+interpreter does not approximate that answer -- it fails immediately and unconditionally on an ELF/Mach-O
+mismatch, regardless of whether the layer is actually correct for Lambda. Running this check on a
+mismatched platform would therefore produce a false FAIL on every real layer, not a weaker true signal --
+worse than not running it, because a script printing "FAILED" that fails on every possible input trains
+its own reader to ignore it. So: on a platform/interpreter match, the import actually runs and a failure is
+real evidence. On a mismatch, the import check is SKIPPED, loudly, with the interpreter/platform that ran
+printed either way -- never silently treated as passed, and never run to produce a result that cannot be
+trusted. This script's own run this session was on this dev machine (Darwin, not Linux `aarch64`), so its
+import check skipped for exactly this reason -- see the plan §3 for what that leaves open and its
+disposition (the AWS-published container image, or `verify_lambda_execution.py` against the real deployed
+function, are the two ways to actually close it).
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
+import platform
 import re
+import sys
 from pathlib import Path
+
+# Lambda's `arm64` runtime, at the Python version this layer is built for (`pyproject.toml`'s
+# `>=3.12,<3.13`). Only a match on all three lets an import attempted by THIS script mean anything --
+# see the module docstring on why a mismatched run is skipped rather than trusted or silently omitted.
+_TARGET_SYSTEM = "Linux"
+_TARGET_MACHINE = {"aarch64", "arm64"}  # `platform.machine()` reports differently across libc/OS
+_TARGET_PYTHON = (3, 12)
+
+
+def _platform_report() -> str:
+    """What actually ran this check, printed unconditionally -- this is Marco's ask directly: report
+    which interpreter it ran under, not just whether it matched."""
+    return (
+        f"{platform.system()} {platform.machine()}, "
+        f"CPython {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+
+
+def _running_on_target() -> bool:
+    return (
+        platform.system() == _TARGET_SYSTEM
+        and platform.machine() in _TARGET_MACHINE
+        and (sys.version_info.major, sys.version_info.minor) == _TARGET_PYTHON
+    )
 
 # Mirrors pyproject.toml's runtime `dependencies` list MINUS `mcp` (excluded, see module docstring).
 # Duplicated here deliberately as an explicit, reviewable pin list rather than parsed from
@@ -81,15 +124,36 @@ def _dist_info_versions(layer_root: Path) -> dict[str, str]:
     return versions
 
 
-def verify(layer_root: Path) -> list[str]:
-    """Returns a list of problems. Empty means every expected package is present, at the pinned
-    version, with its importable module actually on disk."""
+def _try_import(import_name: str, layer_root: Path) -> str | None:
+    """Attempts a real `importlib.import_module()` with `layer_root` on `sys.path`. Returns a problem
+    string on failure, `None` on success. Only called when `_running_on_target()` is true -- see the
+    module docstring for why a mismatched-platform import is skipped rather than attempted and trusted."""
+    sys.path.insert(0, str(layer_root))
+    try:
+        importlib.invalidate_caches()
+        importlib.import_module(import_name)
+        return None
+    except Exception as exc:  # noqa: BLE001 - any import failure is the finding, not a bug in this script
+        return f"IMPORT FAILED: {import_name} — {type(exc).__name__}: {exc}"
+    finally:
+        sys.path.remove(str(layer_root))
+        sys.modules.pop(import_name, None)
+
+
+def verify(layer_root: Path, *, attempt_import: bool = True) -> tuple[list[str], bool]:
+    """Returns `(problems, import_check_ran)`. `problems` empty means every expected package is present,
+    at the pinned version, with its importable module on disk -- and, when `import_check_ran` is `True`,
+    that every one of them actually imports under THIS interpreter. `import_check_ran` is `False` when
+    `attempt_import` was requested but this interpreter/platform does not match Lambda's `arm64` runtime
+    (see `_running_on_target`) -- in that case no import is attempted at all, on any package, because a
+    failure there would not be evidence and a success would not be either."""
     problems: list[str] = []
 
     if not layer_root.is_dir():
-        return [f"layer root {layer_root} does not exist or is not a directory"]
+        return [f"layer root {layer_root} does not exist or is not a directory"], False
 
     found_versions = _dist_info_versions(layer_root)
+    import_check_ran = attempt_import and _running_on_target()
 
     for package, expected_version in EXPECTED_PACKAGES.items():
         key = _normalize(package)
@@ -111,8 +175,14 @@ def verify(layer_root: Path) -> list[str]:
                 f"METADATA WITHOUT MODULE: {package}'s dist-info is present but "
                 f"{import_name}/ (or {import_name}.py) is not — a partial or corrupted extraction"
             )
+            continue  # nothing on disk to attempt importing
 
-    return problems
+        if import_check_ran:
+            import_problem = _try_import(import_name, layer_root)
+            if import_problem is not None:
+                problems.append(import_problem)
+
+    return problems, import_check_ran
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,9 +192,26 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Path to the built layer's python/ directory (site-packages root).",
     )
+    parser.add_argument(
+        "--no-import-check",
+        action="store_true",
+        help="Skip the import attempt even on a matching platform; presence/version checks only.",
+    )
     args = parser.parse_args(argv)
 
-    problems = verify(args.layer_root)
+    print(f"=== Running under: {_platform_report()} ===")
+    problems, import_check_ran = verify(args.layer_root, attempt_import=not args.no_import_check)
+
+    if import_check_ran:
+        print("=== Import check: RAN (interpreter matches Lambda's arm64/Linux/CPython 3.12 target) ===")
+    else:
+        print(
+            "=== Import check: SKIPPED — this interpreter does not match Lambda's target "
+            "(Linux aarch64, CPython 3.12). A skip here is not a pass: presence-and-version checks "
+            "below are real, but nothing has confirmed these packages actually import under Lambda. "
+            "See STAGE4-LAMBDA-LAYER-PLAN.md §3 for how that gap is closed (the AWS-published container "
+            "image pre-deploy, or verify_lambda_execution.py's post-deploy event matrix). ==="
+        )
 
     if problems:
         print(f"=== Layer content verification FAILED: {len(problems)} problem(s) ===")
@@ -132,8 +219,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {problem}")
         return 1
 
+    import_clause = (
+        "and imported successfully under this interpreter"
+        if import_check_ran
+        else "with importable modules on disk (import NOT attempted — see the skip notice above)"
+    )
     print(f"=== Layer content verification passed: {len(EXPECTED_PACKAGES)}/{len(EXPECTED_PACKAGES)} "
-          f"expected packages present at pinned versions, with importable modules on disk ===")
+          f"expected packages present at pinned versions, {import_clause} ===")
     return 0
 
 
