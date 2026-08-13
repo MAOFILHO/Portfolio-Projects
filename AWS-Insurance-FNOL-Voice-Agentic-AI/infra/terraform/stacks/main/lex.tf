@@ -100,9 +100,13 @@ data "aws_iam_policy_document" "lex_assume" {
   }
 }
 
+# `description` is ASCII, deliberately. IAM validates that field against the Latin-1 range -- tab, LF, CR,
+# U+0020-U+007E, U+00A1-U+00FF -- so the em dash (U+2014) this line originally carried is rejected at
+# `CreateRole`. `terraform validate` and `terraform plan` both accept it; the apply is the first thing that
+# looks, and by then sixteen other resources exist. See `D76`.
 resource "aws_iam_role" "lex_runtime" {
   name               = "${local.name_prefix}-lex-runtime"
-  description        = "Role Lex assumes at runtime. Polly only — the codehook has its own role."
+  description        = "Role Lex assumes at runtime. Polly only; the codehook has its own role."
   assume_role_policy = data.aws_iam_policy_document.lex_assume.json
 }
 

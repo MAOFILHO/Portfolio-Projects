@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; Stage 3 built, apply pending)
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stages 0, 0.5, 1, 2 complete; **Stage 3 partially applied — 16 of 23**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2338,6 +2338,115 @@ the codehook Lambda with a scoped IAM role, both DynamoDB tables, the artifacts 
 `make verify-destroy-scope` still passes **now that a `destroy` target actually exists** — Stage 1 noted
 that the check was passing with nothing to find, and that the moment the target appears is the moment
 nobody is looking. It appeared, and the check was watching.
+
+### Stage 3 apply — 2026-08-13, **partial: 16 created, then a hard stop on resource 17**
+
+The apply ran. It got 16 of 23 resources in and failed on `aws_iam_role.lex_runtime`. Nothing was rolled
+back — Terraform does not unwind on error — so the stack is **half-built and the state file is accurate
+about it**. The session then ended on an unrelated local proxy failure (a caching proxy returning empty
+responses; restarted 2026-08-13).
+
+**Created and healthy — 16 managed resources:**
+
+| Group | Resources |
+|---|---|
+| Artifacts bucket | `aws_s3_bucket.artifacts` + `_versioning` + `_server_side_encryption_configuration` + `_lifecycle_configuration` + `_public_access_block` |
+| DynamoDB | `aws_dynamodb_table.checkpoints`, `aws_dynamodb_table.knowledge_chunks` |
+| Codehook | `aws_iam_role.codehook`, `aws_iam_role_policy.codehook`, `aws_lambda_function.codehook`, `aws_cloudwatch_log_group.codehook` |
+| Lambda permissions | `aws_lambda_permission.lex`, `aws_lambda_permission.connect` |
+| Connect | `aws_connect_hours_of_operation.always`, `aws_connect_queue.escalation`, `aws_connect_lambda_function_association.codehook` |
+
+**Not created — 7 remaining**, confirmed against a regenerated plan (`7 to add, 0 to change, 0 to destroy`):
+`aws_iam_role.lex_runtime`, `aws_iam_role_policy.lex_runtime`, `aws_cloudformation_stack.bot`,
+`terraform_data.bot_built`, `aws_cloudformation_stack.release`, `terraform_data.flow_version`,
+`aws_connect_contact_flow.inbound`.
+
+The **entire Lex stack never started**, because all of it hangs off the role that failed. The contact flow
+did not get created either. So there is currently no bot, no alias, no Connect↔Lex association and no flow —
+`D75`'s unrouted-DID position is unchanged and, if anything, more thoroughly true than intended.
+
+**The saved `tfplan` from the pre-apply session is stale and has been regenerated.** A plan file is a
+snapshot of a state that no longer exists; applying the old one against the new state would have failed on
+sixteen already-existing resources.
+
+### D76 — the character-set constraint that three layers of validation do not check
+
+`aws_iam_role.lex_runtime` failed at `CreateRole`. Not a permissions error, not a naming collision:
+
+> `description` failed to satisfy constraint: Member must satisfy regular expression pattern:
+> `[\u0009\u000A\u000D\u0020-\u007E\u00A1-\u00FF]*`
+
+(AWS prints the control characters literally; escaped here so the pattern survives being copied.)
+
+That range is **Latin-1**. The description carried an **em dash, U+2014**, which is outside it — as are
+en dash, curly quotes, ellipsis, arrows, non-breaking space and everything else a text editor or a
+markdown-shaped writing habit produces without announcement. The character is invisible in review at
+normal font sizes and identical in intent to the hyphen it replaced.
+
+**What did not catch it, in order:** `terraform fmt` (formatting only), `terraform validate` (HCL and
+provider schema — types and required-ness, not service-side value constraints), `tflint`, `terraform plan`
+(the provider does not pre-validate string contents, and this field is a plain literal so it was fully
+known at plan time and still passed), and 488 unit tests, none of which assert anything about the charset
+of a description. **The first thing in the pipeline that looks at this is the AWS API, at apply, at
+resource 17 of 23.** Fixed by replacing the em dash with a semicolon; the reason is recorded in `lex.tf`
+above the resource so the next person does not restore it.
+
+The generalisable part is the *shape*, which is `RESULTS.md` §3.5's again from a new direction. §3.5 and
+§3.5.1 are both about a **success** signal that outran the served behaviour. This is the mirror image: a
+**validation** signal that stops short of the constraint it appears to cover. `terraform validate` says
+"the configuration is valid" — a sentence that reads as a statement about the configuration and is
+actually a statement about the subset of the configuration Terraform can see without calling AWS. Same
+lesson as `D69`: count what the instrument covers before trusting what it says.
+
+**Cost note:** the failure cost nothing. Sixteen resources at rest are $0.00/month — the Stage 3 figure
+already recorded — and a rejected `CreateRole` is not billable. The cost was the session.
+
+### The sweep — every description, name and tag value in `infra/terraform`
+
+Marco required the fix be followed by a sweep for the same class of character, and the result reported
+**even if it found nothing**. It did not find nothing.
+
+Scan: every `.tf`, `.tftpl`, `.json`, `.tfvars`, `.hcl`, `.yaml`, `.yml` under `infra/terraform`,
+character by character, against the exact IAM pattern.
+
+- **104** non-ASCII occurrences; **80** outside the IAM range; **19** of those on non-comment lines.
+- **Four distinct offending codepoints**, all of them punctuation: U+2014 EM DASH (77), U+2013 EN DASH (1),
+  U+2194 LEFT RIGHT ARROW (1), U+26A0 WARNING SIGN (1). U+00A7 SECTION SIGN (24) is **inside** Latin-1
+  and passes.
+- The three non-em-dash offenders are all in comments and reach no API.
+
+The 19 live hits, classified by whether the string actually crosses an API boundary:
+
+| Where | Count | Crosses an API? | Action |
+|---|---|---|---|
+| `stacks/main/lex.tf:105` | 1 | **Yes — IAM `CreateRole`** | **Fixed.** The failure |
+| `stacks/main/variables.tf` (×5), `outputs.tf` (×1), `stacks/lexpoc/variables.tf` `error_message` (×1) | 7 | **No** — HCL `variable`/`output` descriptions and validation messages are Terraform-local documentation; they never leave the machine | Left as written |
+| `stacks/main/bot.yaml.tftpl` slot `Description` (×3) | 3 | Yes — Lex V2 `CreateSlot` via CFN | **Left, on evidence.** `stacks/lexpoc/bot.yaml.tftpl` carried em dashes in the same field and **applied successfully three times** in Stage 2. This path is measured, not assumed |
+| `stacks/lexpoc/bot.yaml.tftpl` slot `Description` (×3) | 3 | Yes, but the stack is destroyed | Left |
+| `stacks/main/bot.yaml.tftpl` intent `Description` (×3) | 3 | Yes — Lex V2 `CreateIntent` | Left. Same API family as the measured case; `CreateIntent`'s reference documents a length constraint and **no** `Pattern` |
+| `stacks/main/bot.yaml.tftpl:648` message `Value` | 1 | Yes, but it is **caller-spoken content**, not an identifier | Left deliberately. Rewriting it would change what Polly says, which is a behaviour change smuggled in as a lint fix |
+| `stacks/main/release.yaml.tftpl:72` CFN Parameter `Description` | 1 | Yes — CloudFormation, not IAM | Left. CFN parameter descriptions are free text |
+
+**Every other AWS-bound `description`/`name`/tag in the stack is already pure ASCII** — `connect.tf`'s
+hours and queue and flow, `lambda.tf`'s role and function, `storage.tf`, `main.tf`'s `default_tags`. The
+em dash reached exactly one API-bound field, and it was the one that failed.
+
+Two things this sweep is *not*. It is **not** proof the remaining 18 are safe — it is a classification with
+the evidence for each class named, and the Lex-slot row is the only one carrying a measurement. And it is
+**not** a repeatable control: it was a one-off script in a scratchpad. A `make lint` check that fails on
+non-Latin-1 characters in API-bound strings is the thing that would make this stay fixed, and it does not
+exist yet. Deliberately not built unasked — flagged for Marco.
+
+### Where Stage 3 stands
+
+`terraform plan` regenerated clean against the live half-applied state: **7 to add, 0 to change, 0 to
+destroy**, saved to `infra/terraform/stacks/main/tfplan`. No drift on the 16, no replacements — the
+description fix touches a resource that does not exist yet, so it cascades into nothing. `terraform fmt`
+and `terraform validate` clean.
+
+**The apply is still pending and still needs a word.** Everything in it remains inside the
+`APPROVED: Phase 8` under-$2 authorisation and the cost delta at rest is unchanged at **$0.00/month**;
+nothing in the remaining 7 places a call.
 
 ### D72 — `ADR-007` held up for reasons its author did not have
 

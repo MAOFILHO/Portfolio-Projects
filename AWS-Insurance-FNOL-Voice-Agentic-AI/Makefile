@@ -1,5 +1,5 @@
 .PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
-        verify-destroy-scope verify-flows verify-lex deploy provision destroy teardown
+        verify-destroy-scope verify-flows verify-lex verify-charset deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -112,6 +112,18 @@ teardown: destroy
 verify-flows:
 	@$(VENV)/python scripts/check_flows.py
 
+# `D76`: aws_iam_role.lex_runtime failed at CreateRole on an em dash in `description` -- IAM
+# validates that field against Latin-1 (tab/LF/CR plus U+0020-U+007E plus U+00A1-U+00FF) and rejects
+# it, and terraform fmt/validate/plan and 488 unit tests all passed the string first. This is that check,
+# moved to the front: every description/name/tag-value string under infra/terraform is in scope by
+# default unless it never reaches an API (a variable/output's own description, an error_message) or is
+# on the short exemption list in scripts/check_charset.py, each entry backed by a cited measurement.
+#
+# Also fails if an exemption's named file is in scope and no longer produces the match it was written
+# for -- a stale exemption is a hole nobody is using, and this is the check that notices.
+verify-charset:
+	@$(VENV)/python scripts/check_charset.py
+
 # Read the deployed Lex release back from the service and compare it against what Terraform declared.
 #
 # `RESULTS.md` §3.5.1 rule 1: the apply output is Terraform's record of its own request; the read is a
@@ -190,6 +202,7 @@ lint:
 	$(VENV)/ruff check $(CHECKED)
 	$(VENV)/black --check $(CHECKED)
 	@$(MAKE) --no-print-directory verify-flows
+	@$(MAKE) --no-print-directory verify-charset
 
 # ruff --fix + black
 format:
