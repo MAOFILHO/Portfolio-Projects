@@ -1152,6 +1152,169 @@ one clarifier route on one phrasing is not evidence a router change would improv
 
 ---
 
+## 5.3 Stage 8 — the composed pipeline, and the fingerprint that was blind to half of it
+
+**The last independent-set fingerprint, spent on the composition rather than the router.** Marco set the
+scope and the reasoning is the phase's headline finding, not a preference:
+
+> *"Entry #1 verifies the router in isolation; the guardrail is upstream of L2 and has never been
+> measured against the independent set. The tuning-set 0/45 is not that number. Declining on 'the router
+> is unchanged' would repeat §3.9's error one section after documenting it."*
+
+### The result — `C1` holds on the shipped system
+
+43 items × k=5, temperature 0.0, guardrail `zl5ppnyorwd2` v2, live config sha `4f42baaf29042046`.
+
+| Composition | Escalation recall | Read |
+|---|---|---|
+| **`L1 → guardrail → L2`, the shipped order** | **1.000 (26/26)** ✅ | **`C1` holds on the composed system.** Phase 7 closes |
+| `L1 ∪ L2`, guardrail removed | 1.000 (26/26) | Entry #1's metric, recomputed same-run |
+| `guardrail → L1 → L2`, counterfactual | 1.000 (26/26) | See below |
+
+**0 items blocked** (must-escalate or not), **0 masked**, **0 of 43 varying across five samples**. Union
+false-escalation reproduced at **0.529**, unchanged. Total **$0.0212** — $0.00832 Nova Micro, **$0.0129
+guardrail, measured to the text unit rather than estimated** (`D46`, below).
+
+Three honest qualifications on the 1.000:
+
+1. **The guardrail is sampled at k=1.** `ApplyGuardrail` is a classifier call and nothing here shows it
+   is deterministic. The block counts are one draw each — the same k entries #2/#3 used, which is what
+   makes them comparable, and a limitation either way.
+2. **The ordering counterfactual came back equal, which means it measured nothing here.** `ADR-010`'s
+   L1-before-guardrail guarantee bought exactly zero on this run, because v2 blocked nothing at all.
+   Against v1 it would have been worth 7 of the 10 blocked positives. The guarantee is still right; this
+   run is simply not evidence for it.
+3. **n=26 positives.** A recall of 1.000 on 26 items has a resolution of 0.038.
+
+### The fingerprint under-reported by construction, and this stage is why it now doesn't
+
+`config_fingerprint()` hashed three Python files under `src/`. The guardrail was not among them. So
+**guardrail v1 — the configuration §3.9 records as a `C1` breach — and v2 hashed identically**, at
+`eb82350fee3e4555`. The published "distinct configurations ever measured against this set" would have
+read **2** for three measurements of two materially different systems, and *"the fingerprint has not
+moved"* was not evidence of anything about the guardrail.
+
+The tuple was written before the guardrail existed and nobody widened it when the guardrail arrived —
+because the fingerprint's own tests all passed, and they exercise the files that are *in* the tuple.
+**§3.10's general form, one directory over.** Widened at Stage 8 from three files to seven, covering the
+guardrail Terraform, the guardrail client, the guardrail nodes and `graph.py`. Deliberately
+over-inclusive: an unrelated edit to `graph.py` now moves the hash, and over-inclusive can only inflate
+the count designed to embarrass us.
+
+The `.tf` is still the **artifact**. A console edit or a half-applied plan leaves it unchanged while the
+served resource differs — §3.5 again — so the run also calls `GetGuardrail` and records a hash of the
+**live** policy set in the ledger entry. Two hashes with different failure modes, named as such.
+
+**The ledger now publishes 3**, at fingerprints `889cb0bc` (router only, no guardrail in the path),
+`eb82350f` (guardrail v1) and `55b70547` (composed, guardrail v2).
+
+### Found while probing the guardrail: a mask read as a block, and a shipped intent broken by it
+
+This is the composition defect Stage 8 was scoped to look for, and it is not the one anyone expected.
+
+`ApplyGuardrail` returns `action: GUARDRAIL_INTERVENED` for a **mask** exactly as it does for a
+**block** — `actionReason` distinguishes them (`"Guardrail masked."` vs `"Guardrail blocked."`), as do
+the assessments (`ANONYMIZED` vs `BLOCKED`). `guardrails/client.py` computed `blocked = action ==
+"GUARDRAIL_INTERVENED"`. Verified live:
+
+| Step | What happens |
+|---|---|
+| Agent line | `"Your claim number is CLM-2608-00042-4."` |
+| Guardrail | masks it correctly → `"Your claim number is {claim_number}."` |
+| `_parse_response` | **`blocked=True`** |
+| `guardrails_output_check` | replaces the whole line with *"I'm sorry, I'm not able to share that — let me connect you with someone who can help."* |
+
+**That is the claim-status readback — one of the six in-scope intents — refused, and refused with a
+promise of a handoff the graph does not perform (`D43`).** Every component was correct: the guardrail
+masked what it was configured to mask, the parser read the field it was given, the node branched on the
+boolean it received.
+
+**No test caught it, and the reason is exact: `MockGuardrailClient` could not express a mask.** It had
+one intervention mode, block. Every test of every calling path ran against a fake that could not
+produce the behaviour the real resource has, so the branch that handles a mask was unreachable and its
+absence was invisible. 359 tests passed before the fix and 359 passed after. §3.10's general form, now
+applied to a fake rather than a fixture — which is the same thing.
+
+Fixed at Stage 8, before the fingerprint was spent, so the published number describes what ships:
+mask-versus-block is now decided by **positive evidence of a mask** (some assessment says `ANONYMIZED`
+and none says `BLOCKED`), so an unrecognised response shape stays blocked — the change can turn a
+provable mask into a pass and never a block into one. `MockGuardrailRule` gained `action="MASK"`.
+`tests/unit/test_guardrails_nodes.py` exists at all now; nothing had imported that module.
+
+**The fix cannot have flattered the `C1` number, and this is measured rather than argued:** all 43 items
+returned `action: NONE`, so zero input interventions of either kind occurred and both readings of
+`blocked` agree on this population.
+
+⚠ **The remaining half is not fixed.** With `blocked` corrected the agent now says *"Your claim number
+is {claim\_number}"* — better than a refusal, still wrong. The guardrail masks the caller's own claim
+number, policy number and plate back to the caller who owns them. Fixing that means removing four
+regexes from a provisioned, individually gated resource. Carried to `NOT-FIXED.md`.
+
+### A second discovery: the input-side PII policy does not run at all
+
+Bedrock **does not evaluate the sensitive-information policy on `source="INPUT"`**. Verified live: an
+email, a phone number and a `PY####` policy number all returned `sensitiveInformationPolicyUnits: 0` and
+`action: NONE` on INPUT, and masked correctly on OUTPUT.
+
+`main.tf` describes the input-side anonymisation as *"defence in depth on the same boundary"* and
+justifies `ANONYMIZE` over `BLOCK` with *"a caller who says their phone number mid-sentence must not
+have the turn rejected — the turn carries the claim."* **That protection does not exist.** The reasoning
+was right and the mechanism is absent, which `CLAUDE.md` forbids as plainly as a stub would be.
+
+Separately, `guardrails_input_check` discards `result.output_text` and `routing.py` reads the raw
+`turn_input`. That discard is now a deliberate, commented `C1` decision rather than an accident: if
+Bedrock ever masks on input, forwarding masked text would hand L2 turns with `{PLACEHOLDER}` spans, and
+L2 is the only detector for 73% of indirect injury phrasing. **The privacy fix and the safety guarantee
+are coupled, and neither the node nor the guardrail knows it.** Recorded in `NOT-FIXED.md`.
+
+### `CF5`'s tuning pass — and the reproducibility claim it breaks
+
+`rte-001`, k=3 per arm, against the shipped `rental_towing_entitlement` node.
+
+| Arm | Redundant | General-mechanics leak | Distinct answers |
+|---|---|---|---|
+| Pinned 0.0 (shipped) | **0/3** | 0/3 | **2/3, and 3/3 on an earlier run** |
+| Legacy 0.7 (`temperature=None`) | 0/3 | **1/3** | 3/3 |
+
+**The redundancy defect did not reproduce in either arm, and that is not a retirement** — stated before
+the run, not after. Greedy decoding does not make a prompt robust, the prompt is unchanged, and the
+detector's teeth come from the two committed real defective outputs, not from a live run that happened
+to be clean. The GATE now self-checks against those fixtures on every call and raises rather than
+returning "no failures" from a detector that has stopped detecting.
+
+**The finding is the last column. Temperature 0.0 does not make the generation path reproducible.**
+Identical prompt, identical retrieved passages, `temperature: 0.0` confirmed in the `inferenceConfig`,
+and Nova Lite returned two or three materially different answers in three calls. `D32` pinned generation
+to 0.0 for *"reproducibility, defect stability, and same-question-same-answer consistency"*; on this path
+it delivers none of the three. Stage 0.5's `0/78 unstable` was **Nova Micro, forced tool use, a short
+structured output** — a different model on a different task, and it does not transfer. `D29` again: this
+project cannot see the serving side, and greedy decoding is not a guarantee of deterministic serving.
+Two callers asking the same coverage question can still hear different answers.
+
+### And the router does not reach the flagship compound case
+
+The first version of the `CF5` script drove the whole graph and reported a clean **0/3 redundant in both
+arms**. It was counting redundancy in *"I didn't quite catch that — could you say that again?"*, six
+times. The router classifies *"How many more days of rental do I have left?"* as **`Ambiguous` at
+confidence 0.95**, so `rte-001`'s own first turn routes to `handle_no_match_or_barge_in` and never
+reaches the node.
+
+That is §3.5 committed inside the script that cites it — the detector ran on the artifact (a string came
+back) instead of the outcome (a rental answer was produced) — and it was caught by printing the answers,
+not by the counter. `_assert_is_a_rental_answer` now makes it a hard failure. **The routing miss itself
+is real** and corroborates §5.2's `reg-rental` group, where the standard-English control routed wrong
+while two nonstandard phrasings of the same question routed right.
+
+### `CF6`(a), enforced rather than written down
+
+Baselines now carry `produced_utc`, `model_id`, `temperature` and `k`, and `load_baseline()` **refuses**
+a baseline with no provenance or one older than 90 days rather than silently comparing against it. Tier A
+records `"n/a — Tier A makes no model calls"` explicitly: saying so is more useful than omitting the
+fields, and it is what a reader needs before trusting a six-month-old number. `CF6`(b)'s same-run control
+remains Phase 10's.
+
+---
+
 ## 6. Instrument defects found this phase
 
 Recorded as a category because all three share a property: **a harness defect produces a plausible number
@@ -1183,6 +1346,25 @@ Defects 5–8 are all one shape, and #8 is the sharpest evidence for it: **it ap
 *a check whose inputs the author supplied measures the author's model* — is not a lesson that stays
 learned by having been written down.
 
+### Stage 8 additions (§5.3)
+
+| # | Defect | What it published, or would have |
+|---|---|---|
+| 10 | `config_fingerprint()` did not cover the guardrail, so **v1 and v2 hashed identically** | a published distinct-fingerprint count of **2** for three measurements of two different safety configurations |
+| 11 | `MockGuardrailClient` had **no mask mode**, so no test of any calling path could reach the mask branch | 359 green tests over a live defect that refused one of the six intents |
+| 12 | Nothing in `tests/` imported `agents/nodes/guardrails_nodes.py` | the two nodes gating every spoken line, uncovered |
+| 13 | The Stage 5 script's `modified` count was `intervened and not blocked and …` while `blocked` **was** `intervened` — identically False | `modified: 0` in `RESULTS.md` §3.9 and in ledger entries #2/#3: a **structural zero**, not a measurement |
+| 14 | The first `CF5` script counted redundancy in the router's no-match line | a clean `0/3` in both arms, from six copies of *"I didn't quite catch that."* |
+
+#14 is #8's counterpart one stage later: **§3.5 committed inside a script whose own docstring cites
+§3.5.** #13 is the same again — the "fix" for a phantom-modification bug produced an expression that
+could never be true, and its zero was published twice. Both were caught by looking at the strings, not
+by the counters.
+
+**Instrument defects now outnumber agent defects in this phase, ten to a handful.** That ratio is the
+result, not a footnote: the measuring apparatus has been the least reliable component throughout, and
+every one of these was found by checking an outcome against something the author did not write.
+
 ---
 
 ## 7. Cost
@@ -1211,6 +1393,7 @@ moves 0.063 between identical runs, and must not be read to three decimals or us
 |---|---|---|---|---|---|
 | L1 escalation recall, labelled set | GATE | 1.00 | 1.000 | ✅ | deterministic |
 | Union escalation recall, independent set | — | — | 1.000 | ✅ | **k=5** (§2.1) |
+| **Composed escalation recall** (`L1 → guardrail v2 → L2`), independent set | **`C1`** | **1.000** | **1.000 (26/26)** | ✅ | **k=5** on L2, **k=1** on the guardrail (§5.3) — the number that verifies the shipped system |
 | **False-escalation rate** | **TARGET** | **≤ 0.10** | **0.529** | ❌ | **1×**; reproduced at 0.529 on a complete rule-based denominator (§2.1) |
 | **Intent macro-F1** | **GATE** | **≥ 0.90** | **0.623** | ❌ | **1×**, and ~4.3 sd high (§3.3) |
 | **Out-of-scope detection** | **TARGET** | **≥ 0.85** | **0.200** | ❌ | **1×**; 0.000 in all ten runs since |
@@ -1218,7 +1401,7 @@ moves 0.063 between identical runs, and must not be read to three decimals or us
 | Retrieval MRR | TARGET | ≥ 0.75 | **0.7458** | ❌ | deterministic — short by 0.0042, not rounded |
 | Groundedness | GATE | ≥ 0.95 | 1.000 (9/9) | ✅ | **1×**, n=9 |
 | Answer relevance | TARGET | ≥ 0.85 | 1.000 (9/9) | ✅ | **1×**, n=9 |
-| Redundancy defect rate | TARGET | — | 0/9 this run; defect known intermittent | ⚠ | **1×** |
+| Redundancy defect rate | **GATE** (promoted at Stage 8) | 0 | **0/6** (0/3 at 0.0, 0/3 at 0.7) | ⚠ | §5.3 — **did not reproduce in either arm; not a retirement.** The gate self-checks against the committed real defective outputs before it can report a pass |
 | Bedrock spend, Phases 3–7 | GATE | ≤ $5.00 | $0.0138 | ✅ | exact |
 
 **Three GATEs fail and two TARGETs miss.** Per `SUCCESS-METRICS.md` §1, a failing gate means the system is

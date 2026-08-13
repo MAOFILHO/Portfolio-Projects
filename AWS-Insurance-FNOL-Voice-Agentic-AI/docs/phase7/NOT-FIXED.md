@@ -224,6 +224,73 @@ difference was found".
 
 ---
 
+## 8. The output guardrail masks the caller's own claim number back to them
+
+**Found at Stage 8 by probing the live guardrail, and half-fixed.** The half that is fixed is a code
+defect and was fixed before the last fingerprint was spent, so the published verification describes what
+ships: `GuardrailResult.blocked` no longer treats a **mask** as a **block**, and
+`guardrails_output_check` forwards the masked line instead of substituting a refusal. `RESULTS.md` §5.3
+has the trace.
+
+**What is left is a configuration decision, not a bug in our code.** With `blocked` corrected, the
+claim-status readback now produces:
+
+> *"Your claim number is {claim\_number}. Please keep it for your records."*
+
+The guardrail's `sensitive_information_policy_config` carries four regexes — `policy_number`,
+`claim_number`, `licence_plate`, `vin` — with `ANONYMIZE`, and Bedrock evaluates them **on OUTPUT only**.
+Those are precisely the identifiers this agent exists to speak back to the caller who owns them. Masking
+a caller's own claim number to that caller protects nobody.
+
+**Why it is not fixed here.** Removing those four regexes is a change to the phase's only *provisioned*
+resource, which was gated individually at Phase 7 sign-off and would need a new published version, a new
+live-config hash and — under the widened `_FINGERPRINT_SOURCES` — a new independent-set fingerprint if
+anything were to be re-verified against it. That is Marco's call on a resource he gated, not a close-out
+edit. The one-line shape of the change is known and recorded so it is a decision rather than a
+rediscovery:
+
+```hcl
+# infra/terraform/stacks/guardrails/main.tf — drop the four domain regexes from the OUTPUT path.
+# ADR-011 / D16 already own transcript-side redaction in guardrails/pii.py, which is where the
+# original requirement actually lives; the guardrail duplicated it onto the wrong boundary.
+```
+
+**Reachability, stated plainly:** live today on `CheckClaimStatus` and on any answer that reads back a
+policy number. Not a `C1` issue — `injury_escalation` edges straight to `END` and never touches the
+output guardrail, and the Stage 8 run confirmed zero interventions of either kind on the independent
+set.
+
+---
+
+## 9. The input-side PII anonymisation does not exist, and fixing it would be coupled to `C1`
+
+Two separate things, both live, and they pull in opposite directions.
+
+**(a) Bedrock does not evaluate the sensitive-information policy on `source="INPUT"` at all.** Verified
+live against `zl5ppnyorwd2` v2: an email, a phone number and a `PY####` policy number each returned
+`sensitiveInformationPolicyUnits: 0` and `action: NONE` on INPUT, and masked correctly on OUTPUT.
+`main.tf` describes this as *"defence in depth on the same boundary"* and justifies `ANONYMIZE` over
+`BLOCK` with *"a caller who says their phone number mid-sentence must not have the turn rejected."* The
+reasoning is right; the mechanism is absent. **`CLAUDE.md` forbids a documented capability that does not
+run**, so the comment is now corrected in place rather than left to imply a protection that is not there.
+
+**(b) `guardrails_input_check` discards `result.output_text`, and must keep discarding it.** `routing.py`
+reads the raw `turn_input`. If AWS ever makes (a) work, forwarding the masked text would hand L2 turns
+with `{PLACEHOLDER}` spans in them — and L2 is the only detector for 73% of indirect injury phrasing.
+`C1` is non-tradeable, so **the detector sees the raw turn and the residual exposure is the cost.**
+
+That coupling is the point of recording this: *the privacy fix and the safety guarantee are in tension,
+and neither the guardrail resource nor the node knows the other exists.* Whoever makes (a) work must
+resolve (b) at the same time, and the resolution is not "forward the masked text" — it is something like
+masking after the detector rather than before it. The discard now carries a comment saying so, and
+`tests/unit/test_guardrails_nodes.py` fails loudly if someone "fixes" it without reading why.
+
+**Residual exposure today:** raw caller PII reaches the router prompt. It does **not** reach persistence
+— `ADR-011`/`D16` and `guardrails/pii.py` redact before anything is stored or logged, which is where the
+requirement was always owned. The guardrail duplicated it onto a boundary where Bedrock does not apply it.
+
+---
+
 ## Summary table
 
 | # | Defect | Observed by | Severity | Deferred to |
@@ -235,6 +302,10 @@ difference was found".
 | 5 | PII/fraud passes are dispositional, not controls | report `mechanism` field | Medium | with item 1 |
 | 6 | `cq-005`: a single clause diluted inside a section-level chunk | Stage R diagnosis | Medium | the phase that expands the graded query set |
 | 7 | Bias: `vernacular_nonstandard` phrasing routes to the clarifier where two other phrasings of the same question do not | Stage 7 paired prompts | Low–Medium | unscheduled — one observation, not tuned against |
+| 8 | The output guardrail masks the caller's own claim/policy number back to them — **live on `CheckClaimStatus`** | Stage 8 live probe | **High** — breaks a shipped intent's readback | Marco's call: it is a change to a gated provisioned resource |
+| 9 | Input-side PII anonymisation does not run; fixing it is coupled to `C1` | Stage 8 live probe | Medium | with any future input-masking work, not before |
+| 10 | The router classifies `rte-001`'s own first turn as `Ambiguous` at 0.95, so the flagship compound case never reaches its node through the graph | `CF5` script's first run | Medium | with §5.2's `reg-rental` observation — same defect, two instruments |
+| 11 | Temperature 0.0 does not make the generation path reproducible — 2–3 distinct answers per 3 identical calls | `CF5` pass | Medium | `D32`'s reproducibility claim is qualified, not withdrawn; `D29` owns the mechanism |
 
 **One process failure belongs here too, and it is not a defect in the system.** `D3` requires Bedrock
 spend to be logged in `COSTS.md` **per run**. Three runs — Stages 4, 5 and 6 — were not logged, and the

@@ -33,6 +33,18 @@ def make_guardrails_input_node(*, client: GuardrailClient | None = None) -> Node
 
     def guardrails_input_check(state: AgentState) -> dict[str, Any]:
         result = guardrail.apply_guardrail("INPUT", state.get("turn_input", ""))
+        # `result.output_text` is deliberately NOT written back to `turn_input`, and the reason is a
+        # `C1` decision rather than an oversight. If Bedrock ever masks on the input path, forwarding
+        # the masked text would send L2 a turn with spans replaced by `{PLACEHOLDER}` -- and L2 is the
+        # only detector for 73% of indirect injury phrasing. Recall is non-tradeable (`C1`), so the
+        # detector sees the raw turn and the residual exposure is carried in `NOT-FIXED.md`.
+        #
+        # Currently moot, measured rather than assumed: Bedrock does not evaluate the
+        # sensitive-information policy on `source="INPUT"` at all. Verified live against `zl5ppnyorwd2`
+        # v2 at Stage 8 -- an email, a phone number and a `PY####` policy number all returned
+        # `sensitiveInformationPolicyUnits: 0` and `action: NONE` on INPUT while masking correctly on
+        # OUTPUT. So the input-side PII anonymisation `main.tf` describes does not run, and this line
+        # is the coupling that will matter if AWS ever makes it run.
         return {"guardrail_input_blocked": result.blocked}
 
     return guardrails_input_check
@@ -81,6 +93,17 @@ def make_guardrails_output_node(*, client: GuardrailClient | None = None) -> Nod
         result_gr = guardrail.apply_guardrail("OUTPUT", candidate)
         if result_gr.blocked:
             return {"guardrail_output_blocked": True, "response_text": _OUTPUT_BLOCKED_FALLBACK}
+        if result_gr.masked:
+            # A mask is not a refusal. Until Stage 8 this branch did not exist and `blocked` was true
+            # for any intervention, so a masked line became `_OUTPUT_BLOCKED_FALLBACK` -- the agent
+            # refusing to say a claim number it had just correctly looked up, and promising a handoff
+            # on the way out. Forwarding the masked text is strictly better than that in every case.
+            #
+            # It is still not RIGHT, and the remaining half is not a code fix: the guardrail masks the
+            # caller's own claim number, policy number and plate back to them, so this branch yields
+            # "Your claim number is {claim_number}". Removing those four regexes is a change to a
+            # provisioned, individually-gated resource. Carried to `docs/phase7/NOT-FIXED.md`.
+            return {"guardrail_output_blocked": False, "response_text": result_gr.output_text}
         return {"guardrail_output_blocked": False}
 
     return guardrails_output_check

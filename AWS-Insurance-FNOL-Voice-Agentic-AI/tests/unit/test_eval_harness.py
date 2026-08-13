@@ -361,3 +361,59 @@ def test_the_committed_baseline_matches_the_current_run() -> None:
     from evals.regression import compare, load_baseline
 
     assert compare(load_baseline(), to_dict(run_tier_a())) == []
+
+
+# --------------------------------------------------------------------------------------------------
+# CF6(a), enforced at Stage 8: a baseline that does not say what it was measured under cannot be
+# compared against, and one older than the stated maximum must fail rather than be compared silently.
+# --------------------------------------------------------------------------------------------------
+
+
+def test_a_baseline_without_provenance_is_refused() -> None:
+    """The rule existed as prose in `CF6` from Phase 6 and was satisfied by nobody. Prose is satisfied
+    by whoever remembers it; this is the version that cannot be forgotten."""
+    import json as _json
+
+    from evals.regression import BaselineProvenanceError, load_baseline
+
+    path = Path("/tmp/fnol-baseline-no-provenance.json")
+    path.write_text(_json.dumps({"tier": "A", "l1_golden": {"recall": 1.0}}))
+    with pytest.raises(BaselineProvenanceError, match="provenance"):
+        load_baseline(path)
+
+
+def test_a_baseline_past_the_maximum_age_fails_instead_of_being_compared_against() -> None:
+    """`D31`: a fixed threshold against a baseline of unknown age cannot distinguish "this PR
+    regressed the system" from "the model moved", and it fails in the worse direction -- a real
+    regression hides inside drift."""
+    import json as _json
+    from datetime import UTC, datetime, timedelta
+
+    from evals.regression import MAX_BASELINE_AGE_DAYS, BaselineProvenanceError, load_baseline
+
+    old = datetime.now(UTC) - timedelta(days=MAX_BASELINE_AGE_DAYS + 1)
+    path = Path("/tmp/fnol-baseline-stale.json")
+    path.write_text(
+        _json.dumps(
+            {
+                "provenance": {
+                    "produced_utc": old.isoformat(),
+                    "model_id": "n/a",
+                    "temperature": "n/a",
+                    "k": 1,
+                }
+            }
+        )
+    )
+    with pytest.raises(BaselineProvenanceError, match="maximum"):
+        load_baseline(path)
+
+
+def test_the_committed_baseline_carries_its_own_provenance() -> None:
+    """The check above proves the guard works. This one proves it is armed on the real file --
+    a guard that passes only because nothing exercises it is `RESULTS.md` §3.5 again."""
+    from evals.regression import load_baseline
+
+    provenance = load_baseline()["provenance"]
+    assert set(provenance) >= {"produced_utc", "model_id", "temperature", "k"}
+    assert provenance["tier"] == "A"

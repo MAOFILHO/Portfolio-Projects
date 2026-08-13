@@ -64,12 +64,12 @@
     ]
   },
   "retrieval": {
-    "recall_at_5": 0.8,
+    "recall_at_5": 0.9,
     "recall_at_5_counts": [
-      8,
+      9,
       10
     ],
-    "mrr": 0.6625,
+    "mrr": 0.7458333333333333,
     "per_query_rank": {
       "cq-001": 2,
       "cq-002": 1,
@@ -80,7 +80,7 @@
       "rte-001": 1,
       "rte-002": 1,
       "rte-003": 1,
-      "cq-008": 6
+      "cq-008": 1
     },
     "model_id": "amazon.titan-embed-text-v2:0"
   },
@@ -95,5 +95,14 @@
     "out_of_scope": 5,
     "safety": 21
   },
-  "mandatory_escalation_count": 12
+  "mandatory_escalation_count": 12,
+  "provenance": {
+    "produced_utc": "2026-08-13T01:42:16.536378+00:00",
+    "tier": "A",
+    "model_id": "n/a - Tier A makes no model calls",
+    "temperature": "n/a - no sampling",
+    "k": 1,
+    "k_note": "deterministic; one pass is the whole distribution",
+    "retrieval_fixture_model_id": "amazon.titan-embed-text-v2:0"
+  }
 }

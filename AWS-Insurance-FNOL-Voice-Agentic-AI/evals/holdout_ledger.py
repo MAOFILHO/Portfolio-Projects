@@ -66,10 +66,39 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 # Everything whose change makes a measurement a measurement of a *different system*. Deliberately
 # includes the L1 lexicon source: the union metric this set exists to measure is L1 u L2, so a lexicon
 # edit changes the configuration even though it touches no prompt.
+#
+# THE GUARDRAIL WAS MISSING FROM THIS TUPLE UNTIL STAGE 8, AND THAT WAS A DEFECT IN THE PUBLISHED
+# COUNT ITSELF. Ledger entries #2 and #3 measured guardrail **v1** -- the configuration RESULTS.md
+# section 3.9 records as a C1 breach that would have taken union recall from 1.000 to roughly 0.62 --
+# and they carry the fingerprint `eb82350fee3e4555`. The guardrail was then narrowed to v2. The
+# fingerprint did not move, because this tuple listed only Python under `src/`. Two materially
+# different safety configurations hashed to the same value, and the number RESULTS.md publishes as
+# "distinct configurations ever measured against this set" would have said 2 for three measurements
+# of two different systems.
+#
+# The tuple was authored when the guardrail did not exist. Nobody widened it when the guardrail
+# arrived, because the fingerprint's own tests all passed -- they exercise the files that ARE in the
+# tuple. This is RESULTS.md section 3.10's general form again, one directory over: the check covered
+# exactly the surface its author had in mind.
+#
+# The .tf file is the ARTIFACT, not the outcome -- a console edit or a half-applied plan leaves it
+# unchanged while the live guardrail differs. That gap is closed at run time instead of here:
+# `scripts/measure_composed_pipeline.py` calls `GetGuardrail` and records a hash of the LIVE
+# configuration in the ledger entry. Hashing the file keeps this function offline and free, which it
+# must be -- it is called inside `verification_run`, including in unit tests.
+# Widened at Stage 8 from three files to six, because the measurement itself widened: the thing being
+# verified is now L1 -> guardrail -> L2 as a composition, so every file that determines that path is
+# part of the configuration. `graph.py` is over-inclusive on purpose -- an edit to an unrelated intent
+# node moves the hash -- and over-inclusive is the safe direction: it can only inflate the published
+# distinct-fingerprint count, which is the number designed to embarrass us.
 _FINGERPRINT_SOURCES = (
     "src/fnol_voice_agent/agents/lexicon.py",
     "src/fnol_voice_agent/aws/bedrock_router.py",
     "src/fnol_voice_agent/config/settings.py",
+    "infra/terraform/stacks/guardrails/main.tf",
+    "src/fnol_voice_agent/guardrails/client.py",
+    "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+    "src/fnol_voice_agent/agents/graph.py",
 )
 
 
@@ -86,9 +115,15 @@ def config_fingerprint() -> str:
     supplied by the caller -- a caller-supplied fingerprint is a caller-supplied claim.
 
     Hashes file *contents*, not import-time values, so a change to a prompt string, the
-    tool schema, a model ID, either temperature, or the L1 lexicon all move it. It does
-    **not** move for a change to the eval harness itself, which is correct: rerunning a
-    fixed system through a fixed better-instrumented script is still one configuration.
+    tool schema, a model ID, either temperature, the L1 lexicon, or the guardrail's Terraform
+    all move it. It does **not** move for a change to the eval harness itself, which is
+    correct: rerunning a fixed system through a fixed better-instrumented script is still one
+    configuration.
+
+    Entries #1-#3 in the committed ledger were produced under a narrower three-file definition
+    that omitted the guardrail (see `_FINGERPRINT_SOURCES`). Each entry stores the source list
+    it was computed from, so the ledger says which definition produced which hash rather than
+    presenting four values as if they were commensurable.
     """
     digest = hashlib.sha256()
     for relative in _FINGERPRINT_SOURCES:

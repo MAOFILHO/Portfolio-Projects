@@ -179,3 +179,37 @@ def test_fingerprint_moves_when_the_lexicon_changes(tmp_path: Path, monkeypatch)
     lexicon = fake_root / "src/fnol_voice_agent/agents/lexicon.py"
     lexicon.write_text(lexicon.read_text() + '\n_EXTRA = "unresponsive"\n')
     assert config_fingerprint() != before
+
+
+def test_fingerprint_moves_when_the_guardrail_changes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The input guardrail sits upstream of L2, so its configuration is part of the system this set
+    measures -- `RESULTS.md` §3.9 is a guardrail change that moved union recall from 1.000 to roughly
+    0.62 without touching a single detector.
+
+    Until Stage 8 it was **not** in the fingerprint. Ledger entries #2 and #3 measured guardrail v1
+    and hash to `eb82350fee3e4555`; after the v2 narrowing the hash was still `eb82350fee3e4555`.
+    Two different safety configurations, one fingerprint, and a published count that under-reported
+    by construction. This test is the thing that was missing, not a restatement of the one above --
+    the lexicon test passed throughout.
+    """
+    import evals.holdout_ledger as ledger_module
+
+    assert "infra/terraform/stacks/guardrails/main.tf" in ledger_module._FINGERPRINT_SOURCES
+
+    before = config_fingerprint()
+    fake_root = tmp_path / "repo"
+    for relative in ledger_module._FINGERPRINT_SOURCES:
+        target = fake_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ledger_module._REPO_ROOT / relative).read_bytes())
+    monkeypatch.setattr(ledger_module, "_REPO_ROOT", fake_root)
+    assert config_fingerprint() == before
+
+    guardrail = fake_root / "infra/terraform/stacks/guardrails/main.tf"
+    # The v1 -> v2 narrowing was a change to exactly this string.
+    guardrail.write_text(
+        guardrail.read_text().replace(
+            "Describing injury or death after a car crash is NOT this topic.", ""
+        )
+    )
+    assert config_fingerprint() != before

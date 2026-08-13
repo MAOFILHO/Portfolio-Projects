@@ -36,7 +36,8 @@ long-lived process -- a fresh instance per Lambda invocation (Stage 6/7's expect
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 import boto3
@@ -50,23 +51,48 @@ GuardrailSource = Literal["INPUT", "OUTPUT"]
 # ADR-010: this action string is the literal value Bedrock's ApplyGuardrail response uses to signal that a
 # policy fired. Named here so `_parse_response` reads as a comparison against a documented constant, not a
 # magic string.
+#
+# ⚠ IT SIGNALS "A POLICY FIRED", NOT "THE TURN WAS BLOCKED", AND THIS MODULE CONFLATED THE TWO UNTIL
+# PHASE 7 STAGE 8. Bedrock returns `GUARDRAIL_INTERVENED` for a **mask** exactly as it does for a
+# **block** -- `actionReason` says "Guardrail masked." versus "Guardrail blocked.", and the assessments
+# carry `action: ANONYMIZED` versus `action: BLOCKED`. `blocked = action == _INTERVENED_ACTION` therefore
+# reported every PII anonymisation as a blocked turn. Verified live against `zl5ppnyorwd2` v2:
+#
+#     OUTPUT  "Your claim number is CLM-2608-00042-4."
+#       -> action GUARDRAIL_INTERVENED, actionReason "Guardrail masked.",
+#          outputs[0].text "Your claim number is {claim_number}."
+#       -> parsed as blocked=True, and `guardrails_output_check` replaced the whole line with
+#          "I'm sorry, I'm not able to share that."
+#
+# That is the claim-status readback -- one of the six in-scope intents -- suppressed by a mask being
+# read as a refusal. See `docs/phase7/NOT-FIXED.md`; the remaining half (the guardrail masking the
+# agent's own claim and policy numbers back to the caller who owns them) needs a guardrail version
+# bump and is Marco's call, not a code fix.
 _INTERVENED_ACTION = "GUARDRAIL_INTERVENED"
+_BLOCKED_ACTION = "BLOCKED"
+_MASKED_ACTION = "ANONYMIZED"
 
 
 @dataclass(frozen=True)
 class GuardrailResult:
     """Parsed result of one `ApplyGuardrail` call, real or mocked.
 
-    `output_text` is the (possibly guardrail-modified, e.g. PII-masked) text Bedrock returned when it did
-    not fully block -- callers should use it in place of the original text going forward. When `blocked` is
-    True, `output_text` is empty (nothing safe to forward) and the turn should end there (re-prompt / static
-    fallback message), never fall through to the model call this guardrail check gates.
+    `blocked` means **the turn was rejected**, not merely that some policy fired. A PII mask is an
+    intervention and is not a block: `masked` is True, `blocked` is False, and `output_text` carries the
+    masked text callers should forward in place of the original.
+
+    When `blocked` is True, `output_text` is empty. Bedrock actually returns the
+    `blockedInputMessaging`/`blockedOutputsMessaging` string there (literally `"BLOCKED_OUTPUT"` for
+    this guardrail), and handing that back to a caller who might speak it is a hazard with no upside --
+    `D17` means the graph owns every spoken line anyway.
     """
 
     blocked: bool
     output_text: str
     intervention_reasons: tuple[str, ...] = ()
     raw_action: str = "NONE"
+    masked: bool = False
+    usage: Mapping[str, int] = field(default_factory=dict)
 
 
 class GuardrailClient(Protocol):
@@ -132,18 +158,65 @@ class BedrockGuardrailClient:
 def _parse_response(response: dict[str, Any]) -> GuardrailResult:
     """Parses a real `ApplyGuardrail` response shape (per AWS docs: `action`, `outputs[].text`,
     `assessments[]` holding per-policy detail) into this module's `GuardrailResult`. Defensive `.get()`
-    chains throughout -- this is untested against a real response in Phase 5 (no resource exists), so it
-    does not assume every key is always present."""
+    chains throughout -- this was written in Phase 5 with no real resource to test against, so it does
+    not assume every key is always present.
+
+    **Mask-versus-block is decided by positive evidence of a mask, never by the absence of evidence of
+    a block.** An intervention counts as mask-only when at least one assessment entry says `ANONYMIZED`
+    and no entry anywhere says `BLOCKED`. An unparseable or unfamiliar assessment therefore stays
+    `blocked=True` -- the same direction the old code erred in, so this change can only ever turn a
+    provable mask into a pass, never a block into one. On a safety-relevant filter that asymmetry is the
+    whole point: fail-open on an unrecognised response shape would be a recall defect that no test with
+    a fixture written by this author would find.
+    """
     action = response.get("action", "NONE")
-    blocked = action == _INTERVENED_ACTION
+    intervened = action == _INTERVENED_ACTION
+    actions = list(_assessment_actions(response.get("assessments") or []))
+    mask_only = intervened and _MASKED_ACTION in actions and _BLOCKED_ACTION not in actions
+    blocked = intervened and not mask_only
+
     outputs = response.get("outputs") or []
     output_text = ""
     if outputs and isinstance(outputs[0], dict):
         output_text = str(outputs[0].get("text", ""))
+    if blocked:
+        # Bedrock puts `blockedOutputsMessaging` here. Nothing downstream may speak it.
+        output_text = ""
+
     reasons = tuple(_extract_reasons(response.get("assessments") or []))
+    usage = {k: int(v) for k, v in (response.get("usage") or {}).items() if isinstance(v, int)}
     return GuardrailResult(
-        blocked=blocked, output_text=output_text, intervention_reasons=reasons, raw_action=action
+        blocked=blocked,
+        output_text=output_text,
+        intervention_reasons=reasons,
+        raw_action=action,
+        masked=mask_only,
+        usage=usage,
     )
+
+
+def _assessment_actions(assessments: list[dict[str, Any]]) -> Iterator[str]:
+    """Every `action` value anywhere in the assessments tree.
+
+    A flat walk rather than a per-policy reader, deliberately: the policy shapes differ
+    (`topicPolicy.topics[]`, `contentPolicy.filters[]`, `sensitiveInformationPolicy.piiEntities[]` and
+    `.regexes[]`, `wordPolicy.customWords[]`...) and a reader enumerating the four we happen to use
+    today would silently ignore a fifth. Ignoring a policy here means missing a `BLOCKED`, which is the
+    direction that matters.
+    """
+
+    def walk(node: Any) -> Iterator[str]:
+        if isinstance(node, dict):
+            value = node.get("action")
+            if isinstance(value, str):
+                yield value
+            for child in node.values():
+                yield from walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                yield from walk(child)
+
+    yield from walk(assessments)
 
 
 def _extract_reasons(assessments: list[dict[str, Any]]) -> list[str]:
@@ -179,11 +252,22 @@ class MockGuardrailRule:
     as a plain substring unless `is_regex` is set, in which case it's compiled and matched with
     `re.search`. `reason` becomes one of the returned `GuardrailResult.intervention_reasons` entries when
     this rule fires, so tests can assert on *why* a mock block happened, not just that it happened.
+
+    ⚠ **`action="MASK"` did not exist until Phase 7 Stage 8, and that omission is why no test caught a
+    live defect that broke the claim-status readback.** The real guardrail masks PII and returns the
+    masked text; this fake could only block. Every calling path was therefore tested against a fake that
+    could not produce the behaviour the resource actually has, and the branch that handles a mask was
+    never exercised because nothing could reach it. `RESULTS.md` §3.10: a fake is a fixture, and a
+    fixture encodes its author's model of the thing it stands in for.
     """
 
     pattern: str
     reason: str
     is_regex: bool = False
+    action: Literal["BLOCK", "MASK"] = "BLOCK"
+    # What the matched span becomes under `action="MASK"`, mirroring Bedrock's `{EMAIL}` /
+    # `{policy_number}` placeholder style.
+    replacement: str = "{MASKED}"
 
 
 class MockGuardrailClient:
@@ -208,18 +292,38 @@ class MockGuardrailClient:
         }
 
     def apply_guardrail(self, source: GuardrailSource, text: str) -> GuardrailResult:
-        matched_reasons = [
-            rule.reason for rule in self._rules.get(source, ()) if self._rule_matches(rule, text)
-        ]
-        if matched_reasons:
+        matched = [rule for rule in self._rules.get(source, ()) if self._rule_matches(rule, text)]
+        if not matched:
+            return GuardrailResult(
+                blocked=False, output_text=text, intervention_reasons=(), raw_action="NONE"
+            )
+
+        reasons = tuple(rule.reason for rule in matched)
+        # A block anywhere wins over a mask, matching `_parse_response`: mask-only requires that
+        # nothing said BLOCKED.
+        if any(rule.action == "BLOCK" for rule in matched):
             return GuardrailResult(
                 blocked=True,
                 output_text="",
-                intervention_reasons=tuple(matched_reasons),
+                intervention_reasons=reasons,
                 raw_action=_INTERVENED_ACTION,
             )
+
+        masked_text = text
+        for rule in matched:
+            masked_text = (
+                re.sub(rule.pattern, rule.replacement, masked_text, flags=re.IGNORECASE)
+                if rule.is_regex
+                else re.sub(
+                    re.escape(rule.pattern), rule.replacement, masked_text, flags=re.IGNORECASE
+                )
+            )
         return GuardrailResult(
-            blocked=False, output_text=text, intervention_reasons=(), raw_action="NONE"
+            blocked=False,
+            output_text=masked_text,
+            intervention_reasons=reasons,
+            raw_action=_INTERVENED_ACTION,
+            masked=True,
         )
 
     @staticmethod

@@ -526,19 +526,19 @@ cannot be both."*
 | 5 | **The k-sample protocol for C1 settled and the *current merged* configuration measured under it first** — before any candidate exists to be flattered by the comparison. Recommended: k=5, an item missed on any sample counts as a miss. **If 1.000 does not survive repetition, that is reported as a correction to Phase 6's n=1 figure** and C1 attaches to the measured baseline | ✅ Stage 2 — k=5, any-sample-miss, on the **unchanged merged** configuration. **Union recall 1.000 (26/26) holds; 0 of 43 items unstable; no correction owed** (`D34`). 215 calls, $0.0083. Union false-escalation reproduced at **0.529 on a complete rule-based denominator** |
 | 6 | **The ablation ladder A→D run on the tuning set**, each rung reported at its real value including rungs that move nothing. **The hypothesis reported as confirmed or refuted**, with the refutation condition fixed in advance (`BUILD-PLAN.md` §1) | ⬜ Stage 4 — mid-phase gate |
 | 7 | **The split built with concurrent invocation and a construction-time dominance invariant** for the detector, analogous to L1's existing `assert_dominates`: its output cannot be bypassed, overridden or vetoed by the classifier, the graph or Guardrails. **Q10 stays closed** — the detector remains unreachable from the generation-tier flag. Agent-internal latency **measured** on both configurations, not asserted | ⬜ Stage 3 |
-| 8 | **C1 verified against the independent set on one frozen configuration**, k-sampled. Any candidate below the baseline union recall is **rejected regardless of what it buys** | ⬜ Stage 8 |
+| 8 | **C1 verified against the independent set on one frozen configuration**, k-sampled. Any candidate below the baseline union recall is **rejected regardless of what it buys** | ✅ Stage 8 — **scope widened by Marco from the router to the COMPOSED pipeline** (`L1 → guardrail v2 → L2`). **Composed escalation recall 1.000 (26/26)** at k=5, 0 blocked, 0 unstable. Ledger entry #4, fingerprint `55b7054762da8ae2`, published count **3** |
 | 9 | **False-escalation, intent macro-F1 and out-of-scope re-measured** and reported at their real values. Intent macro-F1 scored on the system's **effective** intent, with the classifier's raw output reported alongside so the split cannot be credited by a scoring convention | ⬜ Stage 8 |
 | 10 | **Bedrock Guardrails as real IaC, input and output** — content filters, denied topics, PII entities, contextual grounding. Replaces the mock rule engine in every measurement. **The L1-before-input-guardrail ordering (`ADR-010`) verified by a test, not by reading the code** — that ordering survives a refactor only if something fails when it breaks | ⬜ Stage 5 |
 | 11 | **Prompt-injection defence demonstrated against real attacks** through both channels the threat model names: retrieved KB chunks (a poisoned chunk planted in our own corpus) and tool responses (the mock claims system returning adversarial content) | ⬜ Stage 6 |
 | 12 | **`make redteam` produces a real effectiveness report with counts**, covering escalation-policy jailbreak, PII exfiltration, guardrail bypass, and the Phase 1 **zero-occurrence GATEs** — fraud flag in caller-facing speech, silent partial write — which need actual attempts, not assertions. **The report states on its first page that it measures the attacks it contains** | ⬜ Stage 6 |
 | 13 | **Bias check, text-level, scoped honestly** — paired prompts varying name origin, register/dialect and disfluency; escalation rate, containment and answer quality compared across pairs. **Explicitly not an ASR or accent audit**; the README limitation stays as written | ⬜ Stage 7 |
-| 14 | **Redundancy check promoted TARGET → GATE**, as settled at Phase 6 approval, and **`CF5`'s tuning pass taken**. If the defect remains probabilistic after tuning, that is the reported outcome — three clean trials is not a retirement | ⬜ Stage 8 |
-| 15 | **`docs/phase7/NOT-FIXED.md`** — everything left unfixed, each with the reason and the phase that owns it. The roadmap asks this phase to *"document what I did not fix"*; **a short register would be a bad sign, not a good one** | ⬜ Stage 8 |
-| 16 | **Spend inside the proposed $1.25 sub-budget**, stop-and-report at $0.90, every run logged in `COSTS.md`. **The Bedrock Guardrail is the only provisioned resource**, $0 at rest, and `make destroy` removes it | ⬜ |
-| 17 | **Retrieval gate — time-boxed and subordinate.** recall@5 0.800 (GATE 0.90) and MRR 0.663 (TARGET 0.75) are a different subsystem; expanding Phase 7 to cover them would dilute the central task. Run last, only if Stages 0–8 land inside budget; otherwise it goes to `NOT-FIXED.md` with a named owner phase. **A failing gate does not get to drift unowned** | ⬜ Stage R (conditional) |
+| 14 | **Redundancy check promoted TARGET → GATE**, as settled at Phase 6 approval, and **`CF5`'s tuning pass taken**. If the defect remains probabilistic after tuning, that is the reported outcome — three clean trials is not a retirement | ✅ Stage 8 — `redundancy_gate_failures()`, which **self-checks against the two committed real defective outputs before it can report a pass**. `CF5`: 0/3 redundant at 0.0 and 0/3 at 0.7 — **did not reproduce, explicitly not a retirement**. The pass instead found that temperature 0.0 does *not* make the generation path reproducible |
+| 15 | **`docs/phase7/NOT-FIXED.md`** — everything left unfixed, each with the reason and the phase that owns it. The roadmap asks this phase to *"document what I did not fix"*; **a short register would be a bad sign, not a good one** | ✅ **11 entries**, two of them added at Stage 8 and one of those (#8, the masked claim number) live on a shipped intent |
+| 16 | **Spend inside the proposed $1.25 sub-budget**, stop-and-report at $0.90, every run logged in `COSTS.md`. **The Bedrock Guardrail is the only provisioned resource**, $0 at rest, and `make destroy` removes it | ⚠ **Partially.** Final spend **≈$0.376 of $1.25**, stop-and-report never reached, guardrail the only provisioned resource. But *"every run logged in COSTS.md"* **was violated** — Stages 4, 5 and 6 went unlogged and were backfilled in one batch. Recorded as violated rather than marked passed |
+| 17 | **Retrieval gate — time-boxed and subordinate.** recall@5 0.800 (GATE 0.90) and MRR 0.663 (TARGET 0.75) are a different subsystem; expanding Phase 7 to cover them would dilute the central task. Run last, only if Stages 0–8 land inside budget; otherwise it goes to `NOT-FIXED.md` with a named owner phase. **A failing gate does not get to drift unowned** | ✅ Stage R, **$0.00**. recall@5 **0.900** (meets the GATE exactly, post-hoc label correction, not claimed as a clean pass); MRR **0.7458**, still short. `cq-005` carried to `NOT-FIXED.md` #6 with a named owner |
 | 18 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 7`, typed 2026-08-12, with both decisions settled as recommended and the guardrail named as an explicit exception to `D3` |
 | 19 | **Every rung measured at temperature 0.0, k=5, identical protocol** (`D30`). No rung reuses a Phase 6 or Stage 0.5 number, including rung A. A rung measured off-protocol is discarded and re-run, not caveated | ⬜ Stage 4 — protocol fixed in `ADR-014` §6 |
-| 20 | **`ADR-015` records which rung won**, its numbers, and `ADR-014` §4's rule applied to them — **including the case where rung A wins and nothing changes.** A decision procedure with no recorded outcome is worse than no ADR | ⬜ Stage 8 |
+| 20 | **`ADR-015` records which rung won**, its numbers, and `ADR-014` §4's rule applied to them — **including the case where rung A wins and nothing changes.** A decision procedure with no recorded outcome is worse than no ADR | ✅ Discharged at Stage 4 as **`ADR-014` Amendment 1**, not as a new ADR — `ADR-015` had already been taken by the output authority check at Stage 6. The ladder selected nothing; recorded as such |
 | 21 | **Phase 6's scorecard carries a retrospective single-draw caveat** — which numbers are one sample and which are reproducible, stated where a reader who quotes the scorecard will see it, not only as a Phase 7 finding | ✅ `RESULTS.md` §0.1 + a `Draw` column on the §8 scorecard. Marco, 2026-08-12: *"Anyone reading the eval report needs to know which numbers are single draws… the same class as the recall-without-precision correction"* |
 | 22 | **The re-baseline discipline logged as a Phase 10 CI-gate design constraint** (`D31`, `CF6`), recorded in `SUCCESS-METRICS.md` §9 itself and not only in `PROJECT_STATE.md` — a constraint discovered after the spec was written is worth nothing if it lives where the implementer will not look | ✅ `SUCCESS-METRICS.md` §9 addendum + `CF6`. Phase 7 does **not** resolve it; it lacks the observation window to characterise drift |
 
@@ -2062,3 +2062,129 @@ first time, which is luck rather than evidence.
   merged incumbent, which is what ledger entry #1 already measured.** Whether that warrants spending a
   third independent-set fingerprint, or whether entry #1 *is* the verification and the ledger's published
   count stays at 2, is a `C2` question for Marco rather than a call to make while closing.
+
+---
+
+## Session log — 2026-08-12 (Stage 8; Phase 7 complete)
+
+### STOP CONDITIONS — restated verbatim
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+- Restate these four conditions verbatim at the top of every session summary and after every `/compact`.
+
+### Marco's Stage 8 instruction, and why it was the whole finding
+
+> *"Spend the third fingerprint. Ledger publishes at 3. Scope it as the COMPOSED pipeline — guardrail v2
+> input filter → L1 → L2 — not the router alone. Entry #1 verifies the router in isolation; the guardrail
+> is upstream of L2 and has never been measured against the independent set. The tuning-set 0/45 is not
+> that number. Record the reasoning explicitly: declining on 'the router is unchanged' would repeat
+> §3.9's error one section after documenting it. Component verification is not composition verification,
+> and that is the phase's headline finding. If composed recall comes in below 1.000, that is a C1 breach
+> on the shipped system and Phase 7 does not close."*
+
+**The answer to the question this session opened with: yes, and the widened scope earned itself three
+times over.** Each of the three findings below was invisible to every component measurement taken in
+this phase.
+
+### `D52` — the composed verification. `C1` holds
+
+`L1 → ApplyGuardrail(INPUT) v2 → L2`, all 43 independent-set items, k=5 on L2, temperature 0.0.
+**Composed escalation recall 1.000 (26/26)**; router-only recomputed same-run at 1.000; guardrail-first
+counterfactual also 1.000, which means `ADR-010`'s ordering guarantee was worth nothing *on this run* —
+v2 blocked nothing at all — and that is reported rather than presented as vindication. 0 blocked, 0
+masked, 0 of 43 unstable. **$0.0212**, of which $0.0129 is guardrail text units **measured, not
+estimated**. Ledger entry #4, fingerprint `55b7054762da8ae2`, live guardrail config sha
+`4f42baaf29042046`. **Published distinct-fingerprint count: 3.**
+
+### `D53` — the fingerprint was blind to the guardrail, so the published count was wrong by construction
+
+`_FINGERPRINT_SOURCES` listed three Python files under `src/`. **Guardrail v1 — the configuration
+`RESULTS.md` §3.9 records as a `C1` breach — and v2 hashed identically at `eb82350fee3e4555`.** The
+count would have read 2 for three measurements of two materially different safety systems, and *"the
+fingerprint has not moved"* was not evidence of anything about the guardrail. The tuple was written
+before the guardrail existed and nobody widened it, because the fingerprint's own tests exercise the
+files that are *in* the tuple. Widened to seven files. The `.tf` is still the artifact, so the run also
+records a hash of the **live** served policy set — two hashes with different failure modes.
+
+### `D54` — a mask read as a block, refusing a shipped intent, with 359 green tests over it
+
+`ApplyGuardrail` returns `GUARDRAIL_INTERVENED` for a mask exactly as for a block.
+`blocked = action == "GUARDRAIL_INTERVENED"` therefore made **"Your claim number is CLM-2608-00042-4"**
+— the claim-status readback, one of the six intents — come out as *"I'm sorry, I'm not able to share
+that,"* plus a handoff promise the graph does not keep (`D43`). Every component was correct.
+
+**No test caught it because `MockGuardrailClient` had no mask mode.** The fake could not produce the
+behaviour the real resource has, so the branch was unreachable and its absence invisible. 359 passed
+before the fix, 359 after. §3.10's general form applied to a fake, which is a fixture by another name.
+
+Fixed **before** the fingerprint was spent, so the published number describes what ships. Mask-vs-block
+now needs positive evidence of a mask, so an unrecognised shape stays blocked — the change can only turn
+a provable mask into a pass, never a block into one. Verified unable to flatter `C1`: all 43 items
+returned `action: NONE`, so both readings agree on this population. `MockGuardrailRule` gained
+`action="MASK"`; `tests/unit/test_guardrails_nodes.py` now exists — **nothing had ever imported that
+module**, so the two nodes gating every spoken line were uncovered.
+
+**The remaining half is Marco's**: the guardrail masks the caller's own claim number, policy number and
+plate back to them, so the line is now *"Your claim number is {claim_number}"*. Removing those four
+regexes is a change to a gated provisioned resource. `NOT-FIXED.md` #8, with the one-line diff recorded.
+
+### `D55` — the input-side PII policy does not run, and fixing it is coupled to `C1`
+
+Bedrock does not evaluate `sensitive_information_policy_config` on `source="INPUT"` — verified live, an
+email, a phone number and a `PY####` all returned `sensitiveInformationPolicyUnits: 0` on INPUT and
+masked correctly on OUTPUT. `main.tf` describes an input-side protection that **does not exist**, which
+`CLAUDE.md` forbids as plainly as a stub. Comment corrected in place.
+
+Separately, `guardrails_input_check` discards the masked text and **must keep discarding it**: if AWS
+ever makes input masking work, forwarding it would hand L2 turns with `{PLACEHOLDER}` spans, and L2 is
+the only detector for 73% of indirect injury phrasing. `C1` is non-tradeable. **The privacy fix and the
+safety guarantee are coupled and neither component knows it.** `NOT-FIXED.md` #9.
+
+### `D56` — `CF5` did not reproduce, and the pass found something else instead
+
+0/3 redundant at 0.0 and 0/3 at 0.7. **Not a retirement, and that was written down before the run.** The
+GATE (promoted TARGET→GATE per criterion 14) self-checks against the two committed real defective
+outputs and raises rather than reporting a pass from a detector that has stopped detecting.
+
+**What the pass actually found: temperature 0.0 does not make the generation path reproducible.**
+Identical prompt, identical retrieved passages, `temperature: 0.0` confirmed in the `inferenceConfig` —
+and Nova Lite returned 2–3 materially different answers in 3 calls. `D32` pinned generation to 0.0 for
+*"reproducibility, defect stability, and same-question-same-answer consistency"* and on this path it
+delivers none of them. Stage 0.5's `0/78 unstable` was Nova Micro, forced tool use, short structured
+output — a different model on a different task, and it does not transfer. `D29` owns the mechanism.
+**`D32`'s reproducibility claim is qualified, not withdrawn.** `NOT-FIXED.md` #11.
+
+### `D57` — the router does not reach the flagship compound case
+
+The first `CF5` script drove the whole graph and reported a clean 0/3 in both arms. It was counting
+redundancy in *"I didn't quite catch that"*, six times: the router classifies `rte-001`'s own first turn
+as **`Ambiguous` at confidence 0.95**. **§3.5 committed inside a script whose docstring cites §3.5** —
+the second instance this phase, after `D50`. Caught by printing the answers, not by the counter;
+`_assert_is_a_rental_answer` now makes it a hard failure. The routing miss corroborates Stage 7's
+`reg-rental` group from an unrelated instrument. `NOT-FIXED.md` #10.
+
+### `D58` — `CF6`(a) enforced instead of written down
+
+Baselines carry `produced_utc`, `model_id`, `temperature`, `k`; `load_baseline()` **refuses** one with no
+provenance or older than 90 days rather than comparing silently. Tier A records `"n/a — makes no model
+calls"` explicitly rather than omitting the fields. `CF6`(b)'s same-run control stays Phase 10's.
+
+### Closing state
+
+- **377 tests green**; `make lint` and `make typecheck` clean; Tier A re-baselined and the regression
+  gate green against it.
+- **Phase 7 final spend ≈$0.376 of $1.25**; standing cap **≈$0.390 of $5.00**. Stop-and-report never
+  reached. The request was ~4× the outturn, recorded in `COSTS.md` because a sub-budget routinely 4× the
+  spend is a number nobody is checking.
+- **`D46` discharged for new runs only.** `GuardrailResult` now captures Bedrock's `usage` block, so the
+  Stage 8 guardrail figure is measured. **The Stage 5 row stays labelled an estimate** — a number that
+  was estimated does not become measured by a later run being instrumented.
+- **Criterion 16 is recorded as violated, not passed.** *"Every run logged in `COSTS.md`"* was not done:
+  Stages 4, 5 and 6 were backfilled in one batch. The rule was correct and it was not followed.
+- **Instrument defects now number 14 for the phase and outnumber agent defects.** That ratio is the
+  result, not a footnote.
+- **Phase 7 is complete.** Every criterion is discharged or explicitly recorded as violated. Next gate:
+  Marco's written exit criteria and approval before Phase 8 opens.

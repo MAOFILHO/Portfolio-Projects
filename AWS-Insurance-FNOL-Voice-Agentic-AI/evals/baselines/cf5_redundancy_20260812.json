@@ -1,0 +1,85 @@
+{
+  "case_id": "rte-001",
+  "k": 3,
+  "note": "Clean at 0.0 means the shipped configuration does not produce the defect on this scenario. It is not a retirement, and the detector's teeth come from the committed known-bad fixtures, not from this run.",
+  "arms": {
+    "pinned_0.0": {
+      "legacy_sampling": false,
+      "trials": [
+        {
+          "trial": 0,
+          "legacy_sampling": false,
+          "answer": "The entitlement applies. You have 8 days and $400 remaining for the rental vehicle coverage on your claim.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        },
+        {
+          "trial": 1,
+          "legacy_sampling": false,
+          "answer": "The entitlement applies. You have 8 days and $400 remaining for your rental vehicle coverage.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        },
+        {
+          "trial": 2,
+          "legacy_sampling": false,
+          "answer": "The entitlement applies. You have 8 days and $400 remaining for your rental vehicle coverage.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        }
+      ],
+      "redundant_count": 0,
+      "distinct_answers": 2
+    },
+    "legacy_0.7": {
+      "legacy_sampling": true,
+      "trials": [
+        {
+          "trial": 0,
+          "legacy_sampling": true,
+          "answer": "The entitlement applies. Your claim shows you have 8 days and $400 remaining for rental coverage.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        },
+        {
+          "trial": 1,
+          "legacy_sampling": true,
+          "answer": "Your rental vehicle is covered while your automobile is undergoing repair for a covered loss, per the policy endorsement terms. The status of your claim shows you have used 12 days, leaving you with 8 days and $400 remaining for rental reimbursement.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        },
+        {
+          "trial": 2,
+          "legacy_sampling": true,
+          "answer": "Rental is covered under the terms of the endorsement as long as the repair work for your covered collision is ongoing. Currently, you have **8 days and $400 remaining** on your rental coverage for this claim.",
+          "sentence_count": 2,
+          "redundant": false,
+          "redundancies": [],
+          "leaked_general_mechanics": []
+        }
+      ],
+      "redundant_count": 0,
+      "distinct_answers": 3
+    }
+  },
+  "gate": {
+    "kind": "GATE",
+    "failures": []
+  },
+  "cost": {
+    "calls": 6,
+    "input_tokens": 6204,
+    "output_tokens": 190,
+    "usd": 0.00041784
+  }
+}

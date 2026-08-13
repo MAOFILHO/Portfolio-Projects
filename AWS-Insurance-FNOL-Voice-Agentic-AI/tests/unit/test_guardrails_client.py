@@ -292,3 +292,166 @@ def test_bedrock_guardrail_client_parse_response_is_defensive_about_missing_keys
     assert result.output_text == ""
     assert result.intervention_reasons == ()
     assert result.raw_action == "NONE"
+
+
+# --------------------------------------------------------------------------------------------------
+# Phase 7 Stage 8: mask is not block.
+#
+# The three response payloads below are TRIMMED VERBATIM CAPTURES from the live guardrail
+# `zl5ppnyorwd2` v2 in us-west-2, taken on 2026-08-12, not shapes invented from the API reference.
+# That distinction is `RESULTS.md` §3.10's operational rule -- "against an adversarial or generative
+# source, at least one input in the suite must come from the source itself" -- applied to a third-party
+# API, which is a generative source in the only sense that matters here: its response shapes were not
+# chosen by us. Every hand-written fixture in this file agreed with the buggy parser.
+# --------------------------------------------------------------------------------------------------
+
+_LIVE_MASKED_OUTPUT = {
+    "action": "GUARDRAIL_INTERVENED",
+    "actionReason": "Guardrail masked.",
+    "outputs": [{"text": "Your claim number is {claim_number} and email {EMAIL}."}],
+    "assessments": [
+        {
+            "sensitiveInformationPolicy": {
+                "piiEntities": [
+                    {
+                        "match": "jane@example.com",
+                        "type": "EMAIL",
+                        "action": "ANONYMIZED",
+                        "detected": True,
+                    }
+                ],
+                "regexes": [
+                    {
+                        "name": "claim_number",
+                        "match": "CLM-2608-00042-4",
+                        "regex": "CLM-[0-9]{4}-[0-9]{5}-[0-9]",
+                        "action": "ANONYMIZED",
+                        "detected": True,
+                    }
+                ],
+            }
+        }
+    ],
+    "usage": {"topicPolicyUnits": 1, "contentPolicyUnits": 1, "sensitiveInformationPolicyUnits": 1},
+}
+
+_LIVE_BLOCKED_INPUT = {
+    "action": "GUARDRAIL_INTERVENED",
+    "actionReason": "Guardrail blocked.",
+    "outputs": [{"text": "BLOCKED_INPUT"}],
+    "assessments": [
+        {
+            "topicPolicy": {
+                "topics": [
+                    {
+                        "name": "non_auto_insurance_products",
+                        "type": "DENY",
+                        "action": "BLOCKED",
+                        "detected": True,
+                    }
+                ]
+            }
+        }
+    ],
+    "usage": {"topicPolicyUnits": 1, "contentPolicyUnits": 1},
+}
+
+_LIVE_CLEAN_INPUT = {
+    "action": "NONE",
+    "actionReason": "No action.",
+    "outputs": [],
+    "assessments": [{"invocationMetrics": {"guardrailProcessingLatency": 108}}],
+    "usage": {"topicPolicyUnits": 1, "contentPolicyUnits": 1},
+}
+
+
+def test_a_pii_mask_is_not_a_block() -> None:
+    """The defect Stage 8 found, pinned against the response that exhibited it.
+
+    `blocked = action == "GUARDRAIL_INTERVENED"` read this payload as a blocked turn, so
+    `guardrails_output_check` threw the masked line away and substituted "I'm sorry, I'm not able to
+    share that." That is the claim-status readback -- one of the six in-scope intents -- refused
+    because the guardrail masked a claim number it was configured to mask.
+    """
+    result = guardrails_client._parse_response(_LIVE_MASKED_OUTPUT)
+    assert result.blocked is False
+    assert result.masked is True
+    assert result.output_text == "Your claim number is {claim_number} and email {EMAIL}."
+    assert result.raw_action == "GUARDRAIL_INTERVENED"
+
+
+def test_a_real_block_is_still_a_block_and_its_messaging_never_leaks() -> None:
+    """The other half of the same change. Bedrock returns `blockedInputMessaging` in `outputs[0].text`
+    -- literally the string `BLOCKED_INPUT` for this guardrail -- and a caller must never hear it.
+    """
+    result = guardrails_client._parse_response(_LIVE_BLOCKED_INPUT)
+    assert result.blocked is True
+    assert result.masked is False
+    assert result.output_text == ""
+    assert result.intervention_reasons == ("deniedTopic:non_auto_insurance_products",)
+
+
+def test_a_clean_pass_is_neither_blocked_nor_masked() -> None:
+    result = guardrails_client._parse_response(_LIVE_CLEAN_INPUT)
+    assert (result.blocked, result.masked, result.raw_action) == (False, False, "NONE")
+
+
+def test_an_unrecognised_intervention_stays_blocked() -> None:
+    """Mask-only requires positive evidence of a mask. An intervention whose assessments this parser
+    cannot read -- a policy type AWS adds later, a shape change -- must not fall through as a pass.
+    Fail-open on a safety filter is a recall defect, and it is the one direction this change is not
+    allowed to introduce."""
+    unknown = {
+        "action": "GUARDRAIL_INTERVENED",
+        "actionReason": "Guardrail intervened.",
+        "outputs": [{"text": "something"}],
+        "assessments": [{"someFuturePolicy": {"entries": [{"action": "REDACTED_SOMEHOW"}]}}],
+    }
+    assert guardrails_client._parse_response(unknown).blocked is True
+
+
+def test_a_block_anywhere_beats_a_mask_elsewhere_in_the_same_response() -> None:
+    """One call can trip two policies. If a denied topic blocked and a regex masked, the turn is
+    blocked -- taking the mask branch would forward text the content policy rejected."""
+    both = {
+        "action": "GUARDRAIL_INTERVENED",
+        "outputs": [{"text": "BLOCKED_OUTPUT"}],
+        "assessments": [
+            {
+                "sensitiveInformationPolicy": {"regexes": [{"action": "ANONYMIZED"}]},
+                "contentPolicy": {"filters": [{"type": "VIOLENCE", "action": "BLOCKED"}]},
+            }
+        ],
+    }
+    result = guardrails_client._parse_response(both)
+    assert result.blocked is True
+    assert result.masked is False
+
+
+def test_usage_units_are_captured_so_guardrail_cost_can_be_measured_not_estimated() -> None:
+    """`D46`. The Stage 5 guardrail row in `COSTS.md` is the one line in the log without exact
+    instrumentation behind it -- estimated from an item count because the client discarded the `usage`
+    block Bedrock returns on every call."""
+    result = guardrails_client._parse_response(_LIVE_MASKED_OUTPUT)
+    assert result.usage["topicPolicyUnits"] == 1
+    assert result.usage["sensitiveInformationPolicyUnits"] == 1
+
+
+def test_the_mock_can_express_a_mask_because_until_stage_8_it_could_not() -> None:
+    """A fake that cannot produce a behaviour the real resource has makes every test that uses it
+    silent about that behaviour. 359 tests passed with the mask branch unreachable."""
+    mock = MockGuardrailClient(
+        output_rules=(
+            MockGuardrailRule(
+                pattern=r"CLM-\d{4}-\d{5}-\d",
+                reason="regex:claim_number",
+                is_regex=True,
+                action="MASK",
+                replacement="{claim_number}",
+            ),
+        )
+    )
+    result = mock.apply_guardrail("OUTPUT", "Your claim number is CLM-2608-00042-4.")
+    assert result.blocked is False
+    assert result.masked is True
+    assert result.output_text == "Your claim number is {claim_number}."

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,22 @@ def to_dict(report: TierAReport) -> dict[str, Any]:
         "turn_count": report.turn_count,
         "category_counts": report.category_counts,
         "mandatory_escalation_count": report.mandatory_escalation_count,
+        # CF6(a): a baseline that does not say what it was measured under cannot be compared
+        # against. Tier A makes no model call at all, and saying so explicitly is more useful
+        # than omitting the fields -- "n/a, deterministic" is the reason this tier can be a CI
+        # gate in the first place, and it is exactly what a future reader needs to know before
+        # trusting a six-month-old number.
+        "provenance": {
+            "produced_utc": datetime.now(UTC).isoformat(),
+            "tier": "A",
+            "model_id": "n/a - Tier A makes no model calls",
+            "temperature": "n/a - no sampling",
+            "k": 1,
+            "k_note": "deterministic; one pass is the whole distribution",
+            "retrieval_fixture_model_id": (
+                report.retrieval.model_id if report.retrieval is not None else None
+            ),
+        },
     }
 
 

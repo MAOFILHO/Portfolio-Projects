@@ -11,6 +11,8 @@ everything is worthless, and only a real negative can establish that this one do
 
 from __future__ import annotations
 
+import pytest
+
 from evals.response_checks import check_response, extract_quantities, load_fixture
 
 STAGE8_BAD = "rental_redundant_stage8_20260811.txt"
@@ -86,3 +88,37 @@ def test_currency_restatement_across_sentences_is_caught() -> None:
     result = check_response("You have $400 left on the rental. That is $400 of remaining benefit.")
     assert result.is_redundant
     assert "$400" in {f.quantity for f in result.redundancies}
+
+
+# --------------------------------------------------------------------------------------------------
+# The GATE, promoted from TARGET at Phase 7 Stage 8.
+# --------------------------------------------------------------------------------------------------
+
+
+def test_the_gate_fires_on_the_committed_real_defective_output() -> None:
+    from evals.response_checks import check_response, load_fixture, redundancy_gate_failures
+
+    failures = redundancy_gate_failures(
+        [check_response(load_fixture("rental_redundant_stage8_20260811.txt"))]
+    )
+    assert len(failures) == 1
+    assert "8 day" in failures[0]
+
+
+def test_the_gate_passes_a_clean_answer() -> None:
+    from evals.response_checks import check_response, redundancy_gate_failures
+
+    assert redundancy_gate_failures([check_response("You have 8 days and $400 left.")]) == []
+
+
+def test_the_gate_refuses_to_report_a_pass_when_the_detector_has_stopped_detecting(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """A gate that returns "no failures" from a broken detector is green forever, and `RESULTS.md`
+    §3.5 is a list of guards with exactly that shape. This one self-checks against the committed real
+    defective outputs on every call and raises rather than passing vacuously."""
+    import evals.response_checks as module
+
+    monkeypatch.setattr(module, "find_redundancies", lambda text: [])
+    with pytest.raises(module.GateSelfCheckError):
+        module.redundancy_gate_failures([])

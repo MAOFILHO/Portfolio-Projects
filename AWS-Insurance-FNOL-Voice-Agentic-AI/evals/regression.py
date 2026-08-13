@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -86,8 +87,45 @@ def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[Regressio
     return regressions
 
 
+# `CF6`(a): the maximum age a committed baseline may have before the gate refuses to compare against
+# it. Generous, because Tier A is deterministic and offline -- nothing in it can drift underneath a
+# stored number -- and the point of the check is to stop a stale baseline outliving the system it
+# describes, not to force a weekly ritual. `CF6`(b)'s same-run control is what actually handles
+# serving-side drift, and it is Phase 10's to build.
+MAX_BASELINE_AGE_DAYS = 90
+
+
+class BaselineProvenanceError(RuntimeError):
+    """A committed baseline is unusable as a comparison target."""
+
+
 def load_baseline(path: Path = BASELINE_PATH) -> dict[str, Any]:
+    """Loads the committed baseline and refuses to hand back one that cannot be compared against.
+
+    `CF6`(a): *"a baseline that does not say what it was measured under cannot be compared against"*,
+    and *"the gate fails on a baseline older than a stated max age rather than silently comparing
+    against it"*. Both halves are enforced here rather than documented, because a provenance rule that
+    lives only in prose is satisfied by whoever remembers it.
+    """
     data: dict[str, Any] = json.loads(path.read_text())
+    provenance = data.get("provenance")
+    if not isinstance(provenance, dict):
+        raise BaselineProvenanceError(
+            f"{path} has no `provenance` block. CF6(a) requires the date, model ID, temperature and k "
+            "a baseline was produced at; without them the comparison cannot say what it is comparing."
+        )
+    missing = [k for k in ("produced_utc", "model_id", "temperature", "k") if k not in provenance]
+    if missing:
+        raise BaselineProvenanceError(f"{path}: provenance is missing {missing}. See CF6(a).")
+
+    produced = datetime.fromisoformat(str(provenance["produced_utc"]))
+    age_days = (datetime.now(UTC) - produced).days
+    if age_days > MAX_BASELINE_AGE_DAYS:
+        raise BaselineProvenanceError(
+            f"{path} was produced {age_days} days ago, over the {MAX_BASELINE_AGE_DAYS}-day maximum. "
+            "Re-run `make eval --json-out` and commit the new baseline. Comparing against it silently "
+            "is how a real regression hides inside drift (CF6, D31)."
+        )
     return data
 
 

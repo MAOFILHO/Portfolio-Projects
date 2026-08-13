@@ -35,6 +35,7 @@ the two problems.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -163,3 +164,50 @@ def check_response(text: str) -> ResponseCheckResult:
 
 def load_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text().strip()
+
+
+# --------------------------------------------------------------------------------------------------
+# The redundancy GATE — promoted from TARGET at Phase 7 Stage 8, as settled at Phase 6 approval.
+# --------------------------------------------------------------------------------------------------
+
+# The two committed real defective outputs. A gate whose only evidence is a passing live run has never
+# been shown to fail, so the promotion is contingent on the detector still being red on these -- and
+# the contingency is enforced here rather than asserted, by making `redundancy_gate_failures` check
+# them on every call. `tests/unit/test_response_checks.py` covers the same fixtures; this is the check
+# the gate itself performs, so a gate invoked outside pytest still cannot pass vacuously.
+KNOWN_BAD_REDUNDANT_FIXTURES = (
+    "rental_redundant_stage8_20260811.txt",
+    "rental_redundant_phase4_20260811.txt",
+)
+
+
+class GateSelfCheckError(RuntimeError):
+    """The redundancy detector no longer fires on a committed real defective output."""
+
+
+def redundancy_gate_failures(results: Iterable[ResponseCheckResult]) -> list[str]:
+    """GATE breaches, as human-readable strings. Empty list = the gate passed.
+
+    `SUCCESS-METRICS.md`'s framing: a redundant answer is a defect on a voice call, where every extra
+    sentence is dead time against the 1,800 ms turn budget and the caller has already been told.
+
+    **The gate self-checks before it judges anything.** If `find_redundancies` has stopped firing on the
+    committed known-bad output, the gate raises instead of returning an empty list -- because "no
+    failures" from a detector that cannot detect is the single cheapest way for this check to go green
+    forever, and `RESULTS.md` §3.5 is a list of guards that had exactly that shape.
+    """
+    for name in KNOWN_BAD_REDUNDANT_FIXTURES:
+        if not find_redundancies(load_fixture(name)):
+            raise GateSelfCheckError(
+                f"the redundancy detector no longer fires on {name}, a committed real defective "
+                "output. The gate refuses to report a pass it cannot have earned."
+            )
+
+    failures: list[str] = []
+    for index, result in enumerate(results):
+        for finding in result.redundancies:
+            failures.append(
+                f"GATE: response {index} restates {finding.quantity!r} across sentences "
+                f"{list(finding.sentence_indices)}: {list(finding.sentences)}"
+            )
+    return failures
