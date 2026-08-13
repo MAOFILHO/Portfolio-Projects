@@ -72,6 +72,10 @@ Three **separate** authorisations, kept separate in this log because Marco grant
 | 2026-08-12 | 0 | **Guardrail stack migrated off local state**, `terraform init -migrate-state`. Verified by a **no-change plan** against the migrated state, not by init reporting success. Phase 7's knowingly-taken debt, paid. Criterion 10 | Yes | — | **$0.00** | A |
 | 2026-08-12 | 0 | **Cost attribution audit.** ~10 `ce:GetCostAndUsage` / `ce:ListCostAllocationTags` requests establishing the Canada DID rate, the credit-offset finding, and the per-line-item tag propagation table. `docs/phase8/COST-ATTRIBUTION-AUDIT.md` | Yes | ~10 CE requests | **≈$0.10** — the Cost Explorer API bills **$0.01/request**; see below | A |
 
+| 2026-08-12 | 0.5 | **Application inference profiles created** — `infra/terraform/stacks/inference`, 4 profiles (`router`, `generation`, `judge`, `embedding`), `ADR-016`. Open decision A, approved by Marco. Routing/tagging records, not capacity | Yes | 4 resources | **$0.00 at rest** | A |
+| 2026-08-12 | 0.5 | **One real `Converse` through the `router` profile ARN** — the check that the ARN is a working invocation path and not merely a well-formed resource. `us.amazon.nova-micro-v1:0` via `application-inference-profile/e55shbc6xaks` | Yes | 7 in / 2 out | **$0.00000053** | Bedrock standing cap |
+| 2026-08-12 | 0.5 | **`GetInferenceProfile` region-set verification**, Marco's condition on `ADR-016`. Control-plane reads, no model calls. All three cross-region wrappers report `us-east-1, us-east-2, us-west-2` — the region set is inherited, not collapsed | Yes | control plane | **$0.00** | — |
+
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that
 *looking* at spend is free: an automated poller over Cost Explorer would be a genuinely stupid way to
@@ -97,15 +101,53 @@ design, and at 7.3% of the monthly ceiling it is the single largest committed li
 figure in this log is a *gross* estimate and should stay that way; the credit balance is an unknown
 buffer with no public API, not a budget.
 
-⚠ **`COSTS.md` and Cost Explorer disagree about this project's own Bedrock spend by roughly 300×, and it
-is not yet reconciled.** This log reports **≈$0.411** for Phases 3–7. Cost Explorer's gross for our usage
-types (`USW2-NovaMicro-*`, `USW2-NovaLite-*`, `USW2-TitanEmbeddingV2-*`) across all of August is
-**$0.00124**. Lag is a partial explanation at best — 2026-08-11 carries no Bedrock line at all. The
-alternatives are that this log's token-count arithmetic substantially over-estimates, or that guardrail
-units billed mostly as free units. Owner: Stage 5, once Cost Explorer settles. **Recorded as unreconciled
-rather than resolved in whichever direction is more comfortable** — it matters both ways, because a large
-over-estimate means every published "spend so far" in this project has been wrong and later phases have
-been reasoning under a constraint that was never real.
+### ✅ The Bedrock discrepancy, resolved 2026-08-12 by a third instrument
+
+Marco: *"If our own logged token counts are right, one known call's cost is arithmetic — the question is
+whether CE is missing data or the log is inventing it."* Exactly the right cut, and it did not need a new
+call. **CloudWatch `AWS/Bedrock` publishes `InputTokenCount` / `OutputTokenCount` / `Invocations` per
+`ModelId`, free, immediately, and counted by AWS rather than by us.** August, `us-west-2`:
+
+| Model | Invocations | Input tok | Output tok | Cost at our rates |
+|---|---|---|---|---|
+| `us.amazon.nova-micro-v1:0` | 14,642 | 12,692,659 | 490,588 | $0.51293 |
+| `us.amazon.nova-lite-v1:0` | 110 | 63,159 | 2,680 | $0.00443 |
+| `amazon.titan-embed-text-v2:0` | 65 | 14,391 | — | $0.00029 |
+| `us.anthropic.claude-haiku-4-5` | 10 | 3,571 | 837 | $0.00776 |
+| **Total** | | | | **$0.52540** |
+
+| Instrument | Figure | Verdict |
+|---|---|---|
+| This log (self-reported) | ≈$0.411 | **under-reports by 22%** |
+| CloudWatch (AWS's count) | **$0.52540** | the reference |
+| Cost Explorer | $0.00124 | **0.24% of actual — CE is missing data** |
+
+**Cost Explorer is missing the data; the log is not inventing it.** Almost all of this project's Bedrock
+usage landed on 2026-08-12, inside Cost Explorer's 24–48h settling window. The service was answering
+honestly about a period it had not finished ingesting.
+
+⚠ **And the direction is the opposite of what §6.2 of the audit guessed.** That section listed
+"`COSTS.md` over-estimates" as the plausible candidate and reasoned that 11.4M Nova Micro input tokens
+were implausible for this project's volume. **The real figure is 12.7M.** The estimate was not too high;
+the volume was larger than assumed, and the log is 22% *low*. Recorded rather than quietly amended,
+because the wrong guess and the reasoning behind it are the interesting part: the arithmetic was checked
+against an intuition about volume, and the intuition was the weaker of the two.
+
+**Corrected standing-cap position: ≈$0.525 of $5.00 consumed, not ≈$0.411.** Still comfortable. Every
+per-run row above stays as written — they are what each run measured — but the phase totals derived from
+them are floors, not totals.
+
+The residual 22% is unattributed and is a real gap in this log. 14,642 Nova Micro invocations is more than
+the itemised rows account for. Candidates: the ablation ladder's true call count (logged by dollar value,
+not by call count), the aborted Stage 0.5 run (~250 calls, credited at ≈$0.0013), Phase 5's uninstrumented
+first pass, and retries. Not chased further, because the reconciliation instrument now exists.
+
+🔑 **The instrument lesson, which outlives the number.** This log is written by the code that makes the
+calls — an instrument reporting on itself, which is `RESULTS.md` §3.10's failure shape applied to
+accounting. CloudWatch has been counting the same calls independently, for free, all along, and nothing in
+Phases 3–7 ever looked. **Criterion 13's per-run logging should be reconciled against
+`AWS/Bedrock` token metrics from here on** — it costs nothing, it needs no code, and it is the only figure
+in this project's cost accounting that we do not produce ourselves.
 
 For context on the tag filter this phase depends on: the sibling fine-tuning project's
 `USW2-Llama3-3-70B-Customization-Training` cost **$0.84935** on 2026-08-10, which is **99.86%** of the

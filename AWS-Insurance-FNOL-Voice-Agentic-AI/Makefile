@@ -1,4 +1,4 @@
-.PHONY: ingest test lint format typecheck eval bootstrap verify-backend
+.PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -61,6 +61,18 @@ eval:
 # Run the unit test suite. No AWS credentials required — moto covers every AWS call in tests.
 test:
 	$(VENV)/python -m pytest tests/unit -v
+
+# Constraint 17's property, asserted against the live resource rather than against the plan that
+# created it. `ADR-016` wraps each `us.*` SYSTEM-DEFINED profile in an APPLICATION profile so Bedrock
+# spend can carry a cost allocation tag; the risk Marco named on approving it is that the wrapper
+# collapses the region set -- "exactly the shape where an assumption could hold in the docs and not in
+# the response metadata."
+#
+# So this reads `GetInferenceProfile` from the API, not Terraform state, and fails if any of the three
+# cross-region profiles reports fewer than 3 regions. `embedding` is expected to report 1: Titan has no
+# us.* profile to inherit from, which is a documented single-region wrap and not a regression.
+verify-inference:
+	@$(VENV)/python scripts/verify_inference_profiles.py
 
 # ruff + black --check
 # Everything that is checked. `evals` and `scripts` were outside this list until Phase 7

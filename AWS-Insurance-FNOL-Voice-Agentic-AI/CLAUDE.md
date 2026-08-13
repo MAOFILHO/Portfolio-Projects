@@ -78,6 +78,16 @@ Connect, Lex V2, Lambda, DynamoDB, S3 and Step Functions all live in **us-west-2
 not stylistic: `amazon.nova-micro-v1:0` supports only `INFERENCE_PROFILE`. Region is a Terraform variable
 and must never appear as a literal in application code; a region migration must be a tfvars change, not a refactor.
 
+**Amended by `ADR-016` (Phase 8, Marco-approved).** Bedrock is now invoked through **application inference
+profiles that wrap those `us.*` system profiles** — `infra/terraform/stacks/inference`. This is an
+amendment to the *wording*, not the rule: `model_source.copy_from` is the `us.*` profile, so the
+three-region set (`us-east-1`, `us-east-2`, `us-west-2`) is **inherited, and verified against
+`GetInferenceProfile` by `make verify-inference`**, not assumed. Both clauses survive — no hardcoded
+regional model ID, no regional pinning. The reason for the change is that system profiles carry no tags,
+so Bedrock spend was unattributable and the tag-filtered budget alarm could not see it. `settings.py`
+keeps the `us.*` literal as the **default**, with the ARN supplied by environment variable, so nothing
+in the local/simulator/test path depends on provisioned infrastructure.
+
 ### Recording stays off (constraint 18)
 No contact flow may enable call or screen recording. In the modern (2019-10-30) flow schema there is **no
 `RecordingBehaviorOption`** — recording state is purely the participants array:
