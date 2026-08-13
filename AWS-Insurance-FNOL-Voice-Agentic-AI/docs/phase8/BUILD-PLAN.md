@@ -1,7 +1,15 @@
 # Phase 8 — Telephony and infrastructure as code
 
-**Status: PROPOSED. Nothing in this document has been executed.** No Terraform runs, no resource is
-created, and no stage begins until Marco types `APPROVED: Phase 8`.
+**Status: APPROVED 2026-08-12.** Marco typed `APPROVED: Phase 8`. Three separate authorisations were
+granted, and they are separate on purpose — see §3.
+
+1. **Provisioned resources**, under **$2**.
+2. **A real-call allowance: 20 calls, ≈$4**, as a line distinct from the Bedrock standing cap. Marco's
+   words: *"different resource class, different authorization."* The simulator stays the default path and
+   every real call is logged in `COSTS.md`.
+3. **The Stage 2 `AWS::Lex::Bot` POC**, with two conditions attached: it gets **its own line in
+   `COSTS.md`**, and it is **destroyed when the gate passes or fails** — *"it has no purpose after
+   `ADR-007` resolves."*
 
 ## STOP CONDITIONS — restated verbatim
 
@@ -44,7 +52,27 @@ and it is not recoverable by re-running anything.
 
 ## 2. Stages
 
-### Stage 0 — `make bootstrap` and the state backend
+### Stage 0 — `make bootstrap`, the state backend, and the cost allocation tag ✅ **DONE 2026-08-12**
+
+Delivered: `Project` tag activated · `infra/terraform/bootstrap` applied (6 resources, $0.00) · guardrail
+stack migrated to the remote backend and verified by a **no-change plan** · `make bootstrap` and
+`make verify-backend` · `.terraform.lock.hcl` un-ignored · **`docs/phase8/COST-ATTRIBUTION-AUDIT.md`**.
+
+The audit changed four things downstream, listed here because they are dependencies, not observations:
+
+| Finding | Lands in |
+|---|---|
+| Connect voice needs **contact tags** set in the flow — instance tags are TBAC and attribute nothing | **Stage 3** |
+| Bedrock on-demand is **unattributable** through a system-defined `us.*` profile; needs an application inference profile, which needs an ADR against constraint 17's literal wording | **Stage 5, ask first** |
+| `aws:connect:instanceId` is the robust filter and **cannot be activated until contacts exist** — so criterion 9 is gated behind criterion 1, then 24h | **Stage 5** |
+| The account is on credits offsetting 100% of usage; the budget must set `IncludeCredit: false` or it can never fire | **Stage 5** |
+
+
+**First action of the phase, before any bucket: activate the `Project` cost allocation tag.** It takes up
+to 24h to appear in billing data, so everything downstream of it is blocked on starting it early. And per
+Marco's condition on criterion 9, activation is not the deliverable — **propagation is**. A tag key can be
+activated while no resource in the account actually carries it, in which case the filtered alarm matches
+nothing, reports $0 forever, and is indistinguishable from a project that is under budget.
 
 S3 bucket (versioned, SSE-S3, public access blocked) plus native S3 state locking. **No DynamoDB lock
 table** — Terraform ≥1.10 supports `use_lockfile`, and a lock table is a billable resource this project
@@ -143,7 +171,7 @@ AWS sources, not from memory. Two figures moved and are corrected in `CLAUDE.md`
 |---|---|---|---|---|
 | S3 state bucket + native locking | Standard, versioned | 5 GB (account-age-independent) | **$0.00** | ~$0.00 — kilobytes |
 | Connect instance | pre-existing, **Customer Basic** | n/a | **$0.00 at rest** | $0.00 — no idle charge |
-| **Canada DID** `+14169871547` | claimed-number daily rate | none | ⚠ **UNCONFIRMED** — see below | **survives `make destroy` by design** |
+| **Canada DID** `+14169871547` | `USW2-CA-did-numbers` | none | **$1.83/mo — MEASURED 2026-08-12**, $0.06/day on two independent days | **survives `make destroy` by design** |
 | Connect voice service | **Customer Basic, $0.015/min** first 5M min/mo | none | ~$0.06 at 20 demo calls × 4 min | $0.00 — usage only |
 | Canada inbound telephony | per-minute, on top of the above | none | ⚠ unconfirmed, ~$0.01/call order | $0.00 |
 | Lex V2 speech | $0.004 / speech request | **none — no perpetual free tier** | ~$0.64 at 20 calls × 8 turns | $0.00 |
@@ -157,12 +185,18 @@ AWS sources, not from memory. Two figures moved and are corrected in `CLAUDE.md`
 **Estimated Phase 8 total: under $2**, dominated by Lex speech requests on real calls, which is why the
 simulator stays the default path.
 
-⚠ **The Canada DID rate is still unconfirmed, and I now know why rather than assuming.** The Global
-Telephony table does not render into fetchable text and the Phase 0 appendix URL 404s. **Cost Explorer
-shows no `Amazon Connect` line at all** as of 2026-08-12 — the DID was claimed on 2026-08-11 and nothing
-has posted. The plan is unchanged (read it from Cost Explorer) but the timing is now known: it needs a
-full billing period, so it resolves during Phase 8 rather than before it. It is the only always-on cost in
-the project and it is a per-day charge that has already started.
+✅ **The Canada DID rate is resolved, and the reason it took eight phases is instructive.** It is
+**$0.06/day = $1.83/month** — twice the US rate, 7.3% of the ceiling, permanent, and the project's only
+always-on cost.
+
+Every previous attempt failed for the same reason, and the reason was not lag. The charge is filed under
+**`Contact Center Telecommunications (service sold by AMCS, LLC)`** — a separate seller — and not under
+Amazon Connect. The observation *"Cost Explorer shows no Amazon Connect line at all"* was true; the
+inference that nothing had posted was wrong. Waiting for a full billing period would have produced exactly
+the same empty result in September. **A $0.00 reading and an absent line item are indistinguishable in a
+grouped cost report, and only one of them means "no spend."**
+
+The **per-minute inbound** rate is still unmeasured and needs a real call — it resolves with criterion 1.
 
 **Two spend requests, both needing an explicit word:**
 
@@ -189,10 +223,11 @@ Phase 7 criterion 16 is the precedent for the second option, and it is a real op
 | 6 | **Zero portal clicks beyond the four already recorded** in `MANUAL-STEPS.md`. Any fifth is added there with its justification, or the phase does not close |
 | 7 | **The recording CI check is red on a deliberately bad flow** and green on the shipped ones. Globbing is **by content**, proven against an extensionless file |
 | 8 | **`ADR-007`'s POC gate discharged**: a prompt change applied twice, verified to have actually taken effect. If it did not, an ADR supersedes `ADR-007` and says what replaced it |
-| 9 | **Budget alarm is tag-filtered** and demonstrated to ignore the sibling project's spend |
+| 9 | **Budget alarm is tag-filtered and proven with two probes in opposite directions**, each with a value known in advance: it must **include** a known non-zero quantity of *our* spend (the DID's $0.06/day, which accrues on its own) and **exclude** a known non-zero quantity of the sibling's (the $0.84935 Llama training run of 2026-08-10). One probe cannot distinguish a working filter from one that matches nothing — "ignores the sibling" is satisfied perfectly by a filter that ignores everybody. Also: **`IncludeCredit: false`**, per §6.1 of the audit. Marco, granting the approval: *"A tag-filtered alarm that silently matches nothing is the same failure shape as the fingerprint that hashed three files."* See `COST-ATTRIBUTION-AUDIT.md` |
+| 15 | **The Stage 2 Lex POC is destroyed once `ADR-007` resolves, pass or fail**, and its own `COSTS.md` line shows the teardown. Marco's condition on approving it separately: *"it has no purpose after `ADR-007` resolves"* |
 | 10 | The guardrail stack is on the **remote backend**, and `RESULTS.md`/`PROJECT_STATE.md` record the migration |
 | 11 | **`D43` is fixed** — a blocked turn either performs a real transfer or stops promising one |
-| 12 | **`C1` re-verified on the deployed system** if anything in `_FINGERPRINT_SOURCES` moved. Phase 7's finding is that a defensible per-component change can move the composition; a Lambda wrapper around the graph is exactly such a change |
+| 12 | **`C1` re-verified on the deployed system** if anything in `_FINGERPRINT_SOURCES` moved. Phase 7's finding is that a defensible per-component change can move the composition; a Lambda wrapper around the graph is exactly such a change. **The reasoning for skipping this will be "the graph is unchanged, only its wrapper is new." That sentence is verbatim the argument Stage 8 rejected and §3.9 documented. If discharging this criterion feels unnecessary when you reach it, that feeling is the finding — proceed anyway.** (Marco, on granting `APPROVED: Phase 8`) |
 | 13 | Spend inside the approved gate, **every run logged in `COSTS.md` at the time it runs.** Phase 7 failed this one and recorded it as failed; Phase 8 does not get to fail it the same way twice |
 | 14 | `PROJECT_STATE.md` updated, `/compact` after sign-off |
 
@@ -205,16 +240,16 @@ limitation stops being theoretical.
 
 **Criterion 12** is the one most likely to be skipped, because it will feel unnecessary — the graph is
 unchanged, only its wrapper is new. That is verbatim the reasoning Phase 7 rejected at Stage 8, one section
-after documenting why it was wrong.
+after documenting why it was wrong. On Marco's instruction that reasoning now lives **inside the criterion
+text**, not only here, so it cannot be lost by reading the table alone.
 
 ---
 
-## 5. Open questions needing Marco's word before Stage 0
+## 5. Open questions — resolved 2026-08-12
 
-1. **Real-call allowance** — 20 calls / ≈$4, or a different number?
-2. **`/Users/marco/K21/Real-world/.github/workflows/`** is a Phase 10 write outside `PROJECT_ROOT` and is
-   **not** pre-approved. It is not needed in Phase 8; flagged so it is not stumbled into.
-3. **Does the Lex bot's `AWS::Lex::Bot` POC (Stage 2) get its own approval?** It creates a real Lex bot —
-   billable only per request, $0 at rest — and would be covered by `APPROVED: Phase 8`. Raising it because
-   it is a resource created *to test whether we can create resources*, which is an odd thing to fold silently
-   into a general approval.
+1. **Real-call allowance** — ✅ **20 calls / ≈$4, approved as a separate line** from the Bedrock cap.
+2. **`/Users/marco/K21/Real-world/.github/workflows/`** — still a Phase 10 write outside `PROJECT_ROOT`,
+   still **not** pre-approved, not needed in Phase 8. Flagged so it is not stumbled into.
+3. **The `AWS::Lex::Bot` POC** — ✅ **approved, and separately.** Marco: *"A resource created to test
+   whether we can create resources is exactly the thing that gets folded in silently and then never
+   accounted for."* Conditions: its own `COSTS.md` line, and destroyed once the gate resolves either way.

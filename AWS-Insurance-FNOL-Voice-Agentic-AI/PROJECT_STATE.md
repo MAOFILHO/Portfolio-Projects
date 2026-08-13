@@ -2241,7 +2241,7 @@ prevents it being remembered as an optimisation.
 
 ---
 
-## Phase 8 — PROPOSED, awaiting `APPROVED: Phase 8`
+## Phase 8 — APPROVED 2026-08-12, IN PROGRESS (Stage 0 complete)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -2249,16 +2249,89 @@ telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory 
 relying further on the nested-CFN shape); `stacks/main`; the Lex codehook Lambda (`src/fnol_voice_agent/api/`
 does not exist yet); and cost controls on day one.
 
-**14 exit criteria**, headed by *a real inbound call to `+14169871547` reaches the agent and completes a
-turn* — nothing else on the list substitutes for it. Estimated under $2 in provisioned/usage cost, plus a
-separate request for a **20-call ≈$4 real-call allowance**, since telephony is not covered by the Phases
-3–7 Bedrock standing cap.
+**15 exit criteria**, headed by *a real inbound call to `+14169871547` reaches the agent and completes a
+turn* — nothing else on the list substitutes for it.
 
-**One finding already banked from the scoping:** the account is shared with the sibling fine-tuning
-project — Cost Explorer shows `USW2-Llama3-3-70B-Customization-Training` on 2026-08-10 — so an
-account-wide $25 budget alarm would fire on a neighbour's spend and be disabled within a week. The alarm
-must be **tag-filtered**, which means activating the cost allocation tag in Stage 0 rather than Stage 5,
-because it takes up to 24h to appear.
+### Three separate authorisations, kept separate
 
-**Three open questions for Marco** are listed in §5 of that plan; the real-call allowance is the only one
-that blocks Stage 0.
+1. **Provisioned resources, under $2.**
+2. **20 real calls, ≈$4** — a distinct line from the Phases 3–7 Bedrock cap. Marco: *"different resource
+   class, different authorization."*
+3. **The Stage 2 `AWS::Lex::Bot` POC**, approved separately, with its own `COSTS.md` line and **destroyed
+   once the gate resolves either way**. Marco: *"A resource created to test whether we can create
+   resources is exactly the thing that gets folded in silently and then never accounted for."*
+
+Marco also required that criterion 12's reasoning live **inside the criterion text**, not only in the
+plan's commentary: *"'the graph is unchanged, only its wrapper is new' is verbatim the argument Stage 8
+rejected and §3.9 documented. If it feels unnecessary when you reach it, that feeling is the finding."*
+Done.
+
+### Stage 0 — complete 2026-08-12
+
+| Deliverable | State |
+|---|---|
+| `Project` cost allocation tag | **Active**. `ce update-cost-allocation-tags-status`, no portal click. Not retroactive; up to 24h to appear |
+| `infra/terraform/bootstrap` | Applied. Versioned, SSE-S3, public-access-blocked, TLS-only S3 bucket with native `use_lockfile` locking and **no DynamoDB lock table**. `prevent_destroy`; not reached by `make destroy` |
+| Guardrail stack on remote state | **Migrated.** Verified by a **no-change plan against the migrated state**, not by `init` reporting success. Criterion 10 discharged |
+| `make bootstrap`, `make verify-backend` | Added. `verify-backend` proven by negative control — it was made to fail on a deliberately wrong bucket name before being trusted |
+| `.terraform.lock.hcl` | **Un-ignored.** It was gitignored, which made criterion 5's "rebuilds from clean in one command" unreproducible: `~> 6.0` lets a rebuild resolve a different 6.x than every result in this project was produced against |
+| `docs/phase8/COST-ATTRIBUTION-AUDIT.md` | New. The Stage 0 finding of record |
+
+### D33 — activating a cost allocation tag is not the same as attributing a cost
+
+Marco made propagation a condition of the approval: *"A tag-filtered alarm that silently matches nothing
+is the same failure shape as the fingerprint that hashed three files."* The audit found exactly that, in
+the two largest cost sources in the project:
+
+- **Connect voice does not carry resource tags at all.** Bills are *"summarized at the AWS account level
+  by usage type"*; attribution requires **contact tags** set per call from a flow block. Instance tags —
+  the obvious move, one API call, and afterwards every check passes — are documented as *tag-based access
+  control* and attribute nothing. **Stage 3 dependency that did not previously exist.**
+- **Bedrock on-demand through a system-defined `us.*` profile is unattributable.** Only **application
+  inference profiles** carry cost allocation tags. One can wrap the `us.*` profile, preserving constraint
+  17's routing while changing the literal identifier passed at call time — which is an ADR, so it is
+  **open decision A, to ask before doing**.
+- `aws:connect:instanceId` would be the robust filter, but **the key does not exist until contacts do**.
+  Criterion 9 is therefore gated behind criterion 1 plus 24h. Any plan ordering that assumed otherwise
+  was wrong.
+
+Criterion 9 was rewritten around **two probes in opposite directions**, each with a value known in
+advance, because "ignores the sibling project" is satisfied perfectly by a filter that ignores everyone.
+
+### D34 — this account is on credits, and `CLAUDE.md` said the opposite
+
+`CLAUDE.md` stated **"Assume no promotional credits on this account."** Wrong, and wrong in the direction
+that disables the control: grouping by `RECORD_TYPE` gives usage/credit of $12.44/−$12.44 (June),
+$0.43/−$0.43 (July), $2.60/−$2.60 (August MTD). **Net August cost is −$0.0000005646.**
+
+A $25 AWS Budget with default settings on this account **can never fire** — not because spending is
+controlled but because the number it watches is pinned near zero by credits that will one day run out.
+The budget must set `IncludeCredit: false` / `IncludeRefund: false` and manage against **gross** usage.
+There is no public API for the remaining balance, so the credits are an unknown buffer, not a budget.
+Corrected in `CLAUDE.md`.
+
+### D35 — the Canada DID rate, resolved after eight phases
+
+**$0.06/day = $1.83/month**, twice the US rate, 7.3% of the ceiling, permanent, and the project's only
+always-on cost. Measured on two independent days rather than divided from one.
+
+It went unfound for eight phases because the charge is filed under **`Contact Center Telecommunications
+(service sold by AMCS, LLC)`**, not under Amazon Connect. Phase 7 recorded *"Cost Explorer showed no
+Amazon Connect line at all"* and inferred that nothing had posted; the observation was true and the
+inference was wrong. Waiting for a full billing period would have returned the same empty result in
+September. **A $0.00 reading and an absent line item look identical in a grouped cost report.**
+
+### Open, carried into later stages
+
+| # | Item | Owner |
+|---|---|---|
+| A | Application inference profile for Bedrock attribution — **needs Marco's word**, ADR against constraint 17's wording | Stage 5 |
+| B | `Contact tags` block in the flow, ≤6 tags, **no PII** (AWS states this explicitly, and FNOL contacts carry claim and policy numbers) | Stage 3 |
+| C | Activate `aws:connect:instanceId` after the first real call, then wait 24h | Stage 5 |
+| D | Budget `IncludeCredit: false` | Stage 5 |
+| E | Tag the Lex bot **alias**, not only the bot | Stage 2 |
+| F | **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
+| G | Verify the AMCS-sold DID line carries the tag once data accrues | 2026-08-13 |
+
+The Cost Explorer API itself bills **$0.01/request** — trivial, but it inverts the assumption that looking
+at spend is free, and is recorded in `CLAUDE.md` so nobody writes a poller.

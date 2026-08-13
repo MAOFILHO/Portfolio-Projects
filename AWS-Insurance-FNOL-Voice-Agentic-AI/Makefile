@@ -1,4 +1,4 @@
-.PHONY: ingest test lint format typecheck eval
+.PHONY: ingest test lint format typecheck eval bootstrap verify-backend
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -6,6 +6,41 @@
 # actually does (CLAUDE.md's own rule, applied to this file too).
 
 VENV := .venv/bin
+BOOTSTRAP_DIR := infra/terraform/bootstrap
+
+# One-time state backend setup: a versioned, encrypted, public-access-blocked S3 bucket, with native S3
+# state locking (Terraform >= 1.10 `use_lockfile`) rather than a billable DynamoDB lock table.
+#
+# Idempotent -- re-running it on an existing backend is a no-op plan. NOT reached by `make destroy`, and
+# the bucket carries `prevent_destroy`: a backend that can delete itself takes every other stack's state
+# with it, including stacks/telephony, whose state points at a number that cannot be re-claimed for 180
+# days.
+#
+# Cost: $0.00/mo. State objects are kilobytes against a 5 GB account-age-independent free allowance.
+bootstrap:
+	cd $(BOOTSTRAP_DIR) && terraform init -input=false && terraform apply -input=false
+	@$(MAKE) --no-print-directory verify-backend
+
+# A `backend "s3"` block cannot interpolate variables, so every stack repeats the bucket name as a
+# literal. This target is what turns that duplication from trusted into checked: it compares each
+# hardcoded name against the bootstrap stack's actual output and fails on any mismatch.
+#
+# The failure it exists to catch is quiet. A stack pointed at a bucket name that does not exist does not
+# silently misbehave -- but a stack pointed at a name that differs only by region suffix would init a
+# fresh, empty state and then plan to CREATE resources that already exist.
+verify-backend:
+	@expected=$$(cd $(BOOTSTRAP_DIR) && terraform output -raw state_bucket 2>/dev/null); \
+	if [ -z "$$expected" ]; then \
+		echo "verify-backend: no bootstrap output -- run 'make bootstrap' first"; exit 1; fi; \
+	echo "verify-backend: expecting bucket $$expected"; \
+	rc=0; \
+	for f in $$(grep -rlE '^[[:space:]]*backend "s3" \{' infra/terraform --include='*.tf'); do \
+		found=$$(awk '/^[[:space:]]*backend "s3" \{/,/^  }/' $$f | sed -n 's/.*bucket *= *"\([^"]*\)".*/\1/p'); \
+		if [ "$$found" != "$$expected" ]; then \
+			echo "  MISMATCH $$f: '$$found'"; rc=1; \
+		else echo "  ok       $$f"; fi; \
+	done; \
+	exit $$rc
 
 # Chunk + embed the policy corpus, load it into the vector store. Free by default: mock embeddings + a
 # local in-memory table (see src/fnol_voice_agent/knowledge/ingest.py's module docstring). Real Bedrock

@@ -8,7 +8,12 @@ credentials
 
 # Terraform
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl is deliberately NOT ignored. It was, until Phase 8 Stage 0, and that was a
+# reproducibility defect rather than a style choice: the provider constraint is `~> 6.0`, so a rebuild
+# without the lock file is free to resolve a different 6.x than the one every result in this project was
+# produced against. Phase 8 criterion 5 is "`make deploy` rebuilds everything destroyed, from clean, in
+# one command" -- "from clean" and "unpinned dependencies" cannot both be true. Terraform's own `init`
+# output says to commit it.
 *.tfstate
 *.tfstate.*
 *.tfplan

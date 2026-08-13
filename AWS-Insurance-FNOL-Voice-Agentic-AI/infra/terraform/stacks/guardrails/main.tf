@@ -6,11 +6,12 @@
  *   IaC, and `make redteam` measuring our own mock rule engine would be the "stubbed out and labelled
  *   production-would-do-X" failure the same document forbids outright.
  *
- * WHY LOCAL STATE, DELIBERATELY
- *   The remote state backend is Phase 8's `make bootstrap`. Marco approved local state here with
- *   migration in Phase 8 -- a routine, documented Terraform operation. Residual risk at its real size:
- *   lose the local state file and the guardrail is orphaned. It is a $0/mo orphan, findable by name
- *   (`fnol-voice-agent-guardrail`), and `scripts/verify_billable.py` looks for it.
+ * STATE -- MIGRATED TO THE REMOTE BACKEND, PHASE 8 STAGE 0 (2026-08-12)
+ *   Phase 7 ran this stack on local state as an explicitly approved, explicitly temporary debt. The
+ *   residual risk was stated at the time as "lose the local state file and the guardrail is orphaned --
+ *   a $0/mo orphan, findable by name (`fnol-voice-agent-guardrail`), and `scripts/verify_billable.py`
+ *   looks for it." That debt is now paid: state lives in the bucket created by `infra/terraform/
+ *   bootstrap`, versioned and locked. Phase 8 criterion 10.
  *
  * COST
  *   The guardrail RESOURCE is free at rest -- there is no hourly or monthly charge for its existence.
@@ -29,7 +30,9 @@
  */
 
 terraform {
-  required_version = ">= 1.9"
+  # 1.10 rather than the project-wide 1.9 floor, for the same reason as the bootstrap stack:
+  # `use_lockfile` does not exist before it, and silently running unlocked is worse than failing init.
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
@@ -38,8 +41,20 @@ terraform {
     }
   }
 
-  # Local state, Phase 7 only. Phase 8 migrates this to the remote backend created by `make bootstrap`.
-  # Recorded here rather than in a runbook so that whoever runs `terraform init` in Phase 8 sees it.
+  # A backend block cannot interpolate variables or locals -- these must be literals, which is why the
+  # bucket name is duplicated here rather than referenced. `terraform output -raw state_bucket` in
+  # infra/terraform/bootstrap is the authority; `make verify-backend` compares the two so the
+  # duplication is checked rather than trusted.
+  #
+  # `use_lockfile` is native S3 state locking (Terraform >= 1.10). It replaces the DynamoDB lock table,
+  # which was a billable resource this project has no use for at one operator.
+  backend "s3" {
+    bucket       = "fnol-voice-agent-tfstate-759316130780-us-west-2"
+    key          = "stacks/guardrails/terraform.tfstate"
+    region       = "us-west-2"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {

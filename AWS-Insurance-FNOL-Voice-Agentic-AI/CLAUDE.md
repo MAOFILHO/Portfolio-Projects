@@ -116,7 +116,8 @@ turns on it — several of these change monthly.
 | Cross-region inference profile surcharge | **None** — confirmed via AWS docs: "no additional cost associated with cross-region inference" for `us.*` profiles |
 | Lex V2 pricing | $0.004 / speech request · $0.00075 / text request · **no perpetual free tier** (re-confirmed 2026-08-11) |
 | Connect voice — **tier switch DONE 2026-08-11** | Instance is on **Amazon Connect Customer Basic**. Voice service **$0.015/min for the first 5M min/month** (tier 2: $0.0125/min) — re-verified 2026-08-12 against the Connect Customer pricing appendix, and this **corrects the earlier $0.018/min figure**. Telephony is billed separately on top. The AI-bundled **Amazon Connect Customer** tier ($0.038/min) was the default on our instance and was switched away from, because `ADR-001` deliberately does not use its bundled AI. Manual console step, Marco-approved, recorded in `docs/runbooks/MANUAL-STEPS.md` §4 |
-| **Canada DID rate — STILL UNCONFIRMED** | The per-day claim rate and per-minute inbound rate for `+14169871547` are **not resolvable from the pricing pages** — the Global Telephony table does not render into fetched text, and the Phase 0 appendix URL 404'd. Cost Explorer showed **no Amazon Connect line at all** as of 2026-08-12 (DID claimed 2026-08-11), so nothing has posted yet. **Read it from Cost Explorer once a full billing period has accrued** — that remains the plan, now with a confirmed reason rather than an assumption |
+| **Canada DID daily rate — CONFIRMED 2026-08-12** | **`USW2-CA-did-numbers` = $0.06/day = $1.83/month**, twice the US rate, 7.3% of the ceiling, permanent. Measured on two independent days (0.8388 days → $0.05033; 0.1667 days → $0.01000), not divided from one. **The charge is filed under `Contact Center Telecommunications (service sold by AMCS, LLC)`, not under Amazon Connect** — which is why every earlier search found nothing and would have kept finding nothing in September. A $0.00 reading and an absent line item look identical in a grouped cost report. The **per-minute inbound** rate is still unmeasured; it needs a real call. `docs/phase8/COST-ATTRIBUTION-AUDIT.md` §3 |
+| Cost Explorer API is **not free** | `ce:GetCostAndUsage` and friends bill **$0.01 per request**. Cheap, but the tool used to control cost is itself a cost line, and a polling loop over it would be a genuinely stupid way to breach a $25 budget. Batch queries; do not poll |
 | Guardrails | $0.15 / 1k text units (content filters, denied topics) · $0.10 / 1k (PII, contextual grounding) · **regex-based sensitive-information filters are FREE** (AWS pricing page, verbatim: *"Sensitive information filters (regular expression) - Free"*, re-verified 2026-08-12) · Automated Reasoning checks ~$0.17/unit, **exact unit unconfirmed** — re-verify before relying on this line |
 | Guardrail usage is **measurable, not estimable** | Every `ApplyGuardrail` response carries a `usage` block (`topicPolicyUnits`, `contentPolicyUnits`, `sensitiveInformationPolicyUnits`, `…FreeUnits`, …). `GuardrailResult.usage` captures it as of Phase 7 Stage 8, so guardrail rows in `COSTS.md` are exact from that point on. **Bedrock does not evaluate the sensitive-information policy on `source="INPUT"`** — verified live, that counter is always 0 on input |
 | Guardrails call model | `ApplyGuardrail` (and the newer, 2026 `InvokeGuardrailChecks`) run **decoupled from any model invocation** — callable anywhere in application control flow, not only bolted onto `Converse`/`InvokeModel`. Load-bearing fact for `ADR-010` |
@@ -126,7 +127,22 @@ turns on it — several of these change monthly.
 "$100 in credits immediately... up to $200 over 6 months"; a separate, account-age-independent "30+ services
 always free within monthly usage limits" layer persists (Lambda 1M req + 400k GB-s, DynamoDB 25 GB storage
 only — **not** free RCU/WCU in on-demand mode, Step Functions 4,000 transitions, CloudWatch/SNS basics).
-**Assume no promotional credits on this account.** S3 Vectors has no free tier.
+S3 Vectors has no free tier.
+
+🔴 **"Assume no promotional credits on this account" was WRONG — corrected 2026-08-12.** This account is on
+credits, and they currently offset **100%** of usage: grouping by `RECORD_TYPE` gives usage $12.44 / credit
+−$12.44 (June), $0.43 / −$0.43 (July), $2.60 / −$2.60 (August MTD). Net August cost is
+**−$0.0000005646**. Every default cost view on this account reads ~$0 while real money accrues.
+
+Two consequences, both binding:
+
+1. **Any AWS Budget must be configured `IncludeCredit: false` and `IncludeRefund: false`.** A $25 budget
+   with default settings on this account can never fire — not because spending is controlled, but because
+   the number it watches is pinned near zero by credits. When those credits run out, the same $25 becomes
+   reachable with no warning at all. This is the same silent-nothing failure as a tag filter that matches
+   nothing, one layer down.
+2. **Manage against gross usage** (`RECORD_TYPE = Usage`), never net. The remaining credit balance has **no
+   public API** — Billing console only — so it is an unknown buffer, not a budget.
 
 ⚠ **Telephony is the dominant marginal cost per conversation, ~$0.15–0.20 depending on which Connect tier
 applies (see above) — Bedrock is noise by comparison even before the Nova pricing correction, and more so

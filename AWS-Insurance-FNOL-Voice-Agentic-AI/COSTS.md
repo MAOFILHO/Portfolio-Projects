@@ -52,3 +52,61 @@ at Phase 7 sign-off rather than treated as covered by the standing approval — 
 preserved rather than blurred."* Guardrail rows in this log are tagged **[guardrail]** so the two kinds of
 spend stay separable. See `PROJECT_STATE.md`'s 2026-08-11 session log for what each phase's calls verified, including
 Stage 8's real-vs-fake divergence findings.
+
+---
+
+## Phase 8 — telephony and infrastructure as code
+
+Three **separate** authorisations, kept separate in this log because Marco granted them separately:
+
+| Line | Authorisation | Spent to date |
+|---|---|---|
+| **A. Provisioned resources** | `APPROVED: Phase 8`, **under $2** | **$0.00** |
+| **B. Real inbound calls** | **20 calls, ≈$4** — a distinct line from the Phases 3–7 Bedrock cap. Marco: *"different resource class, different authorization"* | **$0.00** — 0 of 20 calls used |
+| **C. `AWS::Lex::Bot` POC (Stage 2)** | Approved separately and on condition. Marco: *"A resource created to test whether we can create resources is exactly the thing that gets folded in silently and then never accounted for."* **Must be destroyed once the `ADR-007` gate resolves, pass or fail — it has no purpose after that** | **$0.00** — not yet created |
+
+| Date | Stage | What ran | Real AWS call? | Units | Est. cost | Line |
+|---|---|---|---|---|---|---|
+| 2026-08-12 | 0 | **`Project` cost allocation tag activated.** `ce update-cost-allocation-tags-status`. No portal click, no resource | Yes (control plane) | 1 request | **$0.00** | — |
+| 2026-08-12 | 0 | **State backend created.** `infra/terraform/bootstrap` — one S3 bucket + versioning, SSE-S3, public-access block, lifecycle, TLS-only policy. 6 resources. Deliberately **not** reached by `make destroy`, and `prevent_destroy` on the bucket | Yes | ~10 KB of objects | **$0.00** — kilobytes against a 5 GB account-age-independent allowance | A |
+| 2026-08-12 | 0 | **Guardrail stack migrated off local state**, `terraform init -migrate-state`. Verified by a **no-change plan** against the migrated state, not by init reporting success. Phase 7's knowingly-taken debt, paid. Criterion 10 | Yes | — | **$0.00** | A |
+| 2026-08-12 | 0 | **Cost attribution audit.** ~10 `ce:GetCostAndUsage` / `ce:ListCostAllocationTags` requests establishing the Canada DID rate, the credit-offset finding, and the per-line-item tag propagation table. `docs/phase8/COST-ATTRIBUTION-AUDIT.md` | Yes | ~10 CE requests | **≈$0.10** — the Cost Explorer API bills **$0.01/request**; see below | A |
+
+⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
+**$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that
+*looking* at spend is free: an automated poller over Cost Explorer would be a genuinely stupid way to
+breach the budget. The `AWS Cost Explorer` service line is already visible in this account's August usage
+at $0.0100. Batch the queries; do not poll.
+
+### The Canada DID, now measured rather than estimated
+
+**`USW2-CA-did-numbers` = $0.06/day = $1.83/month.** Filed under
+`Contact Center Telecommunications (service sold by AMCS, LLC)`, **not** under Amazon Connect — which is
+why Phase 0 through Phase 7 all searched for it and found nothing. Confirmed on two independent days
+(2026-08-11: 0.8388 days → $0.05033; 2026-08-12: 0.1667 days → $0.01000), so it is a measurement, not a
+division of one number by another.
+
+This is the project's **only always-on cost**, it started on 2026-08-11, it survives `make destroy` by
+design, and at 7.3% of the monthly ceiling it is the single largest committed line in the project. The
+**per-minute inbound** rate remains unmeasured and needs a real call to establish.
+
+### Standing corrections to earlier figures in this log
+
+🔴 **This account is on credits that currently offset 100% of usage**, contradicting `CLAUDE.md`'s
+"assume no promotional credits." August gross usage is $2.5955 and net is **−$0.0000005646**. Every
+figure in this log is a *gross* estimate and should stay that way; the credit balance is an unknown
+buffer with no public API, not a budget.
+
+⚠ **`COSTS.md` and Cost Explorer disagree about this project's own Bedrock spend by roughly 300×, and it
+is not yet reconciled.** This log reports **≈$0.411** for Phases 3–7. Cost Explorer's gross for our usage
+types (`USW2-NovaMicro-*`, `USW2-NovaLite-*`, `USW2-TitanEmbeddingV2-*`) across all of August is
+**$0.00124**. Lag is a partial explanation at best — 2026-08-11 carries no Bedrock line at all. The
+alternatives are that this log's token-count arithmetic substantially over-estimates, or that guardrail
+units billed mostly as free units. Owner: Stage 5, once Cost Explorer settles. **Recorded as unreconciled
+rather than resolved in whichever direction is more comfortable** — it matters both ways, because a large
+over-estimate means every published "spend so far" in this project has been wrong and later phases have
+been reasoning under a constraint that was never real.
+
+For context on the tag filter this phase depends on: the sibling fine-tuning project's
+`USW2-Llama3-3-70B-Customization-Training` cost **$0.84935** on 2026-08-10, which is **99.86%** of the
+account's August Bedrock spend.
