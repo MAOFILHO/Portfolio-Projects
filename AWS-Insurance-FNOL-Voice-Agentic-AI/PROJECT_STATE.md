@@ -3852,6 +3852,7 @@ September. **A $0.00 reading and an absent line item look identical in a grouped
 | E | ✅ **Resolved 2026-08-13, Stage 3 apply.** `release.yaml.tftpl`'s `BotAliasTags` was a map; `AWS::Lex::BotAlias` documents it as `Array of Tag`, `{Key, Value}` objects, not a map — CFN's early validation caught it (`expected type: JSONArray, found: JSONObject`) before anything applied. Fixed as part of the same apply that surfaced `D77`. Was: Tag the Lex bot **alias**, not only the bot | Stage 3 |
 | F | ✅ **Resolved 2026-08-12 (`D67`)** — CloudWatch `AWS/Bedrock` as a third instrument. CE is missing data; the log under-reports by 22%. Was: **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
 | G | ⏳ **Checked 2026-08-13, still unanswerable — and the reason is worth keeping.** Every line in Aug 11–12 reports `Project$`, i.e. **untagged**, including the AMCS-sold DID. That is *not yet evidence of a defect*: cost allocation tags are **not retroactive**, and `Project` was only activated during 08-12, so those days would read untagged whatever the tag does. 08-13 has no settled data yet. **Re-check 2026-08-14/15 on 08-13's data specifically.** If the DID line is still untagged then, the tag-filtered budget alarm excludes the project's **only always-on cost** ($1.83/mo, 7.3% of the ceiling) — and criterion 9's first probe is already written to catch exactly that, which is why it requires including a known non-zero quantity of *our* spend rather than only excluding the sibling's | **2026-08-14/15** |
+| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22.** `C14` accepted-and-carried-forward as **measured-failing**, not unresolved: warm-path sub-component p95 exceeds the 1,800ms budget by **19ms, a floor** — ASR/TTS/telephony are structurally excluded and unmeasured, so the true end-to-end overage is larger, in an unknown but non-negative amount. Caching, schema strip, and provisioned throughput are closed (structural/empirical/cost-policy respectively, §11.18/§11.20); lexical short-circuit is the one live option not pursued now. **Re-open on any of:** a real inbound call measured (`RuntimeSucessfulRequestLatency`/external timing, cost-gated); Tier A instrumentation built; a scoped lexical short-circuit designed and its required `C1` re-verification passed; a Nova Micro serving-characteristics or `tools`-field-caching change; the cost ceiling or Bedrock PT pricing changing materially. A new mitigation proposal that doesn't address why these five were closed is repeating this phase's work, not advancing past it | Any future phase touching router/graph latency or `C14` |
 
 The Cost Explorer API itself bills **$0.01/request** — trivial, but it inverts the assumption that looking
 at spend is free, and is recorded in `CLAUDE.md` so nobody writes a poller.
@@ -4664,3 +4665,425 @@ that decision.**
 unedited, no apply, no spend. Cost this session: $0 — `cloudwatch:GetMetricStatistics` (`AWS/Bedrock`,
 `AWS/Lambda`), `logs:FilterLogEvents` (standard API, not a Logs Insights scan), `servicequotas:ListServiceQuotas`
 (attempted, abandoned). No AWS resource created or changed.
+
+## Session log — 2026-08-14 (continued; §11.16 accepted; residual relabeled, router prompt token-weighed,
+sequential-question checked against the record before the mitigation decision)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted §11.16 and gave three items before the mitigation decision: (1) label the "intrinsic
+serving-time variance" conclusion as reached by elimination, not measured, not asserted as a property of Nova
+Micro; (2) check at $0 what the router prompt actually contains and whether it can be materially shortened —
+few-shot examples, unused context, verbose instructions — reporting the token breakdown before proposing any
+change; (3) reframe the open question from "provisioned throughput or live with it" to include a third
+option — whether the router must be sequential/blocking, versus parallel with another step, a high-confidence
+lexical skip, or caching — and state whether the record contains anything on why it is sequential, or whether
+that is inherited unexamined. **$0 reads only. No apply, no spend, no redeploy, `ADR-009` unedited.**
+
+**Full write-up in `RESULTS.md` §11.17 (new section) and a `§11.16` edit, summarized here.**
+
+**§11.16 edit.** The Verdict paragraph's "intrinsic serving-time variance on Nova Micro's shared on-demand
+inference endpoint" line now carries a same-investigation correction pointer to §11.17 Item 1 (same idiom as
+the existing §11.10→§11.12 pointer), rather than being silently rewritten.
+
+**Item 1.** Stated plainly: nothing measured says *why* the router's tail is unstable. Four mechanisms were
+ruled out (§11.16); what's left is the absence of those four, not a fifth one found — a residual, named for
+convenience, not a property of Nova Micro backed by a metric or a doc page the way each ruled-out hypothesis
+was. This sharpens, not weakens, §11.16's mitigation argument: "the cheap fixes are ruled out" (measured) and
+"here is why the endpoint is unstable" (not measured, not claimed) are kept as two separate claims.
+
+**Item 2.** Built and sized the real payload `classify_turn` sends: system prompt 962 chars/151 words (~240
+tokens by a crude chars÷4 proxy), tool spec 1,148 chars (~287 tokens), toolChoice 34 chars, one representative
+user turn 107 chars (~27 tokens) — **sum ≈ 562 tokens** against CloudWatch's measured **917–940**, a real,
+**unreconciled ~40% gap**, named rather than smoothed over (candidates: the chars÷4 proxy undercounts
+JSON/schema-dense text; Bedrock's tool-forcing wire format may add protocol overhead invisible from this
+module's own JSON construction — neither confirmable at $0, no local Nova tokenizer, model invocation logging
+confirmed disabled per §11.15). **Concretely avoidable, measured exactly:** pydantic's auto-generated `title`
+fields plus the two enum classes' docstrings (developer cross-references to `PROMPT-REGISTRY.md`, leaking
+into the model-facing schema) — stripping both, keeping the one legitimate tool-level description, took the
+tool spec from 1,148 → 766 chars, **a measured 33.3% reduction of the schema**, ~18% of the whole
+system-prompt+schema payload. **Named plainly as a cost/hygiene finding, not a tail-latency fix** — §11.16
+already found payload size doesn't track the p50→p95 spread within this run's narrow token range, so this
+change should be evaluated on cost/mean-latency terms, not credited toward the instability. **Not applied**
+— `bedrock_router.py` unedited.
+
+**Item 3.** `ADR-014` already built, measured, and rejected a form of Bedrock-call concurrency — splitting
+the merged router+L2-safety call into two concurrent calls (`RESULTS.md` §3.6: p50 wall 473–495ms concurrent
+vs. 861–906ms sequential, confirming `max(t₁,t₂)` empirically) — but rejected the split on classification
+quality (a deterministic schema field-drop defect, §3.6.1, plus a `C1` recall failure on the tuned rung), not
+on latency. **"Nothing was promoted"** — today's merged call stands by default, not by merit. That answers a
+narrower question than Marco's: it does not touch whether `route_and_classify` can run concurrently with
+`guardrails_input_check`, which precedes it today so a blocked input can short-circuit before spending a
+router call. A `docs/` grep for parallel/concurrent language found only `ADR-010` (L1's position only) and
+`ADR-014` (the router-internal split only) — **the guardrails-vs-router pairing is inherited unexamined, not
+rejected.** Quantified from existing numbers, no new measurement: guardrail-input p95 is 137ms against the
+router's 1,286ms p95 — parallelizing would save **at most ~137ms at p95**, well under an order of magnitude
+short of the ~885ms p50→p95 gap that's the actual finding. Two costs transfer directly from `ADR-014`'s own
+accepted-risk list (doubled Bedrock-family throttle/error exposure under concurrency; the
+`boto3.client()`-in-a-concurrent-context hazard, though whether it even applies to a Guardrails client +
+Bedrock client pair is itself unchecked). **Lexical short-circuit and caching are also genuinely
+unexamined** — `l1_safety_check`/`lexicon.py` is this project's own precedent for a deterministic pre-node
+bypassing a model call, but it exists only for safety and is deliberately weak on recall by design; no
+equivalent exists for intent routing anywhere in `graph.py`/`routing.py`, and a `docs/` grep for
+caching-related language (excluding the LangGraph checkpointer) returned zero hits — neither lever has been
+tried and rejected, both are simply open. **Stated so it can't be conflated later: `ADR-014` tried one
+specific concurrency shape for one specific reason and rejected it on quality, not latency — it did not
+"already try making the router non-blocking and find it hurt the numbers."**
+
+**Not done, per instruction:** no code changed anywhere (`bedrock_router.py`, `graph.py`, `lexicon.py`
+untouched), no schema-stripping applied, no lexical fast-path or caching layer designed, no AWS call made,
+`ADR-009` unedited, no redeploy, no run. Cost this session: $0 — local code and documentation inspection
+only.
+
+## Session log — 2026-08-14 (continued; schema strip reframed as a p95 lever, a $0-adjacent test proposed,
+caching closed off structurally, mitigation decision brought on one page)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted §11.17 and gave one reframe plus the mitigation decision: (1) `C14` is a p95 gate, not a
+spread metric — "size doesn't track spread within this run" (measured at near-constant token count) doesn't
+bound the effect of cutting ~18% of the payload across the board; the schema strip is an untested p95 lever,
+not cost/hygiene, and the framing needed correcting; (2) propose a minimum-cost test — direct Bedrock
+invocations of the router prompt, stripped vs. unstripped, n large enough for p95, no Lambda redeploy — with
+an estimated cost, to be answered before provisioned throughput is considered; (3) bring the full mitigation
+decision on one page (schema strip pending item 2, caching, lexical short-circuit, provisioned throughput,
+accept-and-carry-forward), each scored on expected p95 effect, cost, whether it needs an apply, and `C1`
+interaction, with one recommendation. **No apply, no spend beyond what item 2 proposes and is approved,
+`ADR-009` unedited.**
+
+**Full write-up in `RESULTS.md` §11.18 (new section) and a `§11.17` edit, summarized here.**
+
+**§11.17 edit.** The Item 2 closing paragraph ("cost/hygiene finding, not a tail-latency fix") now carries a
+correction pointer to §11.18 Item 1, same idiom as the §11.16→§11.17 and §11.10→§11.12 pointers.
+
+**Item 1.** §11.16's "size doesn't track spread" was measured within a 917-940 token band (2.5% range) and
+answers only "does size predict rank at near-constant size" (no). It never answered "does an 18-33% size cut
+move the whole distribution, including p95, lower" — a different question, and the one that actually matters
+for a p95 gate. Corrected: the schema strip is an **untested p95 lever**.
+
+**Item 2 — a test proposed, not run.** `classify_turn` (`aws/bedrock_router.py:148`) already takes `caller`
+and `tool_spec` as plain arguments and constructs its own real `boto3` client independent of Lambda — the
+same shape `ADR-014`'s ladder ran unmodified 7,900 times. Proposed `scripts/measure_router_schema_latency.py`
+(not written): two arms (Arm U = shipped `build_classify_turn_tool_spec()` unmodified; Arm S = the same
+schema with `title`/`$defs`-description keys stripped, §11.17's measured 1,148→766-char variant), reusing
+real utterances from an existing corpus, **paired and interleaved** (U then S per utterance, order randomized
+per pair) so the within-pair difference isolates the schema change from client-location/time confounds rather
+than trying to reproduce Lambda's absolute latency. Client-side wall-clock as the primary metric, an optional
+free CloudWatch aggregate cross-check afterward (can't split the two arms in that stream — same `ModelId`
+dimension). **Proposed n = 500 pairs (1,000 calls)**, preceded by a 50-pair (100-call) pilot to sanity-check
+the harness against §11.15/§11.16's known numbers before committing to the full run — not a formal power
+calculation, but the same order of magnitude as `ADR-014`'s own per-rung sample sizes. **Reading rule fixed
+in advance**: Δp95 = p95(S) − p95(U), percentile-bootstrap 95% CI (≥2,000 resamples, $0, local); material win
+only if the CI's upper bound is ≤ 0; a straddling CI is reported as "not distinguishable from noise," not
+"didn't work," same discipline as `ADR-014`'s sd-amendment. **Cost: pilot ≈ $0.004, main run ≈ $0.037, total
+≈ $0.04, rounded to ≈$0.10 for margin** (Nova Micro on-demand rates, cross-checked against `ADR-014`'s own
+measured $0.000039/call). **Flagged explicitly: this is Phase 9, outside `CLAUDE.md`'s Phase 3-7 standing
+Bedrock approval — the ≈$0.10 is trivial but not pre-approved by that clause, and needs my explicit go-ahead,
+same as every other real Bedrock spend gets logged in `COSTS.md`. Not run. Proposal only.**
+
+**Item 3 — mitigation decision, one page, in `RESULTS.md` §11.18's table:**
+
+| Option | p95 effect | Cost | Apply? | `C1`? |
+|---|---|---|---|---|
+| Schema strip (pending) | Unknown, untested — bounded loosely by the 18-33% cut, resolved by item 2's test | ≈$0.10 test (unapproved); $0 to ship | Yes, to ship | None expected; shape unchanged, one confirmatory eval run recommended before shipping |
+| Caching | **None available, as currently shaped** | $0 | N/A | None |
+| Lexical short-circuit | Unmeasured, not confidently positive — could concentrate remaining Bedrock calls among harder ones | $0 to prototype; real eng+eval effort to ship | Yes | New routing-correctness surface needs its own gate |
+| Provisioned throughput | Plausibly the direct fix for the shared-endpoint variance §11.16 found by elimination | Nova Micro confirmed PT-eligible (Nova model-spec table); exact $/hr/unit not found in static docs; comparable published rates (Titan $16-18/hr/unit) imply ~$12-13.5k/month for one unit, 2-3 orders of magnitude over the $25/month ceiling | Yes — banned by default, needs written justification + `APPROVED:` | None expected |
+| Accept-and-carry-forward | None — status quo, documented | $0 | No | None |
+
+**Caching closed structurally, verified against current AWS docs this session (`aws___search_documentation`/
+`read_documentation`):** Nova Micro's explicit prompt caching covers only `system`/`messages` fields, **not
+`tools`** — where the tool schema (the larger static component, and the one carrying Item 2's avoidable
+verbosity) actually lives. Nova's cache-checkpoint minimum is **1,000 tokens**; the system prompt (the one
+cacheable field) is on the order of 240-400 tokens, well under it. **No field in this call's payload is both
+cacheable and large enough to qualify.** Nova's separately-documented automatic/implicit caching has no
+stated minimum and no observable signal here (model invocation logging is disabled, §11.15) — named as an
+open, unconfirmable detail, not credited either way. Padding the system prompt past 1,000 tokens just to
+qualify would add tokens to save none — not proposed.
+
+**Recommendation, single and sequenced.** Run item 2's test first, pending approval of the ≈$0.10 spend.
+Caching needs no further work — closed at $0 this session. Lexical short-circuit is real but larger and
+uncertain-sign; shouldn't start before the schema-strip result is in. Provisioned throughput shouldn't be
+seriously pursued at this project's scale regardless of Nova Micro's exact rate — every comparable published
+figure sits far enough above the $25/month hard ceiling that confirming the exact number (a real scoping
+step, not a $0 read) is better spent only if the cheaper options fail or are exhausted. **If the test shows a
+material Δp95: ship the strip, re-verify `C1`/`C14` — likely enough to defer both remaining options
+indefinitely. If inconclusive: accept-and-carry-forward is the honest next state, with lexical short-circuit
+as the one remaining lever worth a real investigation before provisioned throughput is ever brought back.**
+
+**Not done, per instruction:** no code written or changed, no test run, no AWS billable call made (docs
+search/read only), no spend, `ADR-009` unedited. Cost this session: $0.
+
+## Session log — 2026-08-14 (continued; schema-strip test approved and run — pilot triggered its own stop
+rule, 4 dropped `safety_flag` verdicts found, main run never started)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**`APPROVED: Phase 9 — schema-strip latency test, ~$0.10 ceiling`**, with one required addition: capture and
+compare classification output on every call in both arms, not just latency, since the stripped content is
+something the model reads and Nova Micro is small enough for that to matter — the same lesson `ADR-014`'s own
+concurrency lever taught on a bigger schema change. Pre-commit the quality reading rule before running. Run
+the 50-pair pilot first; stop and report on any disagreement rather than proceeding. Then report Δp95+CI,
+agreement rate, actual vs. estimated cost, and the read against both rules. No apply, no redeploy, `ADR-009`
+unedited.
+
+**Pre-registration written first, `RESULTS.md` §11.19, before any pair ran.** Agreement defined per field
+(`safety_flag`/`intent`/`coverage_question_type` exact match; `intent_confidence` by which side of
+`graph.py`'s existing `LOW_CONFIDENCE_THRESHOLD=0.5` it falls on, not exact-float — reusing the one place
+shipped code already treats that field as a decision). Pilot rule: any disagreement stops the run, restated
+from Marco's instruction verbatim as the literal stopping condition. Main-run rule, fixed in advance: `safety_flag`
+zero-tolerance and non-negotiable (mirrors `C1`'s own non-tradeable status — this is the field `C1` actually
+depends on); everything else tolerated to one population unit (`ADR-014`'s own amendment convention), 0 =
+shippable, 1 = investigate, ≥2 = not shippable. The two gates apply independently; neither offsets the other,
+and neither is tradeable against Δp95.
+
+**Script written:** `scripts/measure_router_schema_latency.py` — same shape as `measure_temperature_variance.py`,
+calls the real, shipped `classify_turn` with only `tool_spec` changed (unstripped vs. §11.17's measured
+1,148→766-char stripped variant), paired and interleaved (both arms per utterance, order randomized) over 141
+real turns from `evals/golden/*.yaml`, reuses `evals.tier_b.CostLog`/`LoggingCaller` for exact cost.
+
+**Pilot run, 50 pairs (100 real calls), $0.00357028 actual against a ≈$0.004 estimate.** Result: **34/50
+agree (68%). 16 disagreements — not "any," 32%.** Field breakdown: `safety_flag` 4/50, `intent` 14/50,
+`coverage_question_type` 4/50, confidence-threshold-side 0/50. **All four `safety_flag` disagreements go the
+dangerous direction — `True` on the shipped schema, `False` on the stripped one, zero the other way** —
+"My husband was driving when it happened, not me," "If another driver hits me and it's their fault, am I
+covered for the damage?," "The headlight is broken and the bumper took a real beating," and "I want to report
+an accident" all lost their `InjuryEscalation`/`safety_flag=True` verdict once titles and enum docstrings were
+removed from the tool schema. Latency: Arm U p50 584.0ms/p95 902.4ms; Arm S p50 595.9ms/p95 1,108.4ms; **Δp95 =
++206.0ms, 95% bootstrap CI [-316.2, +500.6]** — straddles zero (no material claim at n=50) and, at face value,
+the stripped schema was numerically *slower*, the opposite of the hypothesis.
+
+**Both pre-committed rules triggered/failed, decisively, not on a close call.** Pilot stop rule: fired —
+the run would have stopped at pair 1 alone. Main-run rule, applied retroactively: `safety_flag` gate needs 0,
+has 4; population-unit gate (1 at n=50) needs ≤1, `intent` has 14 and `coverage_question_type` has 4. **Main
+n=500 run never started, per instruction.** Full write-up `RESULTS.md` §11.20; §11.18's mitigation table
+edited — schema strip's row now reads "tested and rejected on quality," the only row in that table with a
+direct `C1` interaction.
+
+**The finding under the decision: §11.17 Item 2's premise was wrong, measured, not just superseded.** Item 2
+called pydantic's `title` fields and the two enum docstrings "content with no classification value to the
+model." Removing exactly that content changed what Nova Micro classified, including whether it recognized an
+injury, four times in 50 pairs, always the same direction. Same lesson as `RESULTS.md` §3.6.1 one level
+deeper: schema shape being a behavioural input isn't limited to structure (required fields, enum sets) — this
+project had assumed the descriptive metadata sitting on top of that structure was safe to treat as
+documentation, and it measurably is not.
+
+**One aside, named and not chased:** independent of the strip, Arm U (today's *shipped* schema) returned
+`safety_flag=True` on four utterances with no injury language at all in this same pilot — flagged once,
+outside this section's scope to investigate further here.
+
+**Cost logged:** `COSTS.md`, new Phase 9 table, $0.00357028 exact, against the $0.10 ceiling and the Phase
+3-7 standing-approval boundary named explicitly rather than assumed covered.
+
+**Not done, per instruction:** main n=500 run not started; no code shipped (`bedrock_router.py` unedited);
+`ADR-009` unedited; no redeploy. New files: `scripts/measure_router_schema_latency.py`,
+`evals/baselines/schema_strip_pilot_20260814.json` — measurement artifacts, same category as this project's
+existing `scripts/measure_*.py`, not an application change.
+
+## Session log — 2026-08-14 (continued; router over-firing promoted to its own finding, narrowed mitigation
+page brought — full review, held for decision)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted the pilot result and asked for a `RESULTS.md` §11.19 addendum on the latency reading (added:
+Δp95 was inconclusive-to-unfavorable at n=50, so the quality gate alone caught what a latency-only test would
+have shipped or nearly shipped), plus two items: (1) the four no-injury `safety_flag` false positives on the
+*shipped* schema are not an aside — give them their own finding, cross-referenced to §11.6/§11.12, utterances
+recorded, not investigated further; (2) bring the narrowed mitigation page — lexical short-circuit and
+accept-and-carry-forward live, caching/schema-strip/provisioned-throughput marked closed with why — p95
+effect, cost, apply needed, `C1` interaction per live option, one recommendation, then hold for full review.
+
+**Item 1 — `RESULTS.md` §11.21 (new).** The four utterances tabulated verbatim (all from Arm U, today's
+shipped schema): "I want to report an accident" (the golden set's own canonical `FileAutoClaim` opener,
+labelled `safety_escalation: false`), "the headlight is broken and the bumper took a real beating," "my
+husband was driving when it happened, not me," and a coverage-eligibility question — none contain injury
+language. Cross-referenced to §11.6 (independent reproduction of the 0.529 false-escalation rate) as the same
+over-firing shape, now observed at the router layer incidentally. **Citation correction, flagged rather than
+silently applied:** §11.12 was named but re-checked and contains no false-escalation content — it's `C14`
+warm-path-latency work that explicitly states "this does not touch `C1`." **§11.7 used in its place** — the
+section that actually carries the 0.529 figure into deployed-system context. Three caveats stated: n=4/50 is
+not a replacement for the dedicated 0.529 measurement; not diagnosed; three of the four utterances overlap
+the golden set's own negative examples, an unresolved contamination question. Confirmed `C1`-neutral (`C1` is
+recall-only; over-firing can't lower it). §11.20's aside now points here instead of carrying the content.
+
+**Item 2 — `RESULTS.md` §11.22 (new), held for decision, nothing applied.** Closed options carried forward
+with citations (caching: structural, `tools` field not cacheable + 1K-token floor unmet; schema strip:
+empirical, §11.20; provisioned throughput: cost policy, ~$12-13.5k/month against a $25/month ceiling).
+
+**Live option 1, lexical short-circuit — `C1` scoring corrected, not just restated.** §11.18 called this
+"downstream of `C1`." Checked against the real graph (`agents/graph.py`): `route_and_classify` is *where* the
+safety union happens (`state["safety_flag"] = l1_safety_flag or classification.safety_flag`). A short-circuit
+that skips that call for confident turns leaves those turns on L1's lexicon alone — 0.269 recall, not the
+union `C1`'s 1.000 depends on. Clean either/or: the `C1`-preserving form (always still calls Bedrock) saves
+~0 latency; the only form that could move p95 (skips the call) is the one that threatens `C1` directly, unless
+scoped to a not-yet-designed provably-safe subset. Named explicitly: today's own schema-strip result weakens,
+not strengthens, the case for treating a new routing-behavior change as safe by inspection.
+
+**Live option 2, accept-and-carry-forward:** $0, no apply, no `C1` interaction, `C14` stays open and
+documented.
+
+**Recommendation: accept-and-carry-forward** — three of five original options now closed (not paused);
+lexical short-circuit's only latency-useful form reopens exactly the risk category this session's own $0.10
+spend just demonstrated isn't safe to assume away; the 19ms warm-path overage (§11.12/§11.14) is small against
+`C1`'s non-tradeable status, and `ADR-014` §4's own admissibility rule would fail this trade before reading a
+latency number; accept-and-carry-forward is `ADR-014`'s own "nothing promoted, incumbent stands by default"
+outcome-shape, a reported result, not a non-result. Next increment named if lexical short-circuit is wanted
+later: a written, corpus-checked definition of provably-safe-to-skip turns, before any code — not proposed or
+sized here.
+
+**Not done:** nothing applied, no code written, no redeploy, `ADR-009` unedited. Held for Marco's decision.
+
+## Session log — 2026-08-14 (continued; two-tier review process adopted, `REVIEW-CRITERIA.md` §4; schema-strip
+test's approve-and-go sequence found already complete, no re-run)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Process change, approve-and-go: `docs/REVIEW-CRITERIA.md` §4 added**, matching the doc's existing structure
+— FULL REVIEW (touches `C1`/its measurement, produces a `RESULTS.md` number, spend >≈$1 or irreversible,
+`terraform apply`/redeploy/deployed-state change, new defect class or headline-conclusion change) vs. APPROVE
+AND GO (<≈$1 measurements, $0 local/doc/CloudWatch reads, reversible undeployed code changes, record
+fixes/write-ups), classified before reporting, no permission-asking or option-proposing inside approve-and-go,
+stop mid-task on reclassification. Standing constraints (cost-gate typing, no Connect/DID creation,
+`PROJECT_STATE.md` cadence, `C1` non-tradeable) restated as outranking both tiers.
+
+**Schema-strip test, re-issued under approve-and-go: "run the 50-pair pilot AND the full n unless the pilot
+shows classification disagreement, in which case stop and report."** Choice, stated in one line: **do not
+re-run — the disagreement condition already fired in the existing pilot (`RESULTS.md` §11.20), so re-running
+would spend real money to re-answer a question the pre-registered rule already resolved decisively (16/50
+disagreements, not a borderline single case).** Reporting the existing result in the requested format instead
+of generating a new one:
+
+- **Δp95 = +206.0ms, 95% bootstrap CI [-316.2, +500.6]** (n=50; straddles zero, no material claim; stripped
+  schema read numerically *slower*, the opposite of the hypothesis).
+- **Agreement: 34/50 (68.0%).** `safety_flag` disagreements: 4/50, all dangerous-direction (`True`→`False`),
+  zero the other way. `intent`: 14/50. `coverage_question_type`: 4/50. Confidence-threshold-side: 0/50.
+- **Actual cost: $0.00357028** (100 calls, 84,956 in / 4,263 out tokens) against the ≈$0.10 ceiling — main run
+  never spent, since it never started.
+- **Read against both pre-committed rules (§11.19):** pilot stop rule — triggered, decisively (would have
+  fired at pair 1 alone). Main-run shippability rule, applied retroactively — fails on both independent gates:
+  `safety_flag` zero-tolerance needs 0, has 4; population-unit tolerance (1 at n=50) needs ≤1, `intent` has 14
+  and `coverage_question_type` has 4. **Main n=500 never run; nothing changes that reading.**
+
+No new AWS call made this entry. `ADR-009` unedited, no redeploy.
+
+## Session log — 2026-08-14 (continued; §11.22 posted in full per Marco's request — lexical short-circuit's
+`C1` interaction sharpened to "interacts, requires re-verification," accept-and-carry-forward's obligations
+and trigger conditions named, 19ms restated as a floor; open item `H` added)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Full review, per `REVIEW-CRITERIA.md` §4 — nothing applied, posted for Marco's decision.** Three additions
+made to `RESULTS.md` §11.22 in place:
+
+1. **Terminology correction + `C1`-interaction verdict.** `ADR-004`'s merged call means `classify_turn` *is*
+   L2's detection path, not upstream of a separate one — a lexical short-circuit that skips it doesn't bypass
+   something upstream of detection, it removes detection itself for those turns. Stated plainly: **interacts
+   with `C1`'s verified status, not orthogonal** — `C1`'s 1.000 figure is scoped to today's topology (every
+   turn reaches the merged call), and the `C1`-threatening short-circuit form changes that topology, which
+   means the existing verification stops covering the modified system on the day it ships, whether or not
+   anyone re-runs the measurement to notice.
+2. **Accept-and-carry-forward's obligations, named rather than left implicit.** `C14` recorded as
+   measured-failing (not unresolved-pending); five trigger conditions listed that would reopen the
+   recommendation (a real call measured, Tier A built, a scoped lexical short-circuit passing its `C1`
+   re-verification, a Nova Micro/caching change, cost-ceiling or PT-pricing change); a future phase's
+   obligation stated as re-opening this finding rather than re-deriving `C14` from zero. Tracked as
+   **open item `H`**, added to this file's existing ledger (`A`-`G`).
+3. **19ms restated with scope, everywhere it's used in the recommendation.** Explicit: this is the warm-path
+   sub-component figure (Lex NLU/Lambda/LangGraph/checkpointer/Bedrock), structurally excludes ASR/TTS/
+   telephony, and by the same monotonicity argument used at every prior step (§11.10/§11.12/§11.14) is a
+   **floor** on the true end-to-end overage, not the overage itself.
+
+Full section text posted to Marco in this turn's reply, not summarized, per instruction. Holding for decision.
+
+## Session log — 2026-08-14 (continued; accept-and-carry-forward APPROVED, Phase 9 closed; `ADR-009` status confirmed unchanged; Phase 10 entry conditions written)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Marco: "Accept-and-carry-forward APPROVED."** §11.22's `C1` correction affirmed as correct — the "router
+upstream of detection" framing in the instruction that prompted it was wrong; under `ADR-004`'s merged call,
+`classify_turn` **is** L2's detection path, so skipping it removes L2 from the safety union entirely, not
+merely something adjacent to it. Recorded here, as instructed: the correction originated from reading
+`agents/graph.py`/`agents/nodes/routing.py` directly, not from accepting the instruction's own framing at
+face value — the same discipline `REVIEW-CRITERIA.md` §1 item 2 names for any "verified" claim.
+
+Four items, approve-and-go per `REVIEW-CRITERIA.md` §4 (record fixes/write-ups, reversible, undeployed):
+
+**1 — Phase 9 exit criteria satisfaction, against criterion 3 as amended.** Written up in full in
+`RESULTS.md` §11.23, not repeated here. Summary: 1, 2, 3-pre(i), 3-pre(ii), 3(b), and 3-budget all
+**satisfied**; 3(a) (a landed mitigation) is **not satisfied**, closed as unavailable rather than silently
+dropped — three of five candidates closed on their own merits, a fourth on a direct `C1` interaction, none
+landed. Phase 9 closes via 3(b), one of the criterion's two designed exits, exactly as amended.
+
+**2 — Phase 10 entry conditions**, written here at Phase 9's close so Phase 10 can start from these files
+alone without re-deriving them from session history, matching the convention `Phase 9 entry conditions`
+above set at Phase 8's close:
+
+| # | Condition | Current state, with scope | Source |
+|---|---|---|---|
+| 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated — unchanged from the Phase 9 entry-conditions table; Phase 9 added no new `C1` measurement, only a scoping finding. **Scope, restated:** this figure describes *today's topology* — every turn reaches the merged `classify_turn` call. A lexical short-circuit's `C1`-threatening form (§11.22) would change that topology and would require re-verifying `C1` against it before the 1.000 figure could be trusted again for the modified system; it is not automatically inherited. Cold-start coverage remains an existence proof (1/19), not a measurement | `RESULTS.md` §11.7, §11.22 |
+| 2 | `C14` status | **Measured-failing, not unresolved-pending.** Warm-path sub-component p95 exceeds the 1,800ms budget by **19ms — a floor, not the true overage.** The figure structurally excludes ASR, TTS, and telephony (all unmeasured); by the monotonicity argument used throughout this phase, the true end-to-end overage is ≥19ms, unknown in exact amount. Cold-start remains a second, independent exposure (opening-turn-frequency bound). Budget itself is an explicit stated product decision (1,800ms), not a derived requirement — reclassified, not replaced, `C14` stays GATE | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
+| 3 | Open item `H` and its triggers | `C14` accepted-and-carried-forward, tracked in this file's ledger below. **Re-opens on any of:** a real inbound call measured (`RuntimeSucessfulRequestLatency` / external timing, cost-gated); Tier A instrumentation built; a scoped lexical short-circuit designed and its required `C1` re-verification passed; a Nova Micro serving-characteristics or `tools`-field-caching change; the cost ceiling or Bedrock PT pricing changing materially. A new mitigation proposal that doesn't address why the prior five were closed repeats Phase 9's work rather than advancing past it | Ledger row `H` below, `RESULTS.md` §11.22 |
+| 4 | Generation path (`coverage_question`, `rental_towing`) is untested for `C14` | Every latency figure this phase produced (§11.15's CloudWatch recovery, §11.16's router investigation) comes from Line E's escalation/routing-only protocol — zero Bedrock calls were recorded against the generation or embedding profiles in every window checked, because Line E never routes a turn into those nodes. A real run reaching them could move `C14`'s p95 in either direction; nothing in this phase's record bounds it | `RESULTS.md` §11.15 |
+| 5 | Tier A — approved, unbuilt | Downgraded from **gate** to **refinement** on the mitigation decision (§11.16 item 3) — Phase 9's mitigation choice did not wait on it and does not need it. Still the recommended next attribution step if pursued: converts §11.15's approximate percentile-sum bound into an exact per-turn figure, and is the one instrument that automatically covers the untested generation path (condition 4) the first time a real run reaches it. Tier B and Tier C remain named, costed, and demoted, not dropped (`RESULTS.md` §11.15 item 2) | `RESULTS.md` §11.15, §11.16 |
+| 6 | `ADR-009` status | **Unedited, stands.** Its cold-start mitigation order (package → SnapStart → warmer → PT, cost-gated) is uncontradicted by anything this phase found and remains the correct order whenever cold-start mitigation is pursued. **Named, not implied:** its point-4 fallback ("if still breaching, provisioned concurrency is next") assumed any residual breach would still be cold-start-shaped; §11.12/§11.16 show the warm path alone already breaches independently, dominated by router serving-time tail — Lambda provisioned concurrency would not close that specific gap. The lever that would (Bedrock provisioned throughput, a different resource) is separately closed on cost-policy grounds, §11.22 | `RESULTS.md` §11.23 |
+
+**3 — `ADR-009` status confirmed: stands unchanged, not superseded.** Full reasoning in `RESULTS.md` §11.23
+— summarized in ledger row 6 above. Choice stated in one line, per approve-and-go: the ADR's actual Decision
+content (the four-step cold-start order) is not contradicted by this phase, so a supersede is not warranted;
+what needed correcting was a scope boundary the ADR's own text left implicit, and that correction is recorded
+in `RESULTS.md` rather than by editing the immutable file.
+
+**4 — committed**, in three logical groups rather than one undifferentiated commit: `dcedb4d`
+(`REVIEW-CRITERIA.md` §4, the process change itself); `306a4cc` (the schema-strip test instrument, the
+50-pair pilot's raw data, and the `COSTS.md` pilot-cost line); `22232a9` (`RESULTS.md` §11.17–§11.23 — the
+full investigation, the mitigation decision, and this Phase 9 close — plus this session-log entry in
+`PROJECT_STATE.md`).
+
+**Open item `H`** (ledger, unchanged from the prior entry — restated here since Phase 9's close is the point
+a future reader will look for it):
+
+| # | Item | Owner |
+|---|---|---|
+| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22, carried into Phase 10 entry condition 3 above.** `C14` accepted-and-carried-forward as measured-failing: warm-path sub-component p95 exceeds 1,800ms by 19ms, a floor — true end-to-end overage larger, unmeasured. Re-open per the five named triggers in entry condition 3 | Any future phase touching router/graph latency or `C14` |
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 9 — CLOSED 2026-08-14 (criterion 3(b), carry-forward). Phase 10 not opened — no exit criteria proposed, no approval sought.
+Open defects: none new. Open item H (C14 carried forward, 19ms floor, 5 re-open triggers).
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged this entry. Cold-start coverage remains an existence proof (1/19), not a measurement.
+Blocked on: nothing — Phase 9 fully closed. Phase 10 scope awaits Marco's direction (message named it "full review").
+Last apply + gate result: none this entry — no apply, no redeploy, no billable resource created. ADR-009 unedited.
+```
+
+**Not done:** no `terraform apply`, no redeploy, no billable resource, `ADR-009` unedited, Phase 10 not opened
+(no exit criteria proposed or approved — Marco's message closes Phase 9 and names Phase 10's *scope class*,
+full review, not its content). Cost this session: $0.

@@ -3152,7 +3152,9 @@ hypothesis this item set out to check, which the two server-side metrics rule ou
 ruled out, definitively. Request/response size: does not track the spread, and one data point in this window
 argues against it. What's left, not eliminated by any check available at $0: intrinsic serving-time variance
 on Nova Micro's shared on-demand inference endpoint — the explanation this investigation converges on by
-elimination, not by direct confirmation. **This is the less convenient result, not the cheaper one Marco's
+elimination, not by direct confirmation. **Labeled more precisely later the same investigation — see §11.17
+Item 1:** that phrasing reads as a property of Nova Micro; it is a residual left behind by four eliminations,
+and nothing checked here or since confirms a mechanism. **This is the less convenient result, not the cheaper one Marco's
 instruction 1 named as a live possibility going in.** A retry-ladder or backoff-tuning fix — the "different
 and cheaper than `ADR-009`" mitigation instruction 1 raised as the reason to check first — is not available,
 because the tail was never retries. The one lever this project's own record names for reducing shared
@@ -3208,3 +3210,907 @@ positioned to be.**
    attribution gap" to "a refinement, not a gate, on a mitigation decision the record already supports."
 8. *Touches `C1`?* No — no claim on `C1` made or revised; this section is `C14`-only, same explicit check as
    every prior §11.1x entry.
+
+### 11.17 Three items before the mitigation decision — §11.16's residual relabeled, the router's own prompt
+weight measured (a real, unreconciled gap against CloudWatch), and the sequential-question checked against
+the record instead of assumed — ADR-014 already answers one instance of it, not the one this needs
+
+Marco's instruction on accepting §11.16, before the mitigation decision: (1) label the "intrinsic
+serving-time variance" conclusion as reached by elimination, not measured, rather than asserted as a
+property of Nova Micro; (2) check at $0 what the router prompt actually contains and whether it can be
+materially shortened, reporting the token breakdown before proposing any change; (3) reframe the open
+question from "provisioned throughput or live with it" to include a third option — whether the router must
+be synchronous and blocking, versus running in parallel with another step, being skipped on high-confidence
+lexical matches, or being cached — and state whether the record contains anything on why it is sequential, or
+whether that is inherited unexamined. **$0 reads only: local code inspection (`bedrock_router.py`,
+`routing.py`, `graph.py`, `lexicon.py`, `safety.py`), a `grep` sweep of `docs/`, and re-reading `ADR-014`/
+`RESULTS.md` §3.6/§3.6.1 already in the repo. No AWS call, no apply, no spend, no redeploy, `ADR-009`
+unedited.**
+
+**Item 1 — the residual relabeled, not just softened.** §11.16's Verdict paragraph is edited above with a
+pointer to here, per this project's own convention for a correction found later in the same investigation
+(same idiom as §11.12's pointer back into §11.10). Stated plainly, once, in full: **nothing this project has
+measured says *why* the router's tail is unstable.** Item 2 of §11.16 checked four candidate mechanisms —
+throttling, client errors, server errors, concurrency — and ruled out all four with live signals. What
+remains is not a fifth mechanism found; it is the absence of the first four, and "intrinsic serving-time
+variance on Nova Micro's shared on-demand inference endpoint" is a **name for that absence**, chosen because
+an investigation has to call the leftover something to refer to it in the next sentence — not a claim backed
+by a metric, a log line, or an AWS documentation page, the way each of the four ruled-out hypotheses was. No
+check available at $0 can turn this into a measured property: it would need either a Bedrock-side mechanism
+AWS does not expose per-request (queueing depth, placement, or hardware heterogeneity on the shared endpoint
+are not surfaced by any metric checked in §11.16), or a controlled A/B against a provisioned-throughput
+endpoint, which is cost-gated and out of scope for a $0 pass. **This does not weaken the mitigation argument
+§11.16 reached — it sharpens what that argument actually rests on.** The case for "no cheap application-level
+fix exists" only needed the four eliminations, all real and all checked directly; it never needed to know
+*why* the endpoint behaves this way, only that the checked alternatives are closed. Keeping those two claims
+distinct — "the cheap fixes are ruled out" (measured) and "here is why the endpoint is unstable" (not
+measured, not claimed) — is the entire content of this item.
+
+**Item 2 — the router prompt, measured, not estimated from memory.** `_CLASSIFY_TURN_SYSTEM_PROMPT` and
+`build_classify_turn_tool_spec()` (`aws/bedrock_router.py:51-63,122-145`) were imported directly and
+serialized exactly as `classify_turn` sends them, then sized:
+
+| Component | Chars | Words | chars÷4 (crude approx.) |
+|---|---:|---:|---:|
+| System prompt (verbatim, `PROMPT-REGISTRY.md` §1.1) | 962 | 151 | ~240 |
+| Tool spec (`toolSpec` JSON, compact) | 1,148 | — | ~287 |
+| `toolChoice` (forced tool-use) | 34 | — | ~9 |
+| One representative user turn (~20 words, hand-picked mid-length utterance) | 107 | 20 | ~27 |
+| **Sum** | **2,251** | — | **~562** |
+
+**Against the real number: a gap, named rather than smoothed over.** §11.16 Item 2's own CloudWatch table
+reports `InputTokenCount` of 917–940 across Line E's 73 calls. The chars÷4 estimate above (~562) is
+**roughly 40% short of the measured floor (917)** — a real, unreconciled discrepancy, not a rounding
+difference. Two candidate explanations, neither confirmed at $0: (a) the chars÷4 heuristic is a crude proxy
+for English prose and known to undercount punctuation- and structure-dense text like JSON schemas, where
+delimiters, quotes, and short enum tokens each cost more per character than natural-language text does; (b)
+Bedrock's Converse tool-forcing machinery may serialize `toolConfig` into an internal representation before
+handing it to Nova Micro's own tokenizer, adding protocol overhead invisible from inspecting what this
+module constructs. Nova Micro's tokenizer is not available locally (no `tiktoken` in this project's
+dependencies, and it would be the wrong tokenizer regardless — it's OpenAI's), and model invocation logging
+is confirmed disabled (§11.15), so there is no $0 path to a real per-request token count breakdown finer than
+what CloudWatch already reports in aggregate. **This is reported as a partial breakdown with a named gap, not
+a reconciled one.**
+
+**What is concretely avoidable, measured exactly rather than estimated.** `build_classify_turn_tool_spec()`
+builds its JSON schema from `TurnClassification.model_json_schema()` (pydantic's default generator), which
+emits two categories of content with no classification value to the model:
+
+- **`title` fields** on every property and on the schema itself (`"TurnClassification"`, `"Safety Flag"`,
+  `"Intent Confidence"`, and implicitly via `$defs` keys `"CoverageQuestionType"`, `"Intent"`) — pydantic's
+  auto-generated, human-readable restatement of a field name already present as the JSON key.
+- **`description` fields inside `$defs`** — the two enum classes' own Python docstrings
+  (`"Matches PROMPT-REGISTRY.md §1.1's classify_turn tool schema exactly."` and similar, `models/enums.py`
+  lines 16, 69-70) are developer-facing cross-references to *this project's own documentation*, promoted into
+  the model-facing schema as a side effect of how pydantic derives JSON Schema from a docstring. Nothing
+  about "matches `PROMPT-REGISTRY.md` §1.1" is information the classifier needs to fill the schema correctly.
+
+Stripping both (keeping the one legitimate `toolSpec`-level `description`, *"Classify this caller turn for
+routing and safety,"* which the model plausibly does use to know what the tool is for) took the tool spec's
+compact-JSON size from **1,148 to 766 characters — a measured 33.3% reduction of the schema specifically**,
+verified by running the real schema-generation code, diffing the two JSON payloads, and counting characters
+directly — not estimated. Applied to the whole per-call payload (system prompt 962 + schema 1,148 = 2,110
+chars today vs. 962 + 766 = 1,728 stripped), that is roughly **an 18% reduction in what this module sends**,
+before accounting for whatever produces the ~40% gap against CloudWatch's measured tokens above.
+
+**Reframed, not just softened — see §11.18 Item 1 for the correction in full.** This paragraph originally read
+"this is a cost/hygiene finding, not a tail-latency fix," reasoning from §11.16 Item 2's within-run finding
+that payload size doesn't track the p50→p95 *spread* in the 917-940 token band this run actually produced.
+That reasoning conflated two different questions: whether size predicts *rank* at roughly constant token
+count (checked, no), and whether cutting size *materially, across the board* moves the whole distribution —
+including p95 — lower (never checked, and `C14` is a p95 gate, not a spread metric, so the second question is
+the one that matters for mitigation). **Correct framing: the schema strip is an untested p95 lever**, sized at
+~18% of the payload / 33% of the schema, not a hygiene-only change — see §11.18 for the test proposed to
+resolve it. It is a legitimate, free reduction in mean cost regardless of that outcome, and should be
+evaluated on those terms too. **Not applied here** — `bedrock_router.py` is
+unedited; this is the report the instruction asked for, not the change.
+
+**Item 3 — the sequential/blocking question, checked against the record.** The record is **not silent** on
+this, but what it contains answers a narrower question than the one just asked, and the two must not be
+conflated going forward.
+
+**What the record already has, in full.** `ADR-014` (Phase 7) directly proposed and measured a concurrent-
+call architecture — but for a different pair of calls than the one on the table now: splitting the *merged*
+router+L2-safety call (today's single `classify_turn`) into **two concurrent Bedrock calls**, one per
+responsibility. `RESULTS.md` §3.6 measured it for real, 7,900 calls, $0.264: **"Concurrency behaves as
+`ADR-014` §5 claimed. p50 wall 473–495 ms against 861–906 ms sequential"** — `max(t₁, t₂)`, not the sum,
+confirmed empirically, not just argued. That rung (**C**) was then **rejected — not on latency, on
+correctness**: its effective macro-F1 collapsed (0.326 against rung A's 0.510) via a deterministic schema
+field-drop defect found and diagnosed in §3.6.1 (removing `safety_flag` from the split classifier's schema
+made a *different* required field, `intent_confidence`, start disappearing on 7/7 coverage-question turns,
+retry-immune, 20/20 reproductions at temperature 0.0). Rung D (concurrent + revised prompt) additionally
+failed the non-tradeable recall invariant `C1`. **"Nothing was promoted"** — §3.6's own words — and today's
+`bedrock_router.py` is rung A, the merged, sequential call, standing **"by default rather than by merit."**
+
+**So: concurrency for Bedrock calls in this graph has been built, measured, and shown to work exactly as
+`max(t₁, t₂)` predicts — this is not a hypothesis anyone would need to re-derive.** But `ADR-014` answers "can
+the router+L2-safety call be split into two concurrent calls" (yes, mechanically; rejected anyway, on
+quality). It does not answer, and nothing else in the record answers, whether **today's single merged
+`route_and_classify` node can run concurrently with a separate, already-distinct step** — specifically
+`guardrails_input_check`, which `agents/graph.py`'s edges (`_after_guardrails_input`) place strictly before
+it today. A `grep` across `docs/adr`, `docs/phase4`, `docs/phase5`, and `docs/RESULTS.md` for
+parallel/concurrent/sequential language found `ADR-010` (governs only `l1_safety_check`'s position, silent on
+guardrails-vs-router ordering) and `ADR-014` (governs only the router-internal split just described) — no
+document evaluates the router-vs-guardrails-input pairing. **That specific instance is inherited unexamined,
+not rejected.**
+
+**Why the current order isn't accidental, named so the alternative is judged against the real trade-off.**
+`guardrails_input_check` runs first so that a blocked input short-circuits before the router call is made at
+all — skipping a Bedrock spend and a call on turns Guardrails would reject anyway. Running the two
+concurrently would give up that short-circuit on the (presumably rare, unmeasured-here) blocked-input path,
+in exchange for wall-clock savings on every other turn. Quantified from numbers already in this file — no new
+measurement: guardrail-input p95 is **137ms** (§11.15) against the router's **1,286ms** p95 (§11.15/§11.16).
+Running them concurrently would save, at matched percentiles, **at most the smaller call's own duration
+(≤137ms at p95)**, because wall time becomes `max()` instead of the sum — real, but almost an order of
+magnitude smaller than the ~885ms gap between the router's own p50 (401ms) and p95 (1,286ms) that Item 1 of
+§11.16 is actually chasing. **This lever would trim a real ~140ms off the tail; it would not touch the
+instability that is the actual finding.** Two costs transfer directly from `ADR-014`'s own accepted-risk
+list rather than needing to be discovered fresh: doubled per-turn exposure to Bedrock-family throttling/
+errors on whichever branch runs concurrently (a *different* claim from "zero occurrences measured so far" —
+§11.16 Item 2 measured a 14-day zero-occurrence window for the *current* serial call pattern, which says
+nothing about exposure under a doubled concurrent rate), and the `boto3.client()`-in-a-concurrent-context
+hazard `ADR-014` §5 named and fixed by constructing one shared client before issuing both calls — whether
+that same construction is even the right fix here is itself open, since the guardrail client and the Bedrock
+runtime client are two different service clients, not two callers of the same one, and nothing in this
+project's record has checked whether Guardrails' client carries the identical thread-safety caveat.
+
+**Lexical short-circuit and caching: both genuinely unexamined, confirmed by direct check rather than
+assumed absent.** This project already has a precedent for the *shape* of a lexical bypass — `l1_safety_check`
+(`agents/nodes/safety.py`, `agents/lexicon.py`) is a deterministic, model-free pre-node that terminates the
+turn on a pattern match before any Bedrock call is made. But it exists for exactly one purpose, safety, and
+is deliberately weak on recall by design (0.269 against an independent held-out set — `lexicon.py`'s own
+docstring: *"L1 carries precision and latency; L2 has to carry recall"*). No equivalent exists anywhere in
+`graph.py`, `routing.py`, or any node for intent classification — there is no keyword or pattern check ahead
+of `route_and_classify` for high-confidence utterances (e.g., an exact or near-exact match to a canonical
+"what's my claim status" phrasing). A `grep` for cache/caching across `docs/adr` and `docs/RESULTS.md` (excluding
+LangGraph's checkpointer, an unrelated use of the same word) returned zero hits — no ADR, no `RESULTS.md`
+entry, and no code comment discusses Bedrock prompt caching, response caching, or any caching applied to the
+router call. **Neither lever has been tried, tuned, and rejected. Neither has been written down as considered
+at all.** They are open, not closed — the honest state to report before Marco decides where to spend the next
+unit of investigation.
+
+**Verdict on Item 3, stated so it cannot be conflated later.** The record contains a real, measured answer to
+*one* instance of "must the router be sequential" — splitting the merged call into two concurrent Bedrock
+calls — and that instance was tried and rejected on classification quality, not latency. It does **not**
+contain an answer to whether the router can run concurrently with `guardrails_input_check`, be preceded by a
+lexical fast-path, or be preceded by a caching layer — those three are inherited unexamined, and the first of
+them, quantified above, would not have reached the instability Item 1 of §11.16 identified as the actual
+`C14` lever even if it had been tried. **"We already tried making the router non-blocking and it hurt the
+numbers" would overstate what `ADR-014` established — it tried one specific concurrency shape, for one
+specific reason, and rejected it for a reason unrelated to latency.** Saying so plainly here is meant to stop
+that overstatement from happening at the point the mitigation decision is written up.
+
+**Not done, per instruction:** no code changed in `bedrock_router.py`, `graph.py`, `lexicon.py`, or anywhere
+else; no schema-stripping applied; no lexical fast-path or caching layer designed or prototyped; no AWS call
+made; `ADR-009` unedited; no redeploy, no run. Cost this session: **$0** — local code and doc inspection only.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes on Item 3 specifically — the record could plausibly have contained nothing
+   at all on parallelism, or could have contained a direct answer to the guardrails-vs-router pairing. It
+   contains neither extreme: a real, relevant, but non-transferable-without-caveat answer to an adjacent
+   question. Reporting "ADR-014 already covers this" without the pairing distinction would have been the
+   available shortcut and the wrong one.
+2. *Asserted-but-unchecked?* Two catches: (a) the ≤137ms parallelization estimate is explicitly checked
+   against §11.16's own instability finding rather than presented as though it addressed the tail; (b) the
+   chars÷4 token estimate's ~40% shortfall against CloudWatch is stated as an open, unreconciled gap rather
+   than silently dropped or forced to match by adjusting the method after seeing the target number.
+3. *Infra error scored as a result?* N/A — no AWS calls made this section; local code inspection and doc
+   `grep` only.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, no liveness concern.
+5. *Identical markers, different paths?* This is the core of Item 3: "concurrent Bedrock calls" in `ADR-014`
+   and "the router running concurrently with something else" in Marco's instruction are not the same claim
+   wearing the same words, and treating them as interchangeable is exactly the conflation this item exists to
+   prevent.
+6. *Has this check ever failed for the right reason?* Yes — the `grep` for parallel/concurrent language across
+   `docs/adr` came back with real, substantive hits (`ADR-010`, `ADR-014`) rather than only ever returning
+   empty, which is what makes its zero-hit result for the guardrails-router pairing and for caching credible
+   rather than a search that never finds anything.
+7. *Changes a headline number's interpretation?* Yes — §11.16's "intrinsic serving-time variance" is
+   relabeled from a stated explanation to a named residual; and the open mitigation question changes from a
+   two-way choice ("provisioned throughput or live with it") to a two-way choice with two *additional*,
+   distinct, unexamined architecture levers named and bounded (≤137ms for the guardrails pairing; unbounded
+   but untried for lexical/caching), neither of which reaches the instability itself.
+8. *Touches `C1`?* No — no claim on `C1` made or revised; this section is `C14`-only, consistent with every
+   prior §11.1x entry.
+
+### 11.18 The schema strip reframed as a p95 lever, a $0-adjacent test proposed to resolve it, caching closed
+off structurally (not just untried), and the mitigation decision on one page
+
+Marco's instruction on accepting §11.17: (1) correct §11.17 Item 2's framing — `C14` is a p95 gate, not a
+spread metric, so "size doesn't track spread within this run" doesn't bound the effect of removing ~18% of
+the payload across the board; the schema strip is an untested p95 lever, not a hygiene item; (2) propose how
+to test it at minimum cost — direct Bedrock invocations of the router prompt alone, stripped vs. unstripped,
+n large enough to compare p95, no Lambda redeploy, with an estimated cost, answered before provisioned
+throughput is considered; (3) bring the mitigation decision on one page — schema strip (pending item 2),
+caching, lexical short-circuit, provisioned throughput, accept-and-carry-forward — each with expected p95
+effect, cost, whether it needs an apply, and any `C1` interaction, with a recommendation. **No apply, no
+spend beyond what item 2 proposes and Marco approves, `ADR-009` unedited.**
+
+**Item 1 — corrected in place, pointer left in §11.17.** Done above: §11.17's "cost/hygiene, not a
+tail-latency fix" sentence now points here. Restated once, precisely: §11.16 Item 2 measured that, **within
+this run's own 917-940 token band (a 23-token, ~2.5% range)**, output-token count didn't predict which minute
+bucket had the worst p95 — a finding about *rank correlation at near-constant size*. It says nothing about
+what happens to the whole distribution when size is cut by an order of magnitude more than that band's own
+width — 18% of the full payload, 33% of the schema specifically (§11.17 Item 2). Those are different
+questions, and `C14`'s own text is unambiguous about which one is load-bearing: it is a **p95 threshold**,
+not a spread ratio. A schema strip that shifted every call's latency down by some roughly constant amount —
+plausible if any part of Nova Micro's or Bedrock's own processing time scales with input size, e.g. tokenization
+or prefill — would lower p95 whether or not it changed the **ratio** of p95 to p50 by one microsecond. §11.16's
+"payload size doesn't track the spread" finding neither confirms nor rules this out, because it was never the
+question that finding answered.
+
+**Item 2 — a test proposed, not run.** The router's exact call is already isolable from the Lambda: `classify_turn`
+(`aws/bedrock_router.py:148`) takes `caller`, `tool_spec`, and the message list as plain arguments, and
+`get_bedrock_runtime_client()` constructs a real `boto3.client("bedrock-runtime", ...)` with no dependency on
+Lambda's execution environment — the same function the ablation ladder ran unmodified 7,900 times from wherever
+that ladder actually executed (`ADR-014` §5, `RESULTS.md` §3.6). **A standalone script, not a Lambda
+redeploy, can call the real, shipped `classify_turn` and a schema-stripped variant, side by side.**
+
+Proposed design (`scripts/measure_router_schema_latency.py`, not written):
+
+- **Two arms**, both invoking the real `classify_turn`, differing in exactly one input:
+  - **Arm U (unstripped):** `tool_spec=None` → today's shipped `build_classify_turn_tool_spec()`, unmodified,
+    imported directly — not hand-copied, so this arm cannot silently drift from production, same discipline
+    `bedrock_router.py`'s own docstring states for the ablation ladder's rung tests.
+  - **Arm S (stripped):** `tool_spec=` a locally-built variant with `title`/`$defs`-description keys removed
+    (§11.17 Item 2's 1,148→766-char schema), passed through the same `tool_spec` parameter the module already
+    exposes for exactly this purpose. The system prompt is unchanged in both arms — Item 2 found it lean, not
+    a target.
+- **Corpus:** real utterances from an existing set already in this repo (the Phase 7 tuning or golden set) —
+  reused, not authored — cycled so both arms see the same utterance-length distribution real traffic would.
+- **Pairing:** for each utterance, call Arm U then Arm S (order randomized per pair to cancel any monotonic
+  drift), both from the same process, same machine, same network path, in the same short window — a paired,
+  interleaved design specifically so the **within-pair difference** isolates the schema change from any
+  client-location or time-of-day confound, rather than trying to reproduce Lambda's absolute latency from a
+  dev machine's own network path to Bedrock, which this design does not claim to do.
+- **Metric:** client-side wall-clock around each `converse()` call — same instrument category the ladder used
+  — with an optional, free cross-check afterward: pull `AWS/Bedrock` `InvocationLatency` for the `fnol-router`
+  profile over the test's own window and confirm the aggregate is in the same ballpark as the client-side
+  aggregate, the same two-signal discipline §11.15/§11.16 already applied. (The two arms can't be separated
+  in that CloudWatch stream — both share the same `ModelId` dimension — so it's a sanity check on the
+  instrument, not the primary comparison.)
+- **Sample size:** proposed **n = 500 pairs (1,000 calls)** for the main run, preceded by a **50-pair (100
+  call) pilot** whose only job is confirming the harness reproduces something in the ballpark of the already-
+  known numbers (Arm U's p50/p95 landing near, not matching, §11.15/§11.16's 401ms/1,286ms — "near" because
+  the network path differs, "not matching" is expected and fine) before spending on the full run. 500/arm is
+  not a formal power calculation — no variance model for the *post-strip* distribution exists to compute one
+  from — but is the same order of magnitude as the per-rung sample sizes `ADR-014`'s own ladder used (~2,000
+  calls/rung across 4 rungs) and is cheap enough to just run rather than theorize further about.
+- **Reading rule, fixed before the numbers exist** (same discipline as `ADR-014` §4 and its amendment):
+  compute Δp95 = p95(Arm S) − p95(Arm U) and a percentile-bootstrap 95% CI on Δp95 (≥2,000 resamples, pure
+  local compute, $0). **Material p95 win only if the CI's upper bound is ≤ 0.** If the CI straddles zero,
+  report "not distinguishable from noise at n=500," not "didn't work" — the same distinction `ADR-014`'s
+  sd-amendment exists to preserve.
+- **Cost estimate.** Nova Micro on-demand: $0.035/1M input, $0.14/1M output (`CLAUDE.md`). Arm U ≈ 925 input
+  + ~44 output tokens/call (§11.16's own measured averages) ≈ $0.0000385/call; Arm S ≈ 18% fewer input tokens
+  ≈ $0.0000327/call — both consistent with `ADR-014`'s own measured $0.000039/call. **Pilot (100 calls) ≈
+  $0.004. Main run (1,000 calls) ≈ $0.037. Total ≈ $0.04, rounded up to ≈$0.10 for margin.**
+- **Scope note, flagged rather than assumed away:** `CLAUDE.md`'s standing Bedrock approval is stated for
+  **Phases 3–7**; this is Phase 9. The amount is trivial against the $5 cap that approval named, but the
+  phase range is not — **this ≈$0.10 is not pre-approved by that clause and needs Marco's explicit go-ahead**,
+  logged in `COSTS.md` per the same rule as every other real Bedrock call this project has made, same as the
+  scope discipline already applied to writes outside `PROJECT_ROOT`. **Not run. Proposal only, pending
+  approval, per instruction.**
+
+**Item 3 — the mitigation decision, one page.**
+
+| Option | Expected `C14` p95 effect | Cost | Needs apply? | `C1` interaction |
+|---|---|---|---|---|
+| **Schema strip** — **superseded, see §11.20: tested 2026-08-14, rejected on quality** (32% classification disagreement at n=50, 4 dropped `safety_flag` verdicts, pilot stop rule triggered, main run never started) | Was: unknown magnitude, untested. Now: **not shippable in this form, latency direction unresolved and moot** | ≈$0.10 approved, **$0.00357 actually spent** (pilot only) | N/A — will not ship as tested | **Direct `C1` interaction found** — this is the one row that touches it: the stripped schema drops the safety verdict on real inputs the shipped schema catches |
+| **Caching** | **None available as currently shaped** — verified at $0 against current AWS docs (below), not merely untried | $0 (nothing to build) | N/A — not actionable in this form | None (moot) |
+| **Lexical short-circuit for routing** | Unmeasured, **not confidently positive** — a lexicon that disproportionately catches easy/fast utterances could concentrate the *remaining* Bedrock-routed calls among harder ones, holding p95 flat or worse; needs its own measurement, not an assumption | $0 to prototype against existing golden/tuning corpora; real engineering + eval effort to ship safely (L1's own lexicon needed the same discipline, and still only reaches 0.269 recall by design) | Yes | None directly (C1 is L1/L2's domain, this sits downstream), but a new routing-correctness surface needs its own accuracy gate before shipping |
+| **Provisioned throughput** | Plausibly the most direct fix for the *shared-endpoint* variance §11.16 converged on by elimination — dedicated capacity removes the contention that's the leading (unconfirmed) explanation | **Nova Micro confirmed PT-eligible** (Amazon Nova model-spec table: Premier is the only Nova model marked "No"; Micro is "Yes") — but the exact $/hour/model-unit **could not be obtained from static AWS docs this pass**; Bedrock's public pricing page renders per-model PT tables through an interactive picker, and even Anthropic's own PT row on that same page says "reach out to your account team" rather than publishing a figure. Directionally, every PT rate this pass *did* find (Titan Text Express $18.40/hr/unit, Titan Image Generator $16.20/hr/unit) is tens of dollars per hour per unit, billed whether used or not — at that order of magnitude, one model unit run continuously is **roughly $12,000-13,500/month, two to three orders of magnitude over this project's $25/month hard ceiling**, even before a Nova-Micro-specific number is confirmed | Yes — new billable resource, **banned by default** per `CLAUDE.md`, requires written justification + `APPROVED: <phase name>` before it can even be fully scoped (a real quote needs the Pricing Calculator, console, or an account-team ask — not a $0 doc read) | None expected (infra-only), would be re-verified once real per this project's own discipline |
+| **Accept-and-carry-forward** | None — status quo; the bounded overage stays documented with its provenance (§11.13/§11.14: 1,800ms is a stated product decision, not derived; §11.15-§11.17: attributed as far as $0 investigation reaches) | $0 | No | None |
+
+**Caching, verified structurally closed, not left as "untried" (`aws___search_documentation`/`read_documentation`,
+current AWS docs, this session):**
+
+- Nova Micro's model card (`docs.aws.amazon.com/bedrock/.../model-card-amazon-nova-micro.html`) confirms
+  explicit prompt caching is supported, but **only on the `system` and `messages` fields, not `tools`** — and
+  the tool schema (1,148 of this call's ~2,110 static-portion characters, the larger static component and the
+  one carrying Item 2's avoidable verbosity) is exactly the field Nova cannot cache.
+- The same page states a **1,000-token minimum per cache checkpoint** for Nova models (max 20K). The system
+  prompt — the one field that *is* cacheable — is on the order of 240-400 tokens by this section's own
+  chars÷4 estimate and its measured-vs-estimate ratio (§11.17 Item 2), well under that floor on its own.
+  **No field in this call's payload is both cacheable and large enough to check.**
+- AWS's general prompt-caching page separately states Nova offers **automatic, implicit caching for text
+  prompts "even without explicit configuration,"** with no stated minimum for that mechanism specifically —
+  an open, unconfirmable-at-$0 detail (model invocation logging is disabled, §11.15, so no per-request
+  cache-hit signal is observable), named rather than assumed either way. It does not change the conclusion
+  above: the documented, controllable, cost-saving mechanism (explicit checkpoints) is closed off by the
+  `tools`-field exclusion and the token floor; whatever the automatic mechanism does or doesn't do underneath
+  is not a lever this project can observe, tune, or claim credit for.
+- Padding the system prompt past 1,000 tokens purely to qualify for a cache checkpoint would add real tokens
+  to remove none — self-defeating, not proposed.
+
+**Recommendation, single and sequenced, not a menu.** Run Item 2's test first, pending Marco's approval of
+the ≈$0.10 spend. Caching needs no further work — it's closed at $0, structurally, this session. Lexical
+short-circuit is real but is a larger investment with an unmeasured and possibly-adverse p95 sign; it
+shouldn't start before the cheaper schema-strip result is in. Provisioned throughput should not be seriously
+pursued at this project's scale regardless of Nova Micro's exact rate: every comparable published figure this
+pass found sits far enough above the $25/month hard ceiling that a materially different Nova Micro number
+would be needed to change that conclusion, and confirming one costs a real scoping step (console/Pricing
+Calculator/account team), not a $0 read — better spent only if the schema strip fails and lexical
+short-circuit is exhausted or rejected. **If Item 2's test shows a material Δp95 (CI excludes 0): ship the
+strip, re-verify `C1` and re-measure `C14` on the shipped system — likely sufficient progress to defer both
+remaining options indefinitely. If the test is inconclusive (CI straddles 0): the honest next state is
+accept-and-carry-forward, with lexical short-circuit named as the one not-yet-exhausted lever worth a real,
+larger-scoped investigation before provisioned throughput is ever brought back for actual pricing and
+approval.**
+
+**Not done, per instruction:** no code written or changed (`bedrock_router.py`, `scripts/` untouched), no
+test run, no AWS call made this section beyond read-only documentation search, no spend, `ADR-009` unedited.
+Cost this session: $0 — AWS documentation search/read only (`aws___search_documentation`,
+`aws___read_documentation`), no billable API.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — the caching investigation went in open (Marco named it as one of three
+   live architecture levers) and came back closed for a structural reason found directly in AWS's own docs,
+   not because caching is a bad idea in general.
+2. *Asserted-but-unchecked?* The provisioned-throughput cost row is explicit about what it does and doesn't
+   know: Nova Micro's PT-eligibility is confirmed from a primary source; the exact rate is not, and the
+   $12-13.5k/month figure is stated as directional from *other* models' published rates, not presented as
+   Nova Micro's own number.
+3. *Infra error scored as a result?* N/A — read-only AWS documentation search/read; no billable API call, no
+   harness run.
+4. *Cost below estimate?* N/A — $0 estimated and spent this section; the ≈$0.10 test cost is an estimate for
+   a not-yet-run, not-yet-approved future call, clearly labeled as such.
+5. *Identical markers, different paths?* This is Item 1's whole content: "size doesn't track spread" and
+   "size doesn't affect p95" are not the same claim, and §11.17 stated the first while implying the second.
+6. *Has this check ever failed for the right reason?* Yes — the AWS documentation search for Nova Micro's
+   provisioned-throughput rate came back genuinely empty (an interactive picker, not a missing feature),
+   distinct from a search that never finds anything; reported as a real gap rather than papered over with a
+   third-party blog figure `CLAUDE.md` would flag as unverified.
+7. *Changes a headline number's interpretation?* Yes — the schema strip moves from "hygiene, won't touch the
+   gate" to "untested p95 lever, to be resolved by a named, costed, $0.10 test"; caching moves from "open,
+   unexamined" (§11.17) to "closed, and why."
+8. *Touches `C1`?* No — no claim on `C1` made or revised; the schema-strip row recommends a confirmatory eval
+   run before shipping as a precaution, not because this section found a `C1` risk.
+
+### 11.19 Pre-registration — the schema-strip test's quality rule, fixed before any pair has been run
+
+**`APPROVED: Phase 9 — schema-strip latency test, ~$0.10 ceiling`, Marco, 2026-08-14.** Approval carried one
+required addition: the stripped schema removes content the model reads (pydantic `title`s, two enum
+docstrings), not just bytes, and Nova Micro is small enough that classification behavior can move on exactly
+that — `ADR-014`'s own concurrency lever died on classification quality, not latency, on a smaller schema
+change than this one. Every pair run in both arms must have its classification captured and compared, not
+only its latency. This section fixes the reading rule for that comparison **before §11.19's pilot writes a
+single row** — the same discipline `ADR-014` §4 and its sd-amendment, and the Phase 7 pre-registrations, apply
+to every rule in this project that could otherwise be shaped by the result it's about to see.
+
+**What "agreement" means, defined per field, not left implicit:**
+
+| Field | Agreement test | Why this test, not exact-match-everywhere |
+|---|---|---|
+| `safety_flag` | Exact boolean match | Binary, no continuous-value ambiguity to resolve |
+| `intent` | Exact categorical match | 8-way enum, feeds `graph.py`'s `_after_routing` directly |
+| `coverage_question_type` | Exact categorical match | 4-way enum, only load-bearing when `intent = CoverageQuestion`, checked regardless |
+| `intent_confidence` | **Same side of `LOW_CONFIDENCE_THRESHOLD` (0.5)** — `graph.py:56`, not a new number invented for this test | A continuous field; exact-float agreement would fail on ordinary floating-point/serving jitter this project's own record already expects even at temperature 0.0 (`measure_temperature_variance.py`'s docstring: *"Bedrock makes no bit-reproducibility guarantee"*), and would be meaninglessly strict. The 0.5 threshold is the only place this project's *shipped code* treats the value as a decision, not a score — reusing it means the agreement test is grounded in actual behavior, not an arbitrary epsilon chosen for this experiment |
+
+A pair **disagrees** if Arm U and Arm S differ on any one of the four. Agreement is symmetric and per-pair;
+partial agreement on 3 of 4 fields still counts as a disagreement, not a partial pass — there is no field
+here whose drift is acceptable on its own, only fields whose *shippability consequence* differs (next).
+
+**Pilot rule (n=50 pairs) — Marco's instruction 3, restated as the literal stopping condition, not
+paraphrased:** if **any** pair disagrees on any field, **stop immediately after that pilot batch completes**
+and report — do not proceed to the main run, do not average it away, do not wait for a "worse" one. One
+disagreement at n=50 is already enough to fail the shippability bar below at any larger n a straight
+proportional projection would imply, so continuing past it before reporting would only spend more of the
+$0.10 ceiling to confirm what the first disagreement already showed.
+
+**Main-run shippability rule (n=500 pairs, only reached if the pilot passes clean) — fixed now:**
+
+- **`safety_flag`: zero-tolerance, absolute, non-negotiable regardless of Δp95.** Any single `safety_flag`
+  disagreement anywhere in the run makes the strip unshippable. This is not a new invention for this test —
+  it is `C1`'s own non-tradeable status (`ADR-014` §4's admissibility rule: *"Union escalation recall is not
+  below rung A's k-sampled baseline... not tradeable, per Marco"*) applied to the one field of this call that
+  `C1` actually depends on. A faster router that flags injuries differently is the one outcome this project's
+  own record already treats as automatically disqualifying, ladder or no ladder.
+- **`intent` / `coverage_question_type` / confidence-threshold-crossing: tolerance = one population unit at
+  the run size actually reached.** This project's own precedent (`ADR-014` Amendment 1, 2026-08-12): *"Where
+  the measured sd is not resolvable... the tolerance is instead one population unit: the change produced by a
+  single item moving in the evaluation set... A difference smaller than one population unit is not a
+  difference, whatever the arithmetic says."* At n=500 that is **1/500 = 0.2%**. Concretely: **0 disagreements
+  on these three checks across all 500 pairs → shippable on quality grounds** (latency read separately per
+  §11.18's Δp95/CI rule). **Exactly 1 → flag and investigate that specific pair before shipping; neither
+  auto-approve nor auto-reject on a single population unit.** **2 or more → not shippable as currently
+  constructed** — the strip is changing classification behavior, not only removing dead weight, and needs a
+  different strip (e.g., one that keeps whatever content the model was actually using) before being
+  reconsidered, not a larger sample to average the disagreements away.
+- **Both rules apply independently — the `safety_flag` gate cannot be satisfied by the population-unit
+  tolerance, and vice versa.** A run with 0 `safety_flag` disagreements and 3 `intent` disagreements still
+  fails; a run with 1 `safety_flag` disagreement and 0 everything-else disagreements still fails. There is no
+  aggregate "mostly agrees" score that substitutes for either line.
+
+**How this composes with §11.18's latency rule, stated so the two can't be traded against each other later:**
+Δp95's bootstrap-CI test and this section's agreement test are **both gates, not one score.** A material Δp95
+win with any `safety_flag` disagreement, or with ≥2 disagreements on the other three fields, does not make the
+strip shippable — quality fails independently of how good the latency number looks. This is the direct
+consequence of Marco's framing in the approval: *"A faster router that classifies differently is not
+shippable."*
+
+**Sequence, restated as instructed:** pilot (n=50, ≈$0.004) → report both arms' latency and agreement,
+stop-if-any-disagreement → only if clean, main run (n=500, ≈$0.037) → report Δp95 with CI, agreement rate
+against the rules above, actual cost vs. the ≈$0.10 estimate, and the read against both pre-committed rules.
+
+**Run 2026-08-14, immediately after this commitment. Result: §11.20.**
+
+**Addendum, written after §11.20's result — what the two-gates design actually earned.** §11.20's own latency
+reading at n=50 was inconclusive and, at face value, directionally *worse* (Δp95 = +206.0ms, CI straddling
+zero — the stripped schema read numerically slower, not faster). **Had this test been latency-only — the
+shape §11.17 Item 2 originally proposed before Marco's required addition — that inconclusive-and-unfavorable
+reading would have been the entire result at the pilot stage, with nothing to stop it from either being
+discarded as noise or driving straight into the full n=500 run on the strength of the payload-size argument
+alone.** Either path reaches the same place: a schema change that drops real `safety_flag` verdicts, shipped
+or nearly shipped, on the evidence of a latency number that never told anyone. The quality gate this section
+pre-committed is what actually caught it, and it caught it on the same 50 pairs the latency reading was
+already ambiguous on — the two gates were not redundant insurance against the same risk, they were the only
+gate that was ever going to fire.
+
+### 11.20 The pilot triggered its own stop rule — 32% disagreement, 4 dropped `safety_flag` verdicts, main
+run not started
+
+`scripts/measure_router_schema_latency.py` (new, matches `measure_temperature_variance.py`'s shape: real,
+shipped `classify_turn`, one input changed). Corpus: 141 real turns from `evals/golden/*.yaml`, sampled to 50
+pairs, seed fixed to the approval date. Output: `evals/baselines/schema_strip_pilot_20260814.json`.
+
+**Latency, n=50 (underpowered by design — the pilot's job is the stop-rule check, not a latency verdict):**
+
+| | n | p50 | mean | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| Arm U (unstripped) | 50 | 584.0ms | — | 902.4ms | 1,481.1ms |
+| Arm S (stripped) | 50 | 595.9ms | — | 1,108.4ms | 1,506.4ms |
+
+**Δp95 = +206.0ms, 95% bootstrap CI [-316.2, +500.6]** — the CI straddles zero (no material latency claim
+either direction at n=50, exactly the "not distinguishable from noise" outcome §11.18/§11.19 pre-defined for
+this case) and, read at face value, **the stripped schema was numerically *slower* at p95 in this pilot, not
+faster** — the opposite sign from what the whole exercise set out to test. Neither fact resolves anything on
+its own at this n; both are superseded by the quality result below, which does resolve at this n.
+
+**Agreement: 34/50 (68.0%). 16 disagreements — not "any," an outright 32%.** Per-field breakdown (a pair can
+disagree on more than one field):
+
+| Field | Disagreements | Of 50 |
+|---|---:|---:|
+| `safety_flag` | **4** | 8% |
+| `intent` | 14 | 28% |
+| `coverage_question_type` | 4 | 8% |
+| `intent_confidence` (0.5-threshold side) | 0 | 0% |
+
+**All four `safety_flag` disagreements are in the dangerous direction — `True` on the unstripped schema,
+`False` on the stripped one. Zero went the other way.** Not a symmetric noise pattern; a directional one:
+
+| Utterance | U `safety_flag`/`intent` | S `safety_flag`/`intent` |
+|---|---|---|
+| "My husband was driving when it happened, not me." | `True` / `InjuryEscalation` | `False` / `Ambiguous` |
+| "If another driver hits me and it's their fault, am I covered for the damage?" | `True` / `InjuryEscalation` | `False` / `CoverageQuestion` |
+| "The headlight is broken and the bumper took a real beating." | `True` / `InjuryEscalation` | `False` / `FileAutoClaim` |
+| "I want to report an accident." | `True` / `InjuryEscalation` | `False` / `FileAutoClaim` |
+
+Every `safety_flag` disagreement co-occurs with an `intent` disagreement moving away from `InjuryEscalation`
+in the same pair — the same coupling `RESULTS.md` §3.2 measured between these two fields when they share one
+call (27/28 correlation), reproducing here under a schema change that touches neither field's definition,
+only descriptive metadata around them.
+
+**Read against both pre-committed rules (§11.19), plainly:**
+
+- **Pilot stop rule: triggered, decisively.** The rule was "any disagreement stops the run." This pilot
+  produced 16, not 1 — the rule doesn't need a close call to have done its job here, but it would have
+  stopped after the very first pair (i=0) regardless of what the other 49 showed. **Per instruction, the main
+  n=500 run was never started.**
+- **Main-run shippability rule, applied retroactively to what the pilot already shows, not to argue the rule
+  should have been softer:** the `safety_flag` zero-tolerance gate requires 0 disagreements; the pilot has 4.
+  The population-unit tolerance for `intent`/`coverage_question_type`/confidence-side (at n=50, one unit =
+  1/50 = 2%, i.e. 1 disagreement) is exceeded by both `intent` (14) and `coverage_question_type` (4). **Every
+  gate in §11.19 fails, independently, and by a wide margin — this was never a borderline case the full 500
+  pairs were needed to resolve.**
+
+**What this means for the finding itself, not just the shipping decision.** §11.17 Item 2 identified pydantic's
+auto-generated `title` fields and the two enum classes' docstrings as "content with no classification value to
+the model" — cosmetic, developer-facing, safe to remove. **That characterization is wrong, measured directly:**
+removing exactly that content changes Nova Micro's classification on this call, including — four times in 50
+pairs, always in the same direction — whether it recognizes an injury. Whatever the model was actually reading
+out of a JSON Schema `"title": "Safety Flag"` or the `InjuryEscalation` enum's class-docstring-derived
+`description`, it was not decorative. This is the same lesson `RESULTS.md` §3.6.1 drew from a different schema
+edit — *"schema shape is a behavioural input, not just a validation contract"* — extended one level further:
+the behavioural input isn't only the schema's *structure* (which fields exist, which are required), it
+includes content this project had assumed was pure documentation.
+
+**Cost: $0.00357028 actual (100 real calls: 84,956 input tokens, 4,263 output tokens) against the ≈$0.004
+pilot estimate — accurate to within 11%, and the ≈$0.10 total ceiling was never approached** (the main run,
+the larger remaining share of that ceiling, did not execute). Logged here and in `COSTS.md`.
+
+**Consequence for §11.18's mitigation table.** The schema strip's row moves from "pending" to **tested and
+rejected on quality — not shippable in this form, independent of its latency effect** (which the pilot's own
+data suggests may not even be favorable, though that reading is not load-bearing given the quality result
+alone already closes the option). This does not mean *no* schema reduction is possible — it means the
+specific stripped variant tested here (blanket removal of all `title`/`description` keys) removes content the
+model uses. A narrower edit that keeps whichever piece of that content is actually load-bearing (untested
+which one — the `safety_flag` property's own title, the `InjuryEscalation` enum's description, some
+combination, or something else in the removed set) could in principle be re-tried, but that is a new,
+smaller-scoped experiment this section does not propose or size, not a rerun of this one at higher n.
+
+**Promoted to its own finding, not left as an aside — see §11.21.** Independent of the strip, Arm U (today's
+shipped schema) over-fired `safety_flag`/`InjuryEscalation` on four no-injury utterances in this same pilot.
+Marco's instruction on reviewing this section: that is the live system, observed incidentally, not a footnote
+to the strip experiment — recorded at §11.21, cross-referenced to §11.6/§11.7's 0.529 false-escalation
+figure, with the four utterances on the record.
+
+**Not done, per instruction:** main n=500 run not started (pilot triggered the stop rule); no code shipped,
+`bedrock_router.py` unedited; `ADR-009` unedited; no redeploy. The measurement script and its raw output are
+new files (`scripts/measure_router_schema_latency.py`, `evals/baselines/schema_strip_pilot_20260814.json`) —
+not an "apply" in this project's sense (no production code path changed, no infrastructure touched), same
+category as every other `scripts/measure_*.py` this project already has committed.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes, and it's the one that happened — the working hypothesis going in
+   (Marco's own framing) was that the strip *might* move classification, not that it obviously would; a
+   pilot that came back clean was the more likely-seeming outcome before running it, not this one.
+2. *Asserted-but-unchecked?* §11.17 Item 2's claim that stripped content had "no classification value" is
+   the asserted-but-unchecked claim this section exists to check, and it fails the check — recorded as wrong,
+   not quietly revised.
+3. *Infra error scored as a result?* No — all 100 calls returned valid, schema-conformant
+   `TurnClassification` objects (no `BedrockRouterError`, no `ValidationError`); the disagreements are real
+   classification differences, not parse failures being misread as findings.
+4. *Cost below estimate?* Actual ($0.00357) came in under the pilot estimate ($0.004) — checked against the
+   call count (100, matching `n_pairs × 2` exactly) and token counts, not just the dollar figure, so an
+   accidentally-short run isn't mistaken for an efficient one.
+5. *Identical markers, different paths?* The four `safety_flag` disagreements and the ten `intent`-only
+   disagreements are reported as separate rows, not folded into one "16 disagreements" figure — a pair
+   failing the zero-tolerance gate and a pair failing the population-unit gate are different findings with
+   different consequences, per §11.19's own rule that the two gates apply independently.
+6. *Has this check ever failed for the right reason?* This is the first time in the phase's `RESULTS.md`
+   record that a pre-committed pilot stop-rule actually fired rather than passing clean — direct evidence the
+   rule was checking something real, not a formality that would have passed regardless of the data.
+7. *Changes a headline number's interpretation?* Yes — the schema strip goes from §11.18's "untested p95
+   lever" to "tested and rejected on quality, latency direction unresolved and moot"; §11.17 Item 2's
+   "content with no classification value" claim is retracted, measured, not merely walked back in wording.
+8. *Touches `C1`?* **Yes, directly — the first §11.1x entry to.** `safety_flag` is the field `C1`'s escalation
+   recall depends on, and this section found four real instances of the stripped schema dropping it on
+   inputs the shipped schema flagged. No claim about `C1`'s *measured value* is made (this test's corpus and
+   protocol are not `C1`'s own k-sampled measurement), but the schema strip is now excluded from ever being
+   shipped without re-clearing `C1`'s full protocol, not just this section's lighter check — consistent with
+   `C1`'s non-tradeable status, applied here at the point of catching a candidate change before it reached
+   that gate, which is what the gate is for.
+
+### 11.21 The shipped router over-fires `safety_flag` on no-injury utterances — found incidentally, same shape
+as the 0.529 false-escalation rate, at the router layer this time
+
+Marco's instruction on reviewing §11.20: the four no-injury false positives on Arm U — today's *shipped,
+unstripped* schema, not the experimental one — are not an aside to the schema-strip result. They are the live
+system over-firing, observed incidentally while measuring something else, in the same shape as this project's
+best-known defect. Recorded here, cross-referenced, not investigated further, per instruction.
+
+**The four utterances, verbatim, from `evals/baselines/schema_strip_pilot_20260814.json`'s Arm U output —
+today's shipped `classify_turn`, `us.amazon.nova-micro-v1:0`, temperature 0.0, no schema modification:**
+
+| Utterance | `safety_flag` | `intent` | Injury content? |
+|---|---|---|---|
+| "I want to report an accident." | `True` | `InjuryEscalation` | None — the golden set's own canonical `FileAutoClaim` opener (`fac-001`), labelled `safety_escalation: false` |
+| "The headlight is broken and the bumper took a real beating." | `True` | `InjuryEscalation` | None — vehicle damage only, no body part, no distress word about a person |
+| "My husband was driving when it happened, not me." | `True` | `InjuryEscalation` | None — a statement about who was driving, no injury mentioned |
+| "If another driver hits me and it's their fault, am I covered for the damage?" | `True` | `InjuryEscalation` | None — a coverage-eligibility question about a hypothetical |
+
+4 of the pilot's 50 utterances (8%) — a real, observed rate on this sample, stated as exactly that and not
+extrapolated into a new production estimate (see caveats below).
+
+**The same shape as the 0.529 false-escalation rate, not a new defect.** §11.6 independently reproduced §0/§2's
+Phase 6/7 finding that this system's merged router+L2 call escalates on turns it should not roughly half the
+time it escalates at all (`0.529`, `9/17` on the deployed system's own protocol). §11.7 carries the same figure
+forward as *"the 0.529 that travels with it"* alongside `C1`'s verified 1.000 recall — the standing, named
+tension between a detector tuned "when in doubt, true" and a caller experience where over-firing has a real
+cost. **This section's four utterances are that same tension, observed again**, independently, on the exact
+current production schema, via a test that was not built to look for it — the same discovery shape `RESULTS.md`
+§11.5 and §11.12 already named for this phase's `C14` work (*"an instrument that was already collecting the
+right data, sitting unread"*), applied here to `C1`'s companion metric instead of to latency.
+
+*A citation correction, made explicitly rather than silently:* Marco's instruction named `§11.6/§11.12` as the
+cross-reference. §11.6 is exactly right — it is the independent reproduction of 0.529. §11.12 was re-read in
+full before writing this section and contains no false-escalation content at all; it is `C14`/warm-path-latency
+work and explicitly states *"this does not touch `C1`."* **§11.7 is used in its place** — it is the section
+that actually carries the 0.529 figure into the deployed-system context these four utterances also come from.
+Flagged here rather than cited silently, per this project's own standing rule that a citation gets verified
+against the document, not assumed correct because it was asked for.
+
+**Does not threaten `C1`, checked against `C1`'s actual definition, not asserted.** `C1` is a recall gate —
+*does the system escalate every real injury/fatality* — and over-firing on turns with no injury present cannot
+lower recall; it can only raise the false-escalation rate, a tracked but separately-gated `D24` TARGET (`≤
+0.10`), not `C1` itself. Nothing here revises `C1`'s 1.000 figure or any claim built on it.
+
+**Three caveats, named rather than smoothed into a rate:**
+
+1. **n=4/50 from a corpus and protocol built for a different purpose.** `evals/golden/*.yaml` was not sampled
+   to measure false-escalation rate — it is a mixed corpus across all six intents plus adversarial/safety
+   cases, and this pilot drew 50 of its 141 turns once, with no k-sampling (temperature 0.0, but this project's
+   own record — `measure_temperature_variance.py`'s docstring — already holds that 0.0 is not a
+   bit-reproducibility guarantee). **8% here is not a replacement for, or an update to, the 0.529 figure**,
+   which has its own dedicated, larger, purpose-built measurement (`RESULTS.md` §0, §2, §11.6, §11.7). It is a
+   same-shaped observation, reported at the confidence its own sample size supports and no further.
+2. **Not diagnosed.** Whether these four are driven by the same mechanism §0/§2's 0.529 traces to, a different
+   one, or simple sampling variance on a small n is not investigated here, per instruction.
+3. **Golden-set contamination is not ruled out.** Three of the four utterances are drawn near-verbatim from
+   `evals/golden/file_auto_claim.yaml`'s own `fac-001` conversation (labelled `safety_escalation: false`) and
+   adjacent items — real caller phrasing this project wrote as *negative* safety examples. That these are
+   exactly the utterances over-firing is notable on its own (the router disagreeing with this project's own
+   golden labels, not just with common sense), but whether golden-set utterances over-fire at a different rate
+   than genuinely novel phrasing is an open question this section does not resolve.
+
+**Not investigated further, per instruction — recorded so it can be found.**
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — a pilot built to check schema-strip agreement could easily have shown
+   Arm U agreeing with a clean, no-false-positive baseline; instead it surfaced a real defect in the arm that
+   wasn't even under test.
+2. *Asserted-but-unchecked?* The `§11.12` citation Marco supplied was checked against the actual section text
+   before use, found not to contain the claimed content, and corrected openly (above) rather than cited as
+   given or silently swapped without comment.
+3. *Infra error scored as a result?* No — all four calls returned valid, schema-conformant classifications; this
+   is a real disagreement between the model's output and the golden label, not a parse or call failure.
+4. *Cost below estimate?* N/A — no new calls made; this section reports on §11.20's existing data.
+5. *Identical markers, different paths?* The three golden-set-derived utterances and the one novel-phrased
+   utterance ("if another driver hits me...") are not assumed to share a cause just because they share an
+   outcome — caveat 3 states the golden-set overlap as a distinct, unresolved question rather than folding it
+   into "the same defect" without evidence.
+6. *Has this check ever failed for the right reason?* N/A — this section makes no new pass/fail check; it
+   reports an observation from §11.20's existing protocol.
+7. *Changes a headline number's interpretation?* No new headline number is asserted — explicitly stated that
+   8%/n=4 does not update or replace 0.529, to prevent exactly that misreading.
+8. *Touches `C1`?* Directly addressed above: no — `C1` is recall-only, over-firing cannot lower it, and no
+   claim on `C1`'s value is made or revised here.
+
+### 11.22 The mitigation decision, narrowed to two live options — recommendation brought, not applied
+
+Marco's instruction: bring the narrowed mitigation page — lexical short-circuit and accept-and-carry-forward
+as the live options, caching/schema-strip/provisioned-throughput marked closed with why, each live option
+scored on expected p95 effect, cost, whether it needs an apply, and `C1` interaction, one recommendation.
+**Full review — hold for Marco's decision. Nothing in this section is applied.**
+
+**Closed, carried forward with citations, not re-argued:**
+
+| Option | Why closed |
+|---|---|
+| **Caching** | Structural (§11.18, verified against current AWS docs). Nova Micro's explicit prompt caching covers only `system`/`messages`, never `tools` — where the schema actually lives — and requires a 1,000-token minimum per checkpoint the system prompt alone doesn't clear. No field in this call is both cacheable and large enough. |
+| **Schema strip** | Empirical (§11.20). 32% classification disagreement at n=50; 4/50 `safety_flag` verdicts dropped, all in the dangerous direction, zero the other way. Both pre-registered gates (§11.19) failed decisively. Latency was inconclusive-to-unfavorable anyway (§11.19 addendum) — this was never a close call the full n=500 needed to resolve. |
+| **Provisioned throughput** | Policy/cost, not empirical (§11.18). Nova Micro is PT-eligible, but every comparable published rate implies roughly $12-13.5k/month for one model unit — two to three orders of magnitude over the project's $25/month hard ceiling — and it's banned-by-default per `CLAUDE.md` regardless. Nothing found since reopens it. |
+
+**Live option 1 — lexical short-circuit for routing. `C1` interaction corrected here, sharper than §11.18's
+original table entry.**
+
+§11.18 scored this "None directly (`C1` is L1/L2's domain, this sits downstream)." Checked now against the
+actual graph (`agents/graph.py`, `agents/nodes/routing.py`) rather than asserted: `route_and_classify` —
+today's single `classify_turn` call — is *where* the safety union happens: `state["safety_flag"] =
+l1_safety_flag or classification.safety_flag`. A lexical short-circuit that skips this call for "confident"
+utterances means, for those turns, `classification.safety_flag` is never computed — the turn's safety verdict
+falls back to L1's lexicon alone, measured at **0.269 recall** on held-out data (`agents/lexicon.py`'s own
+docstring), not the L1∪L2 union `C1` is built on.
+
+That produces a clean structural either/or, not an unmeasured maybe:
+
+- **A `C1`-preserving short-circuit** (still runs `classify_turn` on every turn; the lexicon only pre-guesses
+  intent for *after* the safety call returns) saves nothing on the router's own latency — the expensive part,
+  the Bedrock call, still happens every turn. p95 effect ≈ 0.
+- **A `C1`-threatening short-circuit** (actually skips the Bedrock call on high-confidence turns, which is the
+  only form that could move p95) removes L2's safety coverage from exactly those turns — the same risk
+  category `ADR-014`'s `I3` invariant exists to prevent for the router/detector split, reappearing one layer
+  up, unguarded.
+
+A narrow, safe middle form is conceivable — short-circuiting only turns provably free of new safety-relevant
+content (e.g., a pure slot-value continuation deep in an already-open `FileAutoClaim` flow, no new clause
+since injury status was last confirmed) — but scoping that correctly is a real design and eval task, not
+something resolvable by inspection, and is not attempted here. **Today's own schema-strip result weakens the
+case for treating a new routing-behavior change as safe by inspection, not strengthens it** — this project
+twice this phase (§3.6.1, §11.20) found Nova Micro more sensitive to changes it expected to be inert than
+assumed going in.
+
+**Terminology correction, precise about which structure a "bypass" actually bypasses.** Marco's framing —
+"the router is upstream of the graph's detection path" — describes a two-stage pipeline (route, then detect)
+that this project does not have. Under `ADR-004`'s merged call, `classify_turn` **is** L2's detection path;
+routing and safety classification are one Bedrock call, not two stages in series. There is no separate,
+downstream detection step for a lexical short-circuit to leave intact while only skipping "the router." Skip
+the router and the only thing skipped is the one call that produces `classification.safety_flag` — L2's
+entire contribution to the union vanishes for that turn, not just its routing contribution.
+
+**Does this interact with `C1`'s verified status, or is it orthogonal? Interacts, directly — not orthogonal,
+stated plainly rather than left to be inferred from the risk description above.** `C1`'s 1.000 recall figure
+(§11.7, verified on the deployed system) is a claim about *this graph's current topology*: every turn passes
+`l1_safety_check`, and every turn L1 doesn't already terminate reaches `route_and_classify`, unconditionally
+(`assert_dominates`, `agents/graph.py`). The `C1`-threatening form of a lexical short-circuit changes that
+topology — some turns would no longer reach the call `C1`'s measurement assumes every turn reaches. **The
+existing 1.000 figure would not silently continue to describe the modified system; it would stop applying to
+exactly the turns the short-circuit diverts, on the day the short-circuit shipped, whether or not anyone
+re-ran the measurement to notice.** This is not a new, separate `C1` risk alongside the topology change — it
+is the same fact stated two ways: shipping this form requires re-verifying `C1` against the new topology
+before it can be trusted again, not as a precaution, but because the old verification's own scope no longer
+covers the system that would exist after shipping it.
+
+| Form | Expected p95 effect | Cost | Apply? | `C1` interaction |
+|---|---|---|---|---|
+| `C1`-preserving (safety call always runs) | ≈0 — still calls Bedrock every turn | $0 to prototype; real eng+eval time to ship | Yes | None (unchanged from today) |
+| `C1`-threatening (skips the Bedrock call) | Unmeasured, plausibly real but hit-rate-dependent; not obviously concentrated in the tail (§11.16 found slow calls aren't payload- or position-clustered, so there's no evidence "easy" turns are the slow ones) | $0 to prototype; substantial eng+eval to scope a provably-safe subset, if one exists | Yes | **Direct — threatens the union-recall guarantee `C1`'s 1.000 is built on, unless scoped to a subset not yet designed** |
+
+**Live option 2 — accept-and-carry-forward.**
+
+| Expected p95 effect | Cost | Apply? | `C1` interaction |
+|---|---|---|---|
+| None — status quo. `C14` stays open, documented with its provenance (§11.13/§11.14: 1,800ms is a stated product decision, not derived; §11.15-§11.21: attributed and now tested — two mitigations tried and closed, not merely proposed and left) | $0 | No | None |
+
+**The 19ms figure, restated with its scope every time it is used below — not a headline number on its own.**
+`C14` is defined end-to-end, Lex STT completion to Polly audio stream start. The measured warm-path p95
+(1,819ms, §11.12) and the 19ms overage against the 1,800ms budget it produces are both **a sub-component**:
+Lex NLU dispatch, Lambda invocation, LangGraph scheduling, checkpointer I/O, and the Bedrock router/guardrail
+calls — structurally excluding ASR, TTS, and telephony wire/playout time, none of which this project has ever
+measured (`CLAUDE.md`'s own verified-facts table: the per-minute inbound rate is unmeasured; §11.10's Tier 2,
+a real call, remains un-run). By the same non-negative-addition/monotonicity argument this project has used
+at every prior step (§11.10, §11.12, §11.14): whatever ASR, TTS, and telephony actually add can only be added
+on top of the measured sub-component, never subtracted from it. **19ms is therefore a floor on the true
+overage, not the overage itself — the true figure is larger and currently unmeasured, in an unknown but
+strictly non-negative amount.**
+
+**What accept-and-carry-forward obligates — named, so this is a decision and not a footnote.**
+
+1. **`C14` is recorded as measured-failing, not unresolved-pending.** The distinction matters for how a future
+   phase is allowed to treat it: "unresolved" invites re-deriving from scratch; "measured-failing, sub-component
+   only, true figure larger" is a specific, falsifiable claim that stands until something in the list below
+   changes it.
+2. **Trigger conditions — what would change this recommendation, named in advance rather than left to whoever
+   reopens it to reconstruct:**
+   - **A real inbound call is placed** (`APPROVED: <phase name>`, cost-gated, not requested here) and produces
+     `RuntimeSucessfulRequestLatency` (§11.12's named, currently-zero-datapoint candidate metric) plus an
+     external human-timed reading — the first measurement of the currently-unmeasured ASR/TTS/telephony
+     segment, and the number that would tell a future phase whether the true overage is close to 19ms or far
+     past it.
+   - **Tier A instrumentation is built** (§11.15/§11.18's named, not-yet-built minimum tier) — converts the
+     current approximate percentile-sum bound into an exact per-turn figure and covers the still-untested
+     `coverage_question`/`rental_towing` generation path, which could move the p95 in either direction from
+     what Line E's escalation-only protocol shows.
+   - **A scoped lexical short-circuit is designed and its `C1` re-verification passes** — the one live option
+     this section did not close, only declined to pursue now; §11.22's own text above names what that scoping
+     work is.
+   - **Nova Micro's serving characteristics change** — a documented fix, a new model generation, or explicit
+     prompt caching extended to the `tools` field (currently excluded, §11.18) — any of which would reopen a
+     question this section currently treats as closed for a stated, dated reason, not a permanent one.
+   - **The project's cost ceiling or Bedrock provisioned-throughput pricing changes materially** — the only
+     circumstance under which provisioned throughput's closure (a cost-policy closure, not an empirical one)
+     would need revisiting rather than restating.
+3. **What a future phase is expected to do, concretely:** re-open this specific finding (§11.10 through §11.22)
+   rather than re-derive `C14` from zero, treat the 19ms figure as a floor rather than a target to shave, and
+   check the trigger list above before proposing a new mitigation — a new proposal that doesn't address why
+   the prior five were closed is repeating this phase's work, not advancing past it.
+4. **Where this gets tracked so it is findable, not just written once and left in `RESULTS.md`:**
+   `PROJECT_STATE.md`'s open-items ledger (`A`-`G`) is this project's existing mechanism for exactly this
+   shape of obligation — a closed decision with named reopening conditions and no fixed date, unlike the
+   dated re-checks in the same table. This session's `PROJECT_STATE.md` entry adds it as item `H`.
+
+**Recommendation: accept-and-carry-forward.** Reasons, not elimination alone:
+
+1. Three of five original options are now closed — caching structurally, schema strip empirically, PT by cost
+   policy. The cheap end of the option space has genuinely been exhausted this phase, not merely paused.
+2. Lexical short-circuit's only p95-positive form is the one that reopens the exact risk category this session
+   just spent real money demonstrating isn't safe to assume away, on a model now twice shown more sensitive to
+   supposedly-inert changes than expected, and — per the correction above — is not orthogonal to `C1`'s
+   verified status but would directly require re-verifying it.
+3. `C14`'s own measured overage is a **sub-component floor of 19ms, not the true end-to-end figure**, which is
+   larger and unmeasured (restated above). Even at just the measured floor, trading a possible fraction of it
+   for a new, unscoped `C1` exposure is not a trade this project's own decision rules would accept framed as a
+   ladder rung instead of a mitigation option — `ADR-014` §4's C1 admissibility check would fail a candidate on
+   exactly this basis before its latency number was ever read, and that reasoning only strengthens once the
+   true overage is understood to be a floor rather than a ceiling.
+4. Accept-and-carry-forward is not a non-result. It is the same category `ADR-014` §4 itself reached and this
+   project's review discipline (`REVIEW-CRITERIA.md`) treats as valid — *"nothing was promoted... the merged
+   incumbent stands by default rather than by merit"* — not a failure to report, a reported outcome, **with
+   the obligations above attached to it rather than left implicit.**
+
+**If a scoped lexical short-circuit is wanted later**, the next step is not a prototype: it is a written
+definition of which turns are provably free of new safety-relevant content, checked against the golden and
+adversarial corpora the same way `ADR-014`'s ladder checked its own candidates, before any code is written —
+named as the honest next increment, not proposed or sized here.
+
+**Self-review (`REVIEW-CRITERIA.md` §1):**
+
+1. *Opposite result possible?* Yes — lexical short-circuit could have scored as a clean, low-risk win if
+   `graph.py`'s wiring put the safety union somewhere the short-circuit wouldn't touch; checking the actual
+   code rather than assuming found the opposite.
+2. *Asserted-but-unchecked?* §11.18's "C1 is downstream" claim for lexical short-circuit is the
+   asserted-but-unchecked claim this section exists to correct, checked against `graph.py`/`routing.py`
+   directly rather than repeated.
+3. *Infra error scored as a result?* N/A — no calls made this section; a decision write-up over existing
+   evidence.
+4. *Cost below estimate?* N/A — $0 estimated and spent.
+5. *Identical markers, different paths?* The two forms of lexical short-circuit are scored as genuinely
+   different options in one table, not averaged into a single "lexical short-circuit: maybe" row — their p95
+   effect and `C1` risk move in opposite directions depending on which form is meant.
+6. *Has this check ever failed for the right reason?* N/A — no pass/fail check run this section.
+7. *Changes a headline number's interpretation?* Yes, twice — lexical short-circuit's `C1` interaction moves
+   from "none, downstream" to "direct, requires re-verification, not orthogonal"; and the 19ms `C14` overage
+   moves from a number read as *the* overage to a stated floor on a larger, unmeasured true figure.
+8. *Touches `C1`?* Yes, in framing — no claim on `C1`'s measured value changes, but this section states
+   plainly that one live option would require re-verifying it (not merely "threaten" it in the abstract), and
+   distinguishes that from `C1`'s current, unrevised, verified status under today's topology.
+
+### 11.23 Phase 9 closed — exit criteria satisfied via the amended criterion 3(b) carry-forward path; `ADR-009` confirmed unchanged, its scope boundary now named rather than implied
+
+**Marco: "Accept-and-carry-forward APPROVED,"** 2026-08-14, closing the decision §11.22 held for review. This
+section discharges Phase 9's exit criteria against that approval — the criteria as amended twice this phase
+(`PROJECT_STATE.md`, "criterion 3's approved options found incomplete" and "amended criterion 3 approved with
+a sequencing change") — and confirms `ADR-009`'s status, per Marco's explicit instruction to decide between
+superseding it and recording why it stands.
+
+**Exit criteria, discharged:**
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| 1 — attribution before any cold-start mitigation choice | ✅ Satisfied | §11.8: $0 local profile: import of `agents.graph` (~1.6–2.0s) is the dominant, stable phase; `ADR-009`'s "smaller package" step targets this project's own `src/` tree, which the data shows isn't where the weight is. No mitigation was chosen ahead of attribution at any point this phase; `ADR-009` was never edited |
+| 2 — cold-start frequency, bounded | ✅ Satisfied — a bound, not an exact rate, per the amendment's own "a bound is sufficient at ~20 calls/month" | §11.9: no AWS-committed idle-reuse duration exists (checked against four live, current AWS sources); mean inter-call gap ≈36h, past every order-of-magnitude AWS states ("hours"); reading: the opening turn of essentially every real call is cold, turns 2–12 of the same call are essentially always warm |
+| 3-pre(i) — budget provenance resolved, before warm-path attribution | ✅ Satisfied | §11.13: no derivation of 1,800ms exists anywhere in this project's own record — five documents state it as a flat requirement, none compute it. §11.14: kept, reclassified as an explicit stated product decision motivated by (not derived from) Stivers et al. 2009 and ITU-T G.114/G.1051; `C14` stays GATE; the research points tighter, not looser, so the measured overage understates the exposure rather than being a technicality |
+| 3-pre(ii) — warm-path attribution | ✅ Satisfied, to the resolution the record itself reached | §11.15: CloudWatch recovery, $0, no redeploy — router + guardrail-input ≈1,423ms of the 1,819ms warm-only p95 (≈78%). §11.16: the router's own p95 (1,286ms) is **71% of `C14`'s entire budget** on one `nova-micro` classification call; the p95/p50 spread (3.21x) is the actual lever, not the mean; throttling, Bedrock-side errors, concurrency, and payload size all ruled out at $0 with direct server-side signals, not by omission; verdict converges by elimination on intrinsic Nova Micro serving-time variance, mechanism unconfirmed. Tier A explicitly downgraded from gate to refinement — the mitigation decision does not require it — but it remains **unbuilt**, carried into Phase 10 entry conditions below, not silently dropped |
+| 3(a) — mitigation path | ❌ Not satisfied — closed as unavailable, not silently skipped | §11.18/§11.20/§11.22: caching closed structurally (Nova Micro's `tools` field isn't cacheable; the cacheable fields don't clear the 1,000-token minimum alone); schema strip closed empirically (§11.20 — 16/50 pairs disagreed, 4 dangerous-direction `safety_flag` drops, zero the other way, both pre-registered gates failed decisively); provisioned throughput closed by cost policy (~$12–13.5k/month against a $25/month ceiling, banned-by-default regardless); lexical short-circuit's only p95-positive form directly threatens `C1` (§11.22) and is not pursued now. No mitigation landed |
+| 3(b) — carry-forward path, redefined | ✅ Satisfied — the path Phase 9 actually closes on | §11.22, approved above: both exposures named with measured-or-bounded figures — cold-start (the opening-turn-cold frequency bound, §11.9/§11.10) and warm-path (19ms measured **floor** over the 1,800ms budget, on a sub-component that structurally excludes ASR/TTS/telephony, §11.12/§11.16); the `C1`-relevant exposure named (the one live mitigation not pursued — lexical short-circuit — would directly require re-verifying `C1` under a changed topology, not merely risk it); cost/complexity is explicitly **not** the sole ground, per the 2026-08-14 amendment — the ground is that the cheap option space is exhausted and the remaining live option reopens a risk category this phase spent real money demonstrating isn't safe to assume away |
+| 3-budget — the budget's provenance recorded alongside the closing path | ✅ Satisfied | §11.13/§11.14; restated again in §11.22's "19ms figure, restated with its scope" paragraph |
+
+**3(a) reading "Not satisfied" is the criterion working as designed, not a failed exit.** 3(a)/3(b) were
+written as two alternative closing paths for criterion 3, not a required step followed by an escape hatch —
+Phase 9 tried the cheap end of the option space in full (§11.18's five candidates), closed three of five on
+their own merits and a fourth on a direct `C1` interaction, and closes via 3(b) because that is what the
+amended criterion names as the honest outcome when no mitigation is available, not because 3(a) was skipped.
+
+**`ADR-009` status — confirmed unchanged, not superseded; the scope boundary named explicitly, where the ADR
+itself is silent on it.**
+
+Two options were on the table, per Marco's instruction: supersede `ADR-009` with this phase's attribution as
+evidence, or record explicitly why it stands unchanged. **Decision: stands unchanged, unedited.** `ADR-009`'s
+own Decision section — smaller package → Python SnapStart → scheduled warmer → provisioned concurrency,
+cost-gated, in that order — is not contradicted by anything this phase found. Nothing in §11.8 through §11.22
+argues for a different order among those four steps for the purpose `ADR-009` was written to solve: mitigating
+cold-start *construction* time specifically. Cold-start remains a real, independent exposure (the opening-turn
+frequency bound, §11.9/§11.10) that would need exactly this ordering whenever it is pursued, regardless of
+this phase's warm-path finding.
+
+**What is now named, that `ADR-009`'s own text does not say.** Its Decision point 4 and Consequences section
+read, together, as though a residual `C14` breach surviving cold-start mitigations would still be a
+cold-start-shaped problem: *"If Phase 9's measured p95 (with SnapStart and a trimmed package already in
+place) still breaches 1,800 ms, provisioned concurrency is the next step."* §11.12/§11.16 show that assumption
+does not hold: the warm path alone, with no cold start in it at all, already exceeds the budget (19ms floor),
+and the dominant cause is the router call's own serving-time tail (§11.16), not anything Lambda-side
+cold-start mitigation — including Lambda provisioned concurrency — touches. **Lambda provisioned concurrency
+would not close this specific gap even if adopted**, because its mechanism is keeping a Lambda execution
+environment warm, and this gap exists entirely on an already-warm path. (Bedrock provisioned throughput — a
+different resource, for the model rather than the function — is the lever that would actually address router
+serving-time variance, and that is exactly the option §11.22 closes, on cost-policy grounds unrelated to this
+point.)
+
+This is a scope gap, not a defect in the decision `ADR-009` actually made. The ADR never claimed to be a
+complete `C14` closure plan — only a cold-start mitigation order — and it says so itself: *"Measurement, not
+assertion: Phase 9 benchmarks p95 turn latency... reported against the 1,800 ms budget as an OBSERVED measure
+— not claimed to meet the budget here, in Phase 2, before it has been measured even once."* Per the
+immutability rule, `ADR-009` is not edited to add this — the file is untouched, exactly as every session log
+this phase has stated. The correction lives here, and in the amended exit criteria's 3(a) redefinition
+(`PROJECT_STATE.md`), which caught the same gap once already, in different words, before this section restated
+it for the ADR specifically.
+
+**Self-review (`REVIEW-CRITERIA.md` §1):**
+
+1. *Opposite result possible?* Yes — `ADR-009` could have been found to need superseding if its Decision
+   section itself (the four-step order) had been contradicted; it wasn't, and that's stated as a specific,
+   checked finding, not assumed from the fact that a correction was due somewhere.
+2. *Asserted-but-unchecked?* `ADR-009`'s point-4 fallback ("provisioned concurrency is the next step") was
+   read literally and checked against what PT for Lambda actually does (keeps environments warm) versus what
+   the measured gap actually is (a warm-path tail), rather than accepted as automatically still valid because
+   the surrounding order is.
+3. *Infra error scored as a result?* N/A — no calls made this section.
+4. *Cost below estimate?* N/A — $0.
+5. *Identical markers, different paths?* Named directly: "provisioned concurrency" (Lambda, cold-start,
+   `ADR-009`'s domain) and "provisioned throughput" (Bedrock, warm-path serving variance, §11.22's domain) are
+   two different AWS resources this project's own record has occasionally let sit near each other under
+   similar-sounding names — kept explicitly distinct here rather than left to be conflated by a future reader.
+6. *Has this check ever failed for the right reason?* N/A — no pass/fail check run this section.
+7. *Changes a headline number's interpretation?* Yes — `ADR-009`'s fallback step (PT) moves from "the next
+   step if cold-start mitigation isn't enough" to "not a lever on the specific gap this phase measured," a
+   correction to what the ADR's own text implies without touching the ADR itself.
+8. *Touches `C1`?* No — this section is `C14`/`ADR-009`-scope only; no claim on `C1` made or revised.
+
+**Not done:** `ADR-009` not edited, no new ADR written, no apply, no redeploy, no spend. Phase 10 entry
+conditions — written from these files alone, per this project's own convention — are in `PROJECT_STATE.md`.
