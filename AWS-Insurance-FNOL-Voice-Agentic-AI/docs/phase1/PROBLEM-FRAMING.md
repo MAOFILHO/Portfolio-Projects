@@ -22,7 +22,7 @@ FNOL is chosen because it is genuinely hard in ways that exercise the whole stac
 - **Callers narrate, they do not fill forms.** They give the date twice in different words, mention the other driver's insurer before their own policy number, and volunteer things nobody asked for. Slot filling must track what is still missing in graph state rather than interrogating linearly.
 - **The branch structure is real.** A comprehensive claim asks different questions than a collision; a disabling-damage claim opens a towing path; any injury changes everything immediately.
 - **Grounding matters and is checkable.** Coverage and entitlement questions have unambiguous answers in the policy document, so groundedness can be measured rather than asserted.
-- **The caller may be distressed.** Someone standing on a roadside is the worst possible audience for a chatty, interrogating, or slow agent. This is what makes the 1,800 ms p95 latency budget and barge-in a correctness requirement, not polish.
+- **The caller may be distressed.** Someone standing on a roadside is the worst possible audience for a chatty, interrogating, or slow agent. This is what makes the 1,800 ms p95 latency budget — measured **Lex STT completion → Polly audio stream start** (constraint 14; excludes telephony wire delay and audio playout, both of which sit outside this window and add to what the caller actually feels) — and barge-in a correctness requirement, not polish.
 
 Scope is **P&C personal auto only**. Health and life claims are out of scope.
 

@@ -4424,3 +4424,98 @@ offers, at $0 (`WebSearch`, no AWS call):
 **Not done, per explicit instruction:** no number chosen, no document edited to state a new or re-affirmed
 target, `ADR-009` unedited, `3-pre(ii)`'s warm-path attribution not started, no apply, no spend. Cost this
 session: $0 (`WebSearch` documentation research only; no AWS call).
+
+## Session log — 2026-08-14 (continued; `3-pre(i)` resolved — 1,800ms kept, `C14` stays GATE; `3-pre(ii)` attribution method proposed)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco's decision on the prior entry's three sourcing paths: **approved as proposed. 1,800ms unchanged, `C14`
+remains a GATE**, reclassified as an explicit stated product decision motivated by (not derived from)
+Stivers et al. 2009 and ITU-T G.114/G.1051. Write-up instructed to include four things, plus proceed to
+`3-pre(ii)` as a proposal only. **Report only. No apply, no spend, `ADR-009` unedited.**
+
+**1–4, written up in `RESULTS.md` §11.14, not repeated in full here:**
+
+1. The directional finding — the research points **tighter, not looser**: wire delay (ITU-T G.114/G.1051)
+   sits on both sides of `C14`'s window, and playout sits past its stop point (stream *start*, not the
+   point the caller has heard enough to respond); both are excluded from `C14` and add to the caller's felt
+   gap, never subtract. The 19ms warm-path overage (§11.12) therefore **understates** the exposure rather
+   than being a technicality against an arbitrary line.
+2. The GATE reasoning, kept verbatim in §11.14: downgrading `C14` from GATE to TARGET in the same session
+   its violation was found and confirmed would be relaxing a failing gate at the moment it failed, dressed
+   as a reclassification — the exact move `SUCCESS-METRICS.md`'s TARGET definition ("reported honestly, not
+   hidden or quietly relaxed") exists to name and forbid. Considered and declined, not overlooked.
+3. `docs/phase1/PROBLEM-FRAMING.md:25` and `docs/phase1/AI-USE-CASE-CARD.md:112` — the two of `§11.13`'s
+   five documents that stated the bare "1,800 ms" figure without the Lex-STT-completion→Polly-start
+   boundary — now state the boundary and its exclusions (wire delay, playout) inline. Both edited this
+   session.
+4. `C1` unaffected — checked and stated explicitly in `RESULTS.md` §11.14, same discipline as §11.12/§11.13.
+
+**`3-pre(ii)` — proposing a warm-path attribution method against the retained 1,800ms budget. Proposal
+only: no code written, no redeploy, no run, no apply, no spend.**
+
+**Components to attribute** — unchanged from the amended-criterion-3 proposal: Lex NLU dispatch overhead,
+Lambda invocation overhead (cold init already characterized, §11.5–§11.8 — excluded here), the Bedrock
+router call, the Bedrock generation call, guardrail `ApplyGuardrail` calls (input and output), checkpointer
+(DynamoDB) read/write, and a residual computed by subtraction for LangGraph scheduling overhead and anything
+not separately attributed.
+
+**Instrument — checked what already exists on the live path before proposing anything new, same discipline
+as §11.7/§11.10/§11.12's instrument reuse.** Unlike those three, **nothing does**: `agents/nodes/routing.py`
+calls `classify_turn` (the merged call) unwrapped, no timing. `aws/bedrock_router.py:233`'s
+`generate_response` has no timing. The guardrail nodes (`agents/nodes/guardrails_nodes.py`) call
+`GuardrailClient.apply_guardrail` unwrapped, no timing. `aws/checkpointer.py` only constructs a
+`DynamoDBSaver`; its read/write calls happen inside `langgraph_checkpoint_aws`, invoked by LangGraph around
+node execution, not at a call site this codebase owns. `api/lex_codehook.py:504`'s `graph.invoke(...)` is a
+plain synchronous call — no `stream_mode`, no callback handler attached, so no LangGraph-native per-node
+timing is being collected either. **The one timing pattern that does exist in the repo**
+(`aws/split_router.py`'s `detector_ms`/`classifier_ms`/`wall_ms`, built for `ADR-014`'s ablation ladder)
+lives in `classify_turn_split`, which is not the function the live routing node calls — it demonstrates the
+right pattern but sits on a code path production traffic never reaches. Verified by reading the call sites
+directly, not assumed from file names. **This phase's usual "an instrument already collecting this, unread"
+shape does not apply here — new instrumentation is required**, stated plainly rather than implied by silence.
+
+Proposed, in increasing invasiveness:
+
+- **Tier A — node-boundary timing, one instrumentation point.** `routing`, `guardrails_input_check`,
+  `guardrails_output_check`, and each generation-bearing node (`coverage_question`, `rental_towing`) are
+  already separate `add_node` entries in `agents/graph.py`. A single LangGraph callback handler or
+  `stream_mode="debug"` attached at the existing `graph.invoke` call site in `lex_codehook.py` gives
+  per-node timing for all of them without touching any node's internals. **Two caveats, checked directly
+  rather than assumed:** (i) `coverage_question`/`rental_towing` each also run retrieval and a policy-tool
+  call inside the same node body as the generation call, so Tier A resolves to *per-node*, not
+  *per-call-site* — it cannot separate the Bedrock generation call from retrieval/tool-call time within one
+  node; (ii) checkpointer read/write is not a node boundary — it happens inside LangGraph's own execution
+  loop, around/between node calls — so Tier A's gaps between node timestamps will include checkpointer I/O
+  folded in with pure LangGraph scheduling overhead, indistinguishable from each other at this tier.
+- **Tier B — call-site timing, closes Tier A's first caveat.** `time.perf_counter()` wraps at each actual
+  call site — `classify_turn` (routing.py), `generate_response` (coverage_question.py, rental_towing.py —
+  two sites), the two guardrail client calls (guardrails_nodes.py) — mirroring the exact pattern
+  `split_router.py` already established for the router, rather than inventing a new one. Gives
+  generation-vs-retrieval-vs-tool-call resolution inside a single node.
+- **Tier C — checkpointer I/O, closes Tier A's second caveat.** Proposed as botocore event hooks
+  (`register("before-call.dynamodb.*", ...)` / `after-call`) around `DynamoDBSaver`'s own DynamoDB calls,
+  since `checkpointer.py` does not own those call sites — they live inside the third-party
+  `langgraph_checkpoint_aws` package. A botocore-level hook times them without modifying a dependency this
+  project doesn't own. Named alternative: wrap the `DynamoDBSaver` instance `build_checkpointer` returns in
+  a thin timing proxy over `.put`/`.get_tuple` — simpler to reason about, but couples to that package's
+  exact interface rather than a stable botocore hook point.
+- **Residual, all tiers:** `wall_ms` (the existing `graph.invoke` wall-clock) minus every attributed
+  segment, same monotonicity discipline §11.10/§11.12 already apply — must be ≥ 0, and a negative residual
+  is itself a defect signal (double-counted or overlapping segments), not a number to round away, per
+  `REVIEW-CRITERIA.md` §1 item 3.
+
+**Cost.** $0 marginal direct AWS cost for any tier — no new resource, the existing Lambda function and
+DynamoDB table, a few more CloudWatch log lines per invocation at existing call volumes (same order of
+magnitude as the `D83` diagnostic lines already read at $0 in §11.8/§11.12). **Not $0 in kind, though**:
+every tier is a Lambda code change requiring a redeploy — an apply, not a read — and producing a usable p95
+attribution requires at least one real invocation run at a scale comparable to Line E's 95 calls, not a
+single request. Both are gated the same way as every prior proposal this phase, not requested here.
+
+**Not done, per explicit instruction:** no tier implemented, no code written, no redeploy, no run, `ADR-009`
+unedited, no apply, no spend. Cost this session: $0 (file edits and a documentation search over the repo's
+own record and source code; no AWS call).

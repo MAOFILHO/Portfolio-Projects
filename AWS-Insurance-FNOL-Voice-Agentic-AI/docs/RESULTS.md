@@ -2794,3 +2794,96 @@ requirement, not a choice, and nothing in the record distinguishes the two.
    supportable reading.
 8. *Touches `C1`?* No — this section concerns `C14`'s threshold provenance only; no `C1` claim is made or
    revised here.
+
+### 11.14 `3-pre(i)` resolved — 1,800ms kept, `C14` stays GATE, reclassified as a stated product decision; the research points tighter, not looser
+
+Marco's decision on §11.13's three sourcing paths: **1,800ms unchanged. `C14` remains a GATE.** The number
+is reclassified — not derived, as §11.13 already established, but an **explicit, stated product decision**,
+motivated by (not computed from) Stivers et al. 2009 and ITU-T G.114/G.1051. $0 — a decision record, no
+measurement, no AWS call.
+
+**The directional finding, stated plainly rather than left implicit in the decision itself.** §11.13's two
+research paths were both found to measure a *different quantity* than `C14` — Stivers et al. measures a
+median human response gap, not a system p95; ITU-T G.114/G.1051 measure wire transmission delay, not
+compute-and-response latency. What was not stated in §11.13, and belongs in the decision record rather than
+left for a reader to work out independently, is **which direction that mismatch cuts**. It cuts toward
+tighter, not looser:
+
+- `C14`'s own boundary is Lex STT completion → Polly audio stream **start** — compute time only, both
+  wire legs and all of playout excluded by construction.
+- **Wire delay sits on both sides of that window and is excluded from it entirely**: the caller's speech
+  reaching Lex (ASR-bound) happens before `C14`'s clock starts; Polly's synthesized audio reaching the
+  caller's ear (jitter, telephony transmission) happens after `C14`'s clock stops. ITU-T G.114/G.1051's
+  transmission-delay thresholds (150–400ms usable one-way, above ~250ms difficult two-way) bound exactly
+  the segments `C14` does not measure.
+- **Playout sits outside the window on the same side as the second wire leg**: `C14` stops the clock at
+  stream *start*, not at the point the caller has heard enough of the response to take their own turn. The
+  turn-taking gap Stivers et al. measures — the quantity `C14` is motivated by, per `PROBLEM-FRAMING.md`'s
+  own north-star framing — is a caller-*felt* gap, and a caller cannot begin responding before the audio
+  they need has actually played, which is strictly after `C14`'s stop point.
+- Every one of these excluded segments is, by the same non-negative-addition/monotonicity argument §11.10
+  and §11.12 already rely on, **added on top of `C14`, never subtracted from it**. So even in the most
+  favorable reading — that 1,800ms is exactly right as a bound on the caller's total felt gap — the portion
+  of that budget `C14` itself is entitled to is `1,800ms minus whatever wire-in + wire-out + playout
+  actually cost`, which is **strictly less than 1,800ms, never equal to or more than it**. The research, to
+  the extent it bears on `C14` at all, argues for a number smaller than 1,800ms specifically for the
+  sub-component `C14` measures — not a looser one.
+
+**Consequence for how the 19ms overage (§11.12) should be read.** A 19ms miss against a number that, if
+anything, should have been tighter is not a rounding-scale technicality against an arbitrary line — it
+**understates** the exposure rather than merely stating it. Nothing here quantifies by how much (that
+requires the still-unmeasured wire/playout segments, `§11.10`'s Tier 2 and the Lex `RuntimeSucessfulRequestLatency`
+metric named in §11.12), but the direction is unambiguous from what is already measured and cited.
+
+**The GATE reasoning, kept verbatim for a future reader under schedule pressure.** `C14` staying a GATE
+rather than becoming a TARGET was considered and rejected as an option here, and the reason is worth stating
+exactly rather than summarizing away: **downgrading `C14` from GATE to TARGET in the same session its
+violation was found and confirmed would not be a reclassification — it would be relaxing a failing gate at
+the exact moment it failed, dressed as a reclassification.** `SUCCESS-METRICS.md`'s own TARGET definition
+exists to name and forbid precisely this move for TARGETs — *"Missing it is reported honestly, not hidden
+or quietly relaxed"* — and a GATE is not exempt from that discipline by virtue of being a GATE; if anything
+it is held to it more strictly, because **a GATE whose threshold or kind changes in the same session it is
+found to fail has stopped functioning as a GATE, whatever it is still called.** A future reader looking at
+this decision under schedule pressure, with a warm-path fix not yet in hand, needs this sentence intact: the
+option to quietly soften `C14` was visible, named, and declined, not overlooked.
+
+**What changed and what didn't.** 1,800ms is unchanged. `C14` is unchanged as a GATE. What changed is the
+record: the figure is now stated, here and in the two source documents below, as a deliberate product
+choice rather than carried silently as though it had been derived — closing the exact gap §11.13 found.
+
+**The two silent documents, fixed rather than left to inherit the boundary by reference.** `§11.13`'s table
+already found the boundary stated explicitly in `CLAUDE.md`, `SUCCESS-METRICS.md`, and `ADR-009`; the other
+two of the five never stated it, only the bare "1,800 ms" figure — a reader of either in isolation had to
+already know `C14`'s definition from elsewhere. Both fixed:
+
+- `docs/phase1/PROBLEM-FRAMING.md:25` — the north-star sentence motivating the budget now states the
+  boundary inline (Lex STT completion → Polly audio stream start) and names what it excludes (telephony
+  wire delay, audio playout) — the same exclusion this section's directional finding turns on.
+- `docs/phase1/AI-USE-CASE-CARD.md:112` — `F6`'s failure-mode row now states the same boundary inline
+  rather than the bare "turn exceeds 1,800 ms p95."
+
+**`C1` unaffected.** No claim on `C1` is made or revised by this decision or these edits — same explicit
+check as §11.12 and §11.13.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — the research could have cut the other way (e.g., if `C14`'s window
+   somehow subsumed wire/playout rather than excluding them, or if the excluded segments could plausibly be
+   near-zero). Checked directly against `C14`'s own stated boundary rather than assumed: both excluded
+   segments are structurally non-negative and outside the window, so the direction is not a coin flip.
+2. *Asserted-but-unchecked?* The claim that `PROBLEM-FRAMING.md` and `AI-USE-CASE-CARD.md` "inherit the
+   boundary by reference" rather than state it was re-verified against the live files (`grep`, both files,
+   this session) before writing the fix, not carried forward from §11.13's table, which only covered
+   whether the *figure* appeared, not whether the *boundary* did.
+3. *Infra error scored as a result?* N/A — decision record and two documentation edits; no harness run.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent.
+5. *Identical markers, different paths?* The core mechanism of this section's directional finding *is* this
+   check, applied a third time in this phase (§11.10, §11.12/§11.13 sourcing): "1,800ms" the budget and
+   "1,800ms" as a hypothetical bound on caller-felt gap are not the same referent as `C14`'s own compute-only
+   window, and treating them as interchangeable is exactly the error being corrected here.
+6. *Has this check ever failed for the right reason?* Yes — the GATE-vs-TARGET question was posed and
+   answered no, not skipped; a decision record that never considered the downgrade would be a weaker one.
+7. *Changes a headline number's interpretation?* Yes — the 19ms overage moves from "a miss against an
+   unsourced number of unknown looseness" (§11.13) to "a miss against a number the available research
+   suggests should have been tighter," without the figure itself changing.
+8. *Touches `C1`?* No — explicitly checked and stated above.
