@@ -236,6 +236,19 @@ record of the invalid run it actually was.
 breach the budget. The `AWS Cost Explorer` service line is already visible in this account's August usage
 at $0.0100. Batch the queries; do not poll.
 
+## Phase 9 — latency investigation, real-call experiments
+
+`RESULTS.md` §11.15–§11.20 are `C14` latency-attribution work; the great majority is $0 read-only
+(CloudWatch/Bedrock/Guardrails control-plane, AWS documentation search). This table covers the one item that
+spent real money.
+
+| Date | What ran | Real AWS call? | Units | Actual cost | Est. before running |
+|---|---|---|---|---|---|
+| 2026-08-14 | **Schema-strip pilot, `APPROVED: Phase 9 — schema-strip latency test, ~$0.10 ceiling`.** `scripts/measure_router_schema_latency.py`, 50 paired real `classify_turn` calls (unstripped tool schema vs. `title`/`$defs`-description-stripped variant), `us.amazon.nova-micro-v1:0`. Found 32% classification disagreement (16/50), including 4 dropped `safety_flag` verdicts — pre-registered pilot stop rule (`RESULTS.md` §11.19) triggered; main n=500 run never started. `RESULTS.md` §11.20 | **Yes** | 100 calls, 84,956 in / 4,263 out | **$0.00357028 exact** | ≈$0.004 (pilot) / ≈$0.10 (pilot + main, main not spent) |
+
+Standing Bedrock approval (`CLAUDE.md`) is stated for Phases 3–7; this spend needed, and got, separate
+explicit approval for Phase 9 rather than being assumed covered by that clause.
+
 ### The Canada DID, now measured rather than estimated
 
 **`USW2-CA-did-numbers` = $0.06/day = $1.83/month.** Filed under
