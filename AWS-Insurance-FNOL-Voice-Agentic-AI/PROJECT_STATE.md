@@ -4185,3 +4185,62 @@ the comparison is new.
 **Not yet done:** the real-call measurement (proposed, not approved or run); any mitigation choice; any
 Terraform change; any apply. No AWS resource created or changed this continuation. All work this session:
 $0 (re-reading an existing artifact, arithmetic, reasoning) or already-recorded cost from prior sessions.
+
+## Session log — 2026-08-14 (continued; §11.12 — `C14` fails on the warm path, outlier chased and resolved)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco's instruction: promote §11.10's warm-path evidence (item 2) to its own headline section rather than
+leaving it filed as supporting material; chase the 14,862ms `'we lost her'` outlier instead of leaving it
+parked; recompute p50/p95 with its status resolved; proceed with Tier 0 of the measurement proposal
+(`AWS/Lex` CloudWatch metrics check); leave `ADR-009` unedited until this lands. All done, `RESULTS.md`
+§11.12, plus forward pointers added at §11.7 and §11.10 (originals left unedited, per the project's existing
+supersession convention). **$0 — CloudWatch Logs reads (`aws logs filter-log-events`, standard API) and one
+AWS-docs search, no billable resource, no apply, no call placed.**
+
+**Outlier chased and resolved: genuine cold start, not a Bedrock retry-ladder event.** Pulled all 95
+`platform.report` events for Line E's run window from `/aws/lambda/fnol-codehook` and checked each
+programmatically for `initDurationMs` (the same cold-only field §11.7's forced-cold probe established as
+mechanism, not inference). Exactly 1 of 95 carries it — `initDurationMs: 549.023ms`, `requestId
+560868d9-...`, session `criterion9-a43f56ef-...` — the first of `'we lost her'`'s three k=3 samples, the
+same call flagged as the 14,862ms outlier, and the chronologically first Lambda invocation of the entire
+run. `_get_graph()` construction for that invocation (D83 diag log): 11.135s, squarely inside the
+already-established 10.3–11.4s cold-construction range — not a new number, just the one call in this run
+that happened to land on one. **§11.7's "every one of Line E's 95 calls that followed landed on a warm
+container" is corrected: 94 of 95, not 95 of 95** — the `make verify-lambda-execution` gate's warm-up
+evidently did not carry over to Line E's own first call (mechanism not chased further, flagged open). `C1`
+unaffected: the cold call still escalated correctly, so the 1.000 composed-recall figure stands.
+
+**Recomputed p50/p95, outlier excluded — and the headline: it does not save the budget.** Same nearest-rank
+method already published for the 1,969ms figure (stated explicitly this time, since a linear-interpolation
+method gives a visibly different number — 1,864ms — on this same dataset). Excluding the one confirmed-cold
+sample (n=94): p50 unchanged at 1,037ms, **p95 = 1,819ms** (mean 933.1ms, max 2,037ms) — still over the
+1,800ms `C14` budget, by 19ms, on a sub-component that structurally excludes ASR, TTS, and telephony
+entirely. **`C14` fails on the warm path.** Removing the cold contamination didn't rescue the number — it
+removed the one data point a skeptical reader could have used to dismiss the finding as "just the cold start
+we already knew about." Consequence, sharpened from §11.10: `ADR-009`'s candidates (plus the untested
+memory-bump one) all act on cold-start construction only; this section shows the warm path alone, with no
+cold start involved at all, already sits at or above budget on its own tail — so no cold-start mitigation,
+however complete, can bring `C14` into compliance by itself. Phase 9's framing of `C14` as a cold-start
+problem is not incomplete, it's the wrong frame.
+
+**Tier 0 proceeded, per instruction — a candidate metric found, unpopulated.** `AWS/Lex`'s CloudWatch
+namespace publishes `RuntimeSucessfulRequestLatency` (AWS's own spelling), valid for `RecognizeUtterance`
+with `InputMode=speech` — the voice channel `C14` is defined over. Zero datapoints today: no real inbound
+call has ever been placed to `+14169871547`. Its boundary ("request made" → "response passed back" for the
+whole `RecognizeUtterance` call) is not proven identical to `C14`'s exact definition — overlaps
+substantially, not asserted as an exact match. Improves, doesn't replace, §11.10's Tier 2 proposal: a real
+call would now yield both external timing and an authoritative, reaction-time-free CloudWatch figure. Still
+gated on `APPROVED: <phase name>` — not requested here.
+
+**Filed as the third instance this session of the same shape**, named explicitly in `RESULTS.md` §11.12: an
+instrument already collecting the right data, sitting unread, until someone reads it — `initDurationMs`
+(§11.7), Line E's own `elapsed_ms` (§11.10), and now the two cross-referenced against each other (§11.12).
+
+**Not yet done:** the real-call measurement (still proposed, not approved or run); any mitigation choice;
+`ADR-009` remains unedited, per explicit instruction; any Terraform change; any apply. No AWS resource
+created or changed this session. Cost this session: $0.

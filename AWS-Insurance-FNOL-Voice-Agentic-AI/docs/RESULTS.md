@@ -2016,7 +2016,10 @@ has run it — no abort, no `invalid` classification.**
 unverified for this build.** `make verify-lambda-execution`'s 9-event gate ran first per the approved
 sequence and consumed the one execution environment this deploy guaranteed would be cold — on events that
 don't exercise the graph's in-band escalation branch. Every one of Line E's 95 calls that followed landed
-on a warm container. A forced-cold probe of an L2-dependent item (one of the 19 positives L1 alone misses,
+on a warm container. **Corrected later the same investigation — see §11.12:** 94 of the 95, not all 95 — the
+run's very first call landed on a genuine cold container, confirmed via CloudWatch `initDurationMs`, without
+disturbing this section's `C1` conclusion (that call still escalated correctly). Left as originally written
+here; the correction is filed at §11.12, not edited into this sentence. A forced-cold probe of an L2-dependent item (one of the 19 positives L1 alone misses,
 per §2's table) was considered and explicitly not run this session, because the only prior forced-cold
 result on record (`'we lost her'`, `D83`-era build, before `D84`) measures a different `source_code_hash`
 than the one deployed here — a changed package is exactly the kind of change cold-start construction cost
@@ -2406,6 +2409,9 @@ only`): the maximum in that sample is 14,862ms, on `'we lost her'` — the same 
 prior forced-cold discussion — which is either a genuine outlier (a Bedrock retry-ladder event, unrelated to
 cold start) or a second, inadvertent cold hit inside a run §11.7 describes as entirely warm. Not resolved
 here; named so it isn't lost, and because it bears directly on whether "95 warm calls" was in fact accurate.
+**Resolved later the same session — see §11.12:** chased via CloudWatch `initDurationMs` cross-reference,
+confirmed a genuine cold start, not a Bedrock retry-ladder event; the recomputed warm-only p95 is also
+reported there, and it does not bring `C14` into compliance.
 
 **Proposed measurement — not undertaken, no apply or spend authorized here.** Closing this gap for real
 means capturing Lex-STT-completion-to-Polly-audio-start on an actual voice-channel call, warm and cold. Three
@@ -2585,3 +2591,133 @@ costs about 65ms out of ~2.1s, regardless of which files inside it get trimmed.
    functional role in this system, which `ADR-009`'s "smaller package" step and any future dependency-pruning
    work should weigh directly rather than treating the whole third-party tree as one undifferentiated cost.
 8. *Touches `C1`?* No.
+
+### 11.12 `C14` fails on the warm path — the outlier that forced this correction was a real cold start, and excluding it does not save the budget
+
+Marco's instruction on seeing §11.10's evidence paragraph filed as supporting material: promote it. Two
+things asked for, both done here, plus a third that follows from doing them honestly: chase the 14,862ms
+`'we lost her'` outlier rather than leave it flagged-and-parked, recompute p50/p95 with its status resolved,
+and state the headline plainly rather than inside a "not investigated further" aside. **$0 — CloudWatch
+Logs reads only (`aws logs filter-log-events`, standard API, no Logs Insights scan billed), plus arithmetic
+over data already on disk. No AWS resource created or changed.**
+
+**The outlier, chased.** §11.10 named two possibilities: a genuine outlier (Bedrock retry-ladder event,
+unrelated to cold start) or a second, inadvertent cold hit inside a run described as entirely warm.
+`RESULTS.md` never had to guess — the same mechanism §11.7's forced-cold probe used (Lambda's `initDurationMs`
+field, emitted on the `platform.report` line **only** on a cold init) is sitting in CloudWatch for every one
+of Line E's 95 invocations, unread until now. Pulled all 95 `platform.report` events for the run window
+(`/aws/lambda/fnol-codehook`, `run_started_utc`/`run_finished_utc` from the artifact) and checked each for
+the field programmatically, not by eye:
+
+| | Result |
+|---|---|
+| `platform.report` events in the run window | **95** — exactly matches `total_recognize_text_calls`, every invocation accounted for |
+| Events carrying `initDurationMs` | **1 of 95** — `requestId 560868d9-8903-4657-8202-85a514ec3148` |
+| That request's session | `criterion9-a43f56ef-6d36-4a78-98ca-10c0d2c323cd` — the first of `'we lost her'`'s three k=3 samples, `elapsed_ms=14862`, matching the flagged outlier exactly |
+| `initDurationMs` | **549.023ms** — cold, confirmed by the same field §11.7 established as cold-only, not by inference |
+| Lambda-side `durationMs` / `billedDurationMs` | 13057.886ms / 13607ms |
+| `_get_graph()` construction (D83 diag log, same invocation) | **11.135s** — squarely inside the 10.3–11.4s range §11.5/§11.7/§11.8 already established for a cold construction, not a new or different number |
+| Chronological position in the run | **The first `platform.report` of all 95**, by timestamp — the very first Lambda invocation Line E's harness made |
+
+**Verdict: genuine cold start, not a Bedrock retry-ladder event.** The second of §11.10's two named
+possibilities is the one that happened. §11.7's "every one of Line E's 95 calls that followed landed on a
+warm container" is corrected: **94 of 95, not 95 of 95.** The `make verify-lambda-execution` gate that ran
+immediately before, per the approved sequence, was intended to consume the one guaranteed-cold execution
+environment — it evidently did not carry over to Line E's own first call. Why not is not chased further
+here (a plausible mechanism: the gate's warm container had already been reclaimed, or Lambda provisioned a
+distinct concurrent environment for the new run) — flagged as an open mechanism question, not a blocker to
+the conclusion below, same discipline as leaving the outlier itself open in §11.10 rather than guessing.
+**This does not touch `C1`:** the cold call still escalated correctly (`detection-graph`, per §11.7's own
+forced-cold probe finding elsewhere that escalation fires cold), so the 1.000 composed recall figure is
+unaffected — only the "all warm" framing was wrong, not the recall result built on top of it.
+
+One more internal check, not load-bearing but worth naming: Lambda's own `durationMs` (13,057.886ms) is
+~1,805ms less than the harness's client-observed `elapsed_ms` (14,862ms) for the same call. The gap is
+Lex-side overhead invisible to Lambda's own `REPORT` line — consistent with, not a contradiction of, the
+"total ≥ any measured sub-component" monotonicity argument §11.10 already relies on.
+
+**Recomputed p50/p95 — outlier excluded, reclassified as cold rather than warm.** Same 95 `elapsed_ms`
+samples as §11.10, same nearest-rank method that produced the already-published 1,969ms figure (`ceil(p/100
+· n)`-th smallest, 1-indexed — stated explicitly here because it matters at this margin: linear-interpolation
+percentile methods give a visibly different number on this dataset, e.g. 1,864ms for p95 on the full 95, and
+the two should not be quoted interchangeably):
+
+| | n | p50 | p95 | mean | max |
+|---|---:|---:|---:|---:|---:|
+| All 95 (§11.10, unchanged, republished for comparison) | 95 | 1,037ms | **1,969ms** | 1,079.7ms | 14,862ms |
+| Excluding the confirmed-cold sample | **94** | 1,037ms | **1,819ms** | 933.1ms | 2,037ms |
+
+**Headline: even after correctly excluding the one confirmed-cold sample, the warm-only p95 (1,819ms)
+still exceeds the entire 1,800ms `C14` budget — by 19ms, on a sub-component that structurally excludes ASR,
+TTS, and telephony entirely.** The same monotonicity argument §11.10 used for the cold-turn case applies
+here to warm turns specifically: for any turn whose Lex-NLU-plus-warm-Lambda leg alone reaches the top ~5%
+of this distribution, real total turn latency — which only ever adds non-negative time on top, never
+subtracts — also exceeds 1,800ms, independent of whether that turn ever touched a cold container. **`C14`
+fails on the warm path.** This is not a residual effect of the removed cold contamination; removing the
+contamination is what exposed it cleanly, by taking away the one data point a skeptical reader could have
+used to wave the whole finding off as "just the cold start we already knew about."
+
+**Consequence for mitigation selection, sharpened from §11.10's framing.** §11.10 argued Phase 9 cannot
+select a mitigation without knowing the unmeasured segment's size, because `ADR-009`'s candidates (smaller
+package, SnapStart, scheduled warmer, provisioned concurrency, plus the untested memory-bump `§11.8` names)
+all act on cold-start construction only. This section goes further: **the warm path alone, before any
+cold-start term is added, already sits at or above budget on its own tail.** Phase 9's framing of `C14` as a
+cold-start problem is not merely incomplete — on this evidence it is the wrong frame. No cold-start
+mitigation, however completely it eliminates construction cost, can bring `C14` into compliance by itself,
+because the failure this section measures does not involve a cold start at all.
+
+**Tier 0 of §11.10's proposal, proceeded per Marco's instruction — a candidate metric exists, unpopulated.**
+`AWS/Lex`'s CloudWatch namespace publishes `RuntimeSucessfulRequestLatency` (AWS's own spelling, not a typo
+introduced here) — *"the latency for successful requests between the time the request was made and the
+response was passed back,"* valid for the `RecognizeUtterance` operation with `InputMode=speech`, i.e. the
+voice channel `C14` is defined over (`docs.aws.amazon.com/lexv2/latest/dg/monitoring-cloudwatch.html`,
+confirmed live 2026-08-14). This is a real candidate for narrowing the still-unmeasured `C14` boundary at
+$0 (a standard `GetMetricStatistics`/`GetMetricData` read) — **but it has zero datapoints today**, because
+every measurement in this project's history has gone through `RecognizeText` (text-mode), and no real
+inbound call has ever been placed to `+14169871547` (`CLAUDE.md`'s own verified-facts table already flags
+the per-minute inbound rate as unmeasured for the same reason). Two honest caveats, not resolved by finding
+the metric: its boundary — "request made" to "response passed back" for the whole `RecognizeUtterance`
+call — is not proven identical to `C14`'s specific definition (Lex STT completion to Polly audio stream
+start); it overlaps substantially but is not asserted here as an exact match. **This improves, but does not
+replace, §11.10's Tier 2 proposal**: a real call would now produce both an external human-timed reading and
+an authoritative, reaction-time-free CloudWatch figure for the same call, which is strictly better evidence
+than external timing alone — still gated on `APPROVED: <phase name>` before any call is placed, not
+requested here.
+
+**This is the third time this investigation has hit the same shape: an instrument that was already
+collecting the right data, sitting unread, until someone went and read it.** First, §11.7's forced-cold
+probe: `initDurationMs` is a field Lambda has always emitted on cold inits, unused in this project until it
+was needed to confirm a cold start by mechanism instead of inference. Second, §11.10: Line E's own harness
+had captured `elapsed_ms` on every one of its 95 calls and never aggregated it. Third, here: cross-referencing
+those same two already-collected instruments against each other — the field from the first discovery,
+applied to the data from the second — is what surfaced that one of the "95 warm calls" was not warm, and
+that removing it does not rescue the budget. None of the three required a new measurement; each required
+reading something the project had already paid for.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes, and checked both ways: the outlier could have resolved as a genuine
+   non-cold anomaly (leaving §11.10's warm-path evidence weaker, not stronger), and excluding it could have
+   dropped the warm-only p95 comfortably under 1,800ms (closing this finding rather than opening it). Neither
+   happened, but both were live possibilities before the CloudWatch cross-reference and the recompute ran.
+2. *Asserted-but-unchecked?* The count of `platform.report` events carrying `initDurationMs` was verified
+   programmatically (`1 of 95`), not eyeballed from the printed log dump — a first pass read the list by eye
+   and could plausibly have missed a second occurrence; the programmatic check is what the table above
+   reports.
+3. *Infra error scored as a result?* N/A — read-only CloudWatch Logs queries and arithmetic over an existing
+   artifact; no harness run, nothing to abort.
+4. *Cost below estimate?* N/A — $0 estimated (CloudWatch Logs reads, standard API), $0 spent.
+5. *Identical markers, different paths?* Checked directly: the recomputed p95 (1,819ms) and the original
+   p95 (1,969ms) are explicitly not interchangeable, and the percentile *method* (nearest-rank vs. linear
+   interpolation) is stated because the two methods diverge by over 100ms on this exact dataset — a distinction
+   that would matter to a reader checking the arithmetic and was worth naming rather than leaving implicit.
+6. *Has this check ever failed for the right reason?* Yes — the `initDurationMs`-presence check is the same
+   mechanism §11.7 first validated as capable of returning a negative (absent on a genuinely warm call); here
+   it returned negative on 94 of 95 and positive on exactly the one already suspected, which is the shape of
+   a check that discriminates rather than a check that always fires.
+7. *Changes a headline number's interpretation?* Yes, the whole point of this section per Marco's
+   instruction — `C14`'s violation moves from "a cold-start problem, proven as a lower bound" (§11.10) to
+   "fails on the warm path too, independent of cold start," which changes what a mitigation has to address,
+   not just how confident the record is.
+8. *Touches `C1`?* No new claim on `C1` — explicitly checked and stated above that the chased call still
+   escalated correctly, so the 1.000 composed-recall figure from §11.7 is unaffected by this correction.
