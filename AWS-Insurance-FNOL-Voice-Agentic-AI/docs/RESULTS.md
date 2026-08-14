@@ -2179,3 +2179,117 @@ its own `APPROVED:` line, named here as a possible next measurement, not underta
 7. *Changes a headline number's interpretation?* Yes — `ADR-009`'s order is now evidenced, not just
    flagged, as ranked by cost/complexity rather than by where the time goes; recorded here, not a footnote.
 8. *Touches `C1`?* No.
+
+### 11.9 Cold-start frequency — criterion 2: no AWS-committed idle-reuse number, and a 36-hour gap the qualitative one doesn't cover
+
+Phase 9, criterion 2, as narrowed 2026-08-14 (`PROJECT_STATE.md`): *"a directly-sourced AWS idle-reuse-timing
+fact plus a turns-per-call figure; at ~20 calls/month a bound is sufficient, an exact figure isn't."* This
+answers a different question from §11.8 — not where the 10.3–11.4s inside a cold start goes, but whether cold
+starts are common enough at this project's actual call volume to make chasing that number worth it at all.
+$0 cost — a documentation search plus repo arithmetic, no AWS calls.
+
+**The AWS fact, fetched live this session, not recalled.** AWS does not publish a committed idle-reuse
+duration for a Lambda execution environment. Four current AWS sources, none contradicted by any other:
+
+- **AWS Lambda security whitepaper, "Lambda isolation technologies"**
+  (<https://docs.aws.amazon.com/whitepapers/latest/security-overview-aws-lambda/lambda-isolation-technologies.html>),
+  verbatim: *"Data and/or state may continue to persist for hours before it is destroyed as a part of normal
+  execution environment lifecycle management."* This is the only place any of the four sources gives an
+  order of magnitude at all, and it is qualitative — "hours," not a number, not a range, not an SLA.
+- **AWS Lambda security whitepaper, "Lambda executions"**
+  (<https://docs.aws.amazon.com/whitepapers/latest/security-overview-aws-lambda/lambda-executions.html>):
+  environments "may be created or destroyed for any number of reasons including... The lease time on the
+  execution environment, or the Worker, is approaching or has exceeded max lifetime... Other internal workload
+  rebalancing processes" — teardown is driven by an internal lease/max-lifetime and rebalancing, neither of
+  which is published as a duration.
+- **AWS Compute Blog, "Operating Lambda: Performance optimization – Part 1"**
+  (<https://aws.amazon.com/blogs/compute/operating-lambda-performance-optimization-part-1/>), verbatim:
+  *"The length of the environment's lifetime is influenced by various factors that aren't configurable by
+  the developer today... you should not depend on this for performance optimization... it's possible for a
+  function to be invoked twice in a short period of time, and both executions experience a cold-start due to
+  this load rebalancing activity."* Directly states that even a short gap between invocations is not a
+  reliable warm-path guarantee, independent of any idle-duration question.
+- **AWS Lambda SLA** (<https://aws.amazon.com/lambda/sla/>): the Service Commitment covers Monthly Uptime
+  Percentage — invocation availability — and says nothing about execution-environment retention. There is no
+  SLA-backed number to fall back on if the qualitative guidance above is judged insufficient.
+
+**Conclusion on the AWS side: there is no number to compute a threshold against, only a qualitative "hours."**
+This is the outcome the amended criterion 2 anticipated ("if AWS doesn't publish a committed figure, say so
+plainly rather than substituting a recalled number") — reported as exactly that, not rounded up to a fabricated
+figure for arithmetic convenience.
+
+**Turns-per-call — two figures in the repo, in conflict, not previously reconciled.** `PROJECT_STATE.md`'s own
+Phase 9 opening entry states *"nothing in the record supplies a turns-per-call figure"* — that was checked
+against both places a number actually exists, and neither was picked up at the time:
+
+- `docs/phase2/COST-MODEL.md`'s "8 turns" (`## Per-conversation marginal cost (8 turns, ~4 minutes)`) is a
+  planning-arithmetic assumption from Phase 2, written before Phase 4's slot design existed. It is not
+  measured against anything and predates the actual `FileAutoClaim` shape by two phases.
+- `evals/golden/file_auto_claim.yaml`, conversation `fac-001` — tagged as *"Straight 11-slot intake... The
+  reference happy path"* — has **12 `caller:` turns**, counted directly against the file: the opening
+  statement plus one turn per each of `FileAutoClaim`'s 11 slots (`docs/phase4/SLOT-DESIGN.md` §1, "11
+  slots"). This is grounded in the real, shipped slot design; the 8-turn figure is not.
+
+**12 is the figure this section uses** — a real fixture built against the actual intent design, not an
+unsourced pre-Phase-4 guess. (The 8-vs-12 discrepancy is left flagged here, not corrected in `COST-MODEL.md`
+— out of scope for criterion 2, which needs a turns-per-call figure to bound cold-start frequency, not a
+cost-model reconciliation.)
+
+**The bound.** Call volume: ~20 real calls/month (`docs/phase2/COST-MODEL.md`, the one call-volume figure
+already on record). Mean gap between calls: 30 days ÷ 20 calls ≈ 1.5 days ≈ **36 hours** — the figure
+criterion 2's own framing already named, now derived rather than assumed. Two comparisons, not one number
+against another, because AWS gives no exact cutoff to compare against directly:
+
+1. **36 hours sits well past every order-of-magnitude AWS states.** The only figure AWS offers at all is
+   "hours" (plural, unquantified) — not "tens of hours," not "a day or more." A 36-hour inter-call gap is
+   past what "hours" would ordinarily be read to cover, even generously. AWS won't commit to where its own
+   boundary sits, but the qualitative language it does use does not reach 36 hours.
+2. **Within a call, the reverse holds by a wide margin.** `fac-001`'s 12 turns are consecutive exchanges in a
+   live phone call — seconds to at most a couple of minutes apart, not hours. Nothing in any of the four
+   sources suggests an execution environment is torn down *mid-call* at that cadence; the "invoked twice in a
+   short period and both cold-start" caveat above is about load-rebalancing, not idle timeout, and is a
+   possibility layered on top of the turn-to-turn analysis below, not a reason to expect it as the norm.
+
+**Reading: cold start is structurally concentrated on one turn in twelve, and that turn happens on
+effectively every call at this volume — not a rare tail event.** The call's opening turn (turn 1 of 12) is
+very likely cold, because the ~36-hour gap since the previous call exceeds AWS's own qualitative bound; turns
+2–12 of the same call very likely land warm, because they arrive far faster than any idle-teardown timescale
+AWS describes. That opening turn is also the worst place for the 1,800ms budget to be missed — the caller's
+first exchange, ahead of any rapport already built — and at ~20 calls/month it is not a rare exposure to
+budget for, it is close to the default state of every call's first turn.
+
+**What this settles, and what it doesn't.** It answers criterion 2's actual question: cold-start mitigation
+is not chasing a hypothetical edge case at this project's real call cadence — the frequency premise behind
+`ADR-009` existing at all is real, not assumed. It does **not** choose a mitigation (`ADR-009`'s order is
+unaffected — this finding supports pursuing it, it does not reorder it), and it does not produce an exact
+cold-start rate — the amended criterion explicitly asked for a bound, not a measured percentage, because no
+simulated arrival pattern can reproduce AWS's own undocumented teardown behavior closely enough to measure
+one honestly.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — if AWS's qualitative language had instead pointed at "days" or given no
+   order of magnitude at all, or if the golden fixture had turned out to match the 8-turn assumption instead
+   of conflicting with it, the reading below would not follow. Both were checked against source, not assumed.
+2. *Asserted-but-unchecked?* The 8-vs-12 turns conflict was sitting in the record unflagged
+   (`PROJECT_STATE.md` says "nothing... supplies a turns-per-call figure," which undercounts what's actually
+   there) — surfaced here rather than silently picking one.
+3. *Infra error scored as a result?* N/A — a documentation lookup and repo arithmetic, no harness run.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent.
+5. *Identical markers, different paths?* Adjacent risk, addressed directly: "hours" in the security
+   whitepaper and the SnapStart "minimum 3-hour billing window" (`ADR-009`) are different mechanisms — the
+   former is execution-environment idle retention, the latter is a SnapStart cache billing floor — not
+   conflated here.
+6. *Has this check ever failed for the right reason?* Yes — the search for an AWS-committed number came back
+   negative across four independent current sources, checked with multiple phrasings before concluding the
+   figure doesn't exist rather than that the search was inadequate.
+7. *Changes a headline number's interpretation?* Yes — cold-start mitigation moves from "flagged as a
+   possible future need" to "addresses something that happens on effectively every call's opening turn at
+   current volume," on the strength of a bound, not an assumption.
+8. *Touches `C1`?* No — cold-start latency and `C1` (false-escalation/safety recall) are separate concerns;
+   nothing here changes any `C1` figure.
+
+**Not started, per Marco's explicit instruction pending this section's outcome:** `python -X importtime`
+attribution inside Finding 1's dominant `agents.graph` import phase (including tracing what pulls in `mcp`,
+excluded from the layer as unused per `STAGE4-LAMBDA-LAYER-PLAN.md` §3), and logging the 512MB-memory
+hypothesis in §11.8 as the stronger of its two gap candidates. Both remain named, not undertaken.

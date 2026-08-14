@@ -4003,3 +4003,43 @@ infra if wanted, not added to the repo unilaterally.
 
 **Not yet done:** criterion 2 (idle-reuse-window + turns-per-call research), any mitigation choice, any
 Terraform change, any apply.
+
+## Session log — 2026-08-14 (continued; §11.8 profiling script committed, criterion 2 run)
+
+Fresh session (post-summarization), continuing directly from the entry above. Marco's instructions on
+entry: (1) commit the profiling script to `scripts/` — the project's pattern is to keep instruments, not
+scratch them; (2) run criterion 2 before either of two named follow-ups (`importtime` attribution inside
+Finding 1; logging the 512MB-memory hypothesis in §11.8), because criterion 2 decides whether a mitigation
+is needed at all — profiling deeper ahead of that decision would be optimizing before it's made.
+
+**Profiling script.** The original no longer existed anywhere (session scratchpad only, gone with the
+prior session per its own log entry above) — reconstructed from §11.8's method paragraph and the current
+source of `_build_graph()`, not from the lost bytes. `scripts/profile_cold_start.py`: hand-mirrors
+`_build_graph()`'s statements in order, each timed with `time.monotonic()`, dummy non-blank identifiers so
+every constructor branch (including `BedrockGuardrailClient`, which a blank id/version would skip) is
+actually exercised, zero AWS calls. Warns on stderr rather than silently reporting numbers when
+`/opt/python` isn't mounted (i.e., not run in the real container against the real built layer) — those
+runs are a correctness check only, not comparable to §11.8. Smoke-tested locally (`PYTHONPATH=src`, no
+Docker): runs clean, reproduces §11.8's phase shape (import dominant, guardrail construction ~0ms). `ruff`/
+`black`/`mypy` all pass. Not re-run inside the AWS base image this session — that would reproduce §11.8's
+numbers, which already exist; committing the instrument was the ask, not a fourth measurement run.
+
+**Criterion 2 — `RESULTS.md` §11.9 has the full account, summarized here.** AWS does not publish a
+committed idle-reuse duration for a Lambda execution environment — checked against four current AWS
+sources (security whitepaper ×2, a Compute Blog performance post, the Lambda SLA page), fetched live this
+session via the AWS docs MCP, not recalled. The only order-of-magnitude language AWS gives anywhere is
+"hours" (unquantified, security whitepaper) — not an SLA, not a range. Turns-per-call: `COST-MODEL.md`'s
+"8 turns" is an unsourced Phase-2 planning assumption predating the real slot design; `fac-001`
+(`evals/golden/file_auto_claim.yaml`), the reference `FileAutoClaim` happy path built against the actual
+11-slot design, has **12** caller turns, counted directly — used as the sourced figure, with the conflict
+flagged rather than silently resolved. At ~20 calls/month (`COST-MODEL.md`, the one call-volume figure on
+record), mean inter-call gap ≈ 36 hours — past every order-of-magnitude AWS states ("hours"), while
+`fac-001`'s 12 turns land seconds-to-minutes apart, far under any idle-teardown timescale AWS describes.
+**Reading: the call's opening turn is very likely cold on effectively every call at this volume; turns
+2–12 of the same call very likely land warm.** Answers criterion 2's actual question — cold-start
+mitigation isn't chasing a hypothetical edge case at this project's real cadence — without producing an
+exact rate, which the amended criterion didn't ask for. Does not choose a mitigation or reorder `ADR-009`.
+
+**Not yet done:** any mitigation choice, any Terraform change, any apply, both named follow-ups
+(`importtime` attribution, 512MB hypothesis logged in §11.8) — pending Marco's direction on criterion 2's
+outcome, per his explicit sequencing.
