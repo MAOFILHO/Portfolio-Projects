@@ -2022,7 +2022,10 @@ result on record (`'we lost her'`, `D83`-era build, before `D84`) measures a dif
 than the one deployed here — a changed package is exactly the kind of change cold-start construction cost
 can move, so that result does not transfer. **This 1.000 is a warm-path figure. A cold-start probe against
 `CodeSha256 u9iIy...` remains open**, tracked against a Terraform-managed forcing mechanism proposed but
-not yet implemented (`PROJECT_STATE.md`).
+not yet implemented (`PROJECT_STATE.md`). **Superseded later the same session — see the forced-cold probe
+at the end of this section, run once that mechanism was built:** this paragraph describes the state as of
+Line E's completion, before `cold_probe_marker` existed; it is left as originally written, as the record of
+what was known at that point, rather than edited to read as if the probe below had already happened.
 
 **Why this 1.000 is trustworthy where §0.2's earlier warning said a future one would carry no more weight
 than the local-graph figure — and why that warning no longer applies here.** §0.2 named a structural gap:
