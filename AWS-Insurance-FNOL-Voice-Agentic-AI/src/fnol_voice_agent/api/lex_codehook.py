@@ -103,6 +103,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any, Literal
 
 from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
@@ -481,9 +482,25 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
     # `D79`. Raw text alone didn't catch it -- the only way to know whether `injuries_present` was
     # confirmed (this turn or a prior one) is to read the checkpointer, so this is the first point in an
     # ordinary turn that touches AWS at all.
+    #
+    # `D83` TEMPORARY diagnostic logging (Marco-approved 2026-08-13) -- localizes a hang to graph
+    # construction vs. the first checkpointer read. Remove once D83 is diagnosed, same revert as the
+    # 60s timeout in `variables.tf`.
+    _d83_t0 = time.monotonic()
+    logging.getLogger(__name__).info("D83 diag: calling _get_graph() at t=0.000s")
     graph = _get_graph()
+    logging.getLogger(__name__).info(
+        "D83 diag: _get_graph() returned after %.3fs", time.monotonic() - _d83_t0
+    )
     config = {"configurable": {"thread_id": contact_id}}
-    previous = graph.get_state(config).values or {}
+    logging.getLogger(__name__).info(
+        "D83 diag: calling graph.get_state() at t=%.3fs", time.monotonic() - _d83_t0
+    )
+    state_snapshot = graph.get_state(config)
+    logging.getLogger(__name__).info(
+        "D83 diag: graph.get_state() returned after %.3fs", time.monotonic() - _d83_t0
+    )
+    previous = state_snapshot.values or {}
     filled_slots = _merged_filled_slots(previous.get("filled_slots", {}), event)
 
     if filled_slots.get("injuries_present") is True:

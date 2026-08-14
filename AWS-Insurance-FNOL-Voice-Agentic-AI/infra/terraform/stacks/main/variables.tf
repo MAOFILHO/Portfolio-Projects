@@ -175,12 +175,20 @@ variable "lambda_memory_mb" {
 
 variable "lambda_timeout_seconds" {
   description = <<-EOT
-    8 s. Lex's own codehook timeout is 30 s, but constraint 14's budget is 1,800 ms p95 end to end, so a
-    codehook still running at 8 s has already failed the caller and should fail fast enough for the
-    fallback to speak. A 30 s timeout would turn a hung turn into half a minute of silence.
+    TEMPORARILY 60s for `D83` diagnosis (Marco-approved 2026-08-13) -- the steady-state value is 8s;
+    see below. `Sandbox.Timedout` at exactly 8.00s with zero application log output is consistent with
+    an in-flight retry loop that has not yet errored, not with a genuine indefinite hang -- at 60s the
+    call either completes or throws a real boto3 exception naming an endpoint, which is the diagnosis
+    this raise exists to get. This is not a workaround for the underlying defect and MUST be reverted
+    to 8 once D83 is diagnosed.
+
+    Steady-state rationale (restore this default when reverting): 8 s. Lex's own codehook timeout is
+    30 s, but constraint 14's budget is 1,800 ms p95 end to end, so a codehook still running at 8 s has
+    already failed the caller and should fail fast enough for the fallback to speak. A 30 s timeout
+    would turn a hung turn into half a minute of silence.
   EOT
   type        = number
-  default     = 8
+  default     = 60
 }
 
 variable "log_retention_days" {

@@ -3170,6 +3170,36 @@ a warm container — not confirmed. `did.tf` untouched, criterion 9 not run, `C1
 
 Awaiting Marco's approval on an instrumented invoke as the next step.
 
+**Local repro against `langgraph-checkpoint-aws` specifically, 2026-08-13 — does NOT reproduce the hang.**
+Marco's condition before approving the instrumented apply: test the layer's mismatched
+`boto3==1.43.69`/`botocore==1.43.71` pair against `langgraph-checkpoint-aws` itself, not raw DynamoDB (the
+earlier isolation test exercised boto3 directly, which is not where a version mismatch would surface).
+Docker was not running; started it and ran the test in a `linux/arm64` container matching the deployed
+Lambda's own `Architectures` setting exactly (confirmed via `get-function-configuration`) and matching the
+layer's compiled `pydantic_core` extension's actual target (`aarch64-linux-gnu`, confirmed via `file`) — the
+most faithful reproduction available short of the execution role's own credentials. Called
+`DynamoDBSaver.get_tuple()` directly (the exact method `graph.get_state()` invokes, confirmed by reading
+`saver.py`'s source), using the layer's own mismatched pair and the layer's own `langgraph_checkpoint_aws`:
+**completed in 0.33s, no hang.** The version-mismatch hypothesis is now ruled out through the actual library
+in question, not only through raw boto3. Proceeding to the approved instrumented apply.
+
+**Self-inflicted finding, caught before it shipped.** Preparing that apply, `terraform plan` showed the
+dependency layer needing replacement — a THIRD, unrequested change alongside the two Marco approved
+(timeout raise, log instrumentation). Investigated rather than applied: this operator's own earlier local
+diagnostic Python invocations had imported directly from `.terraform-build/layer/python` (the live
+`source_dir` `archive_file.codehook_deps` reads from) on the host filesystem, outside any sandbox or
+read-only mount, and CPython's default bytecode-caching wrote 170 stray `.pyc` files back into that exact
+directory across 25 `__pycache__` subdirectories — enough to change the directory's content and therefore
+the zip's hash. Removed them, confirmed `data.archive_file.codehook_deps`'s id returns to
+`987a86fe5996458aa9c906961582b77b91f78e9e` (matching the currently-deployed state), re-ran `terraform plan`:
+**0 to add, 2 to change, 0 to destroy** — exactly the two changes approved, plus a cosmetic
+`aws_s3_object.codehook_deps_layer` etag normalization (multipart-upload-style etag corrected to a plain
+md5 on re-PUT of identical content, not a content change). **Lesson for this project's own local-testing
+discipline, not only for how the layer gets built:** importing directly from a Terraform-managed
+`source_dir` during diagnosis is itself a write hazard against that artifact, same family as the apply-drift
+finding below — an artifact's content can change from something other than an intentional edit, and the
+only way to know is to check the artifact, not assume the last intentional change is still the only one.
+
 ### Apply drift — what's deployed and what was reviewed have diverged once already
 
 Filed as its own finding, not folded into `D82`/`D83`, per Marco: **the S3 key
