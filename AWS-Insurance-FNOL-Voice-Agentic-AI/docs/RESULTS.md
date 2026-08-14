@@ -2085,3 +2085,97 @@ whether cold-start *timing itself* ever causes a different failure (the current 
 measured 10.337s construction cost as margin, which is why this session's probe landed cleanly rather than
 near a boundary). Existence proof that the mechanism works cold, not a claim that it always will under
 every input or under a tighter timeout.
+
+### 11.8 Cold-start attribution — a $0 local profile, and what it does and doesn't explain
+
+Phase 9, criterion 1. `D83`/`D84`'s 10.337–11.421s figures were always a single opaque span around
+`_get_graph()` — `ADR-009`'s mitigation order (smaller package → SnapStart → warmer → provisioned
+concurrency) was fixed 2026-08-11, before that span existed to measure, and ranks by cost/complexity, not
+by where the time goes. This closes that gap for the *relative* question — not the *absolute* one; see the
+finding below the table.
+
+**Method.** `_build_graph()` (`api/lex_codehook.py`) instrumented with `time.monotonic()` around each of
+its statements, in the same order, run as a standalone script — never imported, so nothing else in the
+process pre-warms `sys.modules`. Run in `public.ecr.aws/lambda/python:3.12` (`arm64`), the AWS-published
+Lambda base image itself — `aarch64`/glibc 2.34, confirmed live — a step up in fidelity from `D83`'s plain
+`linux/arm64` container, and the option `STAGE4-LAMBDA-LAYER-PLAN.md` §7 named as "a stronger validation...
+attempted this session [then], not completed" (Docker wasn't running at the time). The deployed dependency
+layer's own built artifact (`infra/terraform/stacks/main/.terraform-build/layer/python`, the exact
+directory `terraform apply` zips and ships) mounted at `/opt/python` — Lambda's real layer mount path, not
+the host venv. `src/` mounted read-only. Dummy table/guardrail identifiers, construction only, never used
+for a read or write. Three independent container invocations (`docker run --rm`, fresh interpreter each
+time, per Marco's instruction) — not one, because a single run cannot distinguish a code property from a
+container-startup artifact, and the repeat surfaced exactly that distinction (below). Real AWS calls: zero.
+Cost: $0.00.
+
+| phase | run 1 | run 2 | run 3 |
+|---|---:|---:|---:|
+| import `agents.graph` | 2048.7 ms | 1775.1 ms | 1640.0 ms |
+| import (4 more modules, combined) | 0.0 ms | 0.0 ms | 0.0 ms |
+| construct `DynamoDBSaver` | 2348.0 ms | 269.4 ms | 261.2 ms |
+| construct `DynamoVectorStore` | 2356.6 ms | 290.6 ms | 302.0 ms |
+| construct `BedrockEmbedder` | 8.5 ms | 5.8 ms | 7.2 ms |
+| construct bedrock-runtime client | 7.4 ms | 6.4 ms | 7.2 ms |
+| construct `BedrockGuardrailClient` | 0.0 ms | 0.0 ms | 0.0 ms |
+| `build_graph()` assemble+compile | 13.9 ms | 10.7 ms | 10.8 ms |
+| **TOTAL** | **6870.2 ms** | **2414.3 ms** | **2282.3 ms** |
+
+**Finding 1 — the import of `agents.graph` is the single largest stable phase, and "smaller package" has
+little room against it.** ~1.6–2.0s across all three runs, the least noisy number in the table. Reading
+`agents/graph.py`'s own import list (this session): three `langgraph` submodules plus twelve small,
+project-owned node files — and every import statement *after* it costs 0.0ms, meaning `agents.graph`'s
+first touch is what actually pulls in the full third-party tree (`langgraph`, `pydantic`, `boto3`,
+`botocore`) transitively, in one shot. `ADR-009`'s "smaller package" step trims this project's own `src/`
+tree, which this data shows is not where the dominant import cost lives — the twelve node files are cheap,
+the three third-party packages are not, and shipping fewer of *our own* files doesn't remove *their*
+weight. SnapStart, by contrast, snapshots state *after* this exact phase completes — it is the step in
+`ADR-009`'s order that actually targets what this table shows is dominant. This is evidence for a
+superseding ADR to weigh, not a reordering made here — `ADR-009` stays Accepted and unedited.
+
+**Finding 2 — the two boto3-client-construction phases are secondary in a stable run (~230–300ms
+combined, ~12% of run 2/3's total) but were the entire source of run 1's 3× outlier.** `DynamoDBSaver` and
+`DynamoVectorStore` construct back-to-back immediately after import completes — the first two points in the
+whole sequence where `botocore` reads its own service-model JSON off disk. Run 1 alone spent 4705ms there;
+runs 2 and 3 spent ~270–300ms combined. This is consistent with a cold host-side page cache for the
+bind-mounted layer directory on the *first* container invocation of the session, not with anything in the
+code — the same two phases, nowhere else, moved together, on exactly the run that touched that mount for
+the first time. Flagged as a repro-method artifact, not a `_build_graph()` property. This is the reason the
+protocol ran three times rather than once (`REVIEW-CRITERIA.md` §1.2): a single run would have reported
+either 6.9s or 2.3–2.4s and had no way to tell which one was the code's own behavior.
+
+**Finding 3 — the more important result: even the slowest local run sits well under the real number, and
+this step does not explain the gap.** Run 1's 6870ms, this profile's own ceiling, is still 3,467–4,551ms
+short of the 10,337–11,421ms actually measured on the deployed Lambda (`§11.5`, `§11.7`). Runs 2 and 3 are
+2,282–2,414ms — under a quarter of the real figure. **This step attributes relative proportions inside
+`_build_graph()`; it does not attribute the absolute 10.3–11.4s, most of which remains unexplained by
+anything measured here.** Two named, unconfirmed candidates, neither sourced this session and neither
+being asserted as a number:
+
+1. The deployed function's `memory_size = 512` (`variables.tf`, explicitly "not tuned," per its own
+   comment awaiting this phase) sets Lambda's CPU share below whatever this Docker Desktop container was
+   actually given — a well-documented Lambda characteristic in shape, but no ratio from this session is
+   sourced against a current AWS doc, so none is used here.
+2. Lambda's real `/opt` layer-mount storage substrate is not a local bind-mount, and Finding 2 already
+   shows exactly this class of phase (first disk-touching `botocore` construction) is the one place local
+   timing swung 3×. Direction unknown — real Lambda could be faster or slower than either extreme observed
+   locally.
+
+Neither is confirmed. Testing candidate 1 for real would mean varying `lambda_memory_mb` and re-running the
+criterion-9 forced-cold probe against the deployed function — a Terraform apply, cost-gated and requiring
+its own `APPROVED:` line, named here as a possible next measurement, not undertaken.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — a single run could have reported either extreme; three runs is what
+   surfaced Finding 2 as a repro artifact rather than accepting whichever number came out.
+2. *Asserted-but-unchecked?* Caught before writing this up: "the linux/arm64 container used for D84" was
+   actually `D83`'s; corrected in the report to Marco, not silently carried forward.
+3. *Infra error scored as a result?* N/A — no harness abort/pass-fail scoring involved, a direct timing
+   instrument.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, no divergence.
+5. *Identical markers, different paths?* N/A — no shared-label provenance question in this data.
+6. *Has this check ever failed for the right reason?* Yes — Finding 2 is exactly a case where the naive
+   reading (report the average, or report run 1) would have been wrong, and the repeat-run design caught it.
+7. *Changes a headline number's interpretation?* Yes — `ADR-009`'s order is now evidenced, not just
+   flagged, as ranked by cost/complexity rather than by where the time goes; recorded here, not a footnote.
+8. *Touches `C1`?* No.

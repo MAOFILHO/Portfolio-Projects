@@ -2595,7 +2595,7 @@ without re-deriving them from session history:**
 |---|---|---|---|
 | 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated. Cold-start coverage is an existence proof (1/19), not a measurement — Phase 9 inherits an open question, not a clean bill of health, on whichever cold-start mechanism it ships | `RESULTS.md` §11.7, `COSTS.md` Line E |
 | 2 | `C14` violation | **Open, unmitigated, quantified twice.** `_get_graph()` cold-start construction: 11.421s (`D83`) and 10.337s (this session's probe) — 5.7–6.3× the 1,800ms p95 budget. The 60s timeout is a workaround (absorbs the latency without failing), not a fix. Phase 9 must either land a mitigation or make an explicit, written decision to carry the violation forward | `RESULTS.md` §11.5 |
-| 3 | `ADR-009` mitigation order | **Smaller package → SnapStart → scheduled warmer → provisioned concurrency, cost-gated in that order.** Not Phase 9's to reorder without a documented reason — the order reflects cost/complexity ranking, cheapest-and-least-invasive first | `ADR-009` |
+| 3 | `ADR-009` mitigation order | **Smaller package → SnapStart → scheduled warmer → provisioned concurrency, cost-gated in that order.** Not Phase 9's to reorder without a documented reason — the order reflects cost/complexity ranking, cheapest-and-least-invasive first, and was fixed 2026-08-11 before `_get_graph()` had ever been measured as one span, let alone broken down. **Superseded in scope by a $0 local attribution, `RESULTS.md` §11.8 (this session):** the dominant stable phase is third-party import (`agents.graph`, ~1.6–2.0s), which "smaller package" — trimming this project's own already-small `src/` tree — has little leverage on; SnapStart targets that phase directly. Evidence for a future superseding ADR, not a reordering made here. The attribution also does not explain 3.5–8s of the real 10.3–11.4s figure — see §11.8 Finding 3 | `RESULTS.md` §11.8 |
 | 4 | **SnapStart re-verification requirement, if chosen** | A thawed snapshot is a **different mechanism** from a true cold init, not merely a faster one — this session's correctness evidence (escalation fires correctly on a genuinely cold container) does not automatically transfer to a SnapStart-restored one. **If Phase 9 selects SnapStart, criterion 9's forced-cold probe (or an equivalent correctness check against a SnapStart-restored environment) must be re-run before treating `C1`'s cold-path status as verified under that mechanism.** Not required for smaller-package or scheduled-warmer, which change cold-start *frequency*, not the *mechanism* itself | This session, Marco explicit |
 | 5 | Coverage gap, stated so it isn't silently treated as closed | 18 of the 19 L2-dependent positives, and every L1-only item, remain unmeasured under cold start. Phase 9's own load/latency testing is a natural place to extend coverage, not a requirement to re-run criterion 9's full protocol cold | This entry |
 
@@ -3932,3 +3932,74 @@ measured cold-start floor — options include a value above 11.4s with margin, o
 cold-start cost first per `ADR-009`'s order; (2) whether to remove the `D83` diagnostic logging now that
 it has done its job, or keep it as permanent instrumentation given it just supplied a real `ADR-009`
 number for free.
+
+## Session log — 2026-08-14 (Phase 9 opening; exit criteria approved with amendments; criterion 1 run)
+
+Fresh session, post-`/clear`. Read `PROJECT_STATE.md`'s Phase 9 entry-conditions table, `RESULTS.md`
+§0.2/§11 (esp. §11.5/§11.7), `REVIEW-CRITERIA.md`, `COSTS.md` Line E, `ADR-009`, reported all four requested
+items before proposing anything, per Marco's explicit "no code, no plan, no apply until I've seen items
+1–4."
+
+**§11.7 self-contradiction found and fixed.** It asserted, in one paragraph, that the Terraform-managed
+forced-cold mechanism was "proposed but not yet implemented," then a few paragraphs later in the *same
+section* described that exact mechanism built and run. Fixed via a forward-pointer at the first mention
+(not a rewrite — the original sentence is left as an accurate record of what was known at that point),
+commit `61a01c9`.
+
+**Marco's two items, answered before Phase 9 exit criteria were proposed** (his explicit sequencing: report
+both, then propose criteria informed by the answers, not ahead of them):
+
+1. `ADR-009`'s order flagged as ranked by cost/complexity, not by where the 10.3–11.4s actually goes — no
+   finer breakdown existed anywhere in the record beyond `_get_graph()` vs. `graph.get_state()` (the D83
+   table above). Proposed a $0 local profiling step, reusing `D83`'s `linux/arm64` container precedent
+   (correcting Marco's "D84 repro" phrasing — that repro was a plain local call, D83's was the
+   containerized one) — described, not run yet, pending his review.
+2. `C14`'s p95 impact: per-cold-turn latency is measured (5.7–6.3× budget); cold-start *frequency* as a
+   fraction of turns is not, and nothing in the record supplies a turns-per-call figure or a Lambda
+   idle-reuse-window figure to compute it from. Only concrete traffic figure on record: ~20 real
+   calls/month (`docs/phase2/COST-MODEL.md`). No reserved/provisioned concurrency configured. Stated as
+   genuinely open, not leaning either way.
+
+**Phase 9 exit criteria proposed, approved with two amendments (Marco, 2026-08-14):**
+- Criterion 2 (cold-start frequency): the load-test option was dropped — a simulated arrival pattern can't
+  reproduce AWS's own execution-environment teardown behavior, so it can't answer the question it's there
+  for. Narrowed to a directly-sourced AWS idle-reuse-timing fact plus a turns-per-call figure; at ~20
+  calls/month a *bound* is sufficient, an exact figure isn't.
+- Criterion 3(b) (carry-forward exit): cost/complexity grounds alone are not sufficient — that was an
+  unbounded escape hatch against a measured 6× violation. Now requires the measured-or-bounded p95 figure
+  stated, plus the C1-relevant exposure named (§11.5's two graph-dependent, unprobed paths).
+- Criterion 1's constraint (attribution before mitigation choice; a superseding ADR if attribution
+  contradicts `ADR-009`'s ranking, never a silent deviation) kept as written.
+
+Marco: proceed with criterion 1 only, no code/plan/apply beyond it.
+
+**Criterion 1 run — `RESULTS.md` §11.8 has the full account, summarized here.** `_build_graph()`
+instrumented with `time.monotonic()` per statement, run three times (fresh `docker run`, matching Marco's
+"fresh interpreter per run") in `public.ecr.aws/lambda/python:3.12` (`arm64`) — the AWS-published Lambda
+base image itself, a step up from `D83`'s plain `linux/arm64` container and the option
+`STAGE4-LAMBDA-LAYER-PLAN.md` §7 named as "not yet run" — with the real built dependency layer
+(`.terraform-build/layer/python`) mounted at `/opt/python`. Zero AWS calls, zero cost, confirmed by reading
+every constructor's source first (`DynamoDBSaver`, `DynamoVectorStore`, `BedrockEmbedder`,
+`BotoBedrockConverseClient`, `BedrockGuardrailClient` — all pure boto3-client/string construction, no
+network I/O; `assert_real_aws_allowed` only blocks inside an active moto scope, which this script never
+opens).
+
+Totals: 6870.2ms / 2414.3ms / 2282.3ms. Import of `agents.graph` (~1.6–2.0s, stable across all three) is
+the dominant phase in the two consistent runs, and is where the *entire* third-party tree (`langgraph`,
+`pydantic`, `boto3`, `botocore`) actually loads — every import statement after it costs 0.0ms. `ADR-009`'s
+"smaller package" step trims this project's own `src/`, which this data shows isn't where the weight is;
+SnapStart targets the phase that actually dominates. The two boto3-client-construction phases
+(`DynamoDBSaver`/`DynamoVectorStore`) were secondary in two runs (~270–300ms combined) and the entire
+source of a 3× outlier in the third (4705ms) — consistent with a cold host-side page-cache on the
+bind-mounted layer directory on the session's first container invocation, not a code property; the reason
+three runs were used rather than one. **Most important finding: even the slowest local run sits
+3,467–4,551ms under the real 10,337–11,421ms deployed figure — this step attributes relative proportions
+inside `_build_graph()`, not the absolute number.** Two unconfirmed, unsourced candidates named for the
+gap (Lambda's 512MB memory → CPU share; `/opt`'s real storage substrate vs. a local bind mount) — neither
+asserted as a figure, per this project's own "verify against current AWS sources, never from memory" rule.
+
+Profiling script kept in the session scratchpad, not committed — offered to Marco as reusable diagnostic
+infra if wanted, not added to the repo unilaterally.
+
+**Not yet done:** criterion 2 (idle-reuse-window + turns-per-call research), any mitigation choice, any
+Terraform change, any apply.
