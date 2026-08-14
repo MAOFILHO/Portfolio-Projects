@@ -447,6 +447,202 @@ def test_file_auto_claim_reaches_fulfilment_and_closes(monkeypatch: pytest.Monke
 
 
 # ---------------------------------------------------------------------------------------------------
+# `D84` -- `_elicit_slot()` names the GRAPH's own intent, never Lex's (possibly-disagreeing) echoed one
+# ---------------------------------------------------------------------------------------------------
+
+# The exact 5 negatives measured to crash pre-fix (`PROJECT_STATE.md`, `D84` follow-up): Lex's own NLU
+# lands on `InjuryEscalation` (zero declared slots) for these negations, while the graph correctly does
+# not escalate and asks for `policy_number` -- a slot only `FileAutoClaim`/`UpdateContactInfo` declare.
+_D84_KNOWN_CRASHING_NEGATIVES = [
+    "nobody was hurt",
+    "no injuries at all, just the two cars",
+    "there's no blood or anything, it's just the bumper",
+    "everyone's fine, we all walked away from it",
+    "thankfully nobody was injured",
+]
+
+
+@pytest.mark.parametrize("index,transcript", list(enumerate(_D84_KNOWN_CRASHING_NEGATIVES)))
+def test_a_lex_graph_intent_disagreement_elicits_under_the_graphs_intent_not_lexs(
+    index: int, transcript: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reproduces `D84`'s exact crash shape for all 5 known-crashing negatives. Before the fix this built
+    `{"name": "InjuryEscalation", ...}` (Lex's own echoed, zero-slot intent) with `slotToElicit:
+    "policy_number"` -- an illegal combination live Lex rejected with `ValidationException: The slot to
+    elicit is invalid`. After the fix the response names the GRAPH's own intent (`FileAutoClaim`), which
+    always legally owns whatever slot the graph asks for, regardless of what Lex's NLU independently
+    picked for the same utterance.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix=f"d84-{index}",
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="InjuryEscalation",
+                slots={},
+                transcript=transcript,
+                session_attributes={"contactId": f"c-d84-{index}"},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+    assert response["sessionState"]["intent"]["name"] == "FileAutoClaim"
+    assert response["sessionState"].get("sessionAttributes", {}).get("escalate") != "true"
+
+
+def test_a_disagreement_between_two_ordinary_slot_bearing_intents_also_elicits_under_the_graphs_intent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not an injury-adjacent case at all -- shows the fix's property holds generally, not only for the
+    zero-slot `InjuryEscalation`/`FallbackIntent` shape `D84` happened to be measured against. Lex's own
+    NLU landed on `CheckClaimStatus`; the graph classifies `UpdateContactInfo` and asks for its own first
+    slot, which is not even a legal slot under Lex's `CheckClaimStatus`.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("UpdateContactInfo")},
+            table_suffix="d84-cross-intent",
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="CheckClaimStatus",
+                transcript="actually I need to update my address",
+                session_attributes={"contactId": "c-d84-cross-intent"},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+    assert response["sessionState"]["intent"]["name"] == "UpdateContactInfo"
+
+
+def test_elicit_slot_preserves_lexs_slot_values_even_when_it_overrides_the_intent_name() -> None:
+    """`_intent_from`'s own docstring warning still applies: only `name` may change, `slots` must still
+    round-trip, or a caller's already-given answers vanish on the exact turn this fix touches."""
+    event = _event(intent_name="CheckClaimStatus", slots={"policy_number": _slot("PY9001")})
+    result = {"intent": "FileAutoClaim", "active_slot": "loss_datetime"}
+
+    response = lex_codehook._elicit_slot(event, result, "loss_datetime", "When did this happen?")
+
+    returned_slots = response["sessionState"]["intent"]["slots"]
+    assert returned_slots["policy_number"]["value"]["interpretedValue"] == "PY9001"
+
+
+def test_close_refuses_the_escalation_path_regardless_of_which_intent_the_graph_named() -> None:
+    """Sanity check on condition 1's structural claim, from the test side rather than only the source
+    read: `_respond_from_graph_result`'s escalation branch must never reach `_elicit_slot` (and therefore
+    never run the `D84` guard at all), no matter what `result["intent"]` holds -- including a value that
+    would fail the guard outright. If this ever regressed to reach `_elicit_slot` first, this test would
+    raise `_UnroutableIntentError` instead of asserting the escalation shape below."""
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {"contact_id": "c-d84-close", "triggering_layer": "L2", "route": 1},
+        "response_text": "connecting you now",
+        "intent": "Ambiguous",  # would fail `_elicit_slot`'s guard -- must never be reached
+        "active_slot": "policy_number",  # would also route to `_elicit_slot` if escalation were ignored
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D84` -- the fail-loud guard on a missing/malformed/non-slot-bearing graph intent
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_a_missing_graph_intent_with_an_active_slot_raises_rather_than_echoing_lex() -> None:
+    """`result` with no `"intent"` key at all -- the defensive case, not assumed unreachable just because
+    the graph is structurally expected to always set it before `active_slot` can be truthy."""
+    event = _event(intent_name="FileAutoClaim")
+    result = {"active_slot": "policy_number", "response_text": "What's your policy number?"}
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+@pytest.mark.parametrize(
+    "bad_intent",
+    [
+        None,
+        "",
+        "not-a-real-intent",
+        "Ambiguous",  # a valid `Intent` member, but never a real Lex intent name
+        "OutOfScope",  # same
+        "InjuryEscalation",  # a real Lex intent, but declares zero slots
+        "FallbackIntent",  # a real Lex intent, but not even a member of `Intent`
+    ],
+    ids=[
+        "none",
+        "empty-string",
+        "garbage",
+        "ambiguous-classifier-label",
+        "out-of-scope-classifier-label",
+        "injury-escalation-zero-slots",
+        "fallback-intent-not-an-intent-member",
+    ],
+)
+def test_a_malformed_or_non_slot_bearing_graph_intent_raises_rather_than_echoing_lex(
+    bad_intent: str | None,
+) -> None:
+    """Covers `D84`'s follow-up finding directly: `handle_no_match_or_barge_in` can leave a carried-over
+    `active_slot` in place while this turn's `intent` is `Ambiguous`/`OutOfScope` -- valid `Intent` members,
+    neither a real Lex intent name. Every case here must fail loudly, never fall back to Lex's own echoed
+    intent (`_intent_from(event)`), which is the exact condition-2 requirement this guard exists to meet.
+    """
+    event = _event(intent_name="FileAutoClaim")
+    result = {"intent": bad_intent, "active_slot": "policy_number", "response_text": "..."}
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Proves the guard's exception actually reaches `handler()`'s existing fail-open path end-to-end, not
+    only that `_elicit_slot` raises in isolation. No raw-text safety signal on this transcript, so this
+    must fail OPEN to `Delegate` -- and critically must NOT return `ElicitSlot` built from Lex's own echoed
+    intent, which is the exact `D84` shape this guard exists to keep from reappearing silently.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d84-malformed-e2e",
+        )
+        monkeypatch.setattr(
+            lex_codehook,
+            "_run_graph_turn",
+            lambda *a, **k: {
+                "active_slot": "policy_number",
+                "response_text": "What's your policy number?",
+                "intent": "Ambiguous",
+            },
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="FileAutoClaim",
+                transcript="I need to update my phone number",
+                session_attributes={"contactId": "c-d84-malformed-e2e"},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Delegate"
+    assert "messages" not in response
+
+
+# ---------------------------------------------------------------------------------------------------
 # L1 -- deterministic, pre-graph, no AWS at all
 # ---------------------------------------------------------------------------------------------------
 
@@ -463,7 +659,9 @@ def test_l1_fires_without_any_graph_installed() -> None:
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    assert (
+        response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    )
     assert "911" in response["messages"][0]["content"]
 
 
@@ -505,7 +703,9 @@ def test_l3_escalates_on_a_bare_override_word(monkeypatch: pytest.MonkeyPatch) -
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    assert (
+        response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    )
 
 
 def test_l3_does_not_fire_on_an_ordinary_mention_of_the_callers_own_agent(
@@ -557,7 +757,9 @@ def test_injuries_present_confirmed_true_escalates_even_with_no_injury_words(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
-    assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    assert (
+        response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    )
     assert "911" in response["messages"][0]["content"]
 
 

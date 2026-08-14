@@ -2436,6 +2436,54 @@ etc.) — no translation layer needed. Three options, C1 risk stated for each pe
 
 Not implemented. Holding for Marco's choice.
 
+**2026-08-14, Option 1 approved and implemented, both pre-conditions discharged first.**
+
+**Condition 1 (escalation paths cannot reach `_elicit_slot`) — verified against source, not the
+docstring.** All five emission points return early, before `_elicit_slot` is reachable: `_respond_from_
+graph_result`'s `escalation` branch (line 450 pre-edit) returns via `_close` ahead of its own `active_slot`
+check at 453-454; `_dispatch`'s three pre-graph checks (L1 at 479, `D79` at 520, L3 at 535) each `return
+_escalate(...)` immediately, never falling through to `_run_graph_turn`/`_respond_from_graph_result`,
+the only path that can reach `_elicit_slot`; `handler`'s fail-closed branch (577) returns `_escalate(...)`
+or `_delegate(...)`, never `_elicit_slot`. Confirmed structurally — every branch that can escalate is a
+`return` statement ahead of the one call site `_elicit_slot` has (inside `_respond_from_graph_result`,
+guarded by `if active_slot:` after the `escalation` early-return).
+
+**Condition 2 (invalid `result["intent"]`) — answered, not assumed.** Grepped where `active_slot` gets set
+across all five intent nodes plus `repair.py`: found `handle_no_match_or_barge_in` can return with a
+**carried-over** `active_slot` from a prior turn while this turn's `intent` is `Ambiguous`/`OutOfScope` —
+valid `Intent` members, neither a real Lex intent name — a second, distinct way (beyond outright
+missing/garbage) to reach `_elicit_slot` with an unroutable intent. **Decision: fail loudly, never fall
+back to `_intent_from(event)`.** New `_UnroutableIntentError`, raised by `_elicit_slot` when
+`result["intent"]` is absent, not a valid `Intent` value, or not one of the five Lex-declared slot-bearing
+intents (`InjuryEscalation`/`FallbackIntent` excluded — zero slots; `Ambiguous`/`OutOfScope` excluded — not
+real Lex intents). Deliberately uncaught inside the module, so it reaches `handler`'s existing, already-
+verified fail-open/fail-closed split rather than a new bespoke path.
+
+**Implementation.** `_elicit_slot(event, result, slot_name, message)` now builds `{"name":
+result["intent"], "slots": _intent_from(event)["slots"], "state": "InProgress"}` — only the intent `name`
+changes; `slots` still round-trips from Lex per `_intent_from`'s own docstring (the graph has no
+independent wire-shape slots to rebuild it from). Call site in `_respond_from_graph_result` updated to pass
+`result` through.
+
+**Tests**, `tests/unit/test_lex_codehook.py`, new `D84` section: all 5 known-crashing negatives from the
+follow-up ('nobody was hurt', 'no injuries at all, just the two cars', "there's no blood or anything, it's
+just the bumper", "everyone's fine, we all walked away from it", 'thankfully nobody was injured'),
+parametrized, each with Lex's own NLU set to `InjuryEscalation` and the graph classifying `FileAutoClaim` —
+asserts the response names the graph's intent, not Lex's. Plus: a non-injury graph/Lex disagreement
+(`CheckClaimStatus` vs. graph's `UpdateContactInfo`) showing the fix is general, not injury-shape-specific;
+a slot-round-trip check under the new intent-name override; a direct test that the escalation branch never
+reaches the `D84` guard at all (constructing a `result` that would fail the guard if escalation were
+ignored); 7 parametrized malformed/non-slot-bearing `result["intent"]` cases (missing, `None`, `""`,
+garbage, `Ambiguous`, `OutOfScope`, `InjuryEscalation`, `FallbackIntent`) each asserting `_UnroutableIntentError`;
+and one end-to-end test proving the guard's exception actually reaches `handler`'s fail-open `Delegate`,
+not just that the helper raises in isolation. **43/43 new-file tests pass, 628/628 full unit suite passes,
+`black`/`ruff`/`mypy` all clean.** Not deployed — no `make deploy`/`terraform apply` run, per Marco's "report
+before any deploy."
+
+Also per Marco's request: the 0.529/0.059 figures this session's local `D84` repro landed on are logged as
+a cross-instrument agreement in `RESULTS.md` §11.6 — not a new finding, §0/§2 already published both, but a
+second, independently-built instrument reproducing them is itself worth recording.
+
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
 (the ADR recorded the provider-bug risk as *unconfirmed rather than clean* and required a POC before

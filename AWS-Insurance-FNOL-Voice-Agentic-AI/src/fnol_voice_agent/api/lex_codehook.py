@@ -97,6 +97,37 @@ FAIL-OPEN / FAIL-CLOSED, SPLIT (Stage 4 owns what Stage 3's docstring flagged as
     defensive classification of a shape this module never actually emits. **Both `detection-*` values
     are genuine detections and both count toward `C1` recall** -- the split exists so a provenance
     breakdown can show WHICH fired, not to demote one relative to the other.
+
+`D84` -- `_elicit_slot()` ECHOED LEX'S OWN NLU INTENT, NOT THE GRAPH'S
+    Lex's own NLU and the graph's classifier are two independent decisions that can disagree on the same
+    turn -- e.g. the caller says "nobody was hurt," the graph correctly classifies `FileAutoClaim` and asks
+    for `policy_number`, but Lex's own NLU lands on `InjuryEscalation` or `FallbackIntent` for the same
+    utterance (both declare zero slots in `bot.yaml.tftpl`). `_elicit_slot()` used to send `{"name":
+    _intent_from(event)["name"], ...}` -- Lex's own intent, round-tripped verbatim -- while naming the
+    GRAPH's `active_slot` in `dialogAction.slotToElicit`. Lex's dialog manager validates the elicited slot
+    against the intent the response names; when the two disagree, Lex rejects the whole response
+    (`ValidationException: The slot to elicit is invalid`). Measured 5/17 on the criterion-9 negative set
+    (`PROJECT_STATE.md`, `D84`), all via this exact mechanism.
+
+    Fixed by building the intent object from `result["intent"]` -- the graph's own explicit decision
+    (`agents/state.py`'s `AgentState.intent`) -- instead of Lex's echo. Since every escalation-worthy turn
+    exits exclusively through `_close()` (see the FAIL-OPEN/FAIL-CLOSED section above and
+    `_respond_from_graph_result`'s early return), `_elicit_slot()` is only ever reached for a turn the
+    graph itself decided NOT to escalate, so `result["intent"]` naming the graph's own slot is always
+    intended to agree with `active_slot` by construction -- Lex's independent (and possibly disagreeing)
+    NLU intent is simply no longer part of the response.
+
+    `result["intent"]` is not guaranteed to be one of the five Lex-declared, slot-bearing intents, though:
+    `AgentState.intent` is typed `str`, not `Intent`, and `handle_no_match_or_barge_in` (the ambiguous/
+    low-confidence repair node) can return with a **carried-over** `active_slot` from a prior turn while
+    this turn's `intent` is `Ambiguous`/`OutOfScope` -- valid `Intent` members, but not real Lex intent
+    names at all. `_elicit_slot()` validates `result["intent"]` against `_SLOT_BEARING_INTENTS` and raises
+    `_UnroutableIntentError` -- never silently falls back to `_intent_from(event)` -- on anything absent,
+    invalid, or not in that set. The error is deliberately uncaught here: it propagates to `handler()`'s
+    existing fail-open/fail-closed split (a benign turn fails OPEN to `Delegate`; a turn also carrying a
+    raw-text safety signal fails CLOSED), reusing an already-verified mechanism rather than inventing a
+    second, unverified one. Falling back to Lex's echoed intent here would reintroduce `D84` under a
+    condition nobody is watching for it -- the exact failure mode Marco named before approving this fix.
 """
 
 from __future__ import annotations
@@ -109,6 +140,7 @@ from typing import Any, Literal
 from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
+from fnol_voice_agent.models.enums import Intent
 
 logger = logging.getLogger(__name__)
 
@@ -294,14 +326,74 @@ def _close(
     }
 
 
-def _elicit_slot(event: dict[str, Any], slot_name: str, message: str) -> dict[str, Any]:
-    """`ElicitSlot`, targeting whatever slot the GRAPH decided to ask about next -- never Lex's own
-    `SlotPriorities` walk, which is why `D78`'s renames made every `active_slot` the graph can produce a
-    legal Lex slot name rather than something this function has to translate."""
+class _UnroutableIntentError(RuntimeError):
+    """`D84`. Raised when the graph names an `active_slot` but `result["intent"]` is absent, not a valid
+    `Intent` value, or not one of the five Lex-declared slot-bearing intents -- there is no legal Lex
+    intent name left to send an `ElicitSlot` under. Deliberately never caught inside this module: letting
+    it propagate to `handler()`'s existing fail-open/fail-closed split is the point, not an omission --
+    the alternative it replaces was silently falling back to Lex's own echoed intent, which is the exact
+    mechanism `D84` diagnosed. A benign turn (no L1/L3 signal on this turn's raw text) fails OPEN to
+    `Delegate`; a turn that also carries a raw-text safety signal fails CLOSED, same as any other
+    unexpected `_dispatch` exception."""
+
+
+# `D84`. The five Lex-declared intents that carry a `Slots:` block in `bot.yaml.tftpl` -- the only names
+# `_elicit_slot` may legally send. `InjuryEscalation` is a real Lex intent but declares zero slots (and
+# never reaches this function regardless -- escalation exits via `_close()`, see the module docstring's
+# FAIL-OPEN/FAIL-CLOSED section); `FallbackIntent` likewise declares zero slots and is not even a member
+# of `models.enums.Intent`. `Ambiguous`/`OutOfScope` ARE `Intent` members but are classifier-only labels,
+# never declared as Lex intents at all. Mirrors `agents/graph.py`'s `_INTENT_TO_NODE` minus
+# `"InjuryEscalation"`.
+_SLOT_BEARING_INTENTS = frozenset(
+    {
+        Intent.FILE_AUTO_CLAIM,
+        Intent.CHECK_CLAIM_STATUS,
+        Intent.COVERAGE_QUESTION,
+        Intent.RENTAL_TOWING_ENTITLEMENT,
+        Intent.UPDATE_CONTACT_INFO,
+    }
+)
+
+
+def _elicit_slot(
+    event: dict[str, Any], result: dict[str, Any], slot_name: str, message: str
+) -> dict[str, Any]:
+    """`ElicitSlot`, targeting whatever slot the GRAPH decided to ask about next, under the GRAPH's OWN
+    chosen intent -- never Lex's own `SlotPriorities` walk (`D78`'s renames made every `active_slot` the
+    graph can produce a legal Lex slot name) and, as of `D84`, never Lex's own echoed intent NAME either:
+    Lex's NLU and the graph's classifier are independent decisions that can disagree on the same turn, and
+    echoing Lex's intent while naming the graph's slot produces an illegal combination Lex's own dialog
+    manager rejects. Building the intent object from `result["intent"]` instead makes the two always agree
+    by construction, for every turn that reaches this function.
+
+    Raises `_UnroutableIntentError` -- never falls back to `_intent_from(event)` -- if `result["intent"]`
+    is absent, not a valid `Intent` value, or not one of `_SLOT_BEARING_INTENTS`. See the module docstring's
+    `D84` entry for why silently falling back would reintroduce the defect this function exists to fix.
+    """
+    raw_intent = result.get("intent")
+    if not isinstance(raw_intent, str):
+        raise _UnroutableIntentError(
+            f"active_slot={slot_name!r} but result['intent']={raw_intent!r} is not a string"
+        )
+    try:
+        graph_intent = Intent(raw_intent)
+    except ValueError as exc:
+        raise _UnroutableIntentError(
+            f"active_slot={slot_name!r} but result['intent']={raw_intent!r} is not a valid Intent value"
+        ) from exc
+    if graph_intent not in _SLOT_BEARING_INTENTS:
+        raise _UnroutableIntentError(
+            f"active_slot={slot_name!r} but result['intent']={graph_intent!r} declares no Lex slots"
+        )
+
+    # The `slots` map is still Lex's own -- only `name` changes. Rebuilding `slots` from scratch is exactly
+    # the mistake `_intent_from`'s own docstring warns against (it drops every value collected so far); the
+    # graph has no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
+    lex_slots = _intent_from(event).get("slots") or {}
     return {
         "sessionState": {
             "dialogAction": {"type": "ElicitSlot", "slotToElicit": slot_name},
-            "intent": _intent_from(event),
+            "intent": {"name": graph_intent.value, "slots": lex_slots, "state": "InProgress"},
             "sessionAttributes": _session_attributes_from(event),
         },
         "messages": [{"contentType": "PlainText", "content": message}],
@@ -451,7 +543,7 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
 
     active_slot = result.get("active_slot")
     if active_slot:
-        return _elicit_slot(event, active_slot, response_text)
+        return _elicit_slot(event, result, active_slot, response_text)
 
     return _close(event, response_text)
 

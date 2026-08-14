@@ -1950,3 +1950,37 @@ requirement both bind.** A future criterion 9 run needs to account for cold- vs.
 explicitly — the harness's existing runs give no evidence either way once a container is warm — and
 `ADR-009`'s Phase 9 mitigations are what closes the exposure itself; this section records that it exists
 and when it was found, not that it has been fixed.
+
+### 11.6 A second, independently-built instrument reproduces §0/§2's 0.529 and 0.059 — a cross-check, not a new finding
+
+`D84`'s local negative-set repro (2026-08-14, `PROJECT_STATE.md`) was built to diagnose the `ElicitSlot`
+intent/slot mismatch — it called `_run_graph_turn()` directly against all 17 criterion-9 negatives,
+bypassing `_dispatch`'s L1 pre-check specifically to isolate where each escalation actually originated, not
+to re-measure false-escalation. Two of its numbers land exactly on this report's existing, already-`❌`
+headline figures anyway:
+
+| | This session's local repro (`_run_graph_turn`, 2026-08-14) | §0 / §2 (published) |
+|---|---|---|
+| Union (L1 ∪ L2) false-escalation | **9/17 = 0.5294117647058824** | **0.529** (§0, §2; also 18/34 on the original denominator) |
+| L1-alone false-escalation | **1/17 = 0.058823529411764705** | **0.059** (§2) |
+
+The single L1 hit is the same item in both — `"ambulance"` — and the item-level attribution matches too:
+8 of the 9 union hits are the graph's own `L2` classifier alone, 1 is `L1`'s raw lexicon, the same L1/L2
+split §2 already reports.
+
+**Why this is worth recording rather than filing as routine.** The two numbers were not produced by the
+same code path. §0/§2's figures come from the Tier B eval harness calling the classifier/graph
+component-by-component; this session's repro came from calling the actual deployed-shape dispatch function
+(`api/lex_codehook.py::_run_graph_turn`) the Lambda codehook itself invokes — built independently, for an
+unrelated purpose (`D84` diagnosis), by someone with no reason to reproduce §0/§2's number and no access to
+it being "the answer" while writing the repro. Two differently-built instruments landing on the identical
+rate, against the identical denominator, is stronger evidence for 0.529 than either instrument alone — in a
+project that has logged **fourteen** instrument defects (§6) by this point, an agreement between two
+separately-built measurement paths is itself informative, not a formality.
+
+**What this is not.** Not a new `C1` finding — `C1` is a recall constraint on positives only, and this
+concerns false-escalation, a precision defect on negatives, already `❌` against `SUCCESS-METRICS.md` §4's
+`≤ 0.10` target since Phase 6/7. Not a new measurement of 0.529's stability — §2.1 already did that (a
+34-case and a 17-case denominator, both landing on 0.529). This is a same-value confirmation via a
+structurally different instrument, filed here because a number two independently-built things agree on is
+worth recording as such, not because the number itself moved.
