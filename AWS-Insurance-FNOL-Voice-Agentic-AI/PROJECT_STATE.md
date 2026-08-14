@@ -4586,3 +4586,81 @@ for the generation-bearing path and the now-bounded-small checkpointer residual 
 unedited, no apply, no spend. Cost this session: $0 — `cloudwatch:ListMetrics`, `cloudwatch:GetMetricStatistics`
 (free, standard-resolution reads, not the metered Cost Explorer API), `bedrock:GetModelInvocationLoggingConfiguration`,
 `bedrock:ListInferenceProfiles`.
+
+## Session log — 2026-08-14 (continued; §11.15 accepted, Tier A approved; router p95 promoted as its own
+finding, the tail traced away from throttling/retries/concurrency, Tier A downgraded from gate to
+refinement)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted §11.15 and approved Tier A alone as the attribution method, then asked for three items before
+any implementation: (1) promote the router's p95 to its own `RESULTS.md` finding — 1,286ms is 71% of the
+entire 1,800ms `C14` budget, on one `nova-micro` classification call, with the p50→p95 spread (401ms→1,286ms,
+~3.2x) named as the finding itself, the largest lever on `C14` in the record; (2) investigate that spread at
+$0 before writing any Tier A code — Bedrock throttling/retries/error metrics in Line E's window, and whether
+slow calls cluster by first-invocation, utterance, or concurrency; (3) state plainly whether Tier A still
+gates mitigation selection or only refines it, given the record is already ~78% attributed with Bedrock
+dominant. Also requested: the inference-profile `ModelId` dimension gotcha made a reusable note in §11.15,
+not narrative. **$0 reads only. No apply, no spend, no redeploy, `ADR-009` unedited.**
+
+**Full write-up in `RESULTS.md` §11.16 (new section) and a `§11.15` edit, summarized here.**
+
+**§11.15 edit.** The `ModelId`-dimension explanation (application inference profile IDs, not `settings.py`'s
+`us.*` literals) is now a labeled, blockquoted "Reusable note" with the four-profile table inside it, instead
+of being folded into the surrounding narrative paragraph — findable on sight by a future reader re-querying
+these metrics, not something to be re-derived from prose.
+
+**Item 1.** 1,286ms / 1,800ms = **71%** of the entire `C14` budget, consumed by `routing.py`'s
+`classify_turn` — the cheapest model (`nova-micro`) doing the simplest job (single-turn classification) in
+the graph's four-profile lineup. p95/p50 = 1,286/401 = **3.21x**. Framed as: the instability, not the mean or
+the dominant-component share, is the actual finding — narrowing the router's own tail is worth more to `C14`
+than eliminating the entire still-unmeasured 200–400ms residual (Lex/Lambda/LangGraph/checkpointer combined)
+would be.
+
+**Item 2 — four hypotheses, each checked against a live signal:**
+
+| Hypothesis | Result |
+|---|---|
+| Bedrock-side throttling (`InvocationThrottles`, 14-day window) | **Zero** |
+| Bedrock-side client errors (`InvocationClientErrors`, same window) | **Zero** |
+| Bedrock-side server errors (`InvocationServerErrors`, same window) | **Zero** |
+| Concurrency (`ConcurrentExecutions`, Line E's window) | **Maximum = 1 in every 1-minute bucket** — fully serial |
+| Clustering by run position | Worst p95 (1,332ms) in the **middle** minute bucket, not the first — not a pure first-invocation effect |
+| Clustering by payload size | Input tokens flat (917–940 across the whole run); output tokens' one uptick (bucket 3) coincides with that bucket's **lowest** p95, the opposite of a size-driven story |
+
+**Named, not closed:** this project sets no explicit logger configuration, so a silent client-side retry
+(botocore logs retries at `DEBUG` by default) that never registered as a countable Bedrock request wouldn't
+show up in either signal checked — a real but narrow gap, smaller and less likely than the throttling
+hypothesis the two server-side metrics rule out directly. `servicequotas:ListServiceQuotas` was attempted to
+pin an exact TPM quota against `EstimatedTPMQuotaUsage`'s ~970–1,000 reading, found no match on the first
+page, and was abandoned as unnecessary — AWS's own docs already caveat that metric as not reflecting the
+mechanism that drives throttling, and the flat-input-token finding independently rules out size as the
+driver. No custom `boto3.Config(retries=...)` exists at the router's client construction
+(`aws/bedrock_router.py:104`) — default botocore retry behavior applies, unverified further.
+
+**Verdict: throttling and Bedrock-side errors ruled out with high confidence; concurrency ruled out
+definitively; payload size does not track the spread.** What's left by elimination, not direct confirmation:
+intrinsic serving-time variance on Nova Micro's shared on-demand endpoint. **The less convenient result, not
+the cheaper one** — the retry/backoff-tuning fix the "cheaper than `ADR-009`" framing was checking for isn't
+available, because the tail was never retries. The one lever this project's record names for shared
+on-demand variance is provisioned throughput — **banned by default** per `CLAUDE.md`'s cost-gate table,
+requiring written justification and approval before even being proposed. This investigation closes off the
+cheap application-level fixes rather than finding one.
+
+**Item 3 — Tier A refines, does not gate, stated plainly.** Mitigation selection needed two things: which
+component dominates (answered — Bedrock, §11.15), and whether that component's cost is cheaply fixable at
+the application layer (answered no — this section). Tier A would still convert an approximate, un-joined
+percentile-sum bound into an exact per-turn figure and cover the still-untested generation-bearing nodes
+automatically — real value, not discarded — but it does not change which lever is available (provisioned
+throughput, cost-gated, or accept the variance), because that answer doesn't depend on the evidence's
+precision. **A mitigation decision can be brought to Marco now; Tier A is worth building, not a blocker to
+that decision.**
+
+**Not done, per explicit instruction:** no tier implemented, no code written, no redeploy, no run, `ADR-009`
+unedited, no apply, no spend. Cost this session: $0 — `cloudwatch:GetMetricStatistics` (`AWS/Bedrock`,
+`AWS/Lambda`), `logs:FilterLogEvents` (standard API, not a Logs Insights scan), `servicequotas:ListServiceQuotas`
+(attempted, abandoned). No AWS resource created or changed.

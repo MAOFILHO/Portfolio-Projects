@@ -2910,14 +2910,22 @@ metrics outage: `ADR-016` (`CLAUDE.md`) already states the deployed Lambda invok
 inference profile ARNs**, not the `us.*` system-profile literal, specifically so Bedrock spend carries cost
 allocation tags — and CloudWatch's `ModelId` dimension follows what was actually passed as `modelId`, not
 the model family name. `bedrock:ListInferenceProfiles` confirms the four live application profiles and
-which foundation model each wraps:
+which foundation model each wraps.
 
-| Profile ID | Name | Wraps |
-|---|---|---|
-| `e55shbc6xaks` | `fnol-router` | `amazon.nova-micro-v1:0` |
-| `gg3w2rbrx1qr` | `fnol-generation` | `amazon.nova-lite-v1:0` |
-| `9vrw3s3yskep` | `fnol-embedding` | `amazon.titan-embed-text-v2:0` |
-| `v9xjmutuiw3q` | `fnol-judge` | `anthropic.claude-haiku-4-5-20251001-v1:0` |
+> **Reusable note — querying `AWS/Bedrock` / `AWS/Bedrock/Guardrails` CloudWatch metrics for this project.**
+> The `ModelId` dimension holds whatever literal string this deployment actually passed as `modelId`, not a
+> model family name. This project's deployed Lambda invokes through **application inference profile IDs**
+> (`ADR-016`), never `settings.py`'s `us.*` system-profile literals — querying by the `us.*` literal returns
+> a **silent empty result, not an error**, and is indistinguishable from a real metrics gap until traced.
+> Use the profile ID column below as the `ModelId` dimension value for any future query against these two
+> namespaces; re-run `bedrock:ListInferenceProfiles` first if there is reason to think these have rotated.
+>
+> | Profile ID | Name | Wraps |
+> |---|---|---|
+> | `e55shbc6xaks` | `fnol-router` | `amazon.nova-micro-v1:0` |
+> | `gg3w2rbrx1qr` | `fnol-generation` | `amazon.nova-lite-v1:0` |
+> | `9vrw3s3yskep` | `fnol-embedding` | `amazon.titan-embed-text-v2:0` |
+> | `v9xjmutuiw3q` | `fnol-judge` | `anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 Re-querying `AWS/Bedrock` under these four profile IDs, plus `AWS/Bedrock/Guardrails`' `InvocationLatency`
 (dimensioned by `GuardrailContentSource`, not by model), against Line E's exact run window
@@ -3036,3 +3044,167 @@ unedited, no apply, no spend.** Cost this session: $0 (CloudWatch and Bedrock co
    the proposed minimum instrumentation tier changes from the full A→B→C ladder to Tier A alone for the
    escalation path.
 8. *Touches `C1`?* No — no claim on `C1` made or revised; read-only latency attribution work only.
+
+### 11.16 The router number is its own finding — p95 1,286ms is 71% of the entire `C14` budget on one
+`nova-micro` classification call; the tail traced away from throttling, retries, and concurrency; Tier A
+downgraded from gate to refinement
+
+Marco's instruction on accepting §11.15 and approving Tier A as the attribution method, before any
+implementation: (1) promote the router's p95 to its own finding, naming the p50→p95 spread itself as the
+finding, not just the dominant-component share; (2) investigate that spread at $0 — Bedrock throttling,
+retries, error metrics, and clustering by first-invocation/utterance/concurrency — before writing a single
+line of Tier A code; (3) state plainly whether Tier A still gates mitigation selection or only refines it.
+**$0 — `cloudwatch:GetMetricStatistics` (`AWS/Bedrock`, `AWS/Lambda`, standard-resolution reads),
+`logs:FilterLogEvents` (standard API, not a Logs Insights scan), `servicequotas:ListServiceQuotas`
+(attempted, abandoned as unnecessary, see below). No AWS resource created or changed, no redeploy, no run,
+`ADR-009` unedited.**
+
+**Item 1 — the router number, promoted.** §11.15's table reported the router's p95 (1,286ms) as a share of
+the warm-path `elapsed_ms` p95 (78%). That framing understates what the number means on its own: **1,286ms
+is 71% of `C14`'s entire 1,800ms budget** (`1286 / 1800 = 0.714`), consumed by one `nova-micro` **classification**
+call — the cheapest, smallest model in this project's four-profile lineup (`CLAUDE.md`'s verified-facts
+table: $0.035/1M input · $0.14/1M output, the lowest of the four), doing the simplest job in the graph
+(`routing.py`'s `classify_turn`, a single-turn intent classification, not generation, not retrieval). **The
+finding is not the 71% share — it is that this number is not stable.** The same metric's p50 is 401ms;
+p95/p50 = **3.21x**. A call this simple, on a model this small, on infrastructure with no application-level
+variability of its own (checked below), should be close to constant-time. It isn't, by a factor of three.
+**That variance — not the mean, not the share — is the single largest lever on `C14` currently in this
+project's record**: closing the entire 200–400ms residual §11.15 bounded for Lex/Lambda/LangGraph/checkpointer
+combined would not bring the warm-path p95 under budget on its own, because the router call's own tail
+(1,286ms) already exceeds `C14`'s 1,800ms budget's warm-path allocation once wire delay and playout are
+netted out per §11.14's directional finding — narrowing the router's *own* p50-to-p95 spread is worth more
+to `C14` than eliminating everything this project has not yet measured, combined.
+
+**Item 2 — the spread investigated at $0, before any Tier A code.** Four hypotheses, each checked directly
+against a live signal, not assumed:
+
+| Hypothesis | Check | Result |
+|---|---|---|
+| Bedrock-side throttling | `AWS/Bedrock` `InvocationThrottles`, `ModelId=e55shbc6xaks`, daily period, 2026-08-01–2026-08-14 | **Zero datapoints across the full 14-day window** |
+| Bedrock-side client errors | Same window, `InvocationClientErrors` | **Zero** |
+| Bedrock-side server errors | Same window, `InvocationServerErrors` | **Zero** |
+| Concurrency | `AWS/Lambda` `ConcurrentExecutions`, `FunctionName=fnol-codehook`, 1-minute period, Line E's run window | **Maximum = 1 in every bucket** — all 95 invocations ran strictly serially, never overlapping |
+
+The three Bedrock error/throttle metrics' absence corroborates, with a direct query rather than by omission,
+what §11.15 only implied from `ListMetrics` returning five metric names, not eight: these three metric types
+have never been published for this profile in the window checked, which is what CloudWatch reports when a
+service has never had a countable event of that type, not a permissions or dimension error (the query
+returns a well-formed empty `Datapoints` list, the same shape a real query with real activity returns).
+**This is a server-side signal, independent of this project's own logging** — it settles whether Bedrock
+itself ever throttled or errored on a request, regardless of what the Lambda function chose to log.
+
+**Clustering, checked three ways:**
+
+- **By concurrency:** ruled out above, definitively — `Maximum: 1` leaves no room for a queueing-under-load
+  explanation.
+- **By position in the run (first-invocation effect):** per-minute router `InvocationLatency` breakdown
+  (`n=73` total, matching §11.15's figure exactly — 11+51+11):
+
+  | Minute | n | p50 | avg | p95 | max |
+  |---|---:|---:|---:|---:|---:|
+  | 02:45 (run start; includes §11.12's confirmed cold Lambda init) | 11 | 452.9ms | 510.9ms | 1,085.1ms | 1,128ms |
+  | 02:46 (bulk of the run) | 51 | 397.0ms | 506.3ms | **1,331.9ms** | 1,467ms |
+  | 02:47 (run end) | 11 | 402.5ms | 461.6ms | 886.6ms | 909ms |
+
+  The worst tail is in the **middle** bucket, not the first — a pure "only the very first call is slow"
+  story would put the worst p95 in the 02:45 row, and it doesn't. The first bucket's p50 (452.9ms) is the
+  highest of the three, a mild and statistically weak signal (n=11) consistent with, but not proof of, some
+  cold-adjacent connection-setup cost on the run's opening calls — it does not explain the larger tail that
+  recurs in the bucket with the most calls. **The spread is not concentrated at the start of the run.**
+- **By utterance / payload size:** `InputTokenCount` and `OutputTokenCount` for the same three buckets:
+
+  | Minute | Input tokens (min–max, avg) | Output tokens (min–max, avg) |
+  |---|---|---|
+  | 02:45 | 917–940, avg 925.7 | 42–44, avg 42.9 |
+  | 02:46 | 917–938, avg 927.9 | 42–46, avg 44.2 |
+  | 02:47 | 918–939, avg 930.6 | 42–61, avg 46.2 |
+
+  Input tokens are flat across the entire run (a 23-token / ~2.5% range on a ~925-token base) — the router
+  prompt's size does not vary meaningfully call to call. Output tokens tick up slightly in the last bucket
+  (max 61 vs. 42–46 elsewhere) — but that bucket has the **lowest** p95 latency of the three (886.6ms), the
+  opposite of what a token-count-driven latency story predicts. **Payload size does not track the latency
+  spread; if anything this window's one data point argues against it.**
+
+**What this doesn't close, named rather than swept past.** `EstimatedTPMQuotaUsage` read 917–1,000
+("Count," not a percentage) across the window — checked against AWS's own metric description before reading
+anything into it: *"This metric is an approximation and does not reflect the reservation-based token
+consumption that drives throttling decisions... Do not use this metric as the sole indicator for quota use
+or capacity planning."* Pinning an actual TPM quota value via `servicequotas:ListServiceQuotas` was
+attempted and abandoned — the first page returned no match for a Nova Micro quota name and paginating
+further added cost (tool calls, not AWS spend) without changing a conclusion the token-count-flat finding
+above already supports independently. **Not pursued further; the flat-input-token finding does the same
+job.** Separately: no custom `boto3.Config(retries=...)` exists at the router's client construction
+(`aws/bedrock_router.py:104`, `boto3.client("bedrock-runtime", region_name=region)` — no `config=` argument
+at all) — default botocore retry behavior applies, unverified against what that default actually resolves to
+in this Lambda runtime. And: `logs:FilterLogEvents` against `/aws/lambda/fnol-codehook` for Line E's window,
+filtered for retry/throttle-indicating text (`Throttl`, `Retry`, `ReadTimeout`, `ConnectionError`,
+`ClientError`, `ServiceUnavailable`), returned **zero matches** against **100+ real log events in the same
+window** (confirmed via an unfiltered count, so the zero is a real negative, not an artifact of no logs
+shipping) — but this project sets no explicit logger configuration anywhere in `api/lex_codehook.py` or
+`aws/bedrock_router.py` (`grep` found none), so botocore's own retry attempts, which log at `DEBUG` by
+default, would not surface in these logs even if one occurred silently and succeeded on a later attempt.
+**This is a real, narrow, unclosed gap** — a client-side retry that never registered as a countable Bedrock
+request (a socket-level timeout before the request reached Bedrock, for instance) would show up in neither
+signal checked here. It is a materially smaller and less likely explanation than the throttling/retry
+hypothesis this item set out to check, which the two server-side metrics rule out with high confidence.
+
+**Verdict.** Throttling and Bedrock-side errors: ruled out, server-side, with high confidence. Concurrency:
+ruled out, definitively. Request/response size: does not track the spread, and one data point in this window
+argues against it. What's left, not eliminated by any check available at $0: intrinsic serving-time variance
+on Nova Micro's shared on-demand inference endpoint — the explanation this investigation converges on by
+elimination, not by direct confirmation. **This is the less convenient result, not the cheaper one Marco's
+instruction 1 named as a live possibility going in.** A retry-ladder or backoff-tuning fix — the "different
+and cheaper than `ADR-009`" mitigation instruction 1 raised as the reason to check first — is not available,
+because the tail was never retries. The one lever this project's own record names for reducing shared
+on-demand serving variance is provisioned throughput, which `CLAUDE.md`'s cost-gate table lists under
+**banned by default**, requiring written justification and approval before it can even be proposed, let
+alone applied. **This investigation closes off the cheap application-level fixes rather than finding one.**
+
+**Item 3 — does Tier A gate the mitigation decision, or refine it? Refine, not gate — stated plainly, not
+left to be inferred.** Before this section, mitigation selection needed to know two things: which component
+dominates warm-path latency, and whether that component's cost is fixable cheaply at the application layer.
+Both are now answered without Tier A: Bedrock (router + guardrail) dominates (§11.15, ~78% of the warm-path
+p95, an approximate bound), and the router's own variance is not retries, not throttling, not concurrency,
+and not request-size-driven (this section, checked directly, not approximated). What Tier A would still add
+— an exact, per-turn, joined `router_ms`/`guardrail_ms`/`residual_ms` figure instead of an approximate
+percentile-sum, plus automatic coverage of `coverage_question`/`rental_towing` the first time a real run
+reaches them (§11.15's own stated reasons for keeping Tier A as the proposed minimum tier) — narrows *how
+precisely* this is known and *how much of the graph* it's known for. **It does not change which lever is
+available to mitigate the router's own tail**, because that answer (provisioned throughput, cost-gated, or
+accept the variance) does not depend on whether the underlying evidence is an approximate bound or an exact
+per-turn number. A decision about which mitigation to pursue can be brought to Marco now, on the evidence
+already in this file; Tier A is worth building for the precision and the generation-path coverage it adds,
+not because the mitigation decision is stuck without it. **Do not let it become a blocker it was never
+positioned to be.**
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes, and it was the expected result going in — Marco's instruction named
+   throttling/retries as a live possibility precisely because, if true, it would be a cheaper mitigation than
+   `ADR-009`. Every check was run looking for that outcome; all four came back negative. Reporting the
+   cheaper-fix hypothesis as ruled out, rather than quietly not mentioning it was checked, is the point of
+   this item.
+2. *Asserted-but-unchecked?* Two catches: (a) §11.15's absence of throttle/error metric *names* from
+   `ListMetrics` was not treated as proof of zero occurrences without a direct, dated query confirming a
+   real empty result rather than a dimension or permissions issue; (b) the "no retry text in logs" negative
+   was checked for whether the logging configuration would even surface a retry before it was reported as
+   meaningful — found it might not, and said so, rather than presenting a weaker check as a stronger one.
+3. *Infra error scored as a result?* N/A — read-only CloudWatch/Lambda/Logs/Service Quotas API calls; no
+   harness run, nothing to abort.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, no liveness concern (none of the APIs used are the
+   metered Cost Explorer API `CLAUDE.md` flags separately).
+5. *Identical markers, different paths?* Checked directly: `EstimatedTPMQuotaUsage`'s numeric values were
+   not read as a quota-saturation percentage without first checking AWS's own documented caveat that this
+   metric is an approximation unrelated to the reservation-based mechanism that actually drives throttling —
+   avoided treating two different quantities ("estimated usage count" and "percent of quota consumed") as
+   the same number.
+6. *Has this check ever failed for the right reason?* Yes — the `boto3.Config` grep is a check that could
+   have found a custom retry override and didn't; a check that had only ever found nothing (never having a
+   config to find) would be weaker evidence than one that searched a file known to sometimes carry such
+   config and returned a specific, citable negative (`bedrock_router.py:104`).
+7. *Changes a headline number's interpretation?* Yes, twice — the router's 1,286ms p95 moves from "the
+   dominant share of a warm-path measurement" (§11.15) to "71% of the entire budget, and unstable by 3.2x,
+   which is the actual finding"; and `3-pre(ii)`'s Tier A moves from "the proposed minimum tier to close the
+   attribution gap" to "a refinement, not a gate, on a mitigation decision the record already supports."
+8. *Touches `C1`?* No — no claim on `C1` made or revised; this section is `C14`-only, same explicit check as
+   every prior §11.1x entry.
