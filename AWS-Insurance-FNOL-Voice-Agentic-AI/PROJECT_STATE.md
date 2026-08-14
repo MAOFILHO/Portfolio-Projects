@@ -4344,3 +4344,83 @@ evaluable, matching the reasoning that already stopped cold-start mitigation sel
 proposed or chosen, criterion 3 not yet re-approved — the amendment above is a proposal awaiting Marco's
 decision, not a change in effect. Cost this session: $0 (documentation search over the repo's own record;
 no AWS call).
+
+## Session log — 2026-08-14 (continued; amended criterion 3 approved with a sequencing change; budget provenance promoted, sourcing proposed)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco's decision on the amendment proposed above: **approved, with one sequencing change.** Three
+instructions given: (1) promote the budget-provenance finding to `RESULTS.md` as its own section, not a
+`PROJECT_STATE.md` line; (2) reorder `3-pre` so the budget question is resolved *before* warm-path
+attribution, and propose how to source a defensible number; (3) `3-pre`'s attribution work then proceeds
+against whatever budget survives (2). `3(a)`, `3(b)`, and `3-budget` are approved **as written** in the
+prior proposal — unchanged. **Report only. No apply, no spend, `ADR-009` unedited.**
+
+**1 — done.** See `RESULTS.md` §11.13. Promoting it surfaced a citation error in the note being promoted:
+the original claimed six documents state the 1,800ms figure; `docs/phase2/COST-MODEL.md`'s only "1,800"
+occurrence is CloudWatch Live Tail free-tier minutes, unrelated to `C14`. Corrected to **five** documents in
+`RESULTS.md` §11.13, not carried forward silently. `RESULTS.md` §11.13 also states, as instructed, that a
+19ms warm-path overage against an unsourced number is a materially different object than the same overage
+against a derived requirement, and that nobody in this project's record currently knows whether a real
+requirement would land looser or tighter than 1,800ms.
+
+**2 — sequencing change, and the sourcing proposal.** `3-pre` (proposed in the prior, not-yet-approved
+amendment as warm-path attribution, mirroring criterion 1's cold-start attribution) is now split into two
+ordered parts, per Marco's instruction:
+
+- **`3-pre(i)` (new): resolve the budget's provenance before any warm-path attribution work begins.**
+- **`3-pre(ii)`: warm-path attribution** — the original `3-pre` content, unchanged, now gated on `3-pre(i)`
+  rather than run in parallel with or ahead of it. Rationale for the reorder, as given: attribution work
+  (§11.11's `importtime` breakdown was the cold-start precedent) is real effort spent measuring components
+  of a turn against a target; if that target is about to be replaced, the effort is aimed at the wrong
+  number until the target question is settled.
+
+**Proposing how `3-pre(i)` could be resolved — proposal only, no number chosen or sourced here, no spend.**
+Three sourcing paths were named in Marco's instruction: published conversational-latency research,
+telephony/IVR standards, and an explicit product decision recorded as such. Checked what each actually
+offers, at $0 (`WebSearch`, no AWS call):
+
+- **Published conversational-latency research.** Stivers et al. 2009 (PNAS, "Universals and cultural
+  variation in turn-taking in conversation," cross-linguistic study of yes/no-question response gaps across
+  ten languages) is the strongest primary source found: median gaps of 0–300ms, a cross-language average
+  offset within roughly 500ms, and gaps beyond roughly 700ms increasingly read across cultures as hesitant
+  or dispreferred. This is real, peer-reviewed, and closely matches `PROBLEM-FRAMING.md`'s own framing (a
+  human caller's tolerance for a slow response). **But it measures a different quantity than `C14`**:
+  human-to-human response *gap* (median/typical, not a tail statistic) versus a system's p95 processing
+  latency before that response even begins to be produced. Using it to derive 1,800ms would require an
+  explicit, stated bridging assumption (e.g., "the caller's patience threshold is N× the human-conversation
+  gap norm, and N is chosen because...") — not a lookup.
+- **Telephony/IVR standards.** ITU-T G.114 sets one-way transmission delay guidance for interactive voice:
+  under 150ms rated satisfactory, 150–400ms usable with growing impairment, above 400ms rated unacceptable.
+  ITU-T G.1051 addresses two-way conversational delay specifically, finding delays above roughly 250ms make
+  verbal exchange difficult. Both are real, primary ITU-T recommendations. **Both measure network
+  transmission delay** — the time a voice signal takes to travel the circuit — **not end-to-end
+  application/model processing-and-response latency**, which is what `C14` actually bounds (Lex STT
+  completion to Polly audio stream start — compute time, not wire time). Citing these directly for 1,800ms
+  would repeat the exact "identical markers, different paths" error this report has flagged repeatedly
+  (§11.10, §11.12, §11.13) — same family of mistake, applied to sourcing a constraint instead of measuring
+  one.
+- **Vendor/industry voice-AI latency blogs** (found in the same search — Telnyx, AssemblyAI, Hamming,
+  OpenMic, and similar) converge informally on "under ~800ms feels responsive, over ~1,500ms feels broken"
+  for full voice-assistant round-trips, which is the closest quantity-match to `C14` found in this search.
+  **Named for completeness, not treated as a source**: these are marketing/engineering blog posts, not
+  primary standards or peer-reviewed research, with no stated methodology this project can verify — the same
+  distinction this project already draws between a primary AWS pricing source and a widely-repeated but
+  unconfirmed figure (`CLAUDE.md`'s verified-facts table, Claude 3 Haiku output pricing row).
+- **Explicit product decision, recorded as such.** Neither of the first two paths produces 1,800ms, or any
+  other specific figure, as a *derivation* — the first measures the wrong statistic on the right kind of
+  quantity (human response gap, not system p95), the second measures the wrong quantity entirely (wire
+  delay, not compute-and-response latency). **Recommendation, not a decision:** the defensible path is not
+  "replace 1,800ms with a number pulled from A or B," it is to keep (or deliberately change) 1,800ms as an
+  explicit, stated product target — motivated by, but not computed from, the conversational-gap research and
+  the IVR delay standards — and record it in `RESULTS.md`/`ADR-009` as a chosen target rather than continue
+  carrying it as though it had been derived. This is a recommendation for Marco's decision, not a resolution
+  — `3-pre(i)` is not closed by this proposal, only its options are laid out.
+
+**Not done, per explicit instruction:** no number chosen, no document edited to state a new or re-affirmed
+target, `ADR-009` unedited, `3-pre(ii)`'s warm-path attribution not started, no apply, no spend. Cost this
+session: $0 (`WebSearch` documentation research only; no AWS call).

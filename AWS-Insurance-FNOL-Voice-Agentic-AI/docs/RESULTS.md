@@ -2721,3 +2721,76 @@ reading something the project had already paid for.
    not just how confident the record is.
 8. *Touches `C1`?* No new claim on `C1` — explicitly checked and stated above that the chased call still
    escalated correctly, so the 1.000 composed-recall figure from §11.7 is unaffected by this correction.
+
+### 11.13 The 1,800ms `C14` budget itself has no derivation anywhere in this project's own record
+
+Promoted per Marco's instruction from a proposal note filed in `PROJECT_STATE.md` (2026-08-14, "criterion 3
+found incomplete post-§11.12") into its own section here, because this is a finding about the constraint
+`C14` is measured against, not an implementation detail of closing Phase 9's exit criteria. $0 —
+documentation search over the repo's own record, re-run and corrected before promotion (see below); no AWS
+call.
+
+**The check, re-verified rather than copied forward.** Every file in the repo that states or discusses the
+1,800ms figure was searched again before promoting the earlier note, because promoting a claim into
+`RESULTS.md` is a higher bar than leaving it in a session-log proposal:
+
+| Document | Location | What it says |
+|---|---|---|
+| `CLAUDE.md` | `:59`, "Voice turn-latency budget" | "End-to-end turn latency from Lex STT completion to Polly audio stream start must stay **under 1,800 ms (p95)**" |
+| `docs/phase1/PROBLEM-FRAMING.md` | `:25`, `:197` | Names it "a correctness requirement, not polish" because "the caller may be distressed... on a roadside"; the north-star statement commits to "within 1,800 ms per turn" |
+| `docs/phase1/SUCCESS-METRICS.md` | `:146`, `:148` | Lists "Turn latency p95" as **GATE, ≤ 1,800 ms**, and cold-start turn latency p95 as a separate **TARGET**, same figure |
+| `docs/phase1/AI-USE-CASE-CARD.md` | `:112` | Risk `F6`, "turn exceeds 1,800 ms p95, caller hears dead air," rated High |
+| `docs/adr/ADR-009-cold-start-vs-latency-budget.md` | `:10`, `:79`, `:85`, `:94`, `:127` | States it repeatedly as the fixed context the ADR's mitigation order is chosen against |
+
+**Correction made while promoting.** The session-log note this section promotes claimed **six** documents,
+including `docs/phase2/COST-MODEL.md`. Re-checked directly (`grep -n "1,800" docs/phase2/COST-MODEL.md`):
+that file's only occurrence of "1,800" is `"1,800 Live Tail min/month"` — CloudWatch Live Tail's monthly
+free-tier minutes, an unrelated quantity that happens to share three digits with the latency figure.
+`COST-MODEL.md` never mentions the `C14` latency budget at all. **The correct count is five documents, not
+six** — the citation is corrected here rather than carried forward, the same discipline this report has
+applied to every other number in it (§0, §11.10, §11.12).
+
+**Finding: none of the five derives 1,800ms from a measured quantity or an external source.** Every instance
+states it as a flat requirement or `GATE` threshold. `PROBLEM-FRAMING.md` supplies a *motivation* — a
+distressed caller on a roadside is poorly served by a slow agent — but a motivation is not a derivation: no
+file computes the figure from an observed human turn-taking gap, a telephony/IVR engineering standard, a
+vendor SLA, or any other external quantity. `ADR-009` treats 1,800ms entirely as given context for choosing
+*among mitigations*, never as something to justify in itself. Searched for the nearest candidate to a
+derivation and found none: no file ties the number to a citation, a measurement, or a named standard.
+
+**Why this matters, stated plainly, not left implicit.** §11.12 found the warm-path p95 (1,819ms) exceeds
+1,800ms by 19ms, on a sub-component that already excludes ASR, TTS, and telephony. **A 19ms overage against
+an unsourced number is a materially different object than the same overage against a number derived from
+measured caller tolerance, telephony engineering practice, or an explicit, deliberately-chosen product
+target.** Against a derived requirement, 19ms means something specific — the system is barely, measurably
+short of what callers or the telephony medium actually demand. Against an unsourced flat threshold, 19ms
+means only that the system misses a number nobody in this project's record ever computed or cited. **Nobody
+currently knows whether a real, defensibly-derived requirement would land looser or tighter than 1,800ms** —
+and until that is known, the size of the miss (19ms, small in absolute terms) cannot be read as "close" or
+"far" with any confidence, because there is no external anchor to be close to or far from. This does not
+make 1,800ms illegitimate as a design target — an explicitly-chosen unsourced number, stated as such, is a
+normal way to set a constraint — but it has been carried in every document above as though it were a
+requirement, not a choice, and nothing in the record distinguishes the two.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — the search could have turned up a derivation (a cited human-factors
+   study, an ITU-T reference, a stated vendor benchmark) in any of the five files or in `COST-MODEL.md`;
+   none was found in any of them.
+2. *Asserted-but-unchecked?* The core catch of this promotion: the session-log note being promoted asserted
+   "six documents" without the citation being re-verified at promotion time. Re-run here, found wrong,
+   corrected to five before this section was written — not silently fixed, stated as a correction.
+3. *Infra error scored as a result?* N/A — `grep` over files already in the repo, no harness run.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, documentation search only.
+5. *Identical markers, different paths?* Checked directly: `COST-MODEL.md`'s "1,800" and `C14`'s "1,800 ms"
+   share digits, not referents — a CloudWatch free-tier minute count and a latency budget are different
+   quantities that happen to look alike in a grep result, exactly the failure mode this project's own
+   review criteria exist to catch.
+6. *Has this check ever failed for the right reason?* Yes, this section — the re-verification is what
+   caught the six-vs-five miscount; a check that had only ever passed before now would be a weaker check.
+7. *Changes a headline number's interpretation?* Yes — this is the finding's entire point: `C14`'s 19ms
+   warm-path overage (§11.12) is reframed from a miss against a requirement to a miss against an unsourced
+   number, with the honest consequence that neither "barely over" nor "substantially over" is currently a
+   supportable reading.
+8. *Touches `C1`?* No — this section concerns `C14`'s threshold provenance only; no `C1` claim is made or
+   revised here.
