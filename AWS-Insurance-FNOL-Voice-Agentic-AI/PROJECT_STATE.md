@@ -2330,10 +2330,13 @@ invalid classifications before the abort, not proof of a 2-call run. **Confirmed
 `platform.report` count in the exact run window (01:18:31–01:19:46 UTC): 79 requestIds, not 2.** Path
 split from the `"escalating contact"` log line: 21 L1 + 57 L2 = 78 escalating calls, exactly matching
 26 positives × base k=3 with **zero contingency triggered** — every one of the 78 positive samples
-escalated with `detection` provenance. This is an aggregate CloudWatch reconstruction, not the script's
-own per-item table (lost when the process crashed before `_run`'s `result` was built), so it does **not**
-verify `C1` — §1.8 still applies, unconditionally — but it is a strong sign the positives side would have
-scored 1.000/26 had the negatives not aborted the run. **Actual cost: Lex $0.05925 (79 × $0.00075) +
+escalated with `detection` provenance. **This is an aggregate CloudWatch reconstruction, explicitly NOT
+`C1` verification: no per-item table (`measure_positives`'s own `items` list was lost when the process
+crashed before `_run` ever built `result`), and no harness provenance breakdown (`provenance_breakdown()`
+never ran) — only a call count and a log-line tally, reconstructed after the fact from a different
+instrument than the one `C1` is scored from.** §1.8 still applies, unconditionally. It is a strong sign the
+positives side would have scored 1.000/26 had the negatives not aborted the run, and nothing more than
+that. **Actual cost: Lex $0.05925 (79 × $0.00075) +
 Bedrock/guardrail ≈$0.0196 (58 graph-path calls: 57 positive-L2 + 1 negative, assumed graph-path per the
 script's own costing convention) ≈ $0.0789 total — landed almost exactly on Line E's pre-registered
 ≈$0.078 estimate**, once counted correctly.
@@ -2364,18 +2367,26 @@ script's own costing convention) ≈ $0.0789 total — landed almost exactly on 
    the same shape as the one crash already observed on the deployed system. **Best current read: `D84` is
    5-in-17, not 1-in-17, all via the same mechanism.**
 
-**Incidental finding, not `D84`, surfaced by the same run — flagged per §1.7, not chased further without
-direction:** **9/17 negatives independently escalate** at the graph/L1 layer alone (`_run_graph_turn`
-called directly, bypassing `_dispatch`'s L1 pre-check to isolate the source): 8 via the graph's own `L2`
-classifier only (*"the car's totalled"*, the bruise/knee item, *"the front end is completely destroyed"*,
-*"she took a real beating…"*, *"there's a scrape…"*, *"I'm a bit stiff…"*, *"the driver's door is caved
-right in…"*, *"I don't think anyone's hurt…"*), 1 also independently caught by `L1`'s raw lexicon on
-`"ambulance"` (*"the ambulance did come out but… no need for anyone to go in"*). **This is not a `C1`
-issue** (`C1` is a recall constraint on positives only) but a real false-escalation-rate finding on
-figurative/idiomatic negative-control language, exactly the class `D81` item 5 exists to surface and the
-measurement script's own docstring names as "worth its own line before criterion 10 if it recurs." Not
-acted on. 3/17 negatives resolve cleanly (Close, no escalation, no `ElicitSlot`): *"my back's been bad
-since last year…"*, *"I checked on the other driver…"*, *"I had a knee replacement…"*.
+**Correction to my own first framing of the next paragraph — caught applying §1.2 to myself before
+sending, not by Marco.** I first wrote the finding below up as "incidental," implying new. It is not.
+**9/17 negatives independently escalate** at the graph/L1 layer alone (`_run_graph_turn` called directly,
+bypassing `_dispatch`'s L1 pre-check to isolate the source): 8 via the graph's own `L2` classifier only
+(*"the car's totalled"*, the bruise/knee item, *"the front end is completely destroyed"*, *"she took a
+real beating…"*, *"there's a scrape…"*, *"I'm a bit stiff…"*, *"the driver's door is caved right in…"*,
+*"I don't think anyone's hurt…"*), 1 also independently caught by `L1`'s raw lexicon on `"ambulance"`
+(*"the ambulance did come out but… no need for anyone to go in"*). **9/17 = 0.5294117647058824 —
+`RESULTS.md` §0/§2/§4's own long-standing, already-published composed false-escalation rate**
+(`SUCCESS-METRICS.md`'s ≤0.10 target, marked ❌ since Phase 6/7), reproduced exactly, item-for-item shape
+consistent with the historical L1-alone figure too: §2's L1 false-escalation is **0.059 = 1/17**, and the
+one L1 hit here (`"ambulance"`) is that same single item. **Nothing here is new.** What this session's
+local repro adds is a second, independently-built instrument (the deployed-shape `_run_graph_turn` path,
+not the original component-level harness) landing on the identical rate and the identical L1/L2
+attribution — a real cross-check (§1.6: a number reproduced by a second, differently-built instrument is
+stronger evidence than either instrument alone), not a discovery. **Not a `C1` issue** (`C1` is a recall
+constraint on positives only) and not filed as a new `D`-number — it is the existing, already-failing,
+already-headline 0.529 finding, re-confirmed. 3/17 negatives resolve cleanly (Close, no escalation, no
+`ElicitSlot`): *"my back's been bad since last year…"*, *"I checked on the other driver…"*, *"I had a
+knee replacement…"*.
 
 **Root cause, stated precisely:** `_elicit_slot()` (`api/lex_codehook.py`) sets
 `intent: _intent_from(event)` — Lex's own NLU intent+slots object, round-tripped verbatim — while
@@ -2384,6 +2395,46 @@ then validates the elicited slot against the intent named in the response. Nothi
 checks that the graph's chosen slot is legal under the intent it is about to echo back. **Still not fixed
 and not routed around, per `REVIEW-CRITERIA.md` §1.8/§2 — holding for Marco's direction on approach before
 any change to `_elicit_slot()`/`_intent_from()`, and before any re-run of criterion 9.**
+
+**2026-08-14, `D84` fix options proposed, not implemented.** `result["intent"]` (`agents/state.py`'s
+`AgentState.intent`) is the graph's own explicit intent decision, and `models/enums.py`'s `Intent` StrEnum
+values are already exactly the bot's Lex-schema PascalCase names (`FILE_AUTO_CLAIM = "FileAutoClaim"`,
+etc.) — no translation layer needed. Three options, C1 risk stated for each per Marco's ask:
+
+1. **(Recommended.) Build `_elicit_slot()`'s intent object from `result["intent"]`, not `_intent_from
+   (event)`.** Send `{"name": result["intent"], "slots": …, "state": "InProgress"}` instead of Lex's
+   echoed intent. Since escalation-worthy turns exit exclusively through `_close()` (never
+   `_elicit_slot()`), the graph's own chosen intent for a non-escalating turn is always one of the five
+   ordinary intents, all of which declare slots for whatever `active_slot` the graph names — this also
+   resolves the `InjuryEscalation`/`FallbackIntent` zero-slot case automatically, without a special case
+   for it. **This is the function's own pre-existing stated design** ("targeting whatever slot the GRAPH
+   decided… never Lex's own `SlotPriorities` walk") — the mismatch is a bug against that design, not a
+   deliberate policy this option overturns. **C1 risk: lowest.** Never touches the escalation path.
+   Residual risk is conversational, not a recall miss: if the graph's own classification is itself wrong,
+   pinning Lex's dialog state to it could compound confusion turn-over-turn — bounded because `_dispatch`
+   re-runs L1 and `D79` unconditionally on every subsequent turn regardless of which intent is active in
+   Lex's state.
+2. **Detect the mismatch, fall back to a different response type for that turn, leave Lex's intent
+   untouched.** Check `active_slot` against a static intent→slots table before calling `_elicit_slot`; on
+   mismatch, respond some other way (not `Delegate` — the function's own docstring already rejected Lex's
+   native `SlotPriorities` walk as wrong for this design). **Marco's flagged case matters most here**:
+   since `InjuryEscalation`/`FallbackIntent` have zero slots, ANY mismatch against either needs a genuinely
+   different `dialogAction.type`, not a substituted slot name — the fix is in the response shape, not the
+   intent, exactly as flagged. **C1 risk: also low on the escalation path itself** (same reasoning — `
+   _close()` remains the only escalation exit) but this is the direction Marco named explicitly: deferring
+   to Lex's NLU for turn continuation, not overriding it. The graph's own classification is not silently
+   discarded (it already decided not to escalate before this branch is reached), but conversation quality
+   degrades on the mismatched turn — bounded by the same `D79`/L1 safety net next turn, not a recall risk.
+3. **Stop coupling graph-driven turns to Lex's `ElicitSlot` mechanism at all** — always respond via `Close`
+   carrying the graph's own dynamic next-question text, matching the pattern the confirm-slots already use
+   (`bot.yaml.tftpl`: "the actual spoken prompt is always the codehook's own dynamic summary"). Removes the
+   whole class of intent/slot coupling that causes `D84`. **C1 risk: lowest in principle** (eliminates the
+   dependency) **but highest implementation/regression risk** — changes the interaction contract for every
+   ordinary slot-filling turn, not just the 5/17 mismatch cases, and would need full re-verification of
+   `DIALOGUE-POLICIES.md`, not a scoped patch. Disproportionate for a narrowly-understood defect; named as
+   the option if this class of failure recurs elsewhere, not a first move.
+
+Not implemented. Holding for Marco's choice.
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
