@@ -49,12 +49,25 @@ PROTOCOL — Marco's, overriding the k=1/43-item proposal logged first in `COSTS
     `escalate="true"` on every escalation. Four values, split by path on review (Marco: tagging both
     pre-graph and in-graph detections `"detection"` was the same defect one level down — identical text
     for genuinely different paths, the shape `D81` itself exists to fix): `"detection-pregraph"` (the
-    raw-text L1/L3 checks and `D79`'s confirmed-slot check — all run before the graph is invoked, and
-    cannot depend on it being reachable at all), `"detection-graph"` (the graph's own in-band `L1`/`L2`
-    branch — requires the graph to have run to completion), `"fail-closed"` (the one path where nothing
-    was detected except that the graph itself could not be reached), `"other-default"` (a missing or
-    unrecognized value this harness has not seen this Lambda actually emit). This script reads the field
-    per call, with no CloudWatch correlation needed — exactly the fix `D81` specified.
+    raw-text L1/L3 checks, plus `D79`'s confirmed-slot check — all run before `graph.invoke()`, i.e.
+    before the graph's own LangGraph nodes execute), `"detection-graph"` (the graph's own in-band `L1`/`L2`
+    branch — requires `graph.invoke()` to have run to completion), `"fail-closed"` (the one path where
+    nothing was detected except that the graph itself could not be reached), `"other-default"` (a missing
+    or unrecognized value this harness has not seen this Lambda actually emit). This script reads the
+    field per call, with no CloudWatch correlation needed — exactly the fix `D81` specified.
+
+    **Correction, `D83`, 2026-08-14 — "pregraph" is not "AWS-independent," and `D79`'s branch is not the
+    raw-text branch.** This docstring previously grouped the raw-text L1/L3 checks and `D79`'s
+    confirmed-slot check together as both running "before the graph is invoked, and cannot depend on it
+    being reachable at all." That is true of L1/L3 only. `D79`'s check reads `graph.get_state()`, which
+    (per `api/lex_codehook.py::_dispatch`) is called *after* `_get_graph()` — so it depends on graph
+    construction succeeding exactly the way `detection-graph` does; "pregraph" here means "before
+    `graph.invoke()`," not "independent of `_get_graph()`." `docs/RESULTS.md` §11.5 has the full account
+    of why this distinction matters: it is the difference between a provenance value that is safe under a
+    cold-start construction failure and one that only looks safe because of its name. `worst_case_detection`
+    below is unaffected — both `detection-*` values count toward `C1` the same way regardless of this
+    distinction — but any reasoning about *which* provenance values survive a cold-start/dependency
+    failure must not read `detection-pregraph` as a single uniform guarantee.
 
     **Both `detection-*` values count toward `C1` recall — the split is for the provenance breakdown to
     show WHICH path fired, not to rank one above the other.** `worst_case_detection` below treats

@@ -195,6 +195,28 @@ inspected and silent about the one layer up.
 guardrail — the conservative $0.0264 Bedrock line never happened. Cost is Lex-only: 79 `RecognizeText`
 requests × $0.00075 = **$0.05925 exact**, no estimation involved on either side of it.
 
+### Line E — criterion 9's re-run, post-`D83`, estimated before it runs
+
+`scripts/measure_composed_pipeline_deployed.py`'s own header already names this destination —
+`"COSTS.md Line D (invalidated) / Line E (this protocol)"` — written before `D80`/`D81`/`D82`/`D83` were
+even found. Line D was never a valid measurement (`D80`); the `D82`/`D83` re-attempts were
+`make verify-lambda-execution`'s smaller diagnostic gate, not this script, and both of those ran invalid
+too (layer structure, then the timeout). **This script itself has never once completed.** The run this
+line is estimated for is genuinely the first time it will, on a build where all four defects are fixed.
+
+**Protocol is unchanged from Line D's** (k=3 on the 26 must-escalate items, k=1 on all 17 negatives,
+contingency up to 6 items to k=7), so Line D's own estimate table is the applicable one, carried forward
+rather than recomputed: **≈$0.078 expected, ≈$0.107 worst case.** A deliberately-forced cold invocation
+(open question to Marco as of this entry — see the cold/warm question this line was written to answer)
+does not change this figure: Lambda invocation count stays inside the always-free tier regardless of
+container temperature (Line D's own table already prices that row at $0.00), and cold vs. warm changes
+wall-clock init time, not which billed API each call makes or how many of them there are.
+
+**Logged here, before any spend, per the same discipline Marco set for Line D:** *"approved as its own
+cost line ... estimate it before running and log it separately."* The actual figure lands in a new row in
+the table below, keyed `E`, once this run executes — not blended into Line D's row, which stays as the
+record of the invalid run it actually was.
+
 | Date | Stage | What ran | Real AWS call? | Units | Actual cost | Line |
 |---|---|---|---|---|---|---|
 | 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. No measurement obtained; run invalid (`D80`/`D81`).** `C1` is unverified on the deployed system, not failed. 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
