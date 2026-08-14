@@ -3200,6 +3200,26 @@ discipline, not only for how the layer gets built:** importing directly from a T
 finding below — an artifact's content can change from something other than an intentional edit, and the
 only way to know is to check the artifact, not assume the last intentional change is still the only one.
 
+**"Same content" verified, not asserted, on Marco's explicit demand before approving the apply.** The
+built zip's own plain MD5 (`md5 .terraform-build/lex-codehook-deps.zip`) is `73deb4753ca856a7cc60270092e4be96`
+— exactly the deployed S3 key's content-addressed name, and that key is **not** changing in the plan.
+`terraform show -json d83.tfplan` on `aws_s3_object.codehook_deps_layer` shows exactly one field differing
+between before/after: `etag` (`ce01dfbd51734440760daaf4200588f5-9` → `73deb4753ca856a7cc60270092e4be96`).
+Every other attribute — `key`, `arn`, `source`, `content_type`, `tags_all` — is identical. The `-9` suffix
+on the stored etag is S3's multipart-upload signature; a multipart etag is a hash-of-part-hashes and never
+equals a whole-file MD5 even for byte-identical content, so the diff is a format artifact of whatever tool
+performed the out-of-band multipart uploads (the "5 identical PUTs" below), not evidence of a content
+difference. Content identity confirmed independently of the etag, via the content-addressed key itself —
+this artifact has failed twice already (`D80`, `D82`), so this project does not accept "same content" on
+this specific resource without checking it the same way both of those were eventually checked: against the
+artifact, not the config's or the plan's claim about it.
+
+**This is the first build-artifact defect this session caught pre-apply rather than post-deploy.** `D80`
+and `D82` were both found by the gate, after a real apply, at real (if small) cost. The `.pyc` contamination
+above was found by reading the plan's own diff before running `terraform apply` at all — the same
+verify-the-artifact discipline `D82` established, now running early enough to prevent a bad deploy instead
+of only explaining one after the fact.
+
 ### Apply drift — what's deployed and what was reviewed have diverged once already
 
 Filed as its own finding, not folded into `D82`/`D83`, per Marco: **the S3 key
