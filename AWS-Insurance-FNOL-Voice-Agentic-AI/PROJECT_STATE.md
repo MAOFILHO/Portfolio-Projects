@@ -2484,6 +2484,121 @@ Also per Marco's request: the 0.529/0.059 figures this session's local `D84` rep
 a cross-instrument agreement in `RESULTS.md` §11.6 — not a new finding, §0/§2 already published both, but a
 second, independently-built instrument reproducing them is itself worth recording.
 
+**2026-08-14, `D84` fix deployed, criterion 9 Line E run — `C1` VERIFIED (warm path), first time this
+project has produced that result without an abort.**
+
+**Sequence, Marco-approved, halt-on-first-failure — nothing halted.**
+
+1. `terraform plan` reviewed and reported before applying: exactly the expected shape, `aws_lambda_function
+   .codehook`'s `source_code_hash` change and `aws_s3_object.codehook_deps_layer`'s known cosmetic etag,
+   `0 to add, 2 to change, 0 to destroy`, nothing beyond it (verified against `lambda.tf`'s `source_dir`
+   definitions, not assumed). Saved to `d84.tfplan`.
+2. **Applied** on Marco's `"Approved."`: `Apply complete! Resources: 0 added, 2 changed, 0 destroyed`. Read
+   back independently, per the `D77` lesson, not trusted from apply's own report: `get-function-
+   configuration` → `CodeSha256: u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/UDPZ3Ud1ZYE=` (exact match to the plan's
+   new value), `LastUpdateStatus: Successful`, `State: Active`.
+3. **`make verify-lambda-execution`: 9/9 events passed.** D80/D82 gate clear, no partial pass.
+4. **Criterion 9, Line E (`scripts/measure_composed_pipeline_deployed.py`), completed clean — no abort, no
+   `invalid` classification, invalid-abort armed and never triggered:** composed recall **1.000 (26/26)**,
+   0 contingency, 0 unstable items; provenance on all 91 `escalate=true` samples —
+   `detection-pregraph` 22, `detection-graph` 65, **`fail-closed` 0**, `other-default` 0; 9/17 negatives
+   false-escalated (0.529, matching §0/§2/§11.6 exactly — not a `C1` breach, not a new finding); CloudWatch
+   path attribution corroborates independently (L1=21, graph-path=61, matched=82); no per-item divergence
+   from `D52`'s local verdicts. Cost **$0.097668** (Lex $0.07125 + Bedrock $0.026418, 95 real
+   `RecognizeText` calls), inside the pre-registered ≈$0.078/≈$0.107 band, logged as Line E's actual row in
+   `COSTS.md`. Full write-up, including why this pass is trustworthy where §0.2 previously said a deployed
+   1.000 would carry no more weight than the local-graph figure: `RESULTS.md` §11.7.
+
+**Scope, held to explicitly rather than let the clean number imply more: this is `C1` verified on the
+DEPLOYED system, WARM PATH ONLY.** The forced-cold L2 existence-proof (1 of 19) was not run this session —
+Marco's own correction, mid-session: the one forced-cold result already on record (`'we lost her'`, cold
+confirmed via `initDurationMs: 409.163`, escalated `detection-graph`) was measured against a different
+`CodeSha256`, from before the `D84` fix, and a changed package is exactly the kind of change cold-start
+construction cost can move — citing it for this build would convert a verified escalation-safety claim into
+an unverified cold-start-timing claim. Manufacturing a fresh cold start out-of-band
+(`update-function-configuration`) was also rejected — the exact drift anti-pattern already refused earlier
+this session. **This deployment (`CodeSha256 u9iIy...`) has no cold-start escalation evidence. That gap is
+open, not closed by this run.**
+
+**Proposed, not implemented: a Terraform-managed way to force a cold start for a follow-up probe.** A
+`var.cold_probe_marker` (default `""`), wired into `lambda.tf`'s `environment.variables` block as a pure
+cache-buster the application code does not read. Bumping its tfvars value and running `terraform apply`
+invalidates warm execution environments the same way an out-of-band config touch would, but through the
+normal plan/apply/cost-gate path — reviewable in `terraform show` and git history, no drift, since Terraform
+owns the value both before and after. First invocation after that apply would be sent the L2 item
+deliberately, same ordering trick as the original probe.
+
+**2026-08-14, `var.cold_probe_marker` implemented and run, same day, Marco-approved at each step —
+existence proof (1 of 19) obtained, not coverage.**
+
+1. `terraform plan -var "cold_probe_marker=d84-cold-probe-2026-08-14T031434Z"` reported before applying:
+   exactly the expected shape — the new env var plus the already-known cosmetic S3 etag, `0 to add, 2 to
+   change, 0 to destroy`, nothing else. (One rendering artifact caught and checked rather than assumed
+   benign: the human-readable plan diff showed `+ "FNOL_COLD_PROBE_MARKER" = null` for the *first*, empty-
+   default plan reviewed a session earlier; `terraform show -json` on that plan confirmed the real `after`
+   value was `""`, not `null` — cosmetic rendering of an empty string, same category as the S3 multipart-
+   etag diff already documented twice this project.)
+2. **Applied.** `Apply complete! Resources: 0 added, 2 changed, 0 destroyed`. Read back independently:
+   `CodeSha256: u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/UDPZ3Ud1ZYE=` — **unchanged from Line E's build**, confirming
+   this probe measures the same code Line E measured, only Lambda config moved; `FNOL_COLD_PROBE_MARKER:
+   "d84-cold-probe-2026-08-14T031434Z"` present as set; `LastUpdateStatus: Successful`.
+3. **`'we lost her'` sent as the first invocation after that apply — nothing before it, no gate, no
+   warm-up.** Coldness confirmed by mechanism, not inferred from wall-clock timing: CloudWatch shows a
+   `platform.initStart` event (`"initializationType":"on-demand"`) immediately preceding this invocation's
+   `platform.start`, and its `platform.report` REPORT line carries `initDurationMs: 429.888` — a field
+   Lambda only emits when an execution environment actually initialized for this call. `_get_graph()`
+   construction, read from the `D83` diagnostic logging (still live): **10.337s**, consistent with `D83`'s
+   original 11.421s measurement — comfortably inside the current 60s timeout (~5.8× margin), the exact
+   headroom that made this run land clean rather than near a boundary.
+4. **Escalated: yes.** `sessionAttributes: {"escalate": "true", "escalation_reason": "detection-graph"}`,
+   corroborated by the application's own log line (`"escalating contact ... on layer L2 route 1 reason
+   detection-graph"`). Safety script delivered: *"If anyone needs medical help, please hang up and call
+   911. I'm connecting you with someone who can help right away."* Cost: **≈$0.00109** (1 `RecognizeText`
+   $0.00075 + Bedrock/guardrail ≈$0.00034), logged in `COSTS.md`.
+
+**Scope, stated precisely, not left to imply more: this closes the specific gap named at Line E's
+close — the graph's escalation branch does still fire, with `detection-graph` provenance, on a genuinely
+cold container of this exact build.** It is 1 of the 19 positives L1 alone misses (§2's table), not the
+other 18, and it is a correctness result, not a timing guarantee — nothing here says cold-start construction
+stays at ~10-11s under a different package shape, a different item, or a tighter timeout than the current
+60s. Full write-up: `RESULTS.md` §11.7.
+
+### Stage 4 — CLOSED, 2026-08-14
+
+**Exit state, plainly:**
+
+- **`C1` VERIFIED on the deployed system, WARM PATH — build `CodeSha256 u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/
+  UDPZ3Ud1ZYE=`.** Composed recall 1.000 (26/26), zero `invalid`, zero `fail-closed`, corroborated by an
+  independent CloudWatch read. Not a `C1` breach, but recorded alongside it per Marco's instruction: 9/17
+  negatives false-escalate (0.529), matching §0/§2/§11.6's already-published figure exactly — a real,
+  still-open precision defect, not new.
+- **Cold-start escalation: existence proof only (1 of 19), not coverage.** One L2-dependent item confirmed
+  to escalate correctly, with correct provenance, on a genuinely cold container of the same build. The
+  other 18 L2-dependent positives, and the L1-only items under cold start, remain unmeasured.
+- **`C14` violation remains open and unmitigated.** `_get_graph()` cold-start construction measures
+  10.3–11.4s across two independent runs (`D83`, this session's probe) — ~5.7–6.3× constraint 14's entire
+  1,800ms p95 turn-latency budget, before any Bedrock call. The 60s timeout (raised from 8s to fix `D83`)
+  absorbs it without failing, but does not address the underlying latency; `ADR-009` names the mitigation
+  order and is Phase 9's to execute, not Stage 4's.
+- **`D84` fixed, deployed, verified**: `_elicit_slot` no longer echoes Lex's own NLU intent against the
+  graph's chosen slot; unroutable/malformed intents raise `_UnroutableIntentError`, deliberately uncaught,
+  reusing `handler`'s existing fail-open/fail-closed split. 43 new tests, 628/628 full suite, deployed and
+  exercised live by both Line E and the cold probe with no recurrence.
+- **`did_routed` stays `false`.** Criterion 10 (DID routing) is unblocked by `C1` verification per `D80`'s
+  original consequence statement, but nothing in this close is an instruction to route it — that remains a
+  separate, explicit decision.
+
+**Phase 9 entry conditions — written here, at Stage 4's close, so Phase 9 can start from these files alone
+without re-deriving them from session history:**
+
+| # | Condition | Current state, with scope | Source |
+|---|---|---|---|
+| 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated. Cold-start coverage is an existence proof (1/19), not a measurement — Phase 9 inherits an open question, not a clean bill of health, on whichever cold-start mechanism it ships | `RESULTS.md` §11.7, `COSTS.md` Line E |
+| 2 | `C14` violation | **Open, unmitigated, quantified twice.** `_get_graph()` cold-start construction: 11.421s (`D83`) and 10.337s (this session's probe) — 5.7–6.3× the 1,800ms p95 budget. The 60s timeout is a workaround (absorbs the latency without failing), not a fix. Phase 9 must either land a mitigation or make an explicit, written decision to carry the violation forward | `RESULTS.md` §11.5 |
+| 3 | `ADR-009` mitigation order | **Smaller package → SnapStart → scheduled warmer → provisioned concurrency, cost-gated in that order.** Not Phase 9's to reorder without a documented reason — the order reflects cost/complexity ranking, cheapest-and-least-invasive first | `ADR-009` |
+| 4 | **SnapStart re-verification requirement, if chosen** | A thawed snapshot is a **different mechanism** from a true cold init, not merely a faster one — this session's correctness evidence (escalation fires correctly on a genuinely cold container) does not automatically transfer to a SnapStart-restored one. **If Phase 9 selects SnapStart, criterion 9's forced-cold probe (or an equivalent correctness check against a SnapStart-restored environment) must be re-run before treating `C1`'s cold-path status as verified under that mechanism.** Not required for smaller-package or scheduled-warmer, which change cold-start *frequency*, not the *mechanism* itself | This session, Marco explicit |
+| 5 | Coverage gap, stated so it isn't silently treated as closed | 18 of the 19 L2-dependent positives, and every L1-only item, remain unmeasured under cold start. Phase 9's own load/latency testing is a natural place to extend coverage, not a requirement to re-run criterion 9's full protocol cold | This entry |
+
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
 (the ADR recorded the provider-bug risk as *unconfirmed rather than clean* and required a POC before

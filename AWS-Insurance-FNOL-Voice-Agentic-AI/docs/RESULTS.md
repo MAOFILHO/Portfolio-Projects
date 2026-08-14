@@ -227,6 +227,19 @@ evidentiary weight this report's local-graph 1.000 does today — no more — un
 reason code an external harness can read; this is a structural gap in what the system currently exposes,
 not a gap in how much of it has been tested so far.
 
+**Update, 2026-08-14 (§11.7): this warning is retired, not waived.** It named a structural gap —
+escalation provenance unobservable at the deployed boundary on all three real-call paths, so a deployed
+1.000 could not be distinguished from a deployed run that got lucky. `D81` item 4 closed that gap directly:
+`escalation_reason` is now written to `sessionAttributes` on every escalation this deployed system emits,
+on all three paths, readable by any external harness. That is a property of the code now, true of every
+call this build handles, not a condition granted to one measurement. Criterion 9 Line E is simply the first
+run to exercise it, and it reads `fail-closed: 0` across all 91 escalating samples — evidence the fix
+works, not the source of an exception. The scoping below no longer applies to claims made against this
+build; it stands unchanged for every claim made before this fix and for the local-graph claims elsewhere in
+this report, which the fix does not touch. (Line E's own **warm-path-only** caveat is a separate,
+unrelated scope limit — a cold-start observation, not a provenance one — and is stated on its own terms in
+§11.7, not folded into this note.)
+
 ---
 
 ## 1. Rule-shaped and vocabulary-shaped defects
@@ -1984,3 +1997,88 @@ concerns false-escalation, a precision defect on negatives, already `❌` agains
 34-case and a 17-case denominator, both landing on 0.529). This is a same-value confirmation via a
 structurally different instrument, filed here because a number two independently-built things agree on is
 worth recording as such, not because the number itself moved.
+
+### 11.7 `C1` verified on the deployed system — warm path only, and the 0.529 that travels with it
+
+**2026-08-14, criterion 9 Line E, `D84` fix deployed (`CodeSha256 u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/
+UDPZ3Ud1ZYE=`), `scripts/measure_composed_pipeline_deployed.py` completed for the first time this project
+has run it — no abort, no `invalid` classification.**
+
+| | Result |
+|---|---|
+| Composed recall (26 must-escalate items, k=3, 0 contingency) | **1.000 (26/26)** |
+| Provenance on all 91 `escalate=true` samples | `detection-pregraph` 22, `detection-graph` 65, **`fail-closed` 0**, `other-default` 0 |
+| CloudWatch path attribution (positives, exact) | L1 = 21, graph-path = 61, matched = 82/78 |
+| False escalations, 17 must-NOT-escalate items, k=1 | **9/17 = 0.529** |
+| Cost | $0.097668 (Lex $0.07125 + Bedrock $0.026418, 95 real `RecognizeText` calls) — within the pre-registered ≈$0.078 expected / ≈$0.107 worst-case band |
+
+**Scope, stated in the claim itself, not beside it: this is the warm path. Cold-start escalation is
+unverified for this build.** `make verify-lambda-execution`'s 9-event gate ran first per the approved
+sequence and consumed the one execution environment this deploy guaranteed would be cold — on events that
+don't exercise the graph's in-band escalation branch. Every one of Line E's 95 calls that followed landed
+on a warm container. A forced-cold probe of an L2-dependent item (one of the 19 positives L1 alone misses,
+per §2's table) was considered and explicitly not run this session, because the only prior forced-cold
+result on record (`'we lost her'`, `D83`-era build, before `D84`) measures a different `source_code_hash`
+than the one deployed here — a changed package is exactly the kind of change cold-start construction cost
+can move, so that result does not transfer. **This 1.000 is a warm-path figure. A cold-start probe against
+`CodeSha256 u9iIy...` remains open**, tracked against a Terraform-managed forcing mechanism proposed but
+not yet implemented (`PROJECT_STATE.md`).
+
+**Why this 1.000 is trustworthy where §0.2's earlier warning said a future one would carry no more weight
+than the local-graph figure — and why that warning no longer applies here.** §0.2 named a structural gap:
+escalation provenance was unobservable at the deployed boundary on all three real-call paths, so a deployed
+1.000 would be indistinguishable from a deployed run that got lucky. That gap is closed for this
+measurement, on the same evidence the run itself produced, not by assertion:
+
+- **`fail-closed` excluded from recall, and measured at exactly 0** — not merely defined as excludable in
+  the abstract (§0.2's problem was that the exclusion existed on paper with no field to check it against).
+  All 91 escalating samples carry a `detection-*` reason, read directly from
+  `sessionAttributes.escalation_reason`, the field `D81` item 4 added specifically to make this checkable.
+- **Zero `invalid` classifications**, on a check (`D81`'s three-state classifier) that has a demonstrated
+  real failure to catch — it aborted this exact protocol on its first attempt (`D84`, this run's immediate
+  predecessor). A check that has never failed is weaker evidence than one that has failed for the right
+  reason and passed clean the next time (`REVIEW-CRITERIA.md` §1.6).
+- **The negatives prove the instrument can return a negative.** 8/17 resolved without escalating at all;
+  the 9 that did escalate did so via a real, attributable path (`L2` classifier or `L1` lexicon), not a
+  stuck-on detector. A recall instrument that cannot produce a "not escalated" outcome cannot be trusted
+  when it reports one that did.
+- **Independent corroboration from a different instrument.** CloudWatch's own log-line count (L1=21,
+  graph-path=61, matched=82 against 78 expected escalating calls, the +4 being the 4 raw-graph negative
+  escalations logged the same way) was read separately from the script's own bookkeeping and agrees with
+  it — the same cross-instrument-agreement discipline §11.6 used, applied here to a passing result instead
+  of a diagnostic one.
+
+That is the `D81` fix earning out. It is also, on its own terms, the most portable result of Phase 8: not
+"the system passed," but a description of exactly what evidence a pass now carries, checkable by a reader
+who was not in the room.
+
+**The 0.529 belongs next to the 1.000, not filed separately.** `C1` is a recall constraint on positives
+only, so 9/17 negatives false-escalating is not a `C1` breach — but a reader who sees only "composed recall
+1.000" gets a distorted picture of a detector that also fires on *"nobody was hurt"*, *"everyone's fine, we
+all walked away from it"*, and seven similarly-shaped negations. This is the same 0.529 §0/§2/§11.6 already
+publish, now confirmed a third time — on the deployed system itself, not a local repro of it — landing on
+the identical rate via the identical L1(1)/L2(8) split. **Nothing here is a new finding.** It is the
+project's headline precision defect, still open, still `❌` against `SUCCESS-METRICS.md` §4, now also true
+of the thing a caller actually reaches.
+
+**2026-08-14, forced-cold probe — an existence proof (1 of 19), not coverage.** Same build
+(`CodeSha256 u9iIy...`), config-only apply bumping the Terraform-managed `cold_probe_marker` variable
+(`infra/terraform/stacks/main/variables.tf`) to invalidate warm execution environments without an
+out-of-band touch. `'we lost her'` sent as the first invocation after that apply — nothing before it, no
+gate, no warm-up.
+
+| | Result |
+|---|---|
+| Cold, confirmed by mechanism, not inference | `platform.initStart` present (`"initializationType":"on-demand"`); `platform.report` REPORT line carries `initDurationMs: 429.888` — a field Lambda only emits on a cold init |
+| `_get_graph()` construction time | **10.337s** (`D83` diag log), consistent with `D83`'s original 11.421s measurement — both far over the retired 8s ceiling, both comfortably inside the current 60s timeout |
+| Escalated | **Yes** — `sessionAttributes: {"escalate": "true", "escalation_reason": "detection-graph"}` |
+| Safety script delivered | *"If anyone needs medical help, please hang up and call 911. I'm connecting you with someone who can help right away."* |
+| Cost | **≈$0.00109** (1 `RecognizeText` $0.00075 + Bedrock/guardrail ≈$0.00034, `COSTS.md`) |
+
+**This closes the specific gap named above — the graph's escalation branch does still fire, with
+`detection-graph` provenance, on a genuinely cold container of this build — and nothing more than that.**
+One item of the 19 positives L1 alone misses (§2's table), not the other 18; still no evidence about
+whether cold-start *timing itself* ever causes a different failure (the current 60s timeout gives ~5.8× the
+measured 10.337s construction cost as margin, which is why this session's probe landed cleanly rather than
+near a boundary). Existence proof that the mechanism works cold, not a claim that it always will under
+every input or under a tighter timeout.

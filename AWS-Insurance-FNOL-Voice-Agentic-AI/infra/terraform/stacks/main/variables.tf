@@ -199,6 +199,27 @@ variable "lambda_timeout_seconds" {
   default     = 60
 }
 
+variable "cold_probe_marker" {
+  description = <<-EOT
+    Pure cache-buster, read by no application code. Wired into `aws_lambda_function.codehook`'s
+    `environment.variables` map (below) for exactly one purpose: bumping this value and running
+    `terraform apply` changes the function's configuration, which invalidates its warm execution
+    environments the same way an out-of-band `aws lambda update-function-configuration` call would -- but
+    through the normal plan/apply/cost-gate path instead of a side channel. Proposed 2026-08-14 as the
+    Terraform-managed alternative to that out-of-band touch (rejected the same session as the drift
+    anti-pattern it is): this way, forcing a cold container for a deliberate cold-start probe is a
+    reviewable diff in `terraform show` and git history, and it reconciles cleanly afterward because
+    Terraform owns the value on both sides of the apply -- no drift to detect or revert.
+
+    Default "" is inert. To force a cold start for a probe: set this to any new, distinct string (e.g. a
+    UTC timestamp or the defect/probe name), `terraform apply`, then send the probe's first real call
+    immediately after -- the guaranteed-cold slot that apply just created. Not consumed automatically by
+    any `make` target; a probe using it is a deliberate, one-off action.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "log_retention_days" {
   description = <<-EOT
     CloudWatch Logs retention. 14 days.

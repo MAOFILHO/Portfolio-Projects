@@ -197,6 +197,10 @@ requests × $0.00075 = **$0.05925 exact**, no estimation involved on either side
 
 ### Line E — criterion 9's re-run, post-`D83`, estimated before it runs
 
+**Closed 2026-08-14 — ran clean, first time, actual $0.097668, inside the worst-case band below.** The
+estimate that follows is left as originally written, pre-spend; the actual row is in the table above,
+keyed `E`.
+
 `scripts/measure_composed_pipeline_deployed.py`'s own header already names this destination —
 `"COSTS.md Line D (invalidated) / Line E (this protocol)"` — written before `D80`/`D81`/`D82`/`D83` were
 even found. Line D was never a valid measurement (`D80`); the `D82`/`D83` re-attempts were
@@ -222,6 +226,9 @@ record of the invalid run it actually was.
 | 2026-08-13 | 4 | **Criterion 9, deployed `C1` re-verification. No measurement obtained; run invalid (`D80`/`D81`).** `C1` is unverified on the deployed system, not failed. 79 `RecognizeText` calls (78 run + 1 diagnostic probe), 0 reached Bedrock. `scripts/measure_composed_pipeline_deployed.py` | **Yes** | 79 `RecognizeText` requests, 0 Bedrock calls | **$0.05925 exact** | **D** |
 | 2026-08-13 | 4 | **`D80`/`D81` layer fix, `terraform apply` — `APPROVED` by Marco.** `2 added, 1 changed, 0 destroyed`: `aws_lambda_layer_version.codehook_deps`, `aws_s3_object.codehook_deps_layer` (41.8 MB), `aws_lambda_function.codehook` updated. Layer/S3 storage at this size is within the always-free tier region-wide; nothing here is a per-request cost until invoked | Yes | 3 resources | **$0.00 at rest** | — |
 | 2026-08-13 | 4 | **`make verify-lambda-execution`, first real run (`D82` found it).** Estimated ~$0.0018 (6 of 9 events reach Bedrock). **Actual: $0.00** — every one of the 9 `lambda:Invoke` calls crashed at cold-start import (`D82`, the layer zip's missing `python/` prefix) before reaching the guardrail or router, the identical shape `RESULTS.md` §11.3 already named: cost-below-estimate as a liveness signal, confirmed a second time by a different instrument | Yes | 9 `lambda:Invoke` calls, 0 Bedrock calls | **$0.00 exact** | — |
+| 2026-08-14 | 4 | **`D84` fix apply + `make verify-lambda-execution` re-run, both clean.** `terraform apply "d84.tfplan"`: `source_code_hash` change only, `CodeSha256` read back and confirmed (`u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/UDPZ3Ud1ZYE=`). Gate: 9/9 events passed, ~$0.0018 estimated/actual (6 of 9 reach Bedrock) | Yes | 3 resources updated + 9 `lambda:Invoke` calls | **≈$0.0018** | — |
+| 2026-08-14 | 4 | **Criterion 9, Line E, completed — first successful run of this script.** `scripts/measure_composed_pipeline_deployed.py` against `CodeSha256 u9iIy...` (post-`D84`): composed recall 1.000 (26/26), zero `invalid`, zero `fail-closed`, 95 real `RecognizeText` calls (78 positive-path + 17 negative). `RESULTS.md` §11.7 | **Yes** | 95 `RecognizeText` requests, 78 graph-path Bedrock/guardrail calls (cost basis, per script docstring) | **$0.097668** (lex $0.07125 + bedrock $0.026418) | **E** |
+| 2026-08-14 | 4 | **Forced-cold probe (existence proof, 1 of 19), Terraform-managed.** `cold_probe_marker` bump + apply (config-only, same `CodeSha256`) invalidates warm environments in place of an out-of-band touch; `'we lost her'` sent as the first invocation after. Cold confirmed via `platform.report`'s `initDurationMs: 429.888`; escalated, `detection-graph`; `_get_graph()` construction 10.337s. `RESULTS.md` §11.7 | **Yes** | 1 `RecognizeText` request, 1 graph-path Bedrock/guardrail call | **≈$0.00109** (lex $0.00075 + bedrock ≈$0.00034) | — |
 
 ⚠ **The Cost Explorer API is not free, and that is worth a line of its own.** `ce:GetCostAndUsage` bills
 **$0.01 per request**. It is trivial next to a $25 ceiling, but it inverts the usual assumption that

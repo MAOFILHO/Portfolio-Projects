@@ -312,6 +312,11 @@ resource "aws_lambda_function" "codehook" {
 
       FNOL_GUARDRAIL_ID      = data.terraform_remote_state.guardrails.outputs.guardrail_id
       FNOL_GUARDRAIL_VERSION = data.terraform_remote_state.guardrails.outputs.guardrail_version
+
+      # Read by no code in `src/` -- a pure cache-buster. See `variables.tf`'s `cold_probe_marker` for the
+      # mechanism this exists to support: bumping it and applying forces a fresh execution environment,
+      # Terraform-managed, in place of an out-of-band `update-function-configuration` touch.
+      FNOL_COLD_PROBE_MARKER = var.cold_probe_marker
     }
   }
 
