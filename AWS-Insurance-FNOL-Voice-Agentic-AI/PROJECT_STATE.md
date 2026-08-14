@@ -4043,3 +4043,86 @@ exact rate, which the amended criterion didn't ask for. Does not choose a mitiga
 **Not yet done:** any mitigation choice, any Terraform change, any apply, both named follow-ups
 (`importtime` attribution, 512MB hypothesis logged in §11.8) — pending Marco's direction on criterion 2's
 outcome, per his explicit sequencing.
+
+## Session log — 2026-08-14 (continued; C14 p95 computed, `importtime` attribution run, 512MB hypothesis logged)
+
+**Restating the four stop conditions, verbatim, per `CLAUDE.md`:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted §11.9 and gave four instructions in one message: (1) compute `C14`'s p95 status explicitly
+from §11.9's own frequency finding, (2) name the scope gap between that computation and constraint 14's
+actual end-to-end definition, then the two previously-deferred follow-ups: (3) `python -X importtime`
+attribution inside `agents.graph`'s dominant import phase, checking what pulls in `mcp`, and (4) log the
+512MB-memory hypothesis in §11.8 as the stronger gap candidate, reasoning only, not tested. All four done
+this session, no Terraform touched, no AWS spend beyond what was already logged, `PROJECT_STATE.md` before
+`RESULTS.md`'s narrative — same order as always, spelled out here since this entry is itself the
+end-of-session update.
+
+**1/2 — `RESULTS.md` §11.10, new section.** 1 cold turn per call against both turns-per-call figures on
+record: 1/12 = 8.3% (sourced), 1/8 = 12.5% (superseded planning figure) — both clear the 5% ceiling p95
+requires, so `C14` is violated **at p95**, not only on the single measured cold-turn number §11.5/§11.7
+already flagged. First point in the record where both halves of that computation (a per-cold-turn latency
+figure and a cold-turn frequency bound) exist together. Scope gap named directly: every cold-turn latency
+number this project has ever measured (§11.5's 11.421s, §11.7's forced-cold probe's 10.337s, §11.8's local
+runs) is `_get_graph()` construction only — `C14` is Lex-STT-completion to Polly-audio-start, telephony/
+ASR/TTS legs included, and §10 already said this project has never measured that end-to-end figure
+("Phase 9 owns it"). Checked: it still hasn't been measured; Line E's forced-cold probe reports
+construction time and cost, not a total. Stated as not captured rather than approximated from the
+construction number.
+
+**3 — `RESULTS.md` §11.11, new section.** Docker wasn't running at session start; started it
+(`open -a Docker`, ~5s to ready) and pulled `public.ecr.aws/lambda/python:3.12` fresh. First invocation
+attempt failed (`entrypoint requires the handler name to be the first argument` — the base image's own
+Lambda runtime entrypoint intercepting `-X importtime -c ...`); fixed with `--entrypoint python3`, same
+mounts `scripts/profile_cold_start.py`'s docstring already specifies (built layer at `/opt/python`, `src/`
+read-only, dummy identifiers). Total import cost for `fnol_voice_agent.agents.graph`: 2096.4ms cumulative,
+consistent with §11.8's own local runs (1640–2049ms for the same phase) — a cross-check between two
+independently-built instruments, not a new number contradicting the old one. Self-time summed by top-level
+package: **`langsmith` is the single largest contributor at 342.7ms / 16.2%** — bigger than `numpy`
+(244.7ms) or `langgraph` itself (203.2ms), for a package this project never calls (LangSmith is LangChain's
+tracing product; CloudWatch is this project's observability tool). Not a new discovery on its own —
+`STAGE4-LAMBDA-LAYER-PLAN.md` §3 already flagged `langsmith`/`zstandard` as "a real, measured optimization
+opportunity... worth investigating in a follow-up" on **disk-size** grounds (21 MB) and explicitly declined
+to hand-prune it (declared transitive dependency of `langgraph`, risk of a `D80`-shaped lazy-import break).
+This run adds the **time** cost to that already-open finding; the mitigation calculus §3 worked through is
+unchanged by which unit the cost is measured in. `mcp`: zero occurrences anywhere in the 1224-line trace.
+The four `fnol_voice_agent.mcp.*_server.py` files that do get imported each contain a function-body-scoped
+`from mcp.server.mcpserver import MCPServer` (their own "local import" comment) that never fires during
+`_build_graph()` — confirms, dynamically, on the one path that matters most, the exact blind spot §3 named
+for its static grep (can't see a lazy/conditional import). Not a repeat of §4's full six-intent gate, one
+path only. `agents/graph.py`'s own "twelve small node files" (§11.8 Finding 1's phrase): 64.5ms / 3.1% of
+the whole phase, confirmed per-file via the same self-time sum, not just inferred from the aggregate.
+
+**4 — `RESULTS.md` §11.8, Finding 3 extended, not a new section.** Fetched live (AWS docs MCP, not
+recalled): "Lambda allocates CPU power in proportion to the amount of memory configured... At 1,769 MB, a
+function has the equivalent of one vCPU" (`docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html`).
+At `memory_size = 512`, this function runs at 512/1,769 ≈ 29% of a vCPU — sourced ratio, not an estimate.
+§11.11's import-bound (CPU-bound, not I/O-bound) finding gives this candidate a mechanism; the
+AWS-documented ratio predicts ~3.46× slower on CPU-bound work below the 1-vCPU line, in the same order of
+magnitude as the observed local-vs-deployed gap (~4.3–5.0×, using §11.8's runs 2/3 against §11.5/§11.7) —
+logged as a mechanism-level match with the right order of magnitude, explicitly not a verified prediction
+(Docker Desktop's own CPU allocation to the profiling container was never pinned or measured against the
+1,769 MB crossover). Named as a mitigation candidate `ADR-009`'s order doesn't list — targets CPU share on
+already-happening work, not what gets loaded or when, potentially cheaper than SnapStart (a Terraform
+variable, no snapshot infra, no billing-window minimum), needs no correctness re-verification. **Not
+tested** — confirming it needs a `lambda_memory_mb` change and a re-run of the criterion-9 forced-cold
+probe against the deployed function, a Terraform apply requiring its own `APPROVED:` line, same as named
+and not undertaken in §11.8 originally.
+
+**Self-review caught, this session:** the first `pydantic`/`pydantic_core` table draft wrongly folded
+`pydantic_core`'s self-time into `pydantic`'s row (true for *cumulative* time, where `pydantic_core` nests
+inside `pydantic`'s import chain, but self-time is disjoint by construction and should not have inherited
+that framing) — caught before commit by resumming the raw parse output programmatically rather than trusting
+the prose description, corrected to two separate rows. The "everything else" bucket in the same table was
+first written from a truncated top-40 printout as "~130ms / ~6.2%, 34 more packages" — re-derived from the
+full 226-root parse before committing: actually 208 entries, 276.1ms, 13.1%, a mix of minor third-party
+packages and CPython's own stdlib/builtin modules, not 34 "packages." Both caught by re-deriving from the
+script's actual output rather than the number first written down.
+
+**Not yet done:** no mitigation has been chosen; `ADR-009` is unedited. The 512MB candidate remains a
+logged hypothesis, not a measurement — testing it needs a Terraform apply and its own `APPROVED:` line.
+No Terraform file was touched this session. No AWS resource was created or changed. All new evidence this
+session is either $0 (Docker, local Python, AWS docs lookups) or already-recorded cost from prior sessions.

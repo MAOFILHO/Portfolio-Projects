@@ -2164,6 +2164,40 @@ Neither is confirmed. Testing candidate 1 for real would mean varying `lambda_me
 criterion-9 forced-cold probe against the deployed function — a Terraform apply, cost-gated and requiring
 its own `APPROVED:` line, named here as a possible next measurement, not undertaken.
 
+**Candidate 1 logged as the stronger of the two, per Marco's instruction (2026-08-14) — reasoning recorded
+with a sourced ratio, still not tested.** Lambda's documented behavior, fetched live this session, not
+recalled ([AWS Lambda docs, "Configure Lambda function memory"](https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html),
+verbatim): *"Lambda allocates CPU power in proportion to the amount of memory configured... At 1,769 MB, a
+function has the equivalent of one vCPU."* At `memory_size = 512` (`variables.tf`), this function runs at
+**512/1,769 ≈ 29% of one vCPU** — a sourced ratio, not an estimate. §11.11's import-attribution run, done
+under this same phase, shows the dominant cost inside `_get_graph()` is import-bound — third-party package
+loading (bytecode execution, module-level object construction), work that is CPU-bound, not I/O-bound. If
+CPU were the whole story, ~29% of a vCPU predicts import-bound work taking roughly **1,769/512 ≈ 3.46×**
+longer than at the 1-vCPU crossover — in the same order of magnitude as the observed gap: §11.8's runs 2/3
+(2282–2414ms, the two runs Finding 2 identified as clean of the page-cache confound) against §11.5/§11.7's
+10,337–11,421ms deployed figures is a **~4.3–5.0× gap**. This is a mechanism-level match with the right
+order of magnitude, not a verified prediction — Docker Desktop's own CPU allocation to the container that
+produced runs 2/3 was never pinned to exactly 1,769 MB-equivalent or measured, so the 3.46× figure and the
+observed 4.3–5.0× are not directly comparable numbers, only numbers in the same band. Candidate 2 (`/opt`'s
+real storage substrate) has no comparable documented mechanism pointing at a multiplier of any particular
+size — it is plausible from Finding 2's page-cache observation, but nothing sources a magnitude for it the
+way Lambda's own memory→CPU documentation now does for candidate 1. That asymmetry — one candidate with a
+documented, directional mechanism and a sourced ratio in the right band, one without either — is why
+candidate 1 is logged as the stronger of the two, not because it has been measured.
+
+**Named as a mitigation candidate `ADR-009` does not list.** `ADR-009`'s order is smaller package → SnapStart
+→ scheduled warmer → provisioned concurrency — all four target either what gets loaded or when/how often
+loading happens. A memory bump targets neither; it targets how fast the CPU-bound work that's already
+happening runs. It is a candidate `ADR-009`'s framing doesn't cover because it was written before this
+phase's data existed to suggest it. Two properties worth naming alongside it: it may be **cheaper than
+SnapStart** (a `lambda_memory_mb` change is a Terraform variable, no snapshot infrastructure, no minimum
+billing window), and it needs **no correctness re-verification** — nothing about `_build_graph()`'s
+statements, order, or outputs changes when the container simply gets a bigger CPU share, unlike a
+restructure of the import graph itself. **Not tested.** Confirming it would mean varying `lambda_memory_mb`
+and re-running the criterion-9 forced-cold probe against the deployed function — a Terraform apply, cost-gated
+and requiring its own `APPROVED:` line, same as candidate 1 was already named above. Logging the hypothesis
+here is documentation of reasoning, not a measurement, and is not presented as one.
+
 **Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
 
 1. *Opposite result possible?* Yes — a single run could have reported either extreme; three runs is what
@@ -2292,4 +2326,196 @@ one honestly.
 **Not started, per Marco's explicit instruction pending this section's outcome:** `python -X importtime`
 attribution inside Finding 1's dominant `agents.graph` import phase (including tracing what pulls in `mcp`,
 excluded from the layer as unused per `STAGE4-LAMBDA-LAYER-PLAN.md` §3), and logging the 512MB-memory
-hypothesis in §11.8 as the stronger of its two gap candidates. Both remain named, not undertaken.
+hypothesis in §11.8 as the stronger of its two gap candidates. **Superseded later the same session — see
+§11.10 (the p95 computation this section's outcome fed directly into), §11.11 (the `importtime` run), and
+the updated Finding 3 in §11.8 above (the 512MB hypothesis logged as instructed).** This paragraph is left
+as originally written, as the record of what was known at §11.9's completion, rather than edited to read as
+if the follow-ups below had already happened.
+
+### 11.10 `C14` p95 status — computable for the first time, and what "measured" still doesn't cover
+
+§11.9 was built to answer whether cold starts are frequent enough to matter, not to compute constraint 14's
+p95 status directly — but the same arithmetic answers both, and Marco's instruction on seeing §11.9 was to
+make that computation explicit rather than leave it implied. $0 cost — arithmetic over numbers already in
+this file, no new measurement.
+
+**The arithmetic.** Constraint 14 (`CLAUDE.md`, "Voice turn-latency budget") sets a p95 bound: total turn
+latency, Lex STT completion to Polly audio stream start, under 1,800ms for **at least 95%** of turns — i.e.
+no more than 5% of turns may exceed it for the constraint to hold. §11.9's reading: turn 1 of a call is very
+likely cold, the remaining turns very likely land warm — one cold turn per call, not a fraction of one.
+
+| turns-per-call figure | source | cold turns / total | % cold | vs. 5% ceiling |
+|---|---|---:|---:|---|
+| 12 | `evals/golden/file_auto_claim.yaml` `fac-001`, measured against the shipped 11-slot design (§11.9) | 1/12 | **8.3%** | 1.67× over |
+| 8 | `docs/phase2/COST-MODEL.md`, unsourced pre-Phase-4 planning assumption (§11.9) | 1/8 | **12.5%** | 2.5× over |
+
+**Both exceed 5%.** §11.9's turns-per-call correction (8 → 12) changed the margin, not the conclusion — the
+sourced figure gives a smaller overage than the superseded one, but both land on the same side of the
+threshold. Showing both rather than only the sourced one is deliberate: a reader checking this arithmetic
+against the number they remember from `COST-MODEL.md` should get the same verdict, not a contradiction that
+reads like a mistake.
+
+**Status: `C14` is violated at p95, not only per-cold-turn.** §11.5 and §11.7 already established that a
+single cold turn's `_get_graph()` construction time alone (10.3–11.4s) blows past the 1,800ms budget on its
+own — a per-cold-turn violation, stated as such at the time. What this section adds, and what has not been
+stated explicitly before now: because cold turns land on ~1-in-8 to ~1-in-12 turns, not a rare tail event,
+**the 95th-percentile turn itself is a cold turn.** This is the first point in the record where both a
+per-cold-turn latency number (§11.5/§11.7/§11.8) and a cold-turn frequency bound (§11.9) exist in the same
+document — the first point `C14`'s actual p95 test, not merely "does a cold turn exceed budget," is
+computable.
+
+**Scope limit, stated rather than glossed over: this p95 verdict and the latency numbers it rests on are not
+measuring the same thing constraint 14 is defined over.** `C14` is end-to-end — Lex STT completion to Polly
+audio stream start, telephony/ASR/TTS legs included. §10 said this explicitly, before Phase 9 began:
+*"the GATE is Lex-STT-completion to Polly-audio-start, which includes telephony, ASR and TTS legs this phase
+never touches. Publishing an internal number next to the 1,800ms budget would invite exactly the wrong
+comparison."* Every cold-turn latency number measured anywhere in this file — §11.5's 11.421s, §11.7's
+forced-cold probe's 10.337s, §11.8's local 2.3–6.9s range — is `_get_graph()` construction only: import,
+boto3 client construction, graph compile. A cold turn's actual constraint-14-comparable cost is construction
+**plus** everything downstream that also runs on that same turn: a full Bedrock round-trip (model call(s),
+guardrail checks), then Polly TTS — none of which any measurement in this project times.
+
+**The total cold-turn figure constraint 14 is actually stated against: not captured, checked rather than
+assumed.** Line E's forced-cold probe (§11.7) is the one real cold-container measurement on record, and it
+reports `_get_graph()` construction time (10.337s) and a cost figure — it does not report a Lex-STT-to-
+Polly-start total, and no other measurement in this project does either. This is not an oversight specific
+to that probe; it is the same gap §10 named before Phase 9 opened, and that gap is still open. Stated
+plainly, per the instruction this file has followed since §11.9, rather than substituting the
+construction-only number for the end-to-end one it resembles in magnitude but is not the same measurement.
+
+**What this settles, and what it doesn't.** It settles that `C14` is violated at the percentile the
+constraint is actually defined over, using numbers already in the record — an arithmetic combination of
+§11.5/§11.7 (per-cold-turn latency) and §11.9 (cold-turn frequency), not a new measurement. It does not
+supply the end-to-end figure constraint 14 is stated against; that remains unmeasured. The violation finding
+here rests on construction time alone being far enough over budget (10.3–11.4s vs. 1,800ms, ~5.7–6.3×) that
+no plausible telephony/ASR/TTS addition brings a cold turn back under budget — the missing legs change the
+exact size of the overage, not which side of 1,800ms it lands on.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Checked both turn-count figures (8 and 12) rather than only the one favored
+   by §11.9's own correction — both land on the same side of 5%, so the verdict doesn't depend on which is
+   right.
+2. *Asserted-but-unchecked?* §10's "latency is deliberately absent... Phase 9 owns it" caveat was searched
+   for and found before asserting the end-to-end figure was uncaptured, rather than assuming it from not
+   immediately recalling one.
+3. *Infra error scored as a result?* N/A — arithmetic over existing figures, no new harness run.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent.
+5. *Identical markers, different paths?* Addressed directly: construction-only latency
+   (§11.5/§11.7/§11.8) and end-to-end constraint-14 latency are named as different measurements throughout,
+   not conflated because both are "cold-start latency."
+6. *Has this check ever failed for the right reason?* N/A — first time this specific computation has been
+   attempted in this project.
+7. *Changes a headline number's interpretation?* Yes — `C14` moves from "violated on the one number
+   measured" to "violated at the percentile the constraint is actually defined over," a stronger and more
+   precise claim, stated alongside an explicit admission that the exact end-to-end figure remains unmeasured.
+8. *Touches `C1`?* No — `C14` (latency) and `C1` (safety recall) are separate constraints; nothing here
+   changes any `C1` figure.
+
+### 11.11 `python -X importtime` attribution — `langsmith`, not `numpy`, is the single largest phase, and `mcp` confirmed absent
+
+Phase 9, follow-up 1 (§11.8 Finding 1), undertaken now that §11.9/§11.10 establish the mitigation question
+is real. Finding 1 located the boundary — `agents.graph`'s first touch pulls the entire third-party tree in
+one shot — without attributing cost inside it. This closes that gap. $0 cost — one `docker run`, no AWS
+calls.
+
+**Method.** `python3 -X importtime -c "from fnol_voice_agent.agents.graph import build_graph"`, run inside
+`public.ecr.aws/lambda/python:3.12` (`arm64`, `--entrypoint python3` to bypass the image's default Lambda
+runtime entrypoint), with the same mounts `scripts/profile_cold_start.py`'s docstring specifies — the built
+dependency layer at `/opt/python` (Lambda's real layer mount path), `src/` read-only, dummy table/guardrail
+identifiers. One run (`-X importtime` measures the interpreter's own import machinery directly; it doesn't
+carry §11.8's cold-page-cache confound, which was specific to `botocore`'s first disk read of the
+bind-mounted layer directory, not to import attribution). Total, `fnol_voice_agent.agents.graph`'s reported
+cumulative: **2096.4ms** — in the same range as §11.8's runs 2/3 (1640–1775ms for this phase alone) and run
+1 (2048.7ms), a cross-check between two independently-built instruments landing in the same band, not a
+contradiction.
+
+**Per-package attribution — self time, summed by top-level package.** `-X importtime` reports both a self
+time and a cumulative time per module; cumulative double-counts (e.g. `pydantic`'s cumulative includes
+`pydantic_core`'s, because `pydantic` imports it internally), so this table sums **self** time grouped by
+each entry's top-level package name — every microsecond counted exactly once, entries below sum to the
+2109.3ms parsed total exactly:
+
+| package | self time | share of 2109.3ms parsed total |
+|---|---:|---:|
+| `langsmith` | 342.7 ms | **16.2%** |
+| `numpy` | 244.7 ms | 11.6% |
+| `langgraph` | 203.2 ms | 9.6% |
+| `langchain_core` | 178.2 ms | 8.4% |
+| `pydantic` | 177.1 ms | 8.4% |
+| `botocore` | 161.6 ms | 7.7% |
+| `langgraph_sdk` | 79.7 ms | 3.8% |
+| `fnol_voice_agent` (this project's own code, every module this import touches) | 64.5 ms | 3.1% |
+| `urllib3` | 57.9 ms | 2.7% |
+| `anyio` | 45.9 ms | 2.2% |
+| `httpx` | 43.7 ms | 2.1% |
+| `websockets` | 41.7 ms | 2.0% |
+| `typing_extensions` | 39.5 ms | 1.9% |
+| `pydantic_core` (a separate installed package `pydantic` imports internally — not part of the `pydantic` row above) | 37.9 ms | 1.8% |
+| `boto3` (own code, excl. `botocore`/`s3transfer`) | 31.3 ms | 1.5% |
+| `requests` | 31.1 ms | 1.5% |
+| `openfeature` | 27.3 ms | 1.3% |
+| `s3transfer` | 25.4 ms | 1.2% |
+| everything else (208 further entries — smaller third-party packages, e.g. `dateutil` 22.7ms, `charset_normalizer` 19.2ms, `tenacity` 16.9ms, plus CPython's own standard-library/builtin modules touched along the way, e.g. `ast` 14.6ms, `asyncio` 6.8ms — none above 1.1%) | 276.1 ms | 13.1% |
+
+**Finding 1 — the single largest phase is `langsmith`, not the LLM/graph runtime packages Finding 1's
+"third-party tree" framing implied, and this was already flagged as a size cost, never as a time cost, in
+`STAGE4-LAMBDA-LAYER-PLAN.md` §3.** `langsmith` alone is larger than `numpy` and larger than `langgraph`
+itself — 16.2% of the whole import phase, for a package this project's own code never imports and never
+calls (LangSmith is LangChain's hosted tracing/observability product; nothing in `CLAUDE.md`'s stack —
+CloudWatch, not LangSmith, is this project's observability tool — configures or references it). §3 already
+named this exact package as "a real, measured optimization opportunity (up to ~20 MB) worth investigating in
+a follow-up," on disk-size grounds (`zstandard`, `langsmith`'s largest transitive pull, at 21 MB) — and
+explicitly declined to prune it, because it is a **declared transitive dependency of `langgraph`**, a
+top-level package this project does import and run, and "hand-pruning" it risks exactly the kind of
+unverified surgery `D80` showed can silently break a lazy import path. That reasoning holds unchanged here:
+this run adds a time cost to §3's already-named size cost: the number is bigger than §3's framing (MB) made
+it look, but the mitigation calculus §3 already worked through — real dependency of a real package, prune
+only via `langgraph`'s own extras or a verified isolation test, not by hand — is unaffected by which unit
+the cost is measured in.
+
+**Finding 2 — `mcp` is confirmed absent from this exact import trace, corroborating `STAGE4-LAMBDA-LAYER-PLAN.md`
+§3's static grep with a dynamic one, on the specific path that matters most.** Searching the full 1224-line
+trace for a bare `mcp` (or `mcp.*`) entry: zero matches. The four `fnol_voice_agent.mcp.*` files that do
+appear (`policy_server`, `claims_server`, `escalation_server`, `contact_server`, all under
+`fnol_voice_agent`'s own namespace, not the third-party SDK) each import `from mcp.server.mcpserver import
+MCPServer` — but every one of those statements sits inside a function body ("local import — see
+`policy_server.py`'s docstring," per each file's own comment), not at module level, so loading these files
+during `_build_graph()` never executes that line. §3's own stated blind spot was that its method — a static
+`grep` for top-of-file imports — **cannot see a lazy or conditional import inside a function body**, which
+is exactly the shape these four files have. This run doesn't close that blind spot in general — it is one
+path (`_build_graph()`'s own construction), not §4's full six-intent event matrix — but it is a real
+interpreter actually executing that exact path, not a text search, and it found nothing 28 MB heavier than
+what §3 decided to ship. Consistent with, not a repeat of, §4's gate.
+
+**Finding 3 — `agents/graph.py`'s own "twelve small, project-owned node files" (§11.8 Finding 1) really are
+cheap, confirmed per-file rather than inferred from the aggregate.** `fnol_voice_agent`'s own self-time
+across every file this import touches (not just the twelve node files — `agents/state.py`, `validation/*`,
+`knowledge/*`, `guardrails/*`, `agents/lexicon.py`, `agents/retry_ladder.py`, and the four `mcp/*_server.py`
+files besides) sums to 64.5ms, **3.1% of the whole phase** — confirming §11.8 Finding 1's reading directly
+rather than by elimination: `ADR-009`'s "smaller package" step trims a part of the tree that this data shows
+costs about 65ms out of ~2.1s, regardless of which files inside it get trimmed.
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes — the working assumption going in, per §11.8 Finding 1's own framing
+   ("third-party tree... langgraph, pydantic, boto3, botocore"), named the LLM/graph and AWS SDK packages as
+   the likely dominant cost. `langsmith` outranking all of them was not the expected outcome.
+2. *Asserted-but-unchecked?* Checked `STAGE4-LAMBDA-LAYER-PLAN.md` §3 for prior art on `langsmith` before
+   presenting it as a new finding — it was already named there, on a different axis (MB, not ms); credited
+   as such rather than presented as newly discovered.
+3. *Infra error scored as a result?* Checked — first attempt (`docker run ... python3 -X importtime -c ...`
+   without overriding the entrypoint) failed with `entrypoint requires the handler name to be the first
+   argument`, the Lambda base image's own runtime entrypoint intercepting the command; not scored as a
+   result, `--entrypoint python3` added and the run repeated before any number was taken from it.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent (local Docker only, no AWS calls).
+5. *Identical markers, different paths?* `numpy`'s 244.7ms was checked against source
+   (`knowledge/retrieve.py:39`, `import numpy as np`) before including it in the table, to confirm it is this
+   project's own direct, intentional import (cosine similarity, `ADR-002`) and not a surprise transitive
+   pull that happened to share a name.
+6. *Has this check ever failed for the right reason?* N/A — first `importtime` run in this project.
+7. *Changes a headline number's interpretation?* Yes — §11.8 Finding 1's "the third-party tree loads in one
+   shot" now has a per-package breakdown attached, and the largest single piece of it is a package with no
+   functional role in this system, which `ADR-009`'s "smaller package" step and any future dependency-pruning
+   work should weigh directly rather than treating the whole third-party tree as one undifferentiated cost.
+8. *Touches `C1`?* No.
