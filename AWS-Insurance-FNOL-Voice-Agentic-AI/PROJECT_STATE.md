@@ -4126,3 +4126,62 @@ script's actual output rather than the number first written down.
 logged hypothesis, not a measurement — testing it needs a Terraform apply and its own `APPROVED:` line.
 No Terraform file was touched this session. No AWS resource was created or changed. All new evidence this
 session is either $0 (Docker, local Python, AWS docs lookups) or already-recorded cost from prior sessions.
+
+## Session log — 2026-08-14 (continued; §11.10 corrected to a lower bound, langsmith split into its own finding, measurement proposed)
+
+**Restating the four stop conditions, verbatim, per `CLAUDE.md`:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco accepted the prior entry's four items and gave three corrections/asks. **Note for anyone reading this
+log in order: the previous entry above states `C14` "is violated at p95" — that framing is superseded by
+this entry, per item 1 below, and is left unedited above as the record of what was written before the
+correction, same convention `RESULTS.md` §11.7 already uses for its own superseded paragraph.**
+
+**1 — `RESULTS.md` §11.10 reframed as a lower bound, not a measurement.** The prior write-up read as though
+`C14` had been measured; it hasn't been, on any turn, warm or cold — zero direct
+Lex-STT-completion-to-Polly-audio-start datapoints exist anywhere in this project. The violation conclusion
+still holds, but as a monotonicity argument: total turn latency ≥ construction time (all downstream
+work adds non-negative time), and a cold turn's construction time alone (10.3–11.4s) already exceeds the
+1,800ms budget by 5.7–6.3×, so that turn's true total exceeds budget regardless of what the unmeasured
+remainder costs. Combined with the 8.3–12.5% cold-turn frequency bound, that's a proof the p95 threshold is
+violated — a lower bound, correctly labeled as one, not a measured p95 value.
+
+**2 — mitigation-selection consequence named.** `ADR-009`'s candidates (plus the not-yet-tested 512MB one)
+all act on `_get_graph()` construction, the one component ever measured. None touch the telephony/ASR/TTS
+segment. If that segment alone is a significant fraction of 1,800ms, no construction-time fix brings a turn
+under budget regardless of which one is picked — Phase 9 cannot responsibly select a mitigation against a
+target it has never measured. Supporting evidence at $0, from data already on disk: re-read (not re-run)
+`evals/baselines/composed_pipeline_deployed_k3_lineE.json`'s `elapsed_ms` samples from Line E's 95 real,
+all-reportedly-warm `RecognizeText` calls — p50 1,037ms, p95 **1,969ms**, already over the 1,800ms budget on
+a sub-component that omits ASR and TTS entirely. Flagged, not investigated further per Marco's "propose
+only" scope: the 14,862ms max, on `'we lost her'` (the same phrasing named in §11.7/§11.8's prior
+forced-cold discussion), is either an unrelated outlier or a second inadvertent cold hit inside a run
+described as entirely warm — open question, named so it isn't lost.
+
+**3 — a real end-to-end measurement proposed, not undertaken.** Three tiers in `RESULTS.md` §11.10: Tier 0
+($0, not yet done) — check whether `AWS/Lex` CloudWatch metrics publish anything relevant, pure
+documentation research; Tier 1 ($0, done above) — the Line E re-analysis; Tier 2 (real spend, `APPROVED:`
+required) — one real inbound call to the live DID, timed externally because Lex audio conversation logs
+would functionally record the caller's IVR leg to S3, which constraint 18 exists to prevent regardless of
+which AWS feature does it, ruling out the cleanest technical approach and leaving external timing (with its
+own, unquantified reaction-time error) as what's left. Cold variant reuses the existing `cold_probe_marker`
+mechanism (no new Terraform resource, one config-only apply); warm variant needs no apply. Cost order of
+magnitude: low cents to low tens of cents, in line with Line E's $0.098-for-95-calls precedent — small, but
+still billable telephony against the protected DID, so still gated. **No call placed, no apply made, no
+approval requested — proposal only, per explicit instruction to stop there.**
+
+**Also — `RESULTS.md` §11.11 Finding 1 rewritten.** The `langsmith` 342.7ms/16.2% finding was originally
+folded into `STAGE4-LAMBDA-LAYER-PLAN.md` §3's existing 21 MB disk-size finding on the same package, framed
+as "the same finding in a different unit." Marco's correction: file it as its own line — §3's cost was
+against a disk **ceiling** (only matters near the boundary, and the layer isn't near it), this cost is
+against a **continuous** budget `§11.10` just proved is already failing, a different-shaped argument that
+may not settle the same way §3 did. Rewritten as its own paragraph; the risk side (is removal safe — the
+`D80`-shaped lazy-import concern) is explicitly unchanged and unaddressed by this run, only the cost side of
+the comparison is new.
+
+**Not yet done:** the real-call measurement (proposed, not approved or run); any mitigation choice; any
+Terraform change; any apply. No AWS resource created or changed this continuation. All work this session:
+$0 (re-reading an existing artifact, arithmetic, reasoning) or already-recorded cost from prior sessions.

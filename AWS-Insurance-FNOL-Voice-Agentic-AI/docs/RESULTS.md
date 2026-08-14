@@ -2332,12 +2332,15 @@ the updated Finding 3 in §11.8 above (the 512MB hypothesis logged as instructed
 as originally written, as the record of what was known at §11.9's completion, rather than edited to read as
 if the follow-ups below had already happened.
 
-### 11.10 `C14` p95 status — computable for the first time, and what "measured" still doesn't cover
+### 11.10 `C14`: a lower-bound proof of violation, not a measurement — and what the unmeasured segment does to mitigation selection
 
 §11.9 was built to answer whether cold starts are frequent enough to matter, not to compute constraint 14's
 p95 status directly — but the same arithmetic answers both, and Marco's instruction on seeing §11.9 was to
-make that computation explicit rather than leave it implied. $0 cost — arithmetic over numbers already in
-this file, no new measurement.
+make that computation explicit. On review, the first draft of this section read as though `C14` had been
+measured. **It hasn't been — on any turn, warm or cold.** Corrected below, per Marco's instruction, before
+the mitigation-selection consequence and the measurement question that follow from getting this distinction
+right. $0 cost throughout this section — arithmetic and reasoning over numbers already in this file, plus
+one $0 read of an existing run artifact; no new AWS call.
 
 **The arithmetic.** Constraint 14 (`CLAUDE.md`, "Voice turn-latency budget") sets a p95 bound: total turn
 latency, Lex STT completion to Polly audio stream start, under 1,800ms for **at least 95%** of turns — i.e.
@@ -2351,64 +2354,114 @@ likely cold, the remaining turns very likely land warm — one cold turn per cal
 
 **Both exceed 5%.** §11.9's turns-per-call correction (8 → 12) changed the margin, not the conclusion — the
 sourced figure gives a smaller overage than the superseded one, but both land on the same side of the
-threshold. Showing both rather than only the sourced one is deliberate: a reader checking this arithmetic
-against the number they remember from `COST-MODEL.md` should get the same verdict, not a contradiction that
-reads like a mistake.
+threshold.
 
-**Status: `C14` is violated at p95, not only per-cold-turn.** §11.5 and §11.7 already established that a
-single cold turn's `_get_graph()` construction time alone (10.3–11.4s) blows past the 1,800ms budget on its
-own — a per-cold-turn violation, stated as such at the time. What this section adds, and what has not been
-stated explicitly before now: because cold turns land on ~1-in-8 to ~1-in-12 turns, not a rare tail event,
-**the 95th-percentile turn itself is a cold turn.** This is the first point in the record where both a
-per-cold-turn latency number (§11.5/§11.7/§11.8) and a cold-turn frequency bound (§11.9) exist in the same
-document — the first point `C14`'s actual p95 test, not merely "does a cold turn exceed budget," is
-computable.
+**This is a lower bound, stated as one, not a measurement.** `C14` is defined over total turn latency — Lex
+STT completion to Polly audio stream start. Every latency number that feeds the table above (§11.5's
+11.421s, §11.7's forced-cold probe's 10.337s, §11.8's local runs) is `_get_graph()` construction **only**:
+import, boto3 client construction, graph compile — one component of a turn, not the turn. **Zero direct
+end-to-end (Lex-STT-completion-to-Polly-audio-start) latency datapoints exist anywhere in this project, on
+any turn, warm or cold.** The violation conclusion nonetheless holds, and holds as a matter of arithmetic,
+not inference: total turn latency for a given turn is construction time **plus** everything that runs after
+it on that same turn (Bedrock round-trip, guardrail checks, Polly TTS) — all non-negative durations — so
+total latency for any turn is never less than that turn's own construction time. On a cold turn,
+construction time alone (10.3–11.4s) already exceeds the 1,800ms budget by 5.7–6.3×; **whatever the
+unmeasured remainder of that turn costs, it cannot subtract time**, so that turn's true total latency also
+exceeds 1,800ms. Combined with §11.9's frequency bound, at least 8.3–12.5% of turns violate budget, which
+exceeds the 5% p95 allows. **The violation is proven as a lower bound via monotonicity, not measured
+directly** — a materially different and weaker-sounding claim than "`C14` is violated at p95," even though
+both describe the same true fact. The record should read as the former.
 
-**Scope limit, stated rather than glossed over: this p95 verdict and the latency numbers it rests on are not
-measuring the same thing constraint 14 is defined over.** `C14` is end-to-end — Lex STT completion to Polly
-audio stream start, telephony/ASR/TTS legs included. §10 said this explicitly, before Phase 9 began:
-*"the GATE is Lex-STT-completion to Polly-audio-start, which includes telephony, ASR and TTS legs this phase
-never touches. Publishing an internal number next to the 1,800ms budget would invite exactly the wrong
-comparison."* Every cold-turn latency number measured anywhere in this file — §11.5's 11.421s, §11.7's
-forced-cold probe's 10.337s, §11.8's local 2.3–6.9s range — is `_get_graph()` construction only: import,
-boto3 client construction, graph compile. A cold turn's actual constraint-14-comparable cost is construction
-**plus** everything downstream that also runs on that same turn: a full Bedrock round-trip (model call(s),
-guardrail checks), then Polly TTS — none of which any measurement in this project times.
+**What a lower bound can and can't tell you.** It settles the yes/no question — `C14` is violated — without
+needing the unmeasured segment's size, because a sum of non-negative parts is never smaller than any one of
+its parts. It cannot tell you the actual p95 *value*, how much margin (or lack of it) exists on **warm**
+turns, or how large the unmeasured telephony/ASR/TTS segment actually is. Those all require a real
+measurement, not an inequality.
 
-**The total cold-turn figure constraint 14 is actually stated against: not captured, checked rather than
-assumed.** Line E's forced-cold probe (§11.7) is the one real cold-container measurement on record, and it
-reports `_get_graph()` construction time (10.337s) and a cost figure — it does not report a Lex-STT-to-
-Polly-start total, and no other measurement in this project does either. This is not an oversight specific
-to that probe; it is the same gap §10 named before Phase 9 opened, and that gap is still open. Stated
-plainly, per the instruction this file has followed since §11.9, rather than substituting the
-construction-only number for the end-to-end one it resembles in magnitude but is not the same measurement.
+**Consequence for mitigation selection, not previously stated: the unmeasured segment is where a mitigation
+gets judged, not where the violation was found.** `ADR-009`'s four candidates (smaller package, SnapStart,
+scheduled warmer, provisioned concurrency, plus the not-yet-tested memory-bump candidate `§11.8` now names)
+all act on `_get_graph()` construction — the one component this project has actually measured. **None of
+them touch the telephony/ASR/TTS segment.** If that segment alone consumes a significant fraction of the
+1,800ms budget, then eliminating cold-start construction entirely still leaves a turn over budget, and which
+mitigation gets chosen stops mattering to whether `C14` passes — a construction-time fix cannot pass a
+budget the non-construction portion of the turn already exhausts. **Phase 9 cannot responsibly select a
+mitigation against a target it has never measured**, because "brings a cold turn under 1,800ms" is not
+verifiable without knowing what the other legs cost.
 
-**What this settles, and what it doesn't.** It settles that `C14` is violated at the percentile the
-constraint is actually defined over, using numbers already in the record — an arithmetic combination of
-§11.5/§11.7 (per-cold-turn latency) and §11.9 (cold-turn frequency), not a new measurement. It does not
-supply the end-to-end figure constraint 14 is stated against; that remains unmeasured. The violation finding
-here rests on construction time alone being far enough over budget (10.3–11.4s vs. 1,800ms, ~5.7–6.3×) that
-no plausible telephony/ASR/TTS addition brings a cold turn back under budget — the missing legs change the
-exact size of the overage, not which side of 1,800ms it lands on.
+**This is not a hypothetical concern — there is already suggestive evidence, from data already collected, at
+$0.** §11.7's Line E run made 95 real `RecognizeText` calls against the deployed system, all landing on a
+warm container (§11.7's own finding); each sample's client-observed round-trip time was captured
+(`elapsed_ms`) but never aggregated in this file. Reading it now from the existing run artifact
+(`evals/baselines/composed_pipeline_deployed_k3_lineE.json`, no new AWS call): **p50 = 1,037ms, p95 =
+1,969ms, mean = 1,079.7ms, n = 95.** This is *not* a `C14` measurement — `RecognizeText` is Lex's text-mode
+API (no ASR, no Polly TTS, no telephony leg at all), so it is a different, partially-overlapping
+sub-component: Lex NLU processing plus the warm Lambda invocation (including the real Bedrock round-trip and
+guardrail checks §11.10's earlier framing above says no measurement captures). It is a strictly *smaller*
+slice of a real turn than the full `C14` boundary, since it omits ASR and TTS entirely — and **its own p95
+(1,969ms) already exceeds the entire 1,800ms budget**, on the warm path, before any telephony, ASR, or TTS
+time is added. If this holds up under a real measurement, warm turns may be at risk too, which no cold-start
+mitigation addresses at all. **Flagged, not investigated further per this instruction's scope** (`propose
+only`): the maximum in that sample is 14,862ms, on `'we lost her'` — the same phrasing named in §11.7/§11.8's
+prior forced-cold discussion — which is either a genuine outlier (a Bedrock retry-ladder event, unrelated to
+cold start) or a second, inadvertent cold hit inside a run §11.7 describes as entirely warm. Not resolved
+here; named so it isn't lost, and because it bears directly on whether "95 warm calls" was in fact accurate.
+
+**Proposed measurement — not undertaken, no apply or spend authorized here.** Closing this gap for real
+means capturing Lex-STT-completion-to-Polly-audio-start on an actual voice-channel call, warm and cold. Three
+tiers, increasing in cost and in what they actually prove:
+
+- **Tier 0 ($0, no approval needed, not yet done): check whether Lex V2 publishes any per-request or
+  aggregate latency metric in the `AWS/Lex` CloudWatch namespace** (`Monitoring operational metrics in Lex
+  V2`, not yet read this session) that approximates any part of the STT-to-response boundary. Pure
+  documentation research, no AWS call, could resolve or narrow this before any of the below is needed.
+- **Tier 1 ($0, already done, folded in above): the Line E `elapsed_ms` re-analysis** — the best
+  currently-available proxy for the non-telephony portion of a turn, not a substitute for the real
+  measurement.
+- **Tier 2 (real spend, cost-gated, `APPROVED:` required): one real inbound call to the live DID
+  (`+14169871547`), timed externally, not via any AWS-side recording.** Recording (constraint 18) cannot be
+  the instrument — audio conversation logs are a Lex-level feature separate from Connect's
+  `RecordingBehavior`, but enabling them for a voice-channel bot would store the caller's self-service audio
+  to S3, which is exactly what constraint 18 exists to prevent regardless of which AWS feature does it; this
+  rules out the cleanest technical approach. What's left is external timing — a human or a scripted caller
+  precisely marking when the caller's utterance ends and when the bot's audio reply begins, which
+  necessarily carries human/measurement reaction-time error (plausibly ±200–500ms, unquantified) that a
+  service-side timestamp would not. **Cold variant** reuses the existing `cold_probe_marker` Terraform
+  mechanism (§11.7) — no new infrastructure, one config-only apply to force a cold container immediately
+  before the call. **Warm variant** needs no apply, just a call after the container is already warm (e.g., a
+  second call placed right after the first). **Cost, order of magnitude**: one to a few real `RecognizeText`
+  or `RecognizeUtterance`-equivalent voice turns ($0.004/speech request), telephony minutes at
+  $0.015–0.0125/min plus the Canada DID's **still-unmeasured per-minute inbound rate** (`CLAUDE.md`'s
+  verified-facts table already flags this as open — this measurement would also be the first data point for
+  it), Bedrock/guardrail cost in line with Line E's $0.098-for-95-calls precedent — plausibly a few cents to
+  low tens of cents total, not a budget concern in itself, but still billable telephony usage against the
+  protected DID and requires `APPROVED: <phase name>` before any call is placed, per the cost gate. **Not
+  requested here — proposal only, stopping per instruction.**
 
 **Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
 
 1. *Opposite result possible?* Checked both turn-count figures (8 and 12) rather than only the one favored
-   by §11.9's own correction — both land on the same side of 5%, so the verdict doesn't depend on which is
-   right.
-2. *Asserted-but-unchecked?* §10's "latency is deliberately absent... Phase 9 owns it" caveat was searched
-   for and found before asserting the end-to-end figure was uncaptured, rather than assuming it from not
-   immediately recalling one.
-3. *Infra error scored as a result?* N/A — arithmetic over existing figures, no new harness run.
-4. *Cost below estimate?* N/A — $0 estimated, $0 spent.
-5. *Identical markers, different paths?* Addressed directly: construction-only latency
-   (§11.5/§11.7/§11.8) and end-to-end constraint-14 latency are named as different measurements throughout,
-   not conflated because both are "cold-start latency."
-6. *Has this check ever failed for the right reason?* N/A — first time this specific computation has been
-   attempted in this project.
-7. *Changes a headline number's interpretation?* Yes — `C14` moves from "violated on the one number
-   measured" to "violated at the percentile the constraint is actually defined over," a stronger and more
-   precise claim, stated alongside an explicit admission that the exact end-to-end figure remains unmeasured.
+   by §11.9's own correction — both land on the same side of 5%, so the lower-bound verdict doesn't depend on
+   which is right.
+2. *Asserted-but-unchecked?* The core catch of this revision: the first draft's "`C14` is violated at p95"
+   framing was itself an asserted-but-unchecked-against-its-own-scope-limit claim — it read as a measurement
+   where only a lower-bound proof existed. Caught on review, not self-caught before Marco's instruction;
+   recorded here rather than papered over.
+3. *Infra error scored as a result?* N/A — arithmetic and one existing-artifact re-read, no new harness run.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent; the Line E re-analysis used data already paid for
+   in a prior session's run.
+5. *Identical markers, different paths?* Addressed directly, twice: construction-only latency vs.
+   end-to-end `C14` latency are named as different measurements throughout; and the Line E `elapsed_ms`
+   figure is explicitly named as a *third*, still-different sub-component (Lex NLU + Lambda, no ASR/TTS) —
+   not conflated with either of the other two.
+6. *Has this check ever failed for the right reason?* Yes, this revision — the monotonicity argument was
+   checked for whether it actually requires the unmeasured segment to be non-negative (it does, and turn
+   latency components are; the argument would fail for a metric that could subtract time, which this one
+   cannot).
+7. *Changes a headline number's interpretation?* Yes, twice — `C14`'s violation is downgraded from "measured
+   at p95" to "proven as a lower bound," a weaker-sounding but more honest claim; and mitigation selection is
+   reframed from "pick from `ADR-009`'s order" to "cannot be responsibly selected until the unmeasured
+   segment is sized," which `ADR-009` itself does not currently say.
 8. *Touches `C1`?* No — `C14` (latency) and `C1` (safety recall) are separate constraints; nothing here
    changes any `C1` figure.
 
@@ -2458,21 +2511,31 @@ each entry's top-level package name — every microsecond counted exactly once, 
 | `s3transfer` | 25.4 ms | 1.2% |
 | everything else (208 further entries — smaller third-party packages, e.g. `dateutil` 22.7ms, `charset_normalizer` 19.2ms, `tenacity` 16.9ms, plus CPython's own standard-library/builtin modules touched along the way, e.g. `ast` 14.6ms, `asyncio` 6.8ms — none above 1.1%) | 276.1 ms | 13.1% |
 
-**Finding 1 — the single largest phase is `langsmith`, not the LLM/graph runtime packages Finding 1's
-"third-party tree" framing implied, and this was already flagged as a size cost, never as a time cost, in
-`STAGE4-LAMBDA-LAYER-PLAN.md` §3.** `langsmith` alone is larger than `numpy` and larger than `langgraph`
-itself — 16.2% of the whole import phase, for a package this project's own code never imports and never
-calls (LangSmith is LangChain's hosted tracing/observability product; nothing in `CLAUDE.md`'s stack —
-CloudWatch, not LangSmith, is this project's observability tool — configures or references it). §3 already
-named this exact package as "a real, measured optimization opportunity (up to ~20 MB) worth investigating in
-a follow-up," on disk-size grounds (`zstandard`, `langsmith`'s largest transitive pull, at 21 MB) — and
-explicitly declined to prune it, because it is a **declared transitive dependency of `langgraph`**, a
+**Finding 1 — `langsmith` costs 342.7ms / 16.2% of import time, and that is filed here as its own finding, on
+its own argument, not folded into `STAGE4-LAMBDA-LAYER-PLAN.md` §3's existing disk-size finding on the same
+package.** `langsmith` alone is larger than `numpy` and larger than `langgraph` itself, for a package this
+project's own code never imports and never calls (LangSmith is LangChain's hosted tracing/observability
+product; nothing in `CLAUDE.md`'s stack — CloudWatch, not LangSmith, is this project's observability tool —
+configures or references it). §3 already named this exact package — via `zstandard`, its largest transitive
+pull, at 21 MB — as "a real, measured optimization opportunity... worth investigating in a follow-up," and
+explicitly declined to prune it there, because it is a **declared transitive dependency of `langgraph`**, a
 top-level package this project does import and run, and "hand-pruning" it risks exactly the kind of
-unverified surgery `D80` showed can silently break a lazy import path. That reasoning holds unchanged here:
-this run adds a time cost to §3's already-named size cost: the number is bigger than §3's framing (MB) made
-it look, but the mitigation calculus §3 already worked through — real dependency of a real package, prune
-only via `langgraph`'s own extras or a verified isolation test, not by hand — is unaffected by which unit
-the cost is measured in.
+unverified surgery `D80` showed can silently break a lazy import path.
+
+**That risk assessment is unchanged by this run — nothing here shows removing `langsmith` is safe.** What
+changed is the cost side of the comparison, and it changed in kind, not just in size. §3's number was
+against a **disk-budget ceiling**: the layer's 250 MB unzipped Lambda-layer limit and its separate 50 MB
+zipped direct-upload threshold (already exceeded regardless, per §3, forcing an S3-based upload either way)
+— a cost that only matters near a hard boundary, and 20 MB against either ceiling was headroom, not urgency,
+which is why §3 filed it as "worth investigating" rather than acting on it. **342.7ms is not a headroom
+number against a ceiling; it is 16.2% of the exact quantity §11.10 just proved `C14` violates.** Every
+millisecond removed from this phase is a millisecond of direct relief against a constraint this project has
+now shown is failing, not banked headroom against a limit the project is nowhere near. That is a materially
+different argument than §3's, not the same finding in a different unit, and it may change the answer:
+§3 asked "is 20 MB worth the risk of hand-pruning a transitive dependency" and answered no; this finding
+asks "is 16.2% of a confirmed latency-budget violation worth the same risk," a higher-stakes question §3
+never posed and this section does not answer either — re-opening it, with the size of the number attached,
+is the finding, not a re-verification that removal is safe.
 
 **Finding 2 — `mcp` is confirmed absent from this exact import trace, corroborating `STAGE4-LAMBDA-LAYER-PLAN.md`
 §3's static grep with a dynamic one, on the specific path that matters most.** Searching the full 1224-line
@@ -2503,7 +2566,10 @@ costs about 65ms out of ~2.1s, regardless of which files inside it get trimmed.
    the likely dominant cost. `langsmith` outranking all of them was not the expected outcome.
 2. *Asserted-but-unchecked?* Checked `STAGE4-LAMBDA-LAYER-PLAN.md` §3 for prior art on `langsmith` before
    presenting it as a new finding — it was already named there, on a different axis (MB, not ms); credited
-   as such rather than presented as newly discovered.
+   as such. The first draft then folded the two together as "the same finding in a different unit" — caught
+   on review (Marco's instruction) and rewritten as Finding 1's own paragraph: the disk-budget argument and
+   the confirmed-`C14`-violation argument have different cost shapes (a ceiling vs. a continuous budget) and
+   may not settle the same way, so presenting them as equivalent was itself an unchecked claim.
 3. *Infra error scored as a result?* Checked — first attempt (`docker run ... python3 -X importtime -c ...`
    without overriding the entrypoint) failed with `entrypoint requires the handler name to be the first
    argument`, the Lambda base image's own runtime entrypoint intercepting the command; not scored as a
