@@ -63,3 +63,44 @@ C1 status:
 Blocked on:
 Last apply + gate result:
 ```
+
+## 4. Two review tiers
+
+Process change, Marco, 2026-08-14. Classify every proposed action against these two tiers **before**
+reporting on it — the tier decides whether a report is a proposal awaiting approval or an outcome already
+reached, and picking the wrong one in either direction is itself a defect: asking permission for something
+approve-and-go already covers wastes a round trip on nothing; running something full-review requires without
+stopping first removes the one point where it could have been caught before it happened.
+
+**FULL REVIEW — propose, stop, wait for approval:**
+
+- Anything touching `C1` or its measurement.
+- Anything producing a number that enters `RESULTS.md` as a result.
+- Real spend above ≈$1, or an irreversible change.
+- `terraform apply`, a redeploy, or anything altering deployed state.
+- A new defect class, or a headline conclusion changing.
+
+**APPROVE AND GO — do it, then report once with the outcome:**
+
+- Measurements under ≈$1.
+- $0 local diagnostics, profiling, doc reads, CloudWatch reads.
+- Reversible code changes not yet deployed.
+- Record fixes, write-ups, corrections to committed docs.
+
+**For approve-and-go: do not ask permission and do not propose options for selection.** Pick the approach,
+state the choice in one line, run it, report the result. This is the same discipline §2 already applies to
+*when* to report, extended to *whether to ask first* — a decision point earns a stop; routine execution
+inside an already-approved bound does not, and asking anyway is a cost of its own, paid in round trips instead
+of dollars.
+
+**If something reclassifies mid-task, stop there and say why.** A task that starts approve-and-go and turns
+up a `C1` interaction, an unplanned deploy, or a number bound for `RESULTS.md` does not finish under the tier
+it started in — it stops at the point of reclassification, not at the end, and the report states which
+condition fired and where.
+
+**Standing constraints are unchanged and outrank both tiers — neither tier can license what these forbid:**
+
+- No billable AWS resource without `APPROVED: <phase name>`.
+- Never create the Connect instance or DID.
+- `PROJECT_STATE.md` updated before any session ends.
+- `C1` is a gate, not a tradeable term.
