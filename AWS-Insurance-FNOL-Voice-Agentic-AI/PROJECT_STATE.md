@@ -3149,6 +3149,47 @@ failed too). Diagnosed rather than assumed, per Marco's explicit instruction:
 execution role's credentials or the sandbox's runtime environment on the very first AWS-touching call of
 a warm container — not confirmed. `did.tf` untouched, criterion 9 not run, `C1` still UNVERIFIED.
 
+**Two cheap checks run 2026-08-13 (Marco), before any instrumented invoke.**
+
+1. **`VpcConfig` is empty (`null`), `Timeout` is 8s — confirmed by a fresh read, not carried over from
+   earlier in the investigation.** This rules out Marco's leading hypothesis (VPC-attached with no
+   DynamoDB VPC endpoint/NAT) on its own terms: that failure mode requires a VPC config to exist at all,
+   and none does. The "network signature, not an IAM signature" reasoning behind the hypothesis still
+   stands as the operative frame for what to look for next — it just isn't *this* network gap.
+2. **L1 is confirmed, from source, as the only one of the 9 gate events whose code path returns before
+   touching the checkpointer at all.** `_dispatch()`'s exact shape: `l1_fired`/`l3_fired` are computed
+   first (pure regex, no I/O); `if l1_fired: return _escalate(...)` is the **only** early return that
+   precedes `graph = _get_graph()` / `previous = graph.get_state(config)`. L3 (`D74`) and `D79` are both
+   flagged `reaches_bedrock=False` in the gate script — true, and the reason they were expected to be
+   liveness signals — but that flag is about Bedrock specifically; both still fall **after**
+   `graph.get_state()` in `_dispatch()`, so both still touch the checkpointer. The 1-passes/8-fail split is
+   therefore **diagnostic, not incidental**: every event that touches the checkpointer hangs, and the one
+   event that doesn't is the one that passed. This sharpens the open question from "why does the graph
+   path hang" to "why does the very first checkpointer call in a warm container hang" — Bedrock is not
+   implicated by the data at all.
+
+Awaiting Marco's approval on an instrumented invoke as the next step.
+
+### Apply drift — what's deployed and what was reviewed have diverged once already
+
+Filed as its own finding, not folded into `D82`/`D83`, per Marco: **the S3 key
+`codehook-deps-73deb4753ca856a7cc60270092e4be96.zip` shows 5 identical PUTs spanning roughly six hours
+(17:27–23:30 UTC, 2026-08-13)**, all of the *same* content — meaning the apply chain that produced the
+D82 fix ran repeatedly, outside the "plan → my review → apply" sequence this session was operating under.
+The content never differed between those five applies (same md5 throughout), so nothing wrong shipped as
+a result — but the **mechanism** that is supposed to gate deployment behind review did not, in fact, gate
+it: this assistant's own `terraform apply` attempt reported `0/0/0` because the real work had already
+happened, off-sequence, before it ran.
+
+**The lesson to keep:** the commit history in this repo is not the deployment history. A reviewer reading
+`git log` and a plan diff can be confident about what the *code* says should happen; being confident about
+what is *actually running* requires reading the deployed artifact's own state (`terraform show`,
+`get-function-configuration`, S3 object versions) — exactly the same discipline `D80`/`D82` already
+established for the artifact itself, now shown to apply to the **timing** of when an artifact reached AWS,
+not only its contents. A future reader should not assume that because a fix is committed, or even that
+because a plan was reviewed, the reviewed plan is what is currently deployed — it has already needed to be
+checked twice in this project (`D82`'s live-state check, and this one).
+
 ### D72 — `ADR-007` held up for reasons its author did not have
 
 `ADR-007` chose nested CloudFormation over native `aws_lexv2models_*` on the strength of three provider
