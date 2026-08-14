@@ -344,5 +344,58 @@
       "C1 BREACH: deployed composed recall below 1.000 on the must-escalate items.",
       "CORRECTION, appended after review: the 0.0 this run recorded above is not a measurement of C1. D80 (infra: no Lambda dependency layer, every invocation crashed at cold-start import) and D81 (instrument: this harness had no invalid-invocation channel and silently scored crashed calls as missed escalations) both apply. Status is unverified, not failed. Raw historical value preserved as composed_recall_deployed_RAW_UNSCORED rather than deleted."
     ]
+  },
+  {
+    "started_utc": "2026-08-14T01:18:31+00:00",
+    "finished_utc": "2026-08-14T01:19:46+00:00",
+    "status": "aborted",
+    "error": "RunInvalidError: invalid invocation on must-NOT-escalate item 'nobody was hurt': RecognizeText raised: ValidationException: An error occurred (ValidationException) when calling the RecognizeText operation: The slot to elicit is invalid. (session criterion9-07b3e45a-b8fe-452d-80d6-d4b3c8a05b6d)",
+    "reason": "Stage 4 exit criterion 9 (Line E) \u2014 C1 re-verified against the DEPLOYED Lex alias and Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason and required for an item to count toward recall, and all 17 independent-set negatives sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's 1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 (DID routing).",
+    "fingerprint": "f5b30ba441270fe3",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 3,
+    "git_commit": "6c9227193d70",
+    "metrics": {},
+    "notes": []
+  },
+  {
+    "started_utc": "2026-08-14T01:40:38+00:00",
+    "finished_utc": "2026-08-14T01:41:11+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "D84 blast-radius check -- local graph-only repro of all 17 independent-set negatives to determine which produce ElicitSlot (the turn shape D84 requires), post-hoc against the bot's own Slots schema. No RecognizeText calls; not a criterion 9 recall measurement.",
+    "fingerprint": "f5b30ba441270fe3",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 1,
+    "git_commit": "6c9227193d70",
+    "metrics": {
+      "exposed_count": 5,
+      "total": 17
+    },
+    "notes": [
+      "D84 blast-radius local repro -- see scratchpad script for full per-item output."
+    ]
   }
 ]

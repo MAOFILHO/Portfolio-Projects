@@ -2301,6 +2301,90 @@ case. **`C1` status unchanged in kind — still UNVERIFIED, no criterion 9 run y
 holding that until this write-up lands — but now carries a known, measured cold-start exposure against
 it rather than an unexplained gate failure.**)
 
+**2026-08-14, criterion 9 (Line E) attempted, aborted on a new defect — not `D80`–`D83` recurring.**
+Forced-cold probe on an L2-dependent item ('we lost her') ran first, standalone: confirmed cold via
+`platform.report`'s `initDurationMs: 409.163` (only present on a fresh execution environment), escalated
+correctly (`detection-graph`, safety script delivered) after an 11-ish-second `_get_graph()` cold start —
+existence proof the cold graph path can escalate, 1 of 19, not coverage. The main k=3/26 + k=1/17 run then
+aborted on its first negative-control item ('nobody was hurt'): Lex rejected the codehook's response with
+`ValidationException: The slot to elicit is invalid` — `D81`'s abort-on-invalid firing correctly, a real
+defect, not a false negative. Root-caused with direct local evidence, not speculation: reproducing
+`_run_graph_turn` locally for the identical text shows the graph classifies it `intent=FileAutoClaim`,
+`active_slot=policy_number`; `_elicit_slot()` sends that slot name back under `_intent_from(event)`, which
+echoes **Lex's own NLU-assigned intent for the turn**, not the graph's. **The graph's intent classifier
+and Lex's own NLU are two independent decisions that can disagree on the same utterance, and nothing
+reconciles them before `ElicitSlot` is sent** — when they disagree, Lex rejects the slot as invalid for
+whatever intent it actually picked. Likely confined to the `ElicitSlot` path (escalation responses use
+`Close`, sidestepping this), meaning exposure is concentrated on the 17 negatives (designed not to
+escalate) rather than the 26 positives — but not yet checked against the other 16. **`C1` status
+unchanged: still UNVERIFIED. Criterion 9 not completed. Holding for Marco on how to proceed** — this is a
+new, real, C1-adjacent defect, not a decision to make unilaterally. **Filed as `D84`.**
+
+**2026-08-14, `D84` follow-up — cost correction, multi-turn question answered, blast radius measured.**
+**Correction to the prior report's cost line**, caught applying `REVIEW-CRITERIA.md` §1.4/§1.2 against my
+own claim rather than by Marco: I reported "2 real `RecognizeText` calls (cold probe + the 1 aborted
+negative) ≈ $0.0015" — wrong, and should have been caught before sending. `measure_negatives` only runs
+after `measure_positives` returns cleanly (`measure_composed_pipeline_deployed.py::measure`), and the
+`RunInvalidError` text names a "must-NOT-escalate item" — proof the positives phase completed with zero
+invalid classifications before the abort, not proof of a 2-call run. **Confirmed via CloudWatch
+`platform.report` count in the exact run window (01:18:31–01:19:46 UTC): 79 requestIds, not 2.** Path
+split from the `"escalating contact"` log line: 21 L1 + 57 L2 = 78 escalating calls, exactly matching
+26 positives × base k=3 with **zero contingency triggered** — every one of the 78 positive samples
+escalated with `detection` provenance. This is an aggregate CloudWatch reconstruction, not the script's
+own per-item table (lost when the process crashed before `_run`'s `result` was built), so it does **not**
+verify `C1` — §1.8 still applies, unconditionally — but it is a strong sign the positives side would have
+scored 1.000/26 had the negatives not aborted the run. **Actual cost: Lex $0.05925 (79 × $0.00075) +
+Bedrock/guardrail ≈$0.0196 (58 graph-path calls: 57 positive-L2 + 1 negative, assumed graph-path per the
+script's own costing convention) ≈ $0.0789 total — landed almost exactly on Line E's pre-registered
+≈$0.078 estimate**, once counted correctly.
+
+**Marco's two questions, answered:**
+1. *Multi-turn exposure.* `evals/holdout.py`'s `InjuryPhrasing` schema (`text`, `kabco`, `should_escalate`,
+   `kind`) and `measure_composed_pipeline_deployed.py::recognize()` (fresh `session_id = uuid4()` per
+   call) confirm the harness is **single-turn only** — every sample, positive or negative, opens a brand
+   new session and sends exactly one utterance. There is no turn-1/turn-2 structure in this protocol at
+   all, so `D79`'s checkpointer-carryover path (which needs state set by a *prior* turn in the *same*
+   session) cannot be exercised by criterion 9 as written, for positives or negatives — not because it's
+   safe, but because this measurement never reaches it. The specific risk named (a multi-turn positive
+   dying on a pre-escalation `ElicitSlot` turn before reaching its escalation turn) cannot occur inside
+   this harness, structurally. The CloudWatch reconstruction above independently confirms none of the 26
+   positives hit `ElicitSlot`/invalid in the actual run.
+2. *Blast radius.* All 17 negatives run through local `_run_graph_turn()` (declared, its own
+   `verification_run`, ledger fingerprint `f5b30ba4…`, zero `RecognizeText` calls, small Bedrock/guardrail
+   cost only — not a `C1` measurement). **5/17 produce `ElicitSlot` with `active_slot=policy_number`**:
+   *'nobody was hurt'*, *'no injuries at all, just the two cars'*, *"there's no blood or anything, it's
+   just the bumper"*, *"everyone's fine, we all walked away from it"*, *'thankfully nobody was injured'*.
+   `policy_number` is a legal slot under `FileAutoClaim`/`UpdateContactInfo` — the crash specifically
+   requires Lex's own NLU to have landed on `InjuryEscalation` or `FallbackIntent` instead, and **both of
+   those declare zero slots at all** (confirmed by reading `bot.yaml.tftpl` directly — `InjuryEscalation`
+   and `FallbackIntent` have no `Slots:` block), so *any* `active_slot` the graph names is rejected the
+   moment Lex's classification lands on either. Not confirmed live for the other 4 (would need a real
+   call), but 4 of the 5 share direct keyword overlap with `InjuryEscalation`'s own `SampleUtterances`
+   ("I think I'm hurt", "there's blood I need help", "somebody is injured") despite being negations —
+   the same shape as the one crash already observed on the deployed system. **Best current read: `D84` is
+   5-in-17, not 1-in-17, all via the same mechanism.**
+
+**Incidental finding, not `D84`, surfaced by the same run — flagged per §1.7, not chased further without
+direction:** **9/17 negatives independently escalate** at the graph/L1 layer alone (`_run_graph_turn`
+called directly, bypassing `_dispatch`'s L1 pre-check to isolate the source): 8 via the graph's own `L2`
+classifier only (*"the car's totalled"*, the bruise/knee item, *"the front end is completely destroyed"*,
+*"she took a real beating…"*, *"there's a scrape…"*, *"I'm a bit stiff…"*, *"the driver's door is caved
+right in…"*, *"I don't think anyone's hurt…"*), 1 also independently caught by `L1`'s raw lexicon on
+`"ambulance"` (*"the ambulance did come out but… no need for anyone to go in"*). **This is not a `C1`
+issue** (`C1` is a recall constraint on positives only) but a real false-escalation-rate finding on
+figurative/idiomatic negative-control language, exactly the class `D81` item 5 exists to surface and the
+measurement script's own docstring names as "worth its own line before criterion 10 if it recurs." Not
+acted on. 3/17 negatives resolve cleanly (Close, no escalation, no `ElicitSlot`): *"my back's been bad
+since last year…"*, *"I checked on the other driver…"*, *"I had a knee replacement…"*.
+
+**Root cause, stated precisely:** `_elicit_slot()` (`api/lex_codehook.py`) sets
+`intent: _intent_from(event)` — Lex's own NLU intent+slots object, round-tripped verbatim — while
+`dialogAction.slotToElicit` is set to the GRAPH's independently-chosen `active_slot`. Lex's dialog manager
+then validates the elicited slot against the intent named in the response. Nothing in `_elicit_slot()`
+checks that the graph's chosen slot is legal under the intent it is about to echo back. **Still not fixed
+and not routed around, per `REVIEW-CRITERIA.md` §1.8/§2 — holding for Marco's direction on approach before
+any change to `_elicit_slot()`/`_intent_from()`, and before any re-run of criterion 9.**
+
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
 (the ADR recorded the provider-bug risk as *unconfirmed rather than clean* and required a POC before

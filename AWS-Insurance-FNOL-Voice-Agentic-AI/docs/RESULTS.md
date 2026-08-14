@@ -1925,6 +1925,16 @@ reasonable inference — Lex has no more reason to treat "the codehook timed out
 codehook raised" — but it was **not independently re-verified via a live `RecognizeText` call against the
 timeout case specifically**, unlike `D80`'s. Recorded as an inference, not a re-measurement.
 
+**A probe to close this specific inference was scoped and then deliberately deferred, 2026-08-14 — noted
+here so the option isn't lost, not because the caveat above needed softening.** The design: temporarily
+apply `lambda_timeout_seconds=5` (safely below the measured 11.4s floor), force a cold container, make one
+real `RecognizeText` call, capture the actual wire shape, then revert. Marco's call not to run it: it costs
+two applies and deliberately puts the function into the known-broken 5s state on the live system to close
+what is currently a flagged inference in a footnote — if the revert failed or was interrupted, `C1`'s
+cold-start exposure would be live on the deployed system, ahead of the measurement (criterion 9) the whole
+session had been blocked on. Correct call on the cost/benefit as weighed at the time; left open for later
+if the inference ever needs to become a measurement.
+
 **So, precisely: the pre-`D83` gate failures (`8/9 events FAILED`, `Sandbox.Timedout` at 8.00s) were not
 only a tooling defect blocking `C1`'s verification. For any turn that reaches `_get_graph()` on a cold
 container — which includes the `D79` slot-carryover path and any injury phrasing outside the L1 lexicon,
