@@ -4519,3 +4519,70 @@ single request. Both are gated the same way as every prior proposal this phase, 
 **Not done, per explicit instruction:** no tier implemented, no code written, no redeploy, no run, `ADR-009`
 unedited, no apply, no spend. Cost this session: $0 (file edits and a documentation search over the repo's
 own record and source code; no AWS call).
+
+## Session log — 2026-08-14 (continued; `3-pre(ii)` item 1 — Bedrock latency recovered from CloudWatch, tiers reordered)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco's instruction before choosing an instrumentation tier: (1) check whether Bedrock invocation latency is
+already recoverable for Line E's 95 calls — CloudWatch Bedrock metrics or model invocation logging, $0, no
+redeploy; (2) reorder the three proposed tiers by expected magnitude rather than coverage, stating which
+components are expected to dominate and why, then propose the minimum tier that settles it; (3) if item 1
+recovers usable latency, report it and re-propose. **Proposal and $0 reads only. No apply, no spend, no
+redeploy, `ADR-009` unedited.**
+
+**Full write-up in `RESULTS.md` §11.15, summarized here.**
+
+**Item 1.** Model invocation logging: confirmed **not enabled**
+(`GetModelInvocationLoggingConfiguration` returns no `loggingConfig` key) — that path is closed. CloudWatch:
+a first query against the `us.*` system-profile model IDs (`settings.py`'s literal defaults) returned zero
+datapoints for Line E's window and for everything after 2026-08-12 — not a metrics gap, but the wrong
+dimension value: `ADR-016` already establishes the deployed Lambda invokes through **application inference
+profile ARNs**, and CloudWatch's `ModelId` dimension follows the literal `modelId` passed, not the model
+family. Re-querying `AWS/Bedrock` and `AWS/Bedrock/Guardrails` under the four live profile IDs
+(`bedrock:ListInferenceProfiles`) for Line E's exact run window (`02:45:29`–`02:47:12Z`, from the eval
+artifact) recovered real data:
+
+| Component | n | p50 | avg | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| Router (`fnol-router`, nova-micro) | 73 | 401ms | 500ms | 1,286ms | 1,467ms |
+| Guardrail, input | 73 | 114ms | 116ms | 137ms | 176ms |
+| Guardrail, output | 5 | 116ms | 115ms | 126ms | 127ms |
+| Generation (`fnol-generation`, nova-lite) | 0 | — | — | — | — |
+| Embedding (`fnol-embedding`, titan) | 0 | — | — | — | — |
+
+Generation and embedding read zero because Line E's composed-recall protocol never routes a turn into
+`coverage_question`/`rental_towing` — checked against the eval artifact's own protocol, not assumed from the
+zero count. Router+guardrail-input summed at matched percentile against §11.12's warm-only `elapsed_ms`
+(n=94, p95 1,819ms): **p95 1,423ms, ≈78% of the warm p95** — an approximate bound, explicitly not a joined
+per-call measurement (CloudWatch gives independent aggregate percentiles per metric stream, not a join by
+request ID), but directionally clear: **Bedrock (router + guardrail) is the dominant measured component**,
+leaving a residual on the order of 200–400ms at p95 for Lex dispatch + Lambda overhead + LangGraph scheduling
++ checkpointer I/O combined — smaller than either measured Bedrock component. Scope stated precisely: this
+resolves the routing/guardrail nodes only, the only node set Line E exercises; it does not touch the
+generation-bearing nodes, which recorded zero Bedrock calls in this window because Line E's protocol never
+reaches them.
+
+**Item 2 — tiers reordered.** Tier C (checkpointer I/O) demoted: the residual it isolates is now bounded
+small by item 1, not the largest unknown. Tier B (call-site timing) demoted on the escalation path: its
+justifying caveat (separating generation from retrieval/tool-call inside one node body) doesn't apply to
+`routing`/`guardrails_input_check`/`guardrails_output_check`, none of which run retrieval or a tool call
+internally; Tier B remains correct, unchanged, the day a real run exercises `coverage_question`/
+`rental_towing`. **Tier A (node-boundary timing) is still the minimum tier** — not because it's cheapest
+(it always was), but because it's the only one of the three that turns item 1's approximate, un-joined
+percentile-sum bound into an exact per-turn paired measurement, and the only one that also covers the
+still-unmeasured generation-bearing nodes automatically the first time a real run reaches them.
+
+**Item 3.** Usable latency was recovered — reported above and in full in `RESULTS.md` §11.15.
+**Re-proposing: Tier A alone**, not the full A→B→C ladder, as the minimum tier to close `3-pre(ii)`'s
+escalation-path attribution. Tier B and Tier C remain named, costed, and available — demoted, not dropped —
+for the generation-bearing path and the now-bounded-small checkpointer residual respectively.
+
+**Not done, per explicit instruction:** no tier implemented, no code written, no redeploy, no run, `ADR-009`
+unedited, no apply, no spend. Cost this session: $0 — `cloudwatch:ListMetrics`, `cloudwatch:GetMetricStatistics`
+(free, standard-resolution reads, not the metered Cost Explorer API), `bedrock:GetModelInvocationLoggingConfiguration`,
+`bedrock:ListInferenceProfiles`.

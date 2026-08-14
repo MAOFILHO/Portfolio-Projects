@@ -2887,3 +2887,152 @@ check as §11.12 and §11.13.
    unsourced number of unknown looseness" (§11.13) to "a miss against a number the available research
    suggests should have been tighter," without the figure itself changing.
 8. *Touches `C1`?* No — explicitly checked and stated above.
+
+### 11.15 `3-pre(ii)` item 1 — Bedrock router + guardrail latency recovered from CloudWatch for Line E's own run window, $0, no redeploy; router is the dominant measured component so far
+
+Marco's instruction before choosing an instrumentation tier: check whether Bedrock invocation latency is
+already recoverable for Line E's 95 calls from CloudWatch Bedrock metrics or model invocation logging,
+reorder the proposed tiers by expected magnitude, and re-propose if usable latency comes back. **$0 —
+`cloudwatch:ListMetrics`, `cloudwatch:GetMetricStatistics` (free, standard-resolution reads, not Cost
+Explorer), `bedrock:GetModelInvocationLoggingConfiguration`, `bedrock:ListInferenceProfiles`. No AWS
+resource created or changed, no redeploy, no run.**
+
+**Model invocation logging: confirmed not enabled.** `GetModelInvocationLoggingConfiguration` returns a
+response with no `loggingConfig` key (22-byte body, `ResponseMetadata` only) — not a
+`ResourceNotFoundException`, an empty configuration. This path is closed: there are no per-invocation
+Bedrock request/response logs for Line E's window, or anywhere.
+
+**CloudWatch namespace: real data exists, but not where the first query looked.** A first query against
+`AWS/Bedrock` `InvocationLatency` for `us.amazon.nova-micro-v1:0` / `us.amazon.nova-lite-v1:0`
+(`settings.py`'s literal defaults) over Line E's run window returned **zero datapoints** — and widening to
+the entire day, then the entire month, still returned zero past **2026-08-12 21:00 EDT**. This is not a
+metrics outage: `ADR-016` (`CLAUDE.md`) already states the deployed Lambda invokes through **application
+inference profile ARNs**, not the `us.*` system-profile literal, specifically so Bedrock spend carries cost
+allocation tags — and CloudWatch's `ModelId` dimension follows what was actually passed as `modelId`, not
+the model family name. `bedrock:ListInferenceProfiles` confirms the four live application profiles and
+which foundation model each wraps:
+
+| Profile ID | Name | Wraps |
+|---|---|---|
+| `e55shbc6xaks` | `fnol-router` | `amazon.nova-micro-v1:0` |
+| `gg3w2rbrx1qr` | `fnol-generation` | `amazon.nova-lite-v1:0` |
+| `9vrw3s3yskep` | `fnol-embedding` | `amazon.titan-embed-text-v2:0` |
+| `v9xjmutuiw3q` | `fnol-judge` | `anthropic.claude-haiku-4-5-20251001-v1:0` |
+
+Re-querying `AWS/Bedrock` under these four profile IDs, plus `AWS/Bedrock/Guardrails`' `InvocationLatency`
+(dimensioned by `GuardrailContentSource`, not by model), against Line E's exact run window
+(`run_started_utc`/`run_finished_utc` from `evals/baselines/composed_pipeline_deployed_k3_lineE.json`,
+`2026-08-14T02:45:29Z`–`02:47:12Z`) returns real data for two of the four:
+
+| Component | Profile / dimension | n | min | p50 | avg | p90 | p95 | p99 | max |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Router (`classify_turn`) | `fnol-router` | 73 | 357ms | 401ms | 500ms | 929ms | **1,286ms** | 1,417ms | 1,467ms |
+| Guardrail, input | `ContentSource=Input` | 73 | 105ms | 114ms | 116ms | 128ms | 137ms | 174ms | 176ms |
+| Guardrail, output | `ContentSource=Output` | 5 | 107ms | 116ms | 115ms | 125ms | 126ms | — | 127ms |
+| Generation (`generate_response`) | `fnol-generation` | **0** | — | — | — | — | — | — | — |
+| Embedding (retrieval) | `fnol-embedding` | **0** | — | — | — | — | — | — | — |
+
+`n=73` for router and guardrail-input **match exactly** — every graph-path turn in Line E's window got one
+router call paired with one input-guardrail call, consistent with `agents/graph.py`'s wiring. Generation and
+embedding show **zero** invocations in this window across all four profiles, checked individually, not
+inferred from the router/guardrail totals. Read against `evals/baselines/composed_pipeline_deployed_k3_lineE.json`'s
+own `protocol` field: Line E runs the **composed-recall escalation-detection protocol** (positives/negatives
+scored on `escalate=true`/`false`), which never routes a turn into `coverage_question` or `rental_towing` —
+the only two nodes that call `generate_response` or run retrieval. Zero calls on those two profiles is the
+expected result of what this run actually exercised, not a gap in the query. The 5 output-guardrail calls
+despite 0 generation calls were initially a puzzle; `agents/nodes/guardrails_nodes.py`/`graph.py:106`
+resolve it — `guardrails_output_check` fires whenever `response_text` is set, which some non-generation,
+templated-response paths also set, not only the two generation-bearing nodes. Named because it was checked,
+not left as an unexplained count; not load-bearing for anything below.
+
+**Comparison against §11.12's warm-only `elapsed_ms` distribution** (`n=94`, the one confirmed-cold sample
+excluded): p50 1,037ms, p95 **1,819ms**, mean 933.1ms, max 2,037ms.
+
+Summing router and guardrail-input at matched percentile gives an **approximate bound**, stated as exactly
+that and not as a per-call attribution — CloudWatch's `GetMetricStatistics`/`ExtendedStatistics` returns
+independent aggregate percentiles over each metric's own stream in the window, not a join against individual
+`RecognizeText` calls or against each other by request ID. Summing two distributions' same-rank percentiles
+equals the percentile of their sum only if the two are perfectly rank-correlated call-for-call, which this
+data cannot establish either way:
+
+| | Router + guardrail-input (summed) | Warm `elapsed_ms` (§11.12) | Ratio |
+|---|---:|---:|---:|
+| p50 | 401 + 114 = 515ms | 1,037ms | 50% |
+| p95 | 1,286 + 137 = **1,423ms** | **1,819ms** | 78% |
+| max-ish (router max + guardrail-input max) | 1,467 + 176 = 1,643ms | 2,037ms | 81% |
+
+**Directional finding, stated at the same confidence level as the arithmetic supports.** On the
+escalation-path turns Line E actually measured, Bedrock (router call plus the paired input-guardrail check)
+plausibly accounts for the large majority of both the median and the tail of warm-path turn latency —
+roughly three-quarters to four-fifths at the percentiles that matter for `C14`'s p95 gate — leaving a
+residual on the order of **200–400ms at p95** for Lex NLU dispatch, Lambda invocation overhead, LangGraph
+scheduling, and checkpointer I/O **combined**. That residual is smaller than the router call alone, and
+smaller than what the `3-pre(ii)` proposal's caveats (i)/(ii) implicitly treated as an open unknown of
+unstated size.
+
+**Scope, stated precisely, not left to imply more than it checked.** This settles the router/guardrail
+share of latency for the **routing and guardrail nodes specifically** — the only node set Line E's
+composed-recall protocol exercises. It does **not** touch Tier A's caveat (i) from the prior proposal
+(separating Bedrock generation from retrieval/tool-call time inside `coverage_question`/`rental_towing`,
+which run all three in one node body) — that code path recorded zero Bedrock calls in this window because
+Line E never routes a turn into it. A future run exercising those two intents, not this check, is what would
+resolve that caveat.
+
+**Item 2 — tiers reordered by expected magnitude, not coverage, per instruction.** The prior proposal
+(`PROJECT_STATE.md`'s 2026-08-14 `3-pre(ii)` session log entry) ordered Tier A → B → C by increasing
+invasiveness, not by where the time actually goes. With router + guardrail latency now directly measured and
+dominant on the only path this project has real deployed-Bedrock data for:
+
+- **Tier C (checkpointer I/O) is demoted.** The residual it exists to isolate — checkpointer reads/writes
+  folded into LangGraph scheduling overhead — is now bounded to roughly 200–400ms at p95 by subtraction
+  above, smaller than originally treated as an open unknown, and smaller than either measured Bedrock
+  component. Still a real gap, not resolved to zero, but no longer the largest one.
+- **Tier B (call-site timing) is demoted on the escalation path** — its purpose is separating generation
+  from retrieval/tool-call time inside a single node body, and `routing`/`guardrails_input_check`/
+  `guardrails_output_check` don't run retrieval or a tool call inside their node bodies to begin with, so
+  Tier B's own justifying caveat doesn't apply to the path this section just measured. It remains the right
+  tier the day a real run exercises `coverage_question`/`rental_towing`, unchanged from the original
+  proposal.
+- **Tier A (node-boundary timing) is still the minimum tier, and now for a sharper reason than before.**
+  What this section adds is real, dominant-component evidence that Bedrock is where the time goes — but only
+  as an *approximate, un-joined* bound (the percentile-sum caveat above). Tier A is the cheapest instrument
+  that turns that approximation into an **exact, per-turn, paired measurement** (router_ms, guardrail_ms,
+  residual_ms on the *same* invocation, not two independent CloudWatch streams), and it is the only tier of
+  the three that also covers `coverage_question`/`rental_towing` automatically the first time a real run
+  exercises them — no second instrumentation pass needed for that case.
+
+**Item 3.** Item 1 recovered usable latency — reported above, not merely flagged. Re-proposing: **Tier A
+alone**, not the full A→B→C ladder, is now the proposed minimum tier to close `3-pre(ii)`'s escalation-path
+attribution; Tier B and Tier C remain named, costed, and available, demoted rather than dropped, for the
+still-unmeasured generation-bearing path and the now-bounded-small checkpointer residual respectively.
+
+**Not done, per standing instruction: no tier implemented, no code written, no redeploy, no run, `ADR-009`
+unedited, no apply, no spend.** Cost this session: $0 (CloudWatch and Bedrock control-plane reads only).
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what each item caught:**
+
+1. *Opposite result possible?* Yes, and it nearly did — the first query (against the `us.*` literal) came
+   back empty, which could honestly have been read as "no CloudWatch data exists for this window" and the
+   check reported as a dead end. It wasn't: the empty result was itself informative (wrong dimension value,
+   traced to `ADR-016`), and re-querying under the correct dimension produced real data. Reporting the empty
+   first result as the answer would have been the wrong conclusion from a real observation.
+2. *Asserted-but-unchecked?* The claim "generation and embedding show zero invocations because Line E's
+   protocol never exercises those nodes" was checked against the eval artifact's own `protocol` field and
+   `agents/graph.py`'s routing, not assumed from the zero count alone — a zero count is also consistent with
+   a wrong dimension or a metrics gap, both of which were ruled out first (router/guardrail-input on the
+   identical query pattern returned real data in the same window).
+3. *Infra error scored as a result?* N/A — read-only CloudWatch/Bedrock control-plane API calls; nothing to
+   abort.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, no liveness concern (CloudWatch/Bedrock read APIs
+   are not the metered Cost Explorer API `CLAUDE.md` flags separately).
+5. *Identical markers, different paths?* Checked directly and named as the section's central caveat: a
+   summed percentile is not a joined per-call measurement, and the two are not interchangeable — stated as
+   an approximate bound, not reported as if Tier A's exact figure had already been obtained.
+6. *Has this check ever failed for the right reason?* Yes — the model-invocation-logging check returned a
+   real negative (confirmed disabled, not merely undiscovered), and the first CloudWatch query under the
+   `us.*` dimension returned a real, explainable negative rather than silently passing as "no data."
+7. *Changes a headline number's interpretation?* Yes — `3-pre(ii)`'s residual, previously an unstated
+   unknown, is now bounded to roughly 200–400ms at p95, smaller than either measured Bedrock component, and
+   the proposed minimum instrumentation tier changes from the full A→B→C ladder to Tier A alone for the
+   escalation path.
+8. *Touches `C1`?* No — no claim on `C1` made or revised; read-only latency attribution work only.
