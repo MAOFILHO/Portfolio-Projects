@@ -4244,3 +4244,103 @@ instrument already collecting the right data, sitting unread, until someone read
 **Not yet done:** the real-call measurement (still proposed, not approved or run); any mitigation choice;
 `ADR-009` remains unedited, per explicit instruction; any Terraform change; any apply. No AWS resource
 created or changed this session. Cost this session: $0.
+
+## Session log — 2026-08-14 (continued; criterion 3's approved options found incomplete, amendment proposed)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Marco's instruction: resolve the exit criteria before any further measurement — Phase 9 opened to mitigate
+cold-start construction, and §11.12 shows that is no longer the binding constraint. Three items: (1) state
+that criterion 3's approved options are incomplete; (2) propose amended options for approval, including
+whether `C14` is achievable at all and whether the 1,800ms budget itself was ever derived from anything
+measured; (3) do not propose warm-path mitigations yet — the warm p95 has no attribution, same reasoning
+that already stopped cold-start mitigation selection. **Propose only. No apply, no spend, `ADR-009`
+unedited — none of the three happened.**
+
+**1 — Criterion 3's approved options are incomplete, as approved 2026-08-14 (the "Phase 9 exit criteria
+proposed, approved with two amendments" entry above).** Both of its two closing paths carried an assumption
+§11.12 now shows false:
+
+- **(a), the mitigation path**, implicitly assumed a mitigation bringing measured p95 under budget was
+  available in principle, and every option on the table for it — `ADR-009`'s four candidates plus the
+  untested memory-bump `§11.8` names — targets cold-start construction exclusively. §11.12: even with
+  cold-start construction eliminated entirely, the warm-path p95 on a strict sub-component of a real turn
+  (1,819ms, ASR/TTS/telephony excluded) already exceeds the 1,800ms budget on its own. **No candidate (a)
+  had available to it could have closed this gate**, because none of them touch the segment now shown to be
+  failing independently.
+- **(b), the carry-forward path**, as amended, required "the measured-or-bounded p95 figure stated, plus
+  the `C1`-relevant exposure named" — written when the only known exposure was cold-start (§11.5's two
+  graph-dependent, unprobed paths). §11.12 adds a second, independent exposure a carry-forward decision
+  would now have to name to be honest: **warm-path exposure**, which existed in the data (Line E's own
+  `elapsed_ms`) since criterion 1 ran, unread until §11.10/§11.12. A carry-forward decision naming only
+  cold-start exposure, today, would repeat the exact shape of gap this correction exists to close.
+
+Neither option anticipated a warm-path failure because criterion 3 was written on the same "cold-start is
+the binding constraint" framing `ADR-009` itself carries — a framing §11.12 states is now the wrong frame,
+not merely incomplete.
+
+**2 — amended criterion 3, proposed for approval, not decided here.**
+
+**On the 1,800ms budget's own provenance, checked before proposing anything else** (Marco's explicit ask):
+searched every file in the repo that states or discusses the figure — `CLAUDE.md`, `PROBLEM-FRAMING.md`,
+`SUCCESS-METRICS.md`, `AI-USE-CASE-CARD.md`, `ADR-009`, `COST-MODEL.md`. **No derivation exists anywhere in
+this project's own record.** Every instance states ≤1,800ms as a flat requirement or GATE threshold; none
+computes it from a measured quantity (e.g., observed human turn-taking gaps, a telephony/UX standard, a
+vendor SLA) or cites an external source for the number itself. The nearest-sounding candidate, R4 ("constraint
+14's 1,800 ms p95 must be **engineered from docs, not adapted**"), is about *how the system should be built*
+to hit the figure — barge-in, fillers, streaming — given zero prior art in the source repos; it is not a
+claim that the figure itself came from docs. **Finding, per Marco's framing: the budget is unsourced as a
+requirement.** That does not make it illegitimate — an unsourced design target set deliberately (the
+`PROBLEM-FRAMING.md` north-star explicitly ties it to a distressed caller on a roadside, a stated design
+intent) is a normal and defensible way to set a constraint — but it changes what a 19ms warm-path overage
+against it means: **not a measured system falling 19ms short of a requirement derived from what callers can
+tolerate, but a measured system falling 19ms short of a number nobody in this project's record ever
+computed.** Recorded as its own finding rather than folded into the amendment below, per the same
+"changes a headline number's interpretation" self-review item every other finding this session used.
+
+**What would have to be true for `C14` to be achievable at all, reasoned from what's already measured, not
+proposed as a mitigation:** the warm-path sub-component's own p95 (1,819ms) already leaves **zero** headroom
+for ASR, TTS, and telephony — legs that cannot be zero. For `C14` to be achievable at the current 1,800ms
+figure, at minimum: (i) the warm-path p95 has to come down by an amount at least equal to whatever ASR +
+TTS + telephony actually cost per turn — currently unmeasured, so the required reduction is itself unknown;
+(ii) cold-start turns still need their own mitigation regardless of (i), because the cold-turn frequency
+bound alone (8.3–12.5%, §11.10) already exceeds the 5% p95 allowance on its own, independent of anything
+this section found; (iii) whatever is consuming the warm-path's ~933ms mean / 1,819ms p95 needs to be
+identified before anyone can say whether (i) is even achievable with this architecture, or requires a
+design change this phase hasn't scoped. None of the three is a mitigation choice — they're the
+preconditions for one to be evaluable at all, which is the same relationship criterion 1 established between
+attribution and cold-start mitigation, now extended to the warm path.
+
+**Proposed amended criterion 3** (supersedes the 2026-08-14 approval above; not yet approved):
+
+- **3-pre (new): warm-path attribution required before either closing path.** Same constraint criterion 1
+  already applies to cold-start construction, extended to the warm-path p95 — break down the ~933ms
+  mean / 1,819ms warm-only p95 into its components (Lex NLU, Lambda invocation overhead, Bedrock router
+  call, Bedrock generation call, guardrail `ApplyGuardrail` calls, checkpointer read/write, any other node
+  latency) before either (a) or (b) below can be responsibly closed. No specific attribution method proposed
+  here, per instruction 3 — this is a gate on mitigation selection, not a mitigation itself.
+- **3(a), mitigation path, redefined:** a mitigation (or combination, potentially spanning cold-start *and*
+  warm-path candidates once 3-pre exists) closes this criterion only if it brings the measured warm-path
+  figure down with enough margin to plausibly absorb the still-unmeasured ASR/TTS/telephony segment — not
+  merely under 1,800ms on the sub-component alone, which §11.12 shows is insufficient reasoning even when
+  satisfied. A cold-start-only fix cannot close this path by itself, per §11.12.
+- **3(b), carry-forward path, redefined:** an explicit written decision to carry `C14` forward must now name
+  **both** exposures — cold-start (as already required) and warm-path (new) — each with its
+  measured-or-bounded p95 figure, plus the `C1`-relevant exposure already required. Cost/complexity grounds
+  alone remain insufficient, per the existing 2026-08-14 amendment.
+- **3-budget (new, informational, not a gate):** the 1,800ms figure's unsourced status is recorded in
+  `RESULTS.md` alongside whichever closing path is eventually taken, so a reader evaluating "closed" or
+  "carried forward" knows which kind of number it was measured against.
+
+**3 — no warm-path mitigation proposed.** Nothing above names a specific fix (model tier, guardrail-call
+batching, checkpointer redesign, or otherwise) — only the attribution step needed before any such choice is
+evaluable, matching the reasoning that already stopped cold-start mitigation selection in §11.10.
+
+**Not done, per explicit instruction:** no apply, no spend, `ADR-009` unedited, no warm-path mitigation
+proposed or chosen, criterion 3 not yet re-approved — the amendment above is a proposal awaiting Marco's
+decision, not a change in effect. Cost this session: $0 (documentation search over the repo's own record;
+no AWS call).
