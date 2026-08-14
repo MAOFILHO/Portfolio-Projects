@@ -1868,3 +1868,75 @@ operator, or any instrument except an unmonitored metric.** For a system whose o
 guarantee is a safety escalation reachable from any state, "fails safe" would mean the opposite of what
 was actually observed here — this system, under this failure mode, fails exactly the way it is not
 allowed to.
+
+### 11.5 A measured constraint-14 violation, found by an instrument built to diagnose something else
+
+`D83`'s diagnostic logging (`variables.tf`/`lex_codehook.py`, Marco-approved 2026-08-13) existed to answer
+one narrow question: does `Sandbox.Timedout` at 8.00s reflect a genuine hang, or a real call that simply
+needs more than 8s to either complete or fail loudly. It answered that question — 11.4s cold-start
+construction, not a hang, §"D83" in `PROJECT_STATE.md` has the full account — and in doing so produced a
+second, larger fact it was never built to look for.
+
+**The fact.** `_get_graph()` — the eager import chain (`langgraph`, `boto3`, `pydantic`) plus
+`DynamoDBSaver` construction — measures **11.421s on a cold start**, timed directly by the diagnostic log
+lines the same run that established `D83`'s root cause. Constraint 14 sets the entire turn-latency budget
+at **1,800ms p95, end to end, Lex STT completion to Polly audio stream start.** Cold-start construction
+alone — before `graph.get_state()` runs, before a router decision, before a single Bedrock call — is
+**~6.3x that whole budget.** This is not a projection or a worst-case bound; it is one measured number
+from one real invocation, read directly off a running system.
+
+**Say plainly what kind of finding this is.** `ADR-009` already anticipated a cold-start cost and placed
+its mitigation order (smaller package → SnapStart → scheduled warmer → provisioned concurrency,
+cost-gated) in Phase 9, pending measurement. It would be easy to file this number there and move on. **It
+is filed here instead, in §11, as a measured constraint violation that already happened on a real
+invocation** — not as an input to a future mitigation decision. The distinction matters for the same
+reason §11.3 and §11.4 do: a number sitting in a future phase's inbox reads as planned work; a number
+recorded as a violation that has already occurred reads as what it is.
+
+**The `C1` interaction, made explicit rather than left implied — and checked against the dispatch code,
+not assumed from the intent's name.** `_dispatch`'s first action, before `_get_graph()` is ever called, is
+`detect_safety_trigger()` — the L1 raw-text lexicon — and a match returns `_escalate(...)` directly,
+**bypassing the graph and the checkpointer entirely** (`lex_codehook.py`'s own comment: "no model call, no
+dependency on anything that can fail"). That bypass exists specifically so injury disclosures are not
+exposed to a downstream dependency failure — **and it works as designed here: an L1-lexicon-matched
+disclosure was never exposed to the 8s/11.4s mismatch**, at any point in `D83`'s history, cold container
+or not. Overstating the exposure to cover this path too would itself be exactly the kind of
+asserted-but-unchecked claim `REVIEW-CRITERIA.md` §1.2 exists to catch, so it is corrected here rather than
+left as first written.
+
+The exposure is real but narrower, and still lands on `C1`. Two paths inside `_dispatch` run *after* the
+L1/L3 raw-text checks have already failed to fire, and both require `_get_graph()` to have succeeded
+first: (a) the `D79` path, where `injuries_present` was confirmed on a **prior** turn and is read back from
+checkpointer state via `graph.get_state()` — a disclosure that doesn't repeat the trigger phrase on the
+turn a cold container happens to handle it; (b) any injury or fatality language that the L1 lexicon does
+not match and only the graph's own model-based classification would catch. At the timeout in force before
+this session's diagnosis (8s), **either of those, arriving on a cold container, would hit `Sandbox.Timedout`
+inside `_get_graph()` before a response of any kind was produced** — not only before an escalation
+determination, before literally anything, since by that point the only AWS-independent checks this handler
+performs have already run and passed through.
+
+That failure is `§11.4`'s finding again, with a dated, specific cause attached rather than an unexplained
+one, **for the sub-path that actually reaches `_get_graph()`**: `Sandbox.Timedout` producing zero
+application output is a Lambda-level failure, and `§11.4` established — for `D80`'s import-crash case,
+via real `RecognizeText` calls — that Lex's own fallback handling turns a failed codehook into a
+normal-sounding `FallbackIntent` response, HTTP 200, indistinguishable on the wire from an ordinary
+no-match turn. Extending that mechanism to `D83`'s timeout case (rather than `D80`'s exception case) is a
+reasonable inference — Lex has no more reason to treat "the codehook timed out" differently from "the
+codehook raised" — but it was **not independently re-verified via a live `RecognizeText` call against the
+timeout case specifically**, unlike `D80`'s. Recorded as an inference, not a re-measurement.
+
+**So, precisely: the pre-`D83` gate failures (`8/9 events FAILED`, `Sandbox.Timedout` at 8.00s) were not
+only a tooling defect blocking `C1`'s verification. For any turn that reaches `_get_graph()` on a cold
+container — which includes the `D79` slot-carryover path and any injury phrasing outside the L1 lexicon,
+but excludes L1-lexicon-matched disclosures by design — they were the safety path itself failing on cold
+start**, most likely (by inference, not re-measurement) in the same silent, normal-looking way `§11.4`
+describes for `D80`.
+
+**`C1` status: unchanged in kind, changed in what is known about it.** Still **UNVERIFIED** — criterion 9
+has not been re-run since `D83`'s diagnosis, deliberately, per Marco, pending this write-up. What changed
+is that `C1`'s unverified status no longer sits next to an unexplained gate failure; it now sits next to a
+**measured, dated cold-start exposure on the exact intent constraint 14 and the injury-escalation
+requirement both bind.** A future criterion 9 run needs to account for cold- vs. warm-container variance
+explicitly — the harness's existing runs give no evidence either way once a container is warm — and
+`ADR-009`'s Phase 9 mitigations are what closes the exposure itself; this section records that it exists
+and when it was found, not that it has been fixed.

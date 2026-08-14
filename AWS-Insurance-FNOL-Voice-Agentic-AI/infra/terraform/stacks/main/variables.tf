@@ -175,17 +175,25 @@ variable "lambda_memory_mb" {
 
 variable "lambda_timeout_seconds" {
   description = <<-EOT
-    TEMPORARILY 60s for `D83` diagnosis (Marco-approved 2026-08-13) -- the steady-state value is 8s;
-    see below. `Sandbox.Timedout` at exactly 8.00s with zero application log output is consistent with
-    an in-flight retry loop that has not yet errored, not with a genuine indefinite hang -- at 60s the
-    call either completes or throws a real boto3 exception naming an endpoint, which is the diagnosis
-    this raise exists to get. This is not a workaround for the underlying defect and MUST be reverted
-    to 8 once D83 is diagnosed.
+    60s. Was TEMPORARILY raised from 8s for `D83` diagnosis (Marco-approved 2026-08-13); `D83` is now
+    diagnosed and 60 is staying as the value, not the diagnostic scaffold -- this comment previously said
+    to revert to 8 once diagnosis completed, and that instruction is now stale, corrected here rather than
+    followed. `Sandbox.Timedout` at exactly 8.00s with zero application log output was never an in-flight
+    retry loop or a hang inside `DynamoDBSaver` -- diagnostic logging in `lex_codehook.py` (still present,
+    see the `D83 diag` lines) localized it directly: `_get_graph()` -- the eager import chain plus
+    `DynamoDBSaver` construction -- measures **11.421s on a cold start**, 43% over the old 8s ceiling, on
+    its own, before `graph.get_state()` (93ms cold, single-digit ms warm) ever runs. 8s was never enough
+    once a container is cold; the number predates having a measurement of what cold start actually costs.
 
-    Steady-state rationale (restore this default when reverting): 8 s. Lex's own codehook timeout is
-    30 s, but constraint 14's budget is 1,800 ms p95 end to end, so a codehook still running at 8 s has
-    already failed the caller and should fail fast enough for the fallback to speak. A 30 s timeout
-    would turn a hung turn into half a minute of silence.
+    Former "steady-state rationale," recorded for the historical reasoning, NOT the current default: 8s
+    was derived from constraint 14's 1,800ms p95 budget against Lex's 30s codehook ceiling, without a
+    measured construction cost to check it against. That derivation is superseded, not just its
+    conclusion -- see `RESULTS.md` §11.5 for the full measurement and its status as a **measured C14
+    violation** (11.4s cold-start construction alone is ~6.3x the entire p95 budget), not merely a stale
+    timeout value. `ADR-009`'s Phase 9 mitigation order (smaller package -> SnapStart -> scheduled warmer
+    -> provisioned concurrency, cost-gated) is what actually closes that gap; this variable does not
+    attempt to. Do not lower this back toward 8 without first landing one of those mitigations -- doing so
+    would silently reintroduce `D83`'s exact failure on every cold start.
   EOT
   type        = number
   default     = 60

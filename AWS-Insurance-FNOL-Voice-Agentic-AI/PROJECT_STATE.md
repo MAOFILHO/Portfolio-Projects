@@ -2277,7 +2277,29 @@ identical code path run locally against real AWS (succeeds in <1.5s), and the la
 boto3/botocore pairing (tested in isolation) are all **ruled out with direct evidence**. Root cause **not
 found** — the leading untested candidate (the Lambda execution role's own narrower credentials) requires
 `sts:AssumeRole`, which the harness blocks the same as `terraform apply`. `C1` still UNVERIFIED; **DID
-stays unrouted; criterion 9 NOT run.**)
+stays unrouted; criterion 9 NOT run.** **2026-08-14, `D83` diagnosed**: 60s-timeout instrumented apply
+(Marco-approved, pre-check on "same content" independently verified against the built artifact's own md5)
+localized it via per-call elapsed-time logging — `_get_graph()` cold-start construction measures 11.421s,
+43% over the old 8s ceiling, entirely before `graph.get_state()` ever runs (93ms cold, ms-level warm). Not
+a hang; not the boto3/botocore layer mismatch; not a `DynamoDBSaver` stall — all three ruled out with
+direct evidence in this session. `make verify-lambda-execution`: 9/9 events passed at the 60s timeout.
+**60s stays as the value, not diagnostic scaffolding** — reverting toward 8 would silently reproduce
+`D83`'s exact failure on every cold start, so per Marco it does not happen without a landed `ADR-009`
+mitigation first (`variables.tf`'s `lambda_timeout_seconds` corrected accordingly). Promoted to `RESULTS.md`
+§11.5 as a **measured constraint-14 violation** (11.4s cold-start construction alone is ~6.3x the entire
+1,800ms p95 budget, before any Bedrock call) with the `C1` interaction made explicit **and checked against
+`_dispatch`'s actual code, not assumed from the intent's name**: L1-lexicon-matched injury disclosures
+bypass `_get_graph()` entirely by design and were never exposed to this timeout, at any point in `D83`'s
+history — the real exposure is narrower, the `D79` checkpointer-carryover path plus injury language
+outside the L1 lexicon, both of which need `_get_graph()` first and would hit `Sandbox.Timedout` there on
+a cold container at the old 8s ceiling. §11.5 has the full, corrected account (first written broader, then
+tightened against the code before this line was sent — `REVIEW-CRITERIA.md` §1.2 caught its own first
+draft). Still, for that narrower set, the pre-`D83` gate failures were **the safety path failing on cold
+start**, not only a tooling defect — surfacing to the caller as an ordinary Lex fallback per §11.4's
+mechanism, extended here by inference from `D80`'s exception case rather than re-measured for the timeout
+case. **`C1` status unchanged in kind — still UNVERIFIED, no criterion 9 run yet, per Marco explicitly
+holding that until this write-up lands — but now carries a known, measured cold-start exposure against
+it rather than an unexplained gate failure.**)
 
 `docs/phase8/BUILD-PLAN.md`. Six stages: state backend + guardrail-state migration; the protected
 telephony stack with its `Protected=true` import guard; **`ADR-007`'s mandatory `AWS::Lex::Bot` POC gate**
@@ -3535,3 +3557,80 @@ September. **A $0.00 reading and an absent line item look identical in a grouped
 
 The Cost Explorer API itself bills **$0.01/request** — trivial, but it inverts the assumption that looking
 at spend is free, and is recorded in `CLAUDE.md` so nobody writes a poller.
+
+### D83 — diagnosed: not a hang. Cold-start `_get_graph()` construction takes ~11.4s, which is why 8s timed out
+
+**Pre-apply check, per Marco's explicit demand.** Before `terraform apply "d83.tfplan"`, re-verified the
+`aws_s3_object.codehook_deps_layer` "cosmetic etag normalization, same content" claim independently rather
+than accepting it: `md5 .terraform-build/lex-codehook-deps.zip` → `73deb4753ca856a7cc60270092e4be96`,
+identical to the S3 key's own content-addressed hash and to the plan's desired `after.etag`. `terraform
+show -json` confirmed exactly one field differing on that resource — `etag`
+(`ce01dfbd51734440760daaf4200588f5-9` → `73deb4753ca856a7cc60270092e4be96`) — every other attribute
+(`key`, `source`, `content_type`, `tags_all`) identical. The `-9` suffix is S3's multipart-upload ETag
+format (hash-of-part-hashes), which never equals a whole-file MD5 for a 41.8 MB object regardless of
+content, so the diff was a format artifact, not a content change. Matches the account already on record
+above (§ "Self-inflicted finding, caught before it shipped" / "`Same content` verified, not asserted").
+The `.pyc`-contamination catch is likewise already logged there as the first build-artifact defect this
+session caught pre-apply rather than post-deploy — not repeated here.
+
+**Applied.** `terraform apply "d83.tfplan"` → `Apply complete! Resources: 0 added, 2 changed, 0 destroyed`,
+matching the reviewed plan exactly: `aws_s3_object.codehook_deps_layer` (etag corrected) and
+`aws_lambda_function.codehook` (`timeout: 8 → 60`, `source_code_hash` → `576zXSFJPSoxQ/yF/0IATa5NcTqigDCRHfJxv88mG8s=`
+carrying the D83 diagnostic logging). Read back independently per the `D77` lesson rather than trusting
+apply's own report: `get-function-configuration` shows `Timeout: 60`, matching `CodeSha256`,
+`LastUpdateStatus: Successful`.
+
+**`make verify-lambda-execution`: 9/9 events passed** — every event that previously risked
+`Sandbox.Timedout` at 8.00s now completes. Full gate output:
+
+```
+=== verify-lambda-execution: fnol-codehook, 9 events ===
+  ok   FileAutoClaim first turn
+  ok   CheckClaimStatus first turn
+  ok   CoverageQuestion first turn
+  ok   RentalTowingEntitlement first turn
+  ok   UpdateContactInfo first turn
+  ok   FallbackIntent (unclassifiable turn)
+  ok   Raw-text L1 trigger (pre-graph, injury)
+  ok   Raw-text L3 trigger (pre-graph, agent override, D74)
+  ok   injuries_present confirmed True, no injury vocabulary (D79)
+=== verify-lambda-execution passed: 9/9 events ===
+```
+
+**The diagnosis, localized by the `D83` diag log lines themselves (`_get_graph()` vs. `graph.get_state()`
+timed separately, per invocation, via CloudWatch):**
+
+| Invocation | `_get_graph()` | `graph.get_state()` |
+|---|---|---|
+| 1st (cold) | **11.421s** | 0.093s |
+| 2nd–9th (warm, `_GRAPH` cached per `ADR-009`) | 0.000s | 0.004s–0.016s |
+
+**It was never a hang.** `_get_graph()` — the eager import chain (`langgraph`, `boto3`, `pydantic`) plus
+`DynamoDBSaver` construction — genuinely takes **11.4s on a cold start**, longer than the old 8s timeout,
+so `Sandbox.Timedout` fired mid-construction with zero log output (this instrumentation did not exist
+yet). `graph.get_state()` — the actual checkpointer read that was the original suspect (`DynamoDBSaver
+.get_tuple()`, matching the Linux-container repro that completed in 0.33s) — is fast on cold start (93ms)
+and near-instant warm (single-digit ms). **Ruled out:** the boto3==1.43.69/botocore==1.43.71 layer
+mismatch, an infinite retry loop, and any stall inside `DynamoDBSaver` itself — all three hypotheses this
+session tested and none of them is where the time goes. The time is construction cost, not a defect.
+
+**This changes what "revert to 8 once diagnosed" means, and needs Marco's call before it happens.**
+`variables.tf`'s own comment says the steady-state timeout is 8s and instructs reverting to it now that
+D83 is diagnosed — but reverting to 8s would **reproduce the exact original failure on every cold start**,
+because cold-start construction alone measures 11.4s, 43% over an 8s ceiling. The 8s figure predates this
+measurement and was derived from constraint 14's 1,800ms p95 budget applied on top of Lex's own 30s
+codehook timeout, not from any measured construction cost. **Not reverting to 8s without direction — that
+would silently reintroduce D83 under a different name.**
+
+**Separately, and worse: 11.4s of cold-start construction alone is ~6.3× constraint 14's entire 1,800ms
+p95 turn-latency budget**, before a single Bedrock call. `ADR-009` already places the mitigation order
+(smaller package → SnapStart → scheduled warmer → provisioned concurrency, cost-gated) in Phase 9 pending
+exactly this kind of measurement — this is that measurement, landing early via `D83`'s diagnostic path
+rather than Phase 9's planned one. Recorded here as a live number for `ADR-009` to consume, not acted on:
+no timeout or warmer change made beyond what Marco already approved (the 60s diagnostic raise).
+
+Open, for Marco: (1) what the steady-state timeout should be now that 8s is known to be under the
+measured cold-start floor — options include a value above 11.4s with margin, or addressing the underlying
+cold-start cost first per `ADR-009`'s order; (2) whether to remove the `D83` diagnostic logging now that
+it has done its job, or keep it as permanent instrumentation given it just supplied a real `ADR-009`
+number for free.
