@@ -241,6 +241,13 @@ Deliberate properties:
 > regression, while still catching a synthetic regression injected on top of the same real reading) and
 > that a future PR which does wire in a live Tier B measurement gets this comparison, not `compare()`'s
 > flat tolerance, for free.
+>
+> **This limitation is not only noted here.** The CI step itself prints an explicit scope banner
+> (`scripts/demonstrate_cf6_gate.py`) and its own name in `fnol-eval-gate.yml` says outright that it does
+> not gate a PR's own Tier B numbers — a reader should not need this document open to see the scope of a
+> green check. What it would take to close the gap (credentials, per-PR cost, whether it is even wanted)
+> is tracked as `CF7` (`PROJECT_STATE.md`), named and findable rather than left as a one-time build-time
+> note.
 
 ### Anti-gaming notes
 

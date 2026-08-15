@@ -622,7 +622,8 @@ cannot be both."*
 | CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure | Phase 6 | Marco, 2026-08-11 |
 | CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's**. **DISCHARGED 2026-08-14, Phase 10, before `CF6` per the sequencing change — resolved, not re-assigned.** `tests/integration/` and the lifecycle-phased tree `CLAUDE.md`'s monorepo convention names (`pre_provision`/`post_provision`/`post_run`/`post_teardown`) were never built; only `tests/unit/` exists. This item's own target — "the integration suite" — never came into being, in Phase 9 or since: the same never-checked-artifact shape the sequencing change existed to catch. The real integration-style work lives instead in `scripts/verify_*.py`/`scripts/measure_*.py` (cost-gated, real-AWS, outside `tests/` entirely). Every one of the 11 such scripts referencing `mock_aws`/`BotoBedrockConverseClient`/`BedrockEmbedder` was inspected directly: each real-call script carries the `ADR-013` boundary comment `TESTING-CONVENTIONS.md` §1 requires, and the one script that opens a real `mock_aws()` scope (`measure_cf5_redundancy.py`) closes it before constructing the real client — the documented safe shape, not merely the documented rule. `tests/unit/test_mock_guard.py` is the only unit test touching the guarded clients, and it is the guard's own test. `ADR-013` §Consequences already asserted *"this is `CF4`'s discharge mechanism"* (Phase 6, 2026-08-12) — that claim is checked against the actual file tree here, per `REVIEW-CRITERIA.md` §1 item 2, rather than taken on the ADR's word, and it holds | Phase 9 (rule authored Phase 6) → **discharged Phase 10, 2026-08-14** | Marco, 2026-08-12 |
 | CF5 | **Updated 2026-08-12 (`D32`): the intermittency was most likely a temperature symptom, not only a prompt weakness.** The generation path was sampling at 0.7 the whole time, and a defect that appears on some runs from an unchanged prompt is what a sampled decoder produces — so **the Phase 4 prompt fix may look better than it did**, and the detector's tuning pass must be re-judged at 0.0 before the prompt is blamed further. This is a mechanism, not a measurement: this phase has withdrawn three causal stories, so it is written as the leading explanation with the measurement still owed. Original entry: `RentalTowingEntitlement`'s redundancy-by-restatement is a **known failing case with real evidence**, not a hypothetical — the Phase 4 prompt fix is probabilistic, and Stage 8's second real trial reproduced the defect. Phase 6's detector must catch **that specific output** and must be red on real output today; Phase 7 is where tuning gets its pass at it | Phase 7 (detector built Phase 6) | Marco, 2026-08-12 |
-| CF6 | **The regression gate needs a re-baseline discipline, not just a tolerance.** Three properties the Phase 10 CI gate must have, all consequences of `D29`/`D31`: **(a)** every committed baseline records the **date, model ID, temperature and k** it was produced at, and the gate **fails on a baseline older than a stated max age** rather than silently comparing against it; **(b)** the gate distinguishes *"this PR regressed the system"* from *"the model moved"* by re-running the **unchanged** baseline configuration in the same CI job and comparing PR-vs-baseline **within that run**, not PR-vs-committed-number — a same-run control, which is the only construction that survives serving-side drift; **(c)** any tolerance on a model-dependent metric is expressed in **measured standard deviations of that metric at k≥5**, not in fixed percentage points, and no such tolerance may be set for a metric whose sd has never been measured. `SUCCESS-METRICS.md` §9's flat 3-point rule stays in force for deterministic metrics, where it is sound | Phase 10 | Marco, 2026-08-12; `D29`, `D31`, `RESULTS.md` §3.3 |
+| CF6 | **The regression gate needs a re-baseline discipline, not just a tolerance.** Three properties the Phase 10 CI gate must have, all consequences of `D29`/`D31`: **(a)** every committed baseline records the **date, model ID, temperature and k** it was produced at, and the gate **fails on a baseline older than a stated max age** rather than silently comparing against it; **(b)** the gate distinguishes *"this PR regressed the system"* from *"the model moved"* by re-running the **unchanged** baseline configuration in the same CI job and comparing PR-vs-baseline **within that run**, not PR-vs-committed-number — a same-run control, which is the only construction that survives serving-side drift; **(c)** any tolerance on a model-dependent metric is expressed in **measured standard deviations of that metric at k≥5**, not in fixed percentage points, and no such tolerance may be set for a metric whose sd has never been measured. `SUCCESS-METRICS.md` §9's flat 3-point rule stays in force for deterministic metrics, where it is sound. **DISCHARGED 2026-08-14, Phase 10 criterion 1.** (a) built Phase 7 Stage 8; (b)/(c) built (`evals/regression.py::same_run_compare`/`sd_tolerance`/`load_measured_sd`), unit-tested (11 tests), and demonstrated against real committed data (`scripts/demonstrate_cf6_gate.py`, reproduces the actual `D29` gap and shows same-run control reads it as drift, not a regression, while still catching a labelled synthetic regression) — wired into `fnol-eval-gate.yml` as a $0 mechanism self-check on every PR. **Caveat, not a shortfall of this item:** the mechanism is proven correct; it is not yet exercised against a *live* Tier B measurement of any given PR's own code, because that needs AWS credentials this workflow deliberately does not carry (cost/flakiness, stated in the workflow's own header). That gap is real and is tracked separately as `CF7`, not folded into this discharge | Phase 10 | Marco, 2026-08-12; `D29`, `D31`, `RESULTS.md` §3.3 |
+| CF7 | **Named, findable, not solved:** wiring a *live* Tier B measurement of a PR's own code into `same_run_compare` (`CF6`(b)/(c)'s mechanism, proven correct against historical data but never yet run against a PR's own output). Filed 2026-08-14 because Marco named the risk of a limitation "noted once at build time" going stale and unfindable — this row is the fix for that, not a plan to build it. Three questions to answer before it is ever attempted, none pre-answered here: **(1) credentials** — the minimum shape is an OIDC-federated IAM role (no long-lived keys) scoped to `bedrock:InvokeModel`/`Converse` on only the specific application inference profile ARN(s) in `infra/terraform/stacks/inference` (`ADR-016`), nothing else; **(2) cost per PR** — the only real measurement on record is Stage 0.5's 780-call run (2 settings × 5 runs × 78-turn corpus, `us.amazon.nova-micro-v1:0`) at ≈$0.047 total (`COSTS.md`, 2026-08-12), ≈$0.00006/call; a single control+candidate same-run pass (2 × 78 calls) on the router alone would be **≈$0.01/PR** — cheap in isolation, unmeasured for a generation-tier metric (Nova Lite, `CoverageQuestion`/`RentalTowingEntitlement`), which would cost more per call; **(3) whether it is even wanted** — this is not only a dollar question: `fnol-eval-gate.yml`'s own header already rejected gating on Tier B for *flakiness* as well as cost, and giving a monorepo-shared CI workflow any Bedrock-invoke credential raises a blast-radius question this project's own scope discipline would need to answer (GitHub Actions does not expose secrets to `pull_request`-triggered runs from forks by default; doing this safely, if done at all, is a bigger design question than the per-PR dollar figure suggests) | **None — deliberately unscheduled.** Findable via this row, not implicitly promised to any phase | Marco, 2026-08-14 |
 
 ### Proposed, pending Phase 2 ADR
 
@@ -5395,3 +5396,101 @@ Last apply + gate result: none — no apply, no deploy, no billable resource, $0
 **Not done:** criterion 3 (monorepo-root copy) untouched, per standing instruction — will be brought as its
 own go/no-go when ready. Criteria 5 and 6 are close-out items, correctly left for Phase 10's own close.
 Rank 3 (Tier 2 real call) untouched. Cost this session: $0.
+
+---
+
+## Session log — 2026-08-14 (continued; the no-credentials scope made visible in the workflow's own
+output; `CF7` filed; criterion 3 go/no-go findings gathered, brought to Marco, not yet decided)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+### Item 1 — scope made unmistakable without opening a doc
+
+`scripts/demonstrate_cf6_gate.py` now prints an explicit `SCOPE OF THIS CHECK` banner at the top of its
+output and a one-line reminder before its final verdict: green means the comparison math is correct against
+real drift and a synthetic regression, **not** that this PR's own Tier B numbers were measured. The
+workflow step's own name in `fnol-eval-gate.yml` was rewritten to say the same thing directly in the GitHub
+Actions UI (`"CF6(b)/(c) mechanism self-check (offline, $0 — does NOT gate this PR's own Tier B numbers)"`)
+— visible in the collapsed step list of a passing run, not only in expanded logs or a doc. Ran the script
+live after the change; output confirmed below the fold, `PASS`, exit 0.
+
+### Item 2 — `CF7` filed
+
+Added to the `Carried forward` table: wiring a **live** Tier B measurement into `same_run_compare` (proven
+correct against historical data, never yet run against a PR's own code). Deliberately unscheduled — no
+owner phase — findable via the row rather than promised to a phase that would then have to explain not
+doing it. Three questions named, none answered: **credentials** (OIDC-federated IAM role scoped to
+`bedrock:InvokeModel`/`Converse` on only the `ADR-016` application inference profile ARNs, nothing else),
+**cost per PR** (real number: Stage 0.5's 780-call measurement, `COSTS.md` 2026-08-12, ≈$0.047 total ≈
+$0.00006/call → a router-only same-run pass, 156 calls, ≈$0.01/PR; unmeasured for a generation-tier
+metric), and **whether it's wanted at all** (`fnol-eval-gate.yml`'s own header already rejected Tier B
+gating for flakiness as well as cost, and any Bedrock-invoke credential on a monorepo-shared CI workflow is
+a blast-radius question independent of the dollar figure). `SUCCESS-METRICS.md` §9 addendum cross-links
+`CF7` rather than repeating the build-time note as the only place this lives.
+
+`CF6` itself marked **DISCHARGED** in the same edit — Phase 10 criterion 1 covers exactly what `CF6` asked
+for, and `CF7` is named as a distinct, larger ask (live wiring) that `CF6`'s own text does not require read
+literally as "the mechanism must exist," which is what was built.
+
+### Criterion 3 — go/no-go findings, brought for decision, nothing copied yet
+
+Investigated the monorepo root directly rather than describing the copy in the abstract:
+
+**What exactly gets copied:** one file, `.github/workflows-for-monorepo-root/fnol-eval-gate.yml` (6 steps:
+checkout, setup-python, install, unit tests, Tier A eval gate + `CF6`(a), baseline freshness, the new
+`CF6`(b)/(c) mechanism self-check, recording-disabled check) → `/Users/marco/K21/Real-world/.github/
+workflows/fnol-eval-gate.yml`. **Naming decision needed before copying:** every sibling workflow at the
+monorepo root is named `<full-project-slug>-<purpose>.yml` (e.g.
+`aws-bedrock-agentic-finetuning-platform-ci.yml`); this file is named `fnol-eval-gate.yml` — the short form,
+not `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`. Not universally enforced already
+(`guardian-ai-deploy.yml` doesn't fully match either), but worth Marco's explicit choice rather than a
+silent copy-as-is.
+
+**What runs when it lands:** nothing until the file is committed **and pushed** — a local copy alone does
+nothing. Once pushed to `main`, GitHub Actions activates it for future PRs/pushes touching
+`AWS-Insurance-FNOL-Voice-Agentic-AI/**`, per its own `paths:` scoping; other sibling projects' PRs never
+trigger it. Confirmed live-checked, not asserted: `main` on `MAOFILHO/Portfolio-Projects` has **no branch
+protection** (`gh api .../branches/main/protection` → 404, "Branch not protected"). **This means the
+workflow will run and report a status, but will not block a merge on a red result** until Marco separately
+adds `eval-gate` as a required status check in the repo's GitHub settings — a manual, non-Terraform step in
+the same family as the other items in `MANUAL-STEPS.md`, not something to add silently as a side effect of
+this copy.
+
+**What it costs per PR:** **$0**, confirmed two ways. No AWS credentials anywhere in the file — every step
+is pytest, pure Python, or JSON reads. And `MAOFILHO/Portfolio-Projects` is a **public** repository (`gh
+repo view` → `"isPrivate":false`), so GitHub Actions minutes are unmetered regardless of run count.
+
+**What it would do on its first run against the current repo state:** ran every step for real, not
+asserted. `pytest tests/unit -q` → 639 passed. `evals.report --check-regression` → all Tier A gates pass,
+no regression against the committed baseline. `demonstrate_cf6_gate` → `PASS`. `pytest tests/unit -q -k
+recording` → 4 passed, for real, without needing its fallback. **First run today would be green,
+end-to-end.**
+
+**Two things surfaced during this review, unrelated to `CF6`, flagged rather than fixed silently:**
+
+1. The last step, `python -m pytest tests/unit -q -k recording || true`, has carried `|| true` since the
+   file's first commit (`4724fbf`, Phase 6) with no comment explaining why. It passes for real today, but
+   the `|| true` means it would **still show green if it ever failed** — constraint 18 (recording stays
+   off) is one of the more serious standing constraints in `CLAUDE.md`, and a check that cannot go red is
+   not a check on it. Recommend removing `|| true` before or immediately after landing; not fixed here
+   because it changes gate behaviour on a file this session is not the one deciding to copy yet.
+2. Public-repo, no-secrets confirmed: this workflow needs no first-time-contributor-approval consideration
+   (GitHub's default fork-PR protection is about secret exposure; there are none here) — checked, not a
+   concern, named so it isn't silently unconsidered.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — OPEN. Criteria 1, 2, 4 done. Criterion 3 findings gathered, decision pending. 5, 6 outstanding.
+Open defects: none new from items 1/2. Criterion 3 review surfaced one pre-existing, unrelated finding (the `|| true` on the recording-check step) — not filed as a D-number yet, named here pending Marco's read.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: criterion 3's own go/no-go decision (this entry) before any copy. Criteria 5/6 remain close-out items.
+Last apply + gate result: none — no apply, no deploy, no billable resource, no push to the monorepo-root path, $0 spend.
+```
+
+**Not done:** nothing copied to `/Users/marco/K21/Real-world/.github/workflows/` — findings gathered, not
+acted on, per the full-review tier. Cost this session: $0.

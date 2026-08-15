@@ -45,6 +45,22 @@ from evals.schema import load_golden_set
 
 TIER_B_BASELINE_PATH = TEMP_VARIANCE_PATH.parent / "tier_b_20260812.json"
 
+SCOPE_BANNER = """\
+================================================================================================
+SCOPE OF THIS CHECK -- read this before trusting a green run (CF7, PROJECT_STATE.md)
+================================================================================================
+This step gates the SAME-RUN-CONTROL MECHANISM (CF6(b)/(c)), not a live Tier B metric of THIS
+PR's code. Every number below comes from committed historical data or a labelled synthetic
+injection -- nothing here classifies this PR's own router output, because that would require
+Bedrock credentials this workflow does not carry (cost gate; see fnol-eval-gate.yml header).
+
+  GREEN means: "the comparison math is still correct against real historical drift and a
+                synthetic regression."
+  GREEN does NOT mean: "this PR's intent classifier still scores >= baseline."
+  Nothing in this CI job currently checks the second claim. CF7 names what closing that gap
+  would take (credentials, per-PR cost, whether it's even wanted) and is not yet resolved.
+================================================================================================"""
+
 
 def _print_regressions(label: str, regressions: list[Regression]) -> None:
     if not regressions:
@@ -57,6 +73,8 @@ def _print_regressions(label: str, regressions: list[Regression]) -> None:
 
 
 def main() -> int:
+    print(SCOPE_BANNER)
+    print()
     print("=" * 96)
     print(
         "CF6(b)/(c) DEMONSTRATION -- same-run control vs. a stale committed baseline, real project data"
@@ -125,6 +143,10 @@ def main() -> int:
 
     ok = false_alarm_avoided and gate_has_teeth
     print(f"\n5. Overall: {'PASS' if ok else 'FAIL'}")
+    print(
+        "\n   Reminder: PASS above means the mechanism is correct, not that this PR's own Tier B "
+        "numbers were checked -- see the SCOPE banner at the top of this output, or CF7."
+    )
     return 0 if ok else 1
 
 

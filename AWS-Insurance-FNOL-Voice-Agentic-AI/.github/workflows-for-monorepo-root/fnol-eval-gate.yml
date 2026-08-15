@@ -79,11 +79,14 @@ jobs:
           print("Baseline freshness OK.")
           PY
 
-      - name: CF6(b)/(c) same-run control — real committed data, $0, no AWS
+      - name: "CF6(b)/(c) mechanism self-check (offline, $0 — does NOT gate this PR's own Tier B numbers)"
         # Offline self-check: replays evals/baselines/temperature_variance_20260812.json and
         # tier_b_20260812.json (both already committed) through same_run_compare(). Protects the
         # mechanism itself from silently breaking, the same role ADR-013's moto canary plays for the
         # mock guard — this has never had a live Tier B PR to gate, so nothing else would catch it.
+        # The step name is deliberately explicit about scope: a green check here is easy to misread as
+        # "this PR's own intent classifier was measured" when it was not. CF7 (PROJECT_STATE.md) names
+        # what closing that gap would take.
         run: python -m scripts.demonstrate_cf6_gate
 
       - name: Recording must be disabled in every contact flow (constraint 18)
