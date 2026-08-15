@@ -226,6 +226,21 @@ Deliberate properties:
 > Recorded here rather than only in `PROJECT_STATE.md` because this is the document the gate is built
 > from, and a constraint discovered after the spec was written is worth exactly nothing if it lives
 > somewhere the implementer will not look.
+>
+> **Implemented 2026-08-14, Phase 10, `evals/regression.py`.** `CF6`(a) (provenance + max-age) was built
+> ahead of schedule at Phase 7 Stage 8 and is exercised on every gate run via `load_baseline()`. `CF6`(b)
+> (`same_run_compare`) and `CF6`(c) (`sd_tolerance`, backed by `load_measured_sd`'s read of the real,
+> committed `temperature_variance_20260812.json`) are built and unit-tested
+> (`tests/unit/test_cf6_gate.py`), and demonstrated against real committed data by
+> `scripts/demonstrate_cf6_gate.py`, wired into `fnol-eval-gate.yml` as a $0 offline step run on every PR.
+> **Not yet true of this repository:** no Tier B metric is actually gated on a live PR run — that still
+> requires AWS credentials in CI, which this workflow deliberately does not carry, for the same cost/
+> flakiness reason stated at the top of this section. What is proven is that the mechanism is correct
+> against real data (it reproduces the exact drift measured above — a real ~0.105 macro-F1 gap between
+> the committed Tier B baseline and every deterministic re-run since — and reads it as drift, not a
+> regression, while still catching a synthetic regression injected on top of the same real reading) and
+> that a future PR which does wire in a live Tier B measurement gets this comparison, not `compare()`'s
+> flat tolerance, for free.
 
 ### Anti-gaming notes
 

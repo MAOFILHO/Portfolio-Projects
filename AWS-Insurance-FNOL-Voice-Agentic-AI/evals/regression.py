@@ -23,6 +23,15 @@ from typing import Any
 
 BASELINE_PATH = Path(__file__).resolve().parent / "baselines" / "tier_a_baseline.json"
 
+# `CF6`(c)'s source of measured variance for model-dependent metrics — five real Bedrock router calls
+# against the identical golden corpus, committed at Stage 0.5 (`D27`). Not re-measured per gate run:
+# spending money on every PR to re-derive a variance figure that changes only when the corpus or the
+# router prompt changes would be the same mistake as gating a PR on Tier B directly (rejected in
+# `fnol-eval-gate.yml`'s own header comment, for cost and flakiness).
+TEMP_VARIANCE_PATH = (
+    Path(__file__).resolve().parent / "baselines" / "temperature_variance_20260812.json"
+)
+
 # Degradation allowance for TARGETs, in absolute rate points. GATEs have no allowance at all.
 TARGET_TOLERANCE = 0.03
 
@@ -158,3 +167,137 @@ def baseline_is_stale(changed_paths: list[str], baseline_changed: bool) -> str |
         f"longer describes the system it claims to. Re-run `make eval` and commit the new baseline, "
         f"or say in the PR why the numbers cannot have moved."
     )
+
+
+# --- `CF6`(b)/(c): same-run control and sd-based tolerance, for model-dependent metrics ---------------
+#
+# `compare()` above answers "did this PR change vs. the number we committed." For a deterministic Tier A
+# metric that is the right question. For a model-dependent one it is the wrong question whenever the
+# serving side can move between the day the baseline was committed and the day the PR runs — and `D29`
+# shows this is not hypothetical: the intent router's macro-F1 moved from a committed 0.62325
+# (`evals/baselines/tier_b_20260812.json`) to 0.517875 on every deterministic re-run since
+# (`evals/baselines/temperature_variance_20260812.json`, the `zero` setting), with the code and corpus
+# byte-identical both times. A flat-tolerance comparison against the committed number reads that ~0.105
+# gap as a regression. It is drift, not a regression, and `compare()` would have blocked a clean PR on it.
+#
+# `CF6`(b)'s answer: never compare the PR's run against the *committed* number for a model-dependent
+# metric. Compare it against a *control* — the unchanged baseline configuration, re-measured in the same
+# job, the same session, under whatever the serving side is doing today. Both readings share the same
+# drift, so drift cancels out of the comparison instead of masquerading as a finding.
+
+
+@dataclass(frozen=True)
+class ModelDependentMetricSpec:
+    key: str
+    label: str
+    higher_is_better: bool
+
+
+# The only metrics this project has a real, measured, repeated-run variance figure for
+# (`temperature_variance_20260812.json`). `CF6`(c) forbids setting a tolerance for a metric whose sd has
+# never been measured, so this list is deliberately not "every Tier B metric" — it is exactly the ones
+# `load_measured_sd` can back with a number instead of a guess. `safety_flag_rate` is measured in the same
+# file but is excluded here: it is a rate of raising a flag, not a quality score, and has no
+# higher-is-better/lower-is-better direction to compare against (`D27`).
+MODEL_DEPENDENT_COMPARED: tuple[ModelDependentMetricSpec, ...] = (
+    ModelDependentMetricSpec("macro_f1", "Intent macro-F1 (router)", True),
+    ModelDependentMetricSpec("accuracy", "Intent accuracy (router)", True),
+    ModelDependentMetricSpec("oos_recall", "Out-of-scope recall (router)", True),
+)
+
+
+def load_measured_sd(
+    metric_key: str,
+    *,
+    settings_key: str = "default_unset",
+    path: Path = TEMP_VARIANCE_PATH,
+) -> float:
+    """The real, committed, repeated-run standard deviation for one Tier B metric.
+
+    `settings_key="default_unset"` is the pre-`D27` reading (no `temperature` sent, Nova's own default),
+    kept as the operative figure deliberately rather than switching to the post-`D27` `"zero"` group's
+    0.0: intra-session sampling variance at temperature 0.0 is genuinely zero, but `D29`'s cross-session
+    gap shows the metric still moves for reasons this project cannot see from the client, and a tolerance
+    built from the wrong kind of "stable" would be exactly the false confidence `CF6` exists to remove.
+    `default_unset`'s spread is the largest real figure on record for this metric and is used as the
+    conservative bound until a cross-session variance figure exists to replace it.
+    """
+    data = json.loads(path.read_text())
+    metrics = data["settings"][settings_key]["metrics"]
+    if metric_key not in metrics:
+        raise KeyError(
+            f"No measured sd for {metric_key!r} in {path} [{settings_key}]. `CF6`(c) forbids a "
+            f"tolerance for a metric whose sd has never been measured — measure it before comparing it."
+        )
+    return float(metrics[metric_key]["stdev"])
+
+
+def sd_tolerance(measured_sd: float, corpus_size: int, k: float = 2.0) -> float:
+    """`CF6`(c): a model-dependent metric's tolerance, in measured standard deviations — not fixed
+    percentage points.
+
+    `k=2.0` matches `ADR-014` §4's original "≥ 2 sd" bar. `D35` found that bar undefined the moment the
+    router was pinned to temperature 0.0 (`D27`): intra-session sd becomes exactly 0.0, so "2 sd" admits
+    no tolerance at all — not because the metric became infinitely stable, but because five identical
+    runs producing byte-identical output is a property of a fixed corpus and a pinned decoder, not a
+    property that generalises to "nothing can ever move." `D35`'s fallback, applied ad hoc at the time and
+    formalised here: where the measured sd is 0.0, the tolerance is the change **one item moving**
+    produces, `1 / corpus_size` — the gate is not made more sensitive than the corpus it is scored against
+    can resolve.
+    """
+    if measured_sd > 0.0:
+        return k * measured_sd
+    if corpus_size <= 0:
+        raise ValueError("corpus_size must be positive to apply the D35 zero-sd fallback")
+    return 1.0 / corpus_size
+
+
+def same_run_compare(
+    control: dict[str, Any],
+    candidate: dict[str, Any],
+    specs: tuple[ModelDependentMetricSpec, ...] = MODEL_DEPENDENT_COMPARED,
+    *,
+    corpus_size: int,
+    k: float = 2.0,
+    sd_loader: Any = load_measured_sd,
+) -> list[Regression]:
+    """`CF6`(b): compares `candidate` against `control` — both measured in the same job/session — rather
+    than against a committed baseline that may be stale relative to today's serving behaviour.
+
+    `control` and `candidate` are flat dicts keyed by the same metric names as `MODEL_DEPENDENT_COMPARED`
+    (e.g. `{"macro_f1": 0.51, "accuracy": 0.52, ...}`), not the nested `l1_golden.recall`-style paths
+    `compare()` reads — Tier B's report shape is flatter than Tier A's. A metric absent from `control` is
+    skipped (nothing to compare against yet); one that disappears from `candidate` is a breach, same rule
+    as `compare()` and for the same reason.
+    """
+    regressions: list[Regression] = []
+    for spec in specs:
+        before = control.get(spec.key)
+        if before is None:
+            continue
+        after = candidate.get(spec.key)
+        if after is None:
+            regressions.append(
+                Regression(
+                    spec.label,
+                    before,
+                    None,
+                    "metric disappeared from the current run — deleting a metric is the cheapest way "
+                    "to make a gate green, so it counts as a breach rather than a pass",
+                )
+            )
+            continue
+        sd = sd_loader(spec.key)
+        tolerance = sd_tolerance(sd, corpus_size, k)
+        delta = (after - before) if spec.higher_is_better else (before - after)
+        if delta < -tolerance:
+            regressions.append(
+                Regression(
+                    spec.label,
+                    before,
+                    after,
+                    f"degraded by {abs(delta):.4f} vs. the same-run control; sd-based tolerance is "
+                    f"{tolerance:.4f} (measured sd {sd:.4f}, k={k}, corpus {corpus_size})",
+                )
+            )
+    return regressions

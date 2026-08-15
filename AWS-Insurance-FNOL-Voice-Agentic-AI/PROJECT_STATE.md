@@ -33,7 +33,7 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
 | 8 | Integration and telephony | ✅ Closed 2026-08-14 — Stage 4 closed same day; `C1` VERIFIED (warm path, build `u9iIy...`, 1.000/26/26); cold-start coverage remains an existence proof (1/19), not a measurement |
 | 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing, 19ms floor; open item `H` re-opens on five named triggers |
-| 10 | CI/CD and progressive delivery | 🟡 **OPEN** 2026-08-14 — scope (ranks 1+2) and exit criteria written verbatim in this file, session log; `CF4` (criterion 4) already discharged same session; criteria 1/2/3/5/6 outstanding |
+| 10 | CI/CD and progressive delivery | 🟡 **OPEN** 2026-08-14 — criteria 1 (`CF6`(a)/(b)/(c) built, tested, demonstrated), 2 (gate re-demonstrated) and 4 (`CF4`, discharged) done same day; criteria 3 (monorepo copy, its own go/no-go), 5 (carry Phase 9 items unchanged) and 6 (`D85` close-out enumeration) outstanding |
 | 11 | Observability and operations | ⬜ Not started |
 | 12 | Documentation and demo | ⬜ Not started |
 | 13 | Continuous improvement design | ⬜ Not started |
@@ -5283,3 +5283,115 @@ Last apply + gate result: none this entry — no apply, no redeploy, no billable
 **Not done:** criteria 1, 2, 3, 5, 6 not started — criterion 1 (`CF6`'s three gate properties in the
 workflow) is next. Rank 2's workflow copy and rank 3 remain untouched, per standing instruction. Cost this
 session: $0.
+
+---
+
+## Session log — 2026-08-14 (continued; §4 correction accepted — `CF6` build is approve-and-go, not full
+review; criteria 1 and 2 built, tested and demonstrated same entry; `D86` filed — lifecycle-directory
+convention corrected in `CLAUDE.md`)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Marco's correction, accepted:** `CF6`'s gate work is a reversible code/workflow change with no deploy and
+no `C1` interaction — `REVIEW-CRITERIA.md` §4's full-review trigger is *producing a number that enters
+`RESULTS.md` as a result*, not "adjacent to `RESULTS.md`." I misapplied the tier last entry. Built to
+completion this entry, approve-and-go, reported once with the outcome.
+
+### Criterion 1 — `CF6`'s three properties, built and demonstrated against real committed baselines
+
+**`CF6`(a)** (dated provenance + max-age fail) was already built, ahead of schedule, at Phase 7 Stage 8
+(`evals/regression.py::load_baseline`, commit `903461f`) — confirmed still live and exercised on every gate
+run (`Evaluation gate` step calls it via `evals.report --check-regression`).
+
+**`CF6`(b)** (same-run PR-vs-baseline control) and **`CF6`(c)** (sd-based tolerance) built new this entry —
+`evals/regression.py`: `ModelDependentMetricSpec`, `load_measured_sd`, `sd_tolerance`, `same_run_compare`.
+Two design points worth recording because they were not obvious going in:
+
+- **The sd used is real, not invented.** `load_measured_sd` reads
+  `evals/baselines/temperature_variance_20260812.json` at call time — `D27`'s own five-real-Bedrock-call
+  measurement (macro-F1 stdev 0.02434 at Nova's unpinned default temperature) — rather than a hardcoded
+  copy, so a change to the committed file changes the tolerance instead of silently diverging from it.
+  `CF6`(c) forbids a tolerance for a metric whose sd was never measured; this is enforced (`KeyError` if
+  asked for a metric absent from that file), not merely documented.
+- **`sd_tolerance`'s zero-sd branch formalises `D35`**, applied ad hoc in Phase 7 and never turned into
+  reusable code: once the router is pinned to temperature 0.0 (`D27`), intra-session sd is exactly 0.0 and
+  a literal "2 sd" tolerance admits nothing at all. `D35`'s fix — tolerance = one item moving, `1 /
+  corpus_size` — is now `sd_tolerance`'s fallback branch, sourced from the real golden-set size
+  (`len(load_golden_set())` = 78), not a copied constant.
+
+**Demonstrated against real committed data**, `scripts/demonstrate_cf6_gate.py` (new, mirrors
+`demonstrate_regression_gate.py`'s structure), $0, no AWS, no mocking needed (`ADR-013` — nothing here
+touches a client the guard would fire on):
+
+1. Reproduces the real `D29` gap with real numbers: committed Tier B baseline macro-F1 **0.62325**
+   (`tier_b_20260812.json`) vs. every deterministic re-run since, **0.51787** (`temperature_variance
+   ...json`, `zero` setting) — code and corpus unchanged, delta **0.10537**.
+2. Shows what `compare()`'s flat 0.03-point tolerance would have done with that delta if it were naively
+   applied to this metric: **blocked a clean PR** — 0.10537 > 0.03. (Not a live call to `compare()`, which
+   never scores this metric — the demonstration replicates its exact arithmetic to show why not; see the
+   script's own step 2 comment.)
+3. Runs the same real 0.51787 reading through `same_run_compare` as both control and candidate (the honest
+   "nothing changed" case): **zero regressions.** Drift and regression correctly told apart, on real data.
+4. Injects a **synthetic** −0.15 regression on top of the same real control (clearly labelled, not
+   presented as measured, matching Stage 8's own convention for its bad change): **caught**, 1 regression,
+   detail names the measured sd, tolerance and corpus size used.
+5. Script asserts both properties and exits non-zero if either fails; ran clean, exit 0, `PASS`.
+
+**Unit-tested**, `tests/unit/test_cf6_gate.py`, 11 new tests (sd-tolerance both branches, the D29-shaped
+same-run pass, the synthetic-regression catch, the never-blocks-an-improvement/disappearing-metric/
+absent-from-control edge cases, the `safety_flag_rate` exclusion). Full suite: **639 passed** (628 prior +
+11), `ruff`/`black`/`mypy --strict` clean on every new file.
+
+**Wired into the workflow**, `.github/workflows-for-monorepo-root/fnol-eval-gate.yml`: new step runs
+`scripts/demonstrate_cf6_gate` on every PR, $0, no credentials — protects the mechanism itself from
+silently breaking, the same role `ADR-013`'s moto canary plays for the mock guard, named as such in the
+step's own comment. **Stated plainly, not overclaimed:** no Tier B metric is actually gated on a live PR
+today — that requires AWS credentials this workflow deliberately does not carry, per its own header
+comment on cost/flakiness. What is proven is that the mechanism is correct against real data and ready the
+day a live Tier B measurement is wired in. `docs/phase1/SUCCESS-METRICS.md` §9 addendum updated with the
+same statement, so the document the gate is built from says what actually exists.
+
+### Criterion 2 — gate re-demonstrated under the new discipline
+
+Re-ran `scripts/demonstrate_regression_gate.py` (unchanged code) against the current `load_baseline()`,
+which now carries `CF6`(a)'s provenance/age check live. **Still blocks**: L1 recall on the labelled safety
+set 1.000 → 0.818 on the same lexicon-removal bad change, 1 gate failure, 1 regression, exit 0 (blocked).
+Confirms the re-baseline discipline does not quietly weaken the original Stage 8 gate — same real bad
+change, same result, now running through the stricter provenance-checked path.
+
+### `D86` — the lifecycle-directory convention was stale, not the repository
+
+Investigated per Marco's instruction, per §2's "resolve rather than carry" framing. `CLAUDE.md`'s
+monorepo-conventions section named `tests/{unit,pre_provision,post_provision,post_run,post_teardown}` as
+this project's layout, copied from the sibling `AWS-Bedrock-Agentic-FineTuning-Platform` in Phase 0. Only
+`tests/unit/` was ever built — and, per `CF4`'s discharge this session, this was not an oversight: the real
+lifecycle-phased verification work has lived in `scripts/verify_*.py` + named `make verify-*` targets
+consistently since Phase 3 (`verify-lambda-execution`, `verify-lex`, `verify-destroy-scope`,
+`verify-inference`, `verify-layer-contents`, and more), never once in a `tests/` subdirectory. **Resolution:
+the convention was stale, corrected in `CLAUDE.md` to say what exists.** Stated reason: this project's
+cost-gate discipline needs a typed `APPROVED: <phase name>` and a `COSTS.md` entry wrapped around a real-AWS
+call, which a pytest fixture does not naturally carry the way a script with its own `main()` and Makefile
+target does — the divergence from the sibling project's layout is a consequence of a real constraint this
+project has that the template it was copied from did not, not a gap. `ADR-013`'s guard already covers
+`scripts/` exactly as it would a `tests/integration/` that was never built (`CF4`), so nothing about the
+divergence weakens the mock-scope protection. Not filed as a ledger gap — the alternative Marco offered —
+because there is no missing work behind it: the four directories were never the plan that got dropped, the
+plan was always scripts, and the file just never said so until now.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — OPEN. Criteria 1, 2, 4 done. Criteria 3, 5, 6 outstanding.
+Open defects: none new. D86 filed and resolved same entry (CLAUDE.md correction, not a carry-forward item).
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged this entry, not touched. Nothing in this entry's scope reaches C1.
+Blocked on: nothing for criteria 1/2/4 (done). Criterion 3 blocked on its own separate go/no-go, per standing instruction. Criteria 5/6 are Phase 10 close-out items, not yet due.
+Last apply + gate result: none — no apply, no deploy, no billable resource, $0 spend. 639/639 unit tests pass; ruff/black/mypy --strict clean on all new/changed files.
+```
+
+**Not done:** criterion 3 (monorepo-root copy) untouched, per standing instruction — will be brought as its
+own go/no-go when ready. Criteria 5 and 6 are close-out items, correctly left for Phase 10's own close.
+Rank 3 (Tier 2 real call) untouched. Cost this session: $0.

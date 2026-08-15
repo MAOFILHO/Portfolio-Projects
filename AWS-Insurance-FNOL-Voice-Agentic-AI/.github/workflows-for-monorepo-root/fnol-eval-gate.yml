@@ -9,6 +9,17 @@
 # Runs Tier A only: no AWS credentials, no model calls, $0.00 per run. Tier B costs money and is
 # stochastic, so gating a PR on it would make the build both expensive and flaky. Tier B's numbers enter
 # CI through the committed baseline instead — which is what the baseline-freshness job protects.
+#
+# CF6(a)/(b)/(c) — baseline provenance+age, same-run control, sd-based tolerance for model-dependent
+# metrics — live in evals/regression.py. (a) is exercised for real every run, inside the "Evaluation
+# gate" step below (load_baseline() refuses a stale/unstamped baseline before comparing against it).
+# (b)/(c) are NOT live-gating a Tier B number here, for the same cost/flakiness reason Tier A is the only
+# thing this job scores — but the mechanism itself is exercised every run by the step below, against real
+# committed data, at $0: it reproduces the exact D29 drift (a real ~0.105 macro-F1 gap between a committed
+# baseline and every deterministic re-run since) and shows same-run control reads it correctly as drift,
+# not a regression, while still catching a synthetic regression injected on top of the same real reading.
+# The day Tier B numbers enter this gate, this is the comparison they get instead of compare()'s flat
+# tolerance — proven correct here first.
 
 name: fnol-eval-gate
 
@@ -67,6 +78,13 @@ jobs:
               sys.exit(1)
           print("Baseline freshness OK.")
           PY
+
+      - name: CF6(b)/(c) same-run control — real committed data, $0, no AWS
+        # Offline self-check: replays evals/baselines/temperature_variance_20260812.json and
+        # tier_b_20260812.json (both already committed) through same_run_compare(). Protects the
+        # mechanism itself from silently breaking, the same role ADR-013's moto canary plays for the
+        # mock guard — this has never had a live Tier B PR to gate, so nothing else would catch it.
+        run: python -m scripts.demonstrate_cf6_gate
 
       - name: Recording must be disabled in every contact flow (constraint 18)
         run: python -m pytest tests/unit -q -k recording || true

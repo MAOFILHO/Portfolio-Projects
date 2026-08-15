@@ -222,9 +222,19 @@ project folder is silently ignored — no error, no warning. Workflows are there
 setting `working-directory`, and copied to the monorepo root on install. Repo variables are prefixed
 (`FNOL_*`) so they cannot collide with a sibling project's settings.
 
-Layout follows the sibling project `AWS-Bedrock-Agentic-FineTuning-Platform`:
-`src/<pkg>/`, `infra/terraform/`, lifecycle-phased `tests/{unit,pre_provision,post_provision,post_run,post_teardown}`,
-`docs/{COST-ACTUALS,RESULTS,LESSONS-LEARNED,INCIDENT-LOG}.md`.
+Layout follows the sibling project `AWS-Bedrock-Agentic-FineTuning-Platform` for `src/<pkg>/`,
+`infra/terraform/`, and `docs/{COST-ACTUALS,RESULTS,LESSONS-LEARNED,INCIDENT-LOG}.md`. **It diverges on
+tests, and does so deliberately, not by omission** (`D86`, 2026-08-14): this project has only
+`tests/unit/`. The sibling's lifecycle-phased `tests/{pre_provision,post_provision,post_run,post_teardown}`
+was never built here — real, cost-gated, lifecycle-scoped verification instead lives in
+**`scripts/verify_*.py`, run through named `make verify-*` targets** (`verify-lambda-execution`,
+`verify-lex`, `verify-destroy-scope`, `verify-inference`, `verify-layer-contents`, …), a pattern used
+consistently from Phase 3 onward. The reason it diverged: this project's cost-gate discipline needs a typed
+`APPROVED: <phase name>` and a per-run `COSTS.md` entry *around* a real-AWS call, which a pytest fixture
+doesn't naturally carry — a script with its own `main()` and Makefile target does. `ADR-013`'s mock-scope
+guard covers `scripts/` exactly as it would cover a `tests/integration/` that was never built, because the
+guard lives in the client constructors, not in which directory calls them (`CF4`, discharged Phase 10 on
+this same finding).
 
 ### Scope rule — writes outside PROJECT_ROOT
 
