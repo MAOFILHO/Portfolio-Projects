@@ -31,6 +31,10 @@ on:
     branches: [main]
     paths:
       - 'AWS-Insurance-FNOL-Voice-Agentic-AI/**'
+  workflow_dispatch: {}   # manual trigger, added 2026-08-15 (Phase 10 correction-of-record) so a first
+                           # real run no longer depends on a PR or a push to main. No `paths:` filter --
+                           # the concept doesn't apply to workflow_dispatch, so a manual run always fires
+                           # regardless of what changed.
 
 defaults:
   run:
