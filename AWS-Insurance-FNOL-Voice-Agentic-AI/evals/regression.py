@@ -27,7 +27,7 @@ BASELINE_PATH = Path(__file__).resolve().parent / "baselines" / "tier_a_baseline
 # against the identical golden corpus, committed at Stage 0.5 (`D27`). Not re-measured per gate run:
 # spending money on every PR to re-derive a variance figure that changes only when the corpus or the
 # router prompt changes would be the same mistake as gating a PR on Tier B directly (rejected in
-# `fnol-eval-gate.yml`'s own header comment, for cost and flakiness).
+# `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`'s own header comment, for cost and flakiness).
 TEMP_VARIANCE_PATH = (
     Path(__file__).resolve().parent / "baselines" / "temperature_variance_20260812.json"
 )

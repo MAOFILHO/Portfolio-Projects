@@ -5494,3 +5494,110 @@ Last apply + gate result: none — no apply, no deploy, no billable resource, no
 
 **Not done:** nothing copied to `/Users/marco/K21/Real-world/.github/workflows/` — findings gathered, not
 acted on, per the full-review tier. Cost this session: $0.
+
+---
+
+## Session log — 2026-08-14 (continued; NO-GO on criterion 3 accepted; `|| true` removed and proven to fail
+for the right reason; workflow renamed to sibling convention; branch protection filed as `MANUAL-STEPS.md`
+item 5; criterion 3 brought again)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+### 1 — `|| true` removed; git-forensics answer; proven to fail for the right reason
+
+**Why it was added, checked against history rather than guessed:** `4724fbf` (Phase 6, 2026-08-12 01:19)
+introduced the `|| true`. `scripts/check_flows.py` and `tests/unit/test_check_flows.py` — the entire real
+check — did not exist until `dd28b55` (Phase 8 Stage 3, 2026-08-13 01:34), **almost 24 hours later**. At
+authoring time, `pytest tests/unit -q -k recording` matched **zero tests**, which pytest reports as **exit
+code 5** — reproduced directly: `pytest tests/unit -q -k definitely_no_such_keyword_xyz` exits 5 today.
+**`|| true` was not masking a real recording failure — it was keeping a placeholder step from failing CI
+before the check it named had been built.** It was never removed once `dd28b55` shipped the real check the
+next day, so this step has been structurally unable to go red for the entire time constraint 18 has had a
+dedicated test. Recorded as the finding, not as a false alarm resolved: a guard that outlives the condition
+it was written for is exactly `D40`'s shape (*"a change that alters a system's failure distribution should
+carry a check of what was written against the old distribution"*) — here the "distribution" was "does the
+check exist yet," and nobody revisited the guard once it did.
+
+**Removed.** `.../aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`'s recording step now runs
+`python -m pytest tests/unit -q -k recording` plain, with the forensics above written into the step's own
+comment.
+
+**Proven to fail for the right reason**, live, against a real deliberately-bad flow rather than relying on
+the existing suite's own historical passes: took the actual shipped flow
+(`infra/terraform/stacks/main/flows/fnol-inbound.json.tftpl`), applied `check_flows.py`'s own template-
+placeholder substitution so it parses identically to how the checker reads it, flipped exactly one switch —
+`IVRRecordingBehavior: "Disabled"` → `"Enabled"`, the `D73` scenario constraint 18 exists to catch — wrote
+the result to a throwaway directory, and ran `scripts/check_flows.py --root <that directory>` for real:
+
+```
+check-flows: 1 flow file(s) found by content under .../bad-flow-demo
+  FAIL fnol-inbound-recording-enabled.json
+       action 'RecordingOff': IVRRecordingBehavior is 'Enabled', must be 'Disabled'. This is a SEPARATE
+       switch from RecordedParticipants and is not covered by an empty list — and the IVR leg is the only
+       leg this system has.
+```
+
+Exit 1. Separately confirmed the CI step's literal command, `pytest tests/unit -q -k recording` with `||
+true` gone, passes for real today — 4 passed, 0 skipped, exit 0 — on the actual shipped flow, not just on
+the synthetic bad copy. Both halves shown: catches a real bad config, passes the real good one.
+
+### 2 — renamed to the sibling convention
+
+`.github/workflows-for-monorepo-root/fnol-eval-gate.yml` → `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`
+(`git mv`), matching every sibling's `<full-project-slug>-<purpose>.yml` pattern (checked against the actual
+monorepo-root `.github/workflows/` directory, not assumed from memory). Internal `name:` field updated to
+match too — `AWS-Insurance-FNOL-Voice-Agentic-AI Eval Gate`, mirroring
+`aws-bedrock-agentic-finetuning-platform-ci.yml`'s own internal name (`AWS-Bedrock-Agentic-FineTuning-
+Platform CI`) — a broader reading of "rename to match the sibling convention" than the filename alone, since
+a reader who opens the file after scanning the directory hits the internal name next. Every literal
+reference to the old filename updated in the files that describe current state
+(`evals/regression.py`, `docs/phase1/SUCCESS-METRICS.md`, `scripts/demonstrate_cf6_gate.py`) — prior
+`PROJECT_STATE.md` entries left as originally written, since this file is a chronological log and those
+entries were accurate descriptions of the file at the time they were written.
+
+### 3 — branch protection filed separately, not bundled
+
+Added `MANUAL-STEPS.md` item 5: marking the `eval-gate` job a required status check on `main`, explicitly
+**OPEN, not yet done**, explicitly sequenced *after* the workflow lands and reports a real green run — not
+a side effect of the copy. `CLAUDE.md`'s "Only permitted manual steps" line updated in the same commit, per
+that file's own rule that a new manual step updates both files together. Confirmed live rather than
+assumed: `main` on `MAOFILHO/Portfolio-Projects` has **no branch protection today**
+(`gh api .../branches/main/protection` → 404), so the gap this item exists to make visible is real, not
+hypothetical, as of this entry.
+
+### Criterion 3 — brought again
+
+**What exactly gets copied:** `.github/workflows-for-monorepo-root/aws-insurance-fnol-voice-agentic-ai-
+eval-gate.yml` → `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-
+gate.yml`. Same 7 steps as before, two changed: the `CF6`(b)/(c) self-check (new this phase) and the
+recording check (now real, `|| true` gone).
+
+**What runs when it lands:** unchanged from the prior go/no-go — nothing until pushed; triggers on future
+PRs/pushes touching `AWS-Insurance-FNOL-Voice-Agentic-AI/**`; reports a status but does not block a merge
+until `MANUAL-STEPS.md` item 5 is separately done (by design, per item 3 above).
+
+**What it costs per PR:** unchanged — **$0**. No AWS credentials anywhere in the file; public repo, Actions
+minutes unmetered.
+
+**What it would do on its first run against the current repo state, re-verified after this entry's
+changes:** `pytest tests/unit -q` → 639 passed. `evals.report --check-regression` → all Tier A gates pass,
+no regression. `demonstrate_cf6_gate` → `PASS`, scope banner visible top and bottom of its own output.
+`pytest tests/unit -q -k recording`, no fallback → 4 passed, real. **First run today would be green,
+end-to-end, for real reasons on every step, including the two that changed.**
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — OPEN. Criteria 1, 2, 4 done. Criterion 3 re-submitted, both blockers from the last NO-GO addressed. 5, 6 outstanding.
+Open defects: none new. The `|| true` finding is resolved (fixed + proven), not merely noted.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: criterion 3's go/no-go decision (this entry). Branch protection (MANUAL-STEPS.md item 5) is explicitly sequenced after landing, not a blocker on the copy itself. Criteria 5/6 remain close-out items.
+Last apply + gate result: none — no apply, no deploy, no billable resource, no push to the monorepo-root path, $0 spend. 639/639 unit tests pass; ruff/black/mypy --strict clean.
+```
+
+**Not done:** nothing copied to `/Users/marco/K21/Real-world/.github/workflows/` yet — brought again for
+decision, per the full-review tier. Cost this session: $0.

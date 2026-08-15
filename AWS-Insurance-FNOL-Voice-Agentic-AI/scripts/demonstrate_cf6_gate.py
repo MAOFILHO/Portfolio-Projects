@@ -9,7 +9,7 @@ tolerances expressed in measured standard deviations rather than fixed points."
 `ADR-013`'s own rule applies here too: no `mock_aws()` in this file, and there is nothing to guard against
 in the first place -- every number below is either read from a committed JSON file or produced by
 arithmetic on numbers read from one. No AWS credentials, no model calls, $0.00. This is what makes it safe
-to run on every PR (wired into `fnol-eval-gate.yml`) rather than reserved for a one-off demonstration like
+to run on every PR (wired into `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`) rather than reserved for a one-off demonstration like
 `demonstrate_regression_gate.py`.
 
 ## Two things this proves, both with real project data
@@ -52,7 +52,7 @@ SCOPE OF THIS CHECK -- read this before trusting a green run (CF7, PROJECT_STATE
 This step gates the SAME-RUN-CONTROL MECHANISM (CF6(b)/(c)), not a live Tier B metric of THIS
 PR's code. Every number below comes from committed historical data or a labelled synthetic
 injection -- nothing here classifies this PR's own router output, because that would require
-Bedrock credentials this workflow does not carry (cost gate; see fnol-eval-gate.yml header).
+Bedrock credentials this workflow does not carry (cost gate; see aws-insurance-fnol-voice-agentic-ai-eval-gate.yml header).
 
   GREEN means: "the comparison math is still correct against real historical drift and a
                 synthetic regression."
@@ -100,7 +100,9 @@ def main() -> int:
         "   it is applied to every Tier A metric (macro_f1 is not actually wired into compare() --"
     )
     print("   Tier B never enters the per-PR gate directly, for cost reasons stated in")
-    print("   fnol-eval-gate.yml. This replicates its exact arithmetic to show why not.):")
+    print(
+        "   aws-insurance-fnol-voice-agentic-ai-eval-gate.yml. This replicates its exact arithmetic to show why not.):"
+    )
     naive_delta = (
         committed - control_now
     )  # higher_is_better=True, same direction compare() would use

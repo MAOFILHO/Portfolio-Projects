@@ -92,3 +92,29 @@ selected, on the `marcos-ivr-demo` instance. No contact-flow runtime errors expe
 project's flows never reference a Connect-Customer-only feature (`ADR-001`), consistent with the pre-switch
 assessment. Post-switch verification (one test call through the sample flow) not yet separately confirmed —
 note if that's still outstanding.
+
+---
+
+## 5. Required-status-check branch protection for the eval gate
+
+- **What:** marking the `AWS-Insurance-FNOL-Voice-Agentic-AI Eval Gate` workflow's `eval-gate` job as a
+  **required status check** on `main` in `MAOFILHO/Portfolio-Projects`'s GitHub repo settings, so a red run
+  actually blocks a merge instead of only reporting one.
+- **Why manual:** a GitHub branch-protection rule is a repo setting, not a resource either Terraform or
+  this project's own IaC can reach — same category as item 4 above, a real toggle with no API surface this
+  project's tooling touches.
+- **Why this is its own step, not bundled with landing the workflow:** confirmed 2026-08-14 — `main` on
+  `MAOFILHO/Portfolio-Projects` currently has **no branch protection at all**
+  (`gh api repos/MAOFILHO/Portfolio-Projects/branches/main/protection` → 404, "Branch not protected"). Once
+  the workflow file lands at the monorepo root (Phase 10 criterion 3, its own go/no-go), it will **run and
+  report a status but not block anything** until this step is done separately. Marco's instruction,
+  2026-08-14: land the workflow, confirm it runs green on a real push, *then* add this setting — not as a
+  side effect of the copy.
+- **Console path:** repo **Settings → Branches → Add branch protection rule** (or **Rulesets**, GitHub's
+  newer equivalent) on `main`, enabling **"Require status checks to pass before merging"** and selecting
+  the `eval-gate` job once it has run at least once (GitHub only offers a check as selectable after it has
+  reported at least one status).
+- **Status:** ⬜ **OPEN, not yet done.** Blocked on Phase 10 criterion 3 (the workflow copy itself) landing
+  and reporting a real green run first. Recorded here now, ahead of that, precisely so the gap between "the
+  workflow file exists" and "the workflow actually blocks a bad merge" stays visible rather than being
+  assumed closed the moment the file is copied.

@@ -21,7 +21,7 @@
 # The day Tier B numbers enter this gate, this is the comparison they get instead of compare()'s flat
 # tolerance — proven correct here first.
 
-name: fnol-eval-gate
+name: AWS-Insurance-FNOL-Voice-Agentic-AI Eval Gate
 
 on:
   pull_request:
@@ -90,4 +90,11 @@ jobs:
         run: python -m scripts.demonstrate_cf6_gate
 
       - name: Recording must be disabled in every contact flow (constraint 18)
-        run: python -m pytest tests/unit -q -k recording || true
+        # `|| true` removed 2026-08-14 (Phase 10). It was added 2026-08-12 (commit 4724fbf), a full day
+        # before scripts/check_flows.py and its tests existed at all (commit dd28b55, 2026-08-13) — `-k
+        # recording` matched zero tests at the time, which pytest reports as exit 5, and `|| true` kept
+        # that from failing a step whose real check hadn't been built yet. It was never removed once the
+        # real tests landed, so this step has been structurally unable to fail for the entire time
+        # constraint 18 has had a real, dedicated check. Verified against real deliberately-bad flows
+        # before removal — see PROJECT_STATE.md, this entry.
+        run: python -m pytest tests/unit -q -k recording

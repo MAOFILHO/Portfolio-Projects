@@ -232,7 +232,7 @@ Deliberate properties:
 > (`same_run_compare`) and `CF6`(c) (`sd_tolerance`, backed by `load_measured_sd`'s read of the real,
 > committed `temperature_variance_20260812.json`) are built and unit-tested
 > (`tests/unit/test_cf6_gate.py`), and demonstrated against real committed data by
-> `scripts/demonstrate_cf6_gate.py`, wired into `fnol-eval-gate.yml` as a $0 offline step run on every PR.
+> `scripts/demonstrate_cf6_gate.py`, wired into `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` as a $0 offline step run on every PR.
 > **Not yet true of this repository:** no Tier B metric is actually gated on a live PR run — that still
 > requires AWS credentials in CI, which this workflow deliberately does not carry, for the same cost/
 > flakiness reason stated at the top of this section. What is proven is that the mechanism is correct
@@ -243,7 +243,7 @@ Deliberate properties:
 > flat tolerance, for free.
 >
 > **This limitation is not only noted here.** The CI step itself prints an explicit scope banner
-> (`scripts/demonstrate_cf6_gate.py`) and its own name in `fnol-eval-gate.yml` says outright that it does
+> (`scripts/demonstrate_cf6_gate.py`) and its own name in `aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` says outright that it does
 > not gate a PR's own Tier B numbers — a reader should not need this document open to see the scope of a
 > green check. What it would take to close the gap (credentials, per-PR cost, whether it is even wanted)
 > is tracked as `CF7` (`PROJECT_STATE.md`), named and findable rather than left as a one-time build-time
