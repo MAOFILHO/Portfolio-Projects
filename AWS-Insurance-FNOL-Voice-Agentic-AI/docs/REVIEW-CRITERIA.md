@@ -127,3 +127,30 @@ An item silently absent from a close-out is not equivalent to any of these — i
 exists to prevent. This is additional to, not a substitute for, §3's report header: "Open defects:" invites
 whatever the closing session happened to remember, while this requires an affirmative pass over the
 carry-forward table itself, row by row, for every row owned by the phase closing.
+
+## 6. Grep/sweep-based claims — recall is bounded by the search terms, not the corpus
+
+Added 2026-08-15, Marco, after a git-mediated claim sweep (`RESULTS.md` §13.3) reported "zero new overclaim
+types" from five search terms (`landed`/`pushed`/`merged`/`in the repo`/`committed`, 321 raw hits), and a
+recall check (`RESULTS.md` §14.2) found the corpus's own vocabulary for the same class of claim
+(`shipped`/`deployed`/`in place`/`at the monorepo root`/`verified at`) produced 573 *more* raw hits the
+original sweep never touched — the conclusion happened to still hold, but the first pass's wording did not
+say it was scoped to five words, and read as a claim about the corpus.
+
+**A grep/sweep-based "zero found" or "N found" claim is a claim about the search terms run, not about the
+text it was run over, until a recall check — an independent pass with differently-worded terms for the same
+underlying claim — has been run and still agrees.** Same shape as `D80`/`D82` (§1.2): a check that only
+confirms what it already looked for is not evidence about what it didn't.
+
+**Every sweep report must state three things, not just the count:**
+
+1. **The term list** — the exact strings searched, not "the usual terms" or a description of their intent.
+2. **The raw hit count**, per term and total.
+3. **Whether the non-matching-claim remainder was individually inspected or pattern-classified** — these are
+   different strength claims (§14.2's own finding: a table reading "every hit is X or Y" is the latter, and
+   saying so plainly is not a weaker report, it is an accurate one). If pattern-classified, keep the raw
+   grep output on disk (not just its summary) until the next recall check, the way `/private/tmp/claimsweep/
+   raw.txt` made this section's own finding checkable instead of asserted.
+
+A sweep that has only ever been run with one term list is the same defect class as §1.6's check that has
+only ever passed — not wrong, just unproven at the scope its conclusion is being read at.

@@ -5934,6 +5934,12 @@ criterion 8.
 
 **Explicitly out of scope**, unchanged: Contact Lens real-time analytics (banned-by-default list).
 
+**Standing methodology rule, added 2026-08-15 (`REVIEW-CRITERIA.md` §6) — applies to every criterion above
+that involves a grep/sweep-based "found"/"not found" claim** (record-hygiene passes, criterion 7's own
+future work included): report the term list, the raw hit count, and whether the remainder was individually
+inspected or pattern-classified. A sweep run with one term list is a claim about those terms, not the
+corpus, until a recall check with different wording still agrees.
+
 **Not started** — this is a proposal only, per Marco's "revise the draft, do not start work." No Terraform,
 no code, no AWS call. Awaiting `APPROVED: Phase 11` or further amendment.
 

@@ -1,5 +1,6 @@
 .PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
         verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
+        verify-project-root-scope install-hooks \
         deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
@@ -124,6 +125,22 @@ verify-flows:
 # for -- a stale exemption is a hole nobody is using, and this is the check that notices.
 verify-charset:
 	@$(VENV)/python scripts/check_charset.py
+
+# The PROJECT_ROOT scope-rule backstop (docs/RESULTS.md §14.3, CLAUDE.md's scope rule): checks whatever
+# is CURRENTLY STAGED, not the tree -- so this is a manual escape hatch and the thing `install-hooks`
+# wires into `.git/hooks/pre-commit`, not something `make lint` calls (lint checks the whole tree; this
+# checks a commit-in-progress, which only exists mid-`git add`).
+verify-project-root-scope:
+	@$(VENV)/python scripts/check_project_root_scope.py
+
+# `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook itself
+# (scripts/git-hooks/pre-commit) is tracked and reviewable inside PROJECT_ROOT; this target is the only
+# place a write lands outside it, and only because a git hook cannot live anywhere else.
+install-hooks:
+	@git_root=$$(git rev-parse --show-toplevel); \
+	cp scripts/git-hooks/pre-commit "$$git_root/.git/hooks/pre-commit"; \
+	chmod +x "$$git_root/.git/hooks/pre-commit"; \
+	echo "install-hooks: installed to $$git_root/.git/hooks/pre-commit"
 
 # Read the deployed Lex release back from the service and compare it against what Terraform declared.
 #
