@@ -233,8 +233,12 @@ consistently from Phase 3 onward. The reason it diverged: this project's cost-ga
 `APPROVED: <phase name>` and a per-run `COSTS.md` entry *around* a real-AWS call, which a pytest fixture
 doesn't naturally carry — a script with its own `main()` and Makefile target does. `ADR-013`'s mock-scope
 guard covers `scripts/` exactly as it would cover a `tests/integration/` that was never built, because the
-guard lives in the client constructors, not in which directory calls them (`CF4`, discharged Phase 10 on
-this same finding).
+guard lives in the client constructors, not in which directory calls them — **for every script that
+constructs one of the three wrapped classes.** (`CF4` was marked DISCHARGED at Phase 10's close on this
+finding; **corrected 2026-08-15, downgraded to UNAUDITED** — two scripts call `boto3.client("bedrock", ...)`
+directly for control-plane reads, bypassing all three wrapped classes and the guard with them; see
+`PROJECT_STATE.md` "Carried forward" table and `docs/RESULTS.md` §12.4 for the two file:line sites and the
+remediation status.)
 
 ### Scope rule — writes outside PROJECT_ROOT
 

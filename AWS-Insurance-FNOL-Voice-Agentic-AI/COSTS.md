@@ -319,3 +319,16 @@ in this project's cost accounting that we do not produce ourselves.
 For context on the tag filter this phase depends on: the sibling fine-tuning project's
 `USW2-Llama3-3-70B-Customization-Training` cost **$0.84935** on 2026-08-10, which is **99.86%** of the
 account's August Bedrock spend.
+
+---
+
+**Correction, 2026-08-15 — the 2026-08-12 "Stages 5–6" row's item (c) is mislabeled.** Item (c) ("9
+generation trials on `us.amazon.nova-lite-v1:0` (3 cases × 3, discharging CF3's repeated-sampling
+requirement)") does not describe `CF3`. `CF3` is the Nova **Micro** tight-turn-path repeated-sampling
+requirement (`PROJECT_STATE.md`); this line item is 3×3 Nova **Lite** generation trials judged for
+redundancy, the same run `RESULTS.md` §5.1 describes as "Nova Lite judging Nova Lite... 3 trials × 3
+cases" — `CF5`'s tuning work, not `CF3`'s. The dollar figure and call count are unaffected (both are part
+of the same real, billed run, correctly totalled); only the parenthetical's *label* is wrong. Row left as
+written, per this file's own standing convention ("every per-run row above stays as written... recorded
+rather than quietly amended") — corrected here rather than by editing the 2026-08-12 entry. Full account:
+`docs/RESULTS.md` §12.5.

@@ -81,6 +81,7 @@ import boto3
 
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.aws.bedrock_router import BotoBedrockConverseClient, classify_turn
+from fnol_voice_agent.aws.mock_guard import assert_real_aws_allowed
 from fnol_voice_agent.config.settings import DEFAULT_REGION
 from fnol_voice_agent.guardrails.client import BedrockGuardrailClient, GuardrailClient
 
@@ -116,6 +117,11 @@ def live_guardrail_config_sha(
     §3.5 pattern, and the reason this second hash exists. Recorded in the ledger entry alongside the
     file-based fingerprint so a future reader can tell the two apart.
     """
+    # `boto3.client("bedrock", ...)` is the control-plane client -- not one of ADR-013's three guarded
+    # wrapper classes, so the comment above ("no mock_aws() in this file") was an unenforced claim, not
+    # a checked one. This call is the guard, added directly at the point of construction (found missing
+    # 2026-08-15, CF4 correction -- RESULTS.md §12.4/§12.6).
+    assert_real_aws_allowed("bedrock (control plane) / measure_composed_pipeline.get_guardrail")
     response = boto3.client("bedrock", region_name=region).get_guardrail(
         guardrailIdentifier=guardrail_id, guardrailVersion=version
     )

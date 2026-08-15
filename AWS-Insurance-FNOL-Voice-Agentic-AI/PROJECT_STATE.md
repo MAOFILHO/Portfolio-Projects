@@ -10,9 +10,9 @@
 
 ---
 
-**Last updated:** 2026-08-14 (this header was stale since 2026-08-12 through Phases 7–10's progress; refreshed at Phase 10's close rather than left to drift further — see this date's session log for what changed)
-**Current phase:** Phase 11 — Observability and operations — **not yet scoped; no exit criteria proposed, no approval sought.** Phase 10 (CI/CD and progressive delivery) closed 2026-08-14, all six criteria satisfied. Phase 9 (Testing) closed 2026-08-14. Phase 8 (Integration and telephony) closed 2026-08-14. Phase 7 (Responsible AI and red-teaming) closed within Phase 9's carry-forward resolution — see Phase status table for the authoritative per-phase state; this line only tracks the frontier.
-**Progress:** Phases 0–6 signed off 2026-08-11/12 (see Phase status table for detail — this line is intentionally not re-itemized here to avoid a second copy of the same drift risk this update exists to fix). Phase 7: `D25`/`D27`/`D29`/`D32` investigated, ablation ladder run, `CF5` tuning pass (did not reproduce). Phase 8: Connect/Lex/Lambda integration, `C1` VERIFIED warm-path 1.000 (26/26). Phase 9: `C14` measured-failing (19ms floor over the 1,800ms budget), mitigation investigated and closed via carry-forward (open item `H`). Phase 10: `CF6` same-run regression-control mechanism built/tested/demonstrated against real `D29` drift; `CF4` discharged; eval-gate workflow authored, hardened (dead `|| true` removed and proven to fail for real), renamed to sibling convention, and landed at the monorepo root — not yet exercised by a real push/PR.
+**Last updated:** 2026-08-15 (Phase 10 correction-of-record — see this date's session log; header refreshed same-day rather than left to drift)
+**Current phase:** Phase 11 — Observability and operations — **not yet scoped; no exit criteria proposed, no approval sought.** Phase 10 (CI/CD and progressive delivery) closed 2026-08-14, **scope-corrected 2026-08-15, not reopened** — see Phase status table row 10 and `RESULTS.md` §12. Phase 9 (Testing) closed 2026-08-14. Phase 8 (Integration and telephony) closed 2026-08-14. Phase 7 (Responsible AI and red-teaming) closed within Phase 9's carry-forward resolution — see Phase status table for the authoritative per-phase state; this line only tracks the frontier.
+**Progress:** Phases 0–6 signed off 2026-08-11/12 (see Phase status table for detail — this line is intentionally not re-itemized here to avoid a second copy of the same drift risk this update exists to fix). Phase 7: `D25`/`D27`/`D29`/`D32` investigated, ablation ladder run, `CF5` tuning pass (did not reproduce). Phase 8: Connect/Lex/Lambda integration, `C1` VERIFIED warm-path 1.000 (26/26). Phase 9: `C14` measured-failing — warm-path p95 1,819ms on a sample excluding cold starts, true p95 over real traffic mix ≥1,819ms, distance to the 1,800ms target unmeasured (corrected phrasing 2026-08-15; retires the "19ms/failing by 19ms" shorthand) — mitigation investigated and closed via carry-forward (open item `H`). Phase 10: `CF6` same-run regression-control mechanism built/tested/demonstrated against real `D29` drift; eval-gate workflow authored, hardened (dead `|| true` removed and proven to fail for real), renamed to sibling convention, and landed at the monorepo root — **never executed on GitHub as of this update.** 2026-08-15 correction: criterion 3 verified file identity, not execution; `CF4` downgraded to UNAUDITED (two unguarded control-plane call sites found); `CF2`/`CF3` corrected from "discharged" to open/never-attempted; `workflow_dispatch` added to the source workflow, not yet synced to the deployed copy.
 **Running spend attributable to this project:** **≈$0.525 of the $5.00 Bedrock standing cap** (CloudWatch-reconciled figure, `COSTS.md` — the self-reported log under-counts by ~22%; CloudWatch is the reference, not this log). Phases 8–10 added $0.00 real spend (integration verification, testing, and CI/CD work this session were $0 diagnostics/mocked/local). Provisioned-resource spend: **$0.00** — nothing beyond Phase 8's approved, destroyable resources.
 Pre-existing accrual only: the claimed Canada DID, confirmed **$0.06/day = $1.83/month** (`docs/phase8/COST-ATTRIBUTION-AUDIT.md` §3), plus unmeasured per-minute inbound telephony.
 
@@ -31,8 +31,8 @@ Pre-existing accrual only: the claimed Canada DID, confirmed **$0.06/day = $1.83
 | 6 | Evaluation harness | ✅ **Signed off** 2026-08-12 — three GATEs failed at their real values, which is the specified outcome of a pre-tuning phase |
 | 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
 | 8 | Integration and telephony | ✅ Closed 2026-08-14 — Stage 4 closed same day; `C1` VERIFIED (warm path, build `u9iIy...`, 1.000/26/26); cold-start coverage remains an existence proof (1/19), not a measurement |
-| 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing, 19ms floor; open item `H` re-opens on five named triggers |
-| 10 | CI/CD and progressive delivery | ✅ **Closed 2026-08-14** — all six criteria satisfied same day: 1 (`CF6`(a)/(b)/(c)), 2 (gate re-demonstrated), 3 (monorepo copy, Marco-approved, landed), 4 (`CF4`, discharged), 5 (open item `H` + Phase 9 entry conditions carried forward unchanged), 6 (`D85` close-out enumeration: `CF4`/`CF6` discharged, `CF7` filed unscheduled, `D86` resolved). First real CI run and branch-protection required-status-check remain open, tracked in Phase 11 entry conditions and `MANUAL-STEPS.md` item 5 |
+| 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing: warm-path p95 1,819ms on a sample excluding cold starts, true p95 over real traffic mix ≥1,819ms, distance to target unmeasured (corrected phrasing 2026-08-15); open item `H` re-opens on five named triggers |
+| 10 | CI/CD and progressive delivery | ✅ **Closed 2026-08-14**, **scope-corrected 2026-08-15 — not reopened.** Criterion 3 verified file identity (byte-identical copy), not pipeline execution — the workflow had never run on GitHub as of either date, and criterion 1 (`CF6`) is unit-verified as a function but has never executed inside the pipeline it guards. Criterion 4 (`CF4`) downgraded DISCHARGED → **UNAUDITED**: two real-call sites (`measure_composed_pipeline.py`, `verify_inference_profiles.py`) bypass the guard entirely via raw `boto3.client("bedrock", ...)` control-plane calls. `RESULTS.md` §12 has the full correction; ledger rows updated in place. Criteria 2/5/6 stand as before. First real CI run and branch-protection required-status-check remain open, tracked in Phase 11 entry conditions and `MANUAL-STEPS.md` item 5; `workflow_dispatch` added 2026-08-15 so a first run no longer needs a real PR/push |
 | 11 | Observability and operations | ⬜ Not started |
 | 12 | Documentation and demo | ⬜ Not started |
 | 13 | Continuous improvement design | ⬜ Not started |
@@ -617,9 +617,9 @@ cannot be both."*
 | # | Item | Owner phase | Source |
 |---|---|---|---|
 | CF1 | State explicitly in the README: only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | Phase 12 | `D20`, `docs/phase4/PROMPT-REGISTRY.md` |
-| CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency | Phase 9 | Marco, 2026-08-11 |
-| CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure | Phase 6 | Marco, 2026-08-11 |
-| CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's**. **DISCHARGED 2026-08-14, Phase 10, before `CF6` per the sequencing change — resolved, not re-assigned.** `tests/integration/` and the lifecycle-phased tree `CLAUDE.md`'s monorepo convention names (`pre_provision`/`post_provision`/`post_run`/`post_teardown`) were never built; only `tests/unit/` exists. This item's own target — "the integration suite" — never came into being, in Phase 9 or since: the same never-checked-artifact shape the sequencing change existed to catch. The real integration-style work lives instead in `scripts/verify_*.py`/`scripts/measure_*.py` (cost-gated, real-AWS, outside `tests/` entirely). Every one of the 11 such scripts referencing `mock_aws`/`BotoBedrockConverseClient`/`BedrockEmbedder` was inspected directly: each real-call script carries the `ADR-013` boundary comment `TESTING-CONVENTIONS.md` §1 requires, and the one script that opens a real `mock_aws()` scope (`measure_cf5_redundancy.py`) closes it before constructing the real client — the documented safe shape, not merely the documented rule. `tests/unit/test_mock_guard.py` is the only unit test touching the guarded clients, and it is the guard's own test. `ADR-013` §Consequences already asserted *"this is `CF4`'s discharge mechanism"* (Phase 6, 2026-08-12) — that claim is checked against the actual file tree here, per `REVIEW-CRITERIA.md` §1 item 2, rather than taken on the ADR's word, and it holds | Phase 9 (rule authored Phase 6) → **discharged Phase 10, 2026-08-14** | Marco, 2026-08-12 |
+| CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency. **CORRECTED 2026-08-15: NOT discharged, never attempted.** Phase 9's own approved exit criteria explicitly dropped the load-test approach entirely ("a simulated arrival pattern can't reproduce AWS's own execution-environment teardown behavior") and pivoted to direct instrumentation instead. Zero "load test" hits anywhere in `RESULTS.md`. Phase 9 closed 2026-08-14 with this item never actioned and not carried forward by name. Owner-less as of this correction — `RESULTS.md` §12.5 | Phase 9 — **closed 2026-08-14 without discharging this item; open, unowned** | Marco, 2026-08-11 |
+| CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure. **CORRECTED 2026-08-15: NOT discharged.** Phase 6's own exit-criteria table (criterion 6) was never checked off — it still reads "⬜ Stage 6." The only real sampling on record is Stage 8's **n=5**, the exact figure criterion 6's own text names as insufficient. No n≥20 run (or any run beyond n=5) appears anywhere in `RESULTS.md`/`COSTS.md`. The one other cost-log line invoking this item's name is mislabeled — it describes 9 Nova **Lite** judge trials that `RESULTS.md` §5.1 identifies as `CF5`'s work, not this item's Nova Micro tight-turn path. The "discharged — criterion 6" prose elsewhere in this file, and the Phase 10 close-out's "discharged per line 477," are both incorrect. **n=5 against a stated n≥20 threshold is an existence proof (the defect can occur; 5/5 trials didn't show it), not a measurement of the distribution the criterion asked for — the same category as `C1`'s cold-start coverage (1/19, `RESULTS.md` §11.7)** — `RESULTS.md` §12.5 | Phase 6 — **criterion 6 never met; open** | Marco, 2026-08-11 |
+| CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's**. **DISCHARGED 2026-08-14, Phase 10, before `CF6` per the sequencing change — resolved, not re-assigned.** `tests/integration/` and the lifecycle-phased tree `CLAUDE.md`'s monorepo convention names (`pre_provision`/`post_provision`/`post_run`/`post_teardown`) were never built; only `tests/unit/` exists. This item's own target — "the integration suite" — never came into being, in Phase 9 or since: the same never-checked-artifact shape the sequencing change existed to catch. The real integration-style work lives instead in `scripts/verify_*.py`/`scripts/measure_*.py` (cost-gated, real-AWS, outside `tests/` entirely). Every one of the 11 such scripts referencing `mock_aws`/`BotoBedrockConverseClient`/`BedrockEmbedder` was inspected directly: each real-call script carries the `ADR-013` boundary comment `TESTING-CONVENTIONS.md` §1 requires, and the one script that opens a real `mock_aws()` scope (`measure_cf5_redundancy.py`) closes it before constructing the real client — the documented safe shape, not merely the documented rule. `tests/unit/test_mock_guard.py` is the only unit test touching the guarded clients, and it is the guard's own test. `ADR-013` §Consequences already asserted *"this is `CF4`'s discharge mechanism"* (Phase 6, 2026-08-12) — that claim is checked against the actual file tree here, per `REVIEW-CRITERIA.md` §1 item 2, rather than taken on the ADR's word, and it holds. **CORRECTED 2026-08-15: downgraded DISCHARGED → UNAUDITED.** A literal mapping from this concern to a covering assertion inside `scripts/verify_*.py`/`scripts/measure_*.py` finds none — the assertion lives in `src/`, inherited transitively, never written into a script directly. Checking the transitive coverage rather than the ADR's claim about itself found **two real-call sites with no coverage at all**: `scripts/measure_composed_pipeline.py:119` and `scripts/verify_inference_profiles.py:68` both call `boto3.client("bedrock", ...)` directly for control-plane reads (`get_guardrail`, `GetInferenceProfile`), bypassing all three guarded wrapper classes — `assert_real_aws_allowed` is never invoked on either path. Separately, the discharge's own file count (11) undercounted the population that existed at the time by at least 3 scripts (`measure_authority_check.py`, `measure_bias_pairs.py`, `measure_composed_pipeline_deployed.py`, all pre-dating the discharge commit and unnamed in it) — those three are structurally covered, so this is a process/enumeration-accuracy defect, not a live gap, and is named separately from the two-file finding above. `RESULTS.md` §12.4 has the full mapping | Phase 9 (rule authored Phase 6) → **UNAUDITED as of 2026-08-15** (was: discharged Phase 10, 2026-08-14) | Marco, 2026-08-12 |
 | CF5 | **Updated 2026-08-12 (`D32`): the intermittency was most likely a temperature symptom, not only a prompt weakness.** The generation path was sampling at 0.7 the whole time, and a defect that appears on some runs from an unchanged prompt is what a sampled decoder produces — so **the Phase 4 prompt fix may look better than it did**, and the detector's tuning pass must be re-judged at 0.0 before the prompt is blamed further. This is a mechanism, not a measurement: this phase has withdrawn three causal stories, so it is written as the leading explanation with the measurement still owed. Original entry: `RentalTowingEntitlement`'s redundancy-by-restatement is a **known failing case with real evidence**, not a hypothetical — the Phase 4 prompt fix is probabilistic, and Stage 8's second real trial reproduced the defect. Phase 6's detector must catch **that specific output** and must be red on real output today; Phase 7 is where tuning gets its pass at it | Phase 7 (detector built Phase 6) | Marco, 2026-08-12 |
 | CF6 | **The regression gate needs a re-baseline discipline, not just a tolerance.** Three properties the Phase 10 CI gate must have, all consequences of `D29`/`D31`: **(a)** every committed baseline records the **date, model ID, temperature and k** it was produced at, and the gate **fails on a baseline older than a stated max age** rather than silently comparing against it; **(b)** the gate distinguishes *"this PR regressed the system"* from *"the model moved"* by re-running the **unchanged** baseline configuration in the same CI job and comparing PR-vs-baseline **within that run**, not PR-vs-committed-number — a same-run control, which is the only construction that survives serving-side drift; **(c)** any tolerance on a model-dependent metric is expressed in **measured standard deviations of that metric at k≥5**, not in fixed percentage points, and no such tolerance may be set for a metric whose sd has never been measured. `SUCCESS-METRICS.md` §9's flat 3-point rule stays in force for deterministic metrics, where it is sound. **DISCHARGED 2026-08-14, Phase 10 criterion 1.** (a) built Phase 7 Stage 8; (b)/(c) built (`evals/regression.py::same_run_compare`/`sd_tolerance`/`load_measured_sd`), unit-tested (11 tests), and demonstrated against real committed data (`scripts/demonstrate_cf6_gate.py`, reproduces the actual `D29` gap and shows same-run control reads it as drift, not a regression, while still catching a labelled synthetic regression) — wired into `fnol-eval-gate.yml` as a $0 mechanism self-check on every PR. **Caveat, not a shortfall of this item:** the mechanism is proven correct; it is not yet exercised against a *live* Tier B measurement of any given PR's own code, because that needs AWS credentials this workflow deliberately does not carry (cost/flakiness, stated in the workflow's own header). That gap is real and is tracked separately as `CF7`, not folded into this discharge | Phase 10 | Marco, 2026-08-12; `D29`, `D31`, `RESULTS.md` §3.3 |
 | CF7 | **Named, findable, not solved:** wiring a *live* Tier B measurement of a PR's own code into `same_run_compare` (`CF6`(b)/(c)'s mechanism, proven correct against historical data but never yet run against a PR's own output). Filed 2026-08-14 because Marco named the risk of a limitation "noted once at build time" going stale and unfindable — this row is the fix for that, not a plan to build it. Three questions to answer before it is ever attempted, none pre-answered here: **(1) credentials** — the minimum shape is an OIDC-federated IAM role (no long-lived keys) scoped to `bedrock:InvokeModel`/`Converse` on only the specific application inference profile ARN(s) in `infra/terraform/stacks/inference` (`ADR-016`), nothing else; **(2) cost per PR** — the only real measurement on record is Stage 0.5's 780-call run (2 settings × 5 runs × 78-turn corpus, `us.amazon.nova-micro-v1:0`) at ≈$0.047 total (`COSTS.md`, 2026-08-12), ≈$0.00006/call; a single control+candidate same-run pass (2 × 78 calls) on the router alone would be **≈$0.01/PR** — cheap in isolation, unmeasured for a generation-tier metric (Nova Lite, `CoverageQuestion`/`RentalTowingEntitlement`), which would cost more per call; **(3) whether it is even wanted** — this is not only a dollar question: `fnol-eval-gate.yml`'s own header already rejected gating on Tier B for *flakiness* as well as cost, and giving a monorepo-shared CI workflow any Bedrock-invoke credential raises a blast-radius question this project's own scope discipline would need to answer (GitHub Actions does not expose secrets to `pull_request`-triggered runs from forks by default; doing this safely, if done at all, is a bigger design question than the per-PR dollar figure suggests) | **None — deliberately unscheduled.** Findable via this row, not implicitly promised to any phase | Marco, 2026-08-14 |
@@ -3852,7 +3852,7 @@ September. **A $0.00 reading and an absent line item look identical in a grouped
 | E | ✅ **Resolved 2026-08-13, Stage 3 apply.** `release.yaml.tftpl`'s `BotAliasTags` was a map; `AWS::Lex::BotAlias` documents it as `Array of Tag`, `{Key, Value}` objects, not a map — CFN's early validation caught it (`expected type: JSONArray, found: JSONObject`) before anything applied. Fixed as part of the same apply that surfaced `D77`. Was: Tag the Lex bot **alias**, not only the bot | Stage 3 |
 | F | ✅ **Resolved 2026-08-12 (`D67`)** — CloudWatch `AWS/Bedrock` as a third instrument. CE is missing data; the log under-reports by 22%. Was: **Reconcile `COSTS.md`'s ≈$0.411 against Cost Explorer's $0.00124** — a ~300× disagreement about this project's own Bedrock spend, unresolved in either direction. If the log over-estimates, every "spend so far" figure published by this project is wrong | Stage 5 |
 | G | ⏳ **Checked 2026-08-13, still unanswerable — and the reason is worth keeping.** Every line in Aug 11–12 reports `Project$`, i.e. **untagged**, including the AMCS-sold DID. That is *not yet evidence of a defect*: cost allocation tags are **not retroactive**, and `Project` was only activated during 08-12, so those days would read untagged whatever the tag does. 08-13 has no settled data yet. **Re-check 2026-08-14/15 on 08-13's data specifically.** If the DID line is still untagged then, the tag-filtered budget alarm excludes the project's **only always-on cost** ($1.83/mo, 7.3% of the ceiling) — and criterion 9's first probe is already written to catch exactly that, which is why it requires including a known non-zero quantity of *our* spend rather than only excluding the sibling's | **2026-08-14/15** |
-| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22.** `C14` accepted-and-carried-forward as **measured-failing**, not unresolved: warm-path sub-component p95 exceeds the 1,800ms budget by **19ms, a floor** — ASR/TTS/telephony are structurally excluded and unmeasured, so the true end-to-end overage is larger, in an unknown but non-negative amount. Caching, schema strip, and provisioned throughput are closed (structural/empirical/cost-policy respectively, §11.18/§11.20); lexical short-circuit is the one live option not pursued now. **Re-open on any of:** a real inbound call measured (`RuntimeSucessfulRequestLatency`/external timing, cost-gated); Tier A instrumentation built; a scoped lexical short-circuit designed and its required `C1` re-verification passed; a Nova Micro serving-characteristics or `tools`-field-caching change; the cost ceiling or Bedrock PT pricing changing materially. A new mitigation proposal that doesn't address why these five were closed is repeating this phase's work, not advancing past it | Any future phase touching router/graph latency or `C14` |
+| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22.** `C14` accepted-and-carried-forward as **measured-failing**, not unresolved. **Corrected phrasing, 2026-08-15:** warm-path p95 is **1,819ms**, measured on a sample that excludes cold starts; the 1,800ms budget is exceeded on that sample. ASR/TTS/telephony are structurally excluded from the 1,819ms figure, so the **true p95 over real traffic mix is ≥1,819ms — distance to the 1,800ms target is unmeasured**, not "19ms." "19ms" is arithmetic on the measured sample only, not a claim about the true overage; retiring the "failing/short by 19ms" shorthand everywhere it implies otherwise. Caching, schema strip, and provisioned throughput are closed (structural/empirical/cost-policy respectively, §11.18/§11.20); lexical short-circuit is the one live option not pursued now. **Re-open on any of:** a real inbound call measured (`RuntimeSucessfulRequestLatency`/external timing, cost-gated); Tier A instrumentation built; a scoped lexical short-circuit designed and its required `C1` re-verification passed; a Nova Micro serving-characteristics or `tools`-field-caching change; the cost ceiling or Bedrock PT pricing changing materially. A new mitigation proposal that doesn't address why these five were closed is repeating this phase's work, not advancing past it | Any future phase touching router/graph latency or `C14` |
 
 The Cost Explorer API itself bills **$0.01/request** — trivial, but it inverts the assumption that looking
 at spend is free, and is recorded in `CLAUDE.md` so nobody writes a poller.
@@ -5049,7 +5049,7 @@ above set at Phase 8's close:
 | # | Condition | Current state, with scope | Source |
 |---|---|---|---|
 | 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated — unchanged from the Phase 9 entry-conditions table; Phase 9 added no new `C1` measurement, only a scoping finding. **Scope, restated:** this figure describes *today's topology* — every turn reaches the merged `classify_turn` call. A lexical short-circuit's `C1`-threatening form (§11.22) would change that topology and would require re-verifying `C1` against it before the 1.000 figure could be trusted again for the modified system; it is not automatically inherited. Cold-start coverage remains an existence proof (1/19), not a measurement | `RESULTS.md` §11.7, §11.22 |
-| 2 | `C14` status | **Measured-failing, not unresolved-pending.** Warm-path sub-component p95 exceeds the 1,800ms budget by **19ms — a floor, not the true overage.** The figure structurally excludes ASR, TTS, and telephony (all unmeasured); by the monotonicity argument used throughout this phase, the true end-to-end overage is ≥19ms, unknown in exact amount. Cold-start remains a second, independent exposure (opening-turn-frequency bound). Budget itself is an explicit stated product decision (1,800ms), not a derived requirement — reclassified, not replaced, `C14` stays GATE | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
+| 2 | `C14` status | **Measured-failing, not unresolved-pending.** **Corrected phrasing, 2026-08-15:** warm-path p95 is **1,819ms**, measured on a sample excluding cold starts; the 1,800ms budget is exceeded on that sample. ASR, TTS, and telephony are structurally excluded from the 1,819ms figure (all unmeasured), so **the true p95 over real traffic mix is ≥1,819ms — distance to the 1,800ms target is unmeasured**, not a specific "ms over" figure. Cold-start remains a second, independent exposure (opening-turn-frequency bound). Budget itself is an explicit stated product decision (1,800ms), not a derived requirement — reclassified, not replaced, `C14` stays GATE | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
 | 3 | Open item `H` and its triggers | `C14` accepted-and-carried-forward, tracked in this file's ledger below. **Re-opens on any of:** a real inbound call measured (`RuntimeSucessfulRequestLatency` / external timing, cost-gated); Tier A instrumentation built; a scoped lexical short-circuit designed and its required `C1` re-verification passed; a Nova Micro serving-characteristics or `tools`-field-caching change; the cost ceiling or Bedrock PT pricing changing materially. A new mitigation proposal that doesn't address why the prior five were closed repeats Phase 9's work rather than advancing past it | Ledger row `H` below, `RESULTS.md` §11.22 |
 | 4 | Generation path (`coverage_question`, `rental_towing`) is untested for `C14` | Every latency figure this phase produced (§11.15's CloudWatch recovery, §11.16's router investigation) comes from Line E's escalation/routing-only protocol — zero Bedrock calls were recorded against the generation or embedding profiles in every window checked, because Line E never routes a turn into those nodes. A real run reaching them could move `C14`'s p95 in either direction; nothing in this phase's record bounds it | `RESULTS.md` §11.15 |
 | 5 | Tier A — approved, unbuilt | Downgraded from **gate** to **refinement** on the mitigation decision (§11.16 item 3) — Phase 9's mitigation choice did not wait on it and does not need it. Still the recommended next attribution step if pursued: converts §11.15's approximate percentile-sum bound into an exact per-turn figure, and is the one instrument that automatically covers the untested generation path (condition 4) the first time a real run reaches it. Tier B and Tier C remain named, costed, and demoted, not dropped (`RESULTS.md` §11.15 item 2) | `RESULTS.md` §11.15, §11.16 |
@@ -5072,7 +5072,7 @@ a future reader will look for it):
 
 | # | Item | Owner |
 |---|---|---|
-| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22, carried into Phase 10 entry condition 3 above.** `C14` accepted-and-carried-forward as measured-failing: warm-path sub-component p95 exceeds 1,800ms by 19ms, a floor — true end-to-end overage larger, unmeasured. Re-open per the five named triggers in entry condition 3 | Any future phase touching router/graph latency or `C14` |
+| H | ⏳ **Opened 2026-08-14, `RESULTS.md` §11.22, carried into Phase 10 entry condition 3 above.** `C14` accepted-and-carried-forward as measured-failing: **warm-path p95 1,819ms on a sample excluding cold starts; true p95 over real traffic mix is ≥1,819ms, distance to the 1,800ms target unmeasured** (corrected phrasing, 2026-08-15 — see the other `H` row above). Re-open per the five named triggers in entry condition 3 | Any future phase touching router/graph latency or `C14` |
 
 **Report** (`REVIEW-CRITERIA.md` §3 header):
 
@@ -5708,7 +5708,7 @@ unchanged (criterion 5's carry-forward); rows 4–6 are new, from this phase's o
 | # | Condition | Current state, with scope | Source |
 |---|---|---|---|
 | 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated. Unchanged since Phase 8 — Phase 9 added only a scoping finding, Phase 10 touched nothing `C1`-adjacent. Cold-start coverage remains an existence proof (1/19), not a measurement | `RESULTS.md` §11.7, §11.22 |
-| 2 | `C14` status | **Measured-failing, not unresolved-pending.** Warm-path sub-component p95 exceeds the 1,800ms budget by **19ms — a floor**, structurally excluding ASR/TTS/telephony. Budget is a stated product decision, not derived. Stays GATE, unchanged by Phase 10 | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
+| 2 | `C14` status | **Measured-failing, not unresolved-pending.** **Corrected phrasing, 2026-08-15:** warm-path p95 1,819ms, measured on a sample excluding cold starts; true p95 over real traffic mix ≥1,819ms, distance to the 1,800ms target unmeasured — not a "19ms" figure. Budget is a stated product decision, not derived. Stays GATE, unchanged by Phase 10 | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
 | 3 | Open item `H` and its triggers | Unchanged — re-opens on: a real inbound call measured; Tier A instrumentation built; a scoped lexical short-circuit designed + `C1` re-verified against it; a Nova Micro serving-characteristics/caching change; the cost ceiling or Bedrock PT pricing changing materially | Ledger row `H`, `RESULTS.md` §11.22 |
 | 4 | `CF6` / same-run regression control | **Discharged, live-wired.** `evals/regression.py::same_run_compare`/`sd_tolerance`/`load_measured_sd`, 11 unit tests, demonstrated against real `D29` data via `scripts/demonstrate_cf6_gate.py`, running as a $0 per-PR mechanism self-check inside the eval-gate workflow. **Does not gate a live Tier B number of any given PR** — that gap is `CF7`, named and unscheduled, not folded into this discharge | `CF6`/`CF7` rows, "Carried forward" table; this entry |
 | 5 | Eval-gate workflow — deployment status | **Landed** at `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`, Marco-approved by absolute path, verified byte-identical to the authored source. **Not yet exercised by a real push/PR** — triggers are `pull_request`/`push:main` on paths under `AWS-Insurance-FNOL-Voice-Agentic-AI/**`, no `workflow_dispatch`; the first real trigger is Marco's to fire, not automated by this project | This entry |
@@ -5744,3 +5744,207 @@ Last apply + gate result: none — no apply, no deploy, no billable resource. On
 **Not done:** no push/PR triggered (Marco's to do); branch protection not added (sequenced after that);
 `CF2`/`CF3` record-hygiene note filed but not fixed; Phase 11 exit criteria not proposed (scope is Marco's
 next call). Cost this session: $0.
+
+---
+
+## Session log — 2026-08-15 (Phase 10 correction-of-record — not a reopen; `workflow_dispatch` added,
+`CF4` downgraded, `CF2`/`CF3` corrected, one verification queued on Marco's trigger)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Marco's framing, taken as the task:** Phase 10 closed on a claim true in one frame (file identity)
+carried into another (CI works) where nobody rechecked — this project's recurring defect class. Five
+tasks: add `workflow_dispatch`, report the first real run when triggered, correct `RESULTS.md`, map `CF4`
+to real assertions or downgrade it, and fix `CF2`/`CF3` record hygiene. No Phase 11 work, no new
+instrumentation, infra errors are not results.
+
+### 1 — `workflow_dispatch` added, diff shown, not yet synced or run
+
+Added to `.github/workflows-for-monorepo-root/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` (the
+canonical source, inside `PROJECT_ROOT` — no separate approval needed for this file). `pull_request` and
+`push:main` triggers unchanged. Diff shown to Marco before applying, per his instruction; applied after.
+**Not yet synced to the deployed copy** (`/Users/marco/K21/Real-world/.github/workflows/...`, outside
+`PROJECT_ROOT`) — that copy is currently the pre-correction version (confirmed: one commit, `6c78733`,
+the original landing commit, nothing since). Syncing it, and any commit/push to make it live on GitHub's
+default branch (required before the manual-dispatch button appears there at all), is a further write
+outside `PROJECT_ROOT` and a push to the shared monorepo's `main` — both need their own explicit go-ahead,
+named by absolute path, same discipline as the original copy.
+
+### 2 — First real run: not performed, correctly
+
+Marco's task 2 is conditioned on "after I trigger the first run" — not done this entry, per his own
+sequencing, and not something this session did unprompted. Nothing to report yet. Ready to watch and
+report per-stage (parse, OIDC, secrets, install, gate, exit code) the moment a run exists, with failures
+reported as failures, not summarized as a pass.
+
+### 3 — `RESULTS.md` §12 written — Phase 10 scope correction
+
+Full account in `docs/RESULTS.md` §12 (five subsections + self-review). Summary of what it establishes,
+checked directly rather than assumed from the prior entry's own words:
+
+- **§12.1** — criterion 3 verified file identity (`diff`/`sha256sum`), not pipeline execution. The
+  workflow has **never run on GitHub** — one commit against the deployed path, zero Actions runs. Every
+  claim about the workflow actually working (parses, installs, no hidden credential dependency) was
+  unproven at Phase 10's close, not merely unmeasured.
+- **§12.2** — `CF6`(a)/(b)/(c) are unit-tested and were demonstrated **locally**, never inside the
+  pipeline the ledger row says they're "wired into." Two different claims, folded into one in the Phase 10
+  close-out.
+- **§12.3** — criterion 2's two demonstrations (lexicon-removal regression, `|| true` removal) both ran
+  locally too, for the unavoidable reason that the workflow didn't exist at the monorepo root yet when the
+  first one ran. Both are real red-then-green demonstrations; neither has been run through
+  `ubuntu-latest`.
+
+### 4 — `CF4`: mapped, and downgraded
+
+No assertion covering `CF4`'s concern exists literally inside any `scripts/verify_*.py`/`measure_*.py`
+file — grepped directly, zero hits. The covering assertion (`assert_real_aws_allowed`,
+`src/fnol_voice_agent/aws/mock_guard.py`) is inherited transitively via three wrapper-class constructors.
+Checking that transitive coverage rather than re-citing `ADR-013`'s own claim about itself found **two
+real, uncovered call sites** — `scripts/measure_composed_pipeline.py:119` and
+`scripts/verify_inference_profiles.py:68`, both raw `boto3.client("bedrock", ...)` control-plane calls
+(`get_guardrail`, `GetInferenceProfile`) that bypass all three guarded classes entirely. Separately, the
+original discharge's 11-file enumeration undercounted the population that existed at the time by at least
+3 files (all structurally covered, so a record-accuracy defect, not a live gap — named separately from the
+two-file finding). **`CF4`'s ledger row changed from DISCHARGED to UNAUDITED**, per the task's own rule —
+not argued down from "no separate suite needed," shown as two named files with line numbers instead. Full
+mapping: `RESULTS.md` §12.4.
+
+### 5 — `CF2`/`CF3`: corrected, not merely annotated
+
+Requested as a low-severity annotation pass. Checked against actual evidence rather than annotated on the
+strength of the existing claims, and **neither supports a DISCHARGED annotation** — larger than the
+framing anticipated, reported as found rather than softened to match it.
+
+- **`CF3`**: Phase 6's own criterion-6 table cell was never checked off (still "⬜ Stage 6" — that cell was
+  never wrong). The prose layered on top of it *was* wrong: no n≥20 (or any n>5) real Nova Micro
+  tight-turn sample exists anywhere in `RESULTS.md`/`COSTS.md`; the only real run is Stage 8's n=5, which
+  criterion 6's own text names as insufficient; the one cost-log line citing `CF3` by name is mislabeled —
+  it's `CF5`'s Nova Lite judge trials. Corrected to OPEN.
+- **`CF2`**: Phase 9's own approved exit criteria dropped the load-test approach entirely before any work
+  started — a load test concentrated on the generation paths, or any load test, was never built. Zero
+  "load test" hits in `RESULTS.md`. Corrected to OPEN, unowned since Phase 9's close.
+
+Both corrections: `RESULTS.md` §12.5, ledger rows updated in place (`PROJECT_STATE.md`, "Carried forward"
+table).
+
+### What this entry does and does not change
+
+Phase 10 stays **✅ Closed 2026-08-14** — not reopened, per Marco's explicit instruction. What changed is
+the record's characterization of four of its six criteria (1, 2, 3, 4) and two carried-forward items owned
+by earlier phases (`CF2`, `CF3`) that Phase 10's own close-out had touched in passing. The phase-status
+table row, the header, and the three ledger rows are corrected in place; the session-log entries that
+first made the now-corrected claims are left untouched, per this file's append-only convention — the
+correction lives here and in `RESULTS.md` §12, not by editing history.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED 2026-08-14, scope-corrected 2026-08-15, not reopened. Phase 11 still not scoped.
+Open defects: CF4 downgraded DISCHARGED → UNAUDITED (two unguarded control-plane call sites, named with line numbers). CF2/CF3 corrected from "discharged" to open/never-attempted (CF3: no n≥20 sample exists; CF2: load testing was dropped as an approach in Phase 9, never attempted).
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: first real CI run (Marco's to trigger); deployed-copy sync + monorepo push for workflow_dispatch (needs absolute-path approval, not yet given); CF4's two uncovered call sites unremediated (no new instrumentation, per constraint).
+Last apply + gate result: none — no apply, no deploy, no billable resource, no CI run. $0 spend (local git/grep/read + doc edits only).
+```
+
+**Not done:** deployed-copy sync and monorepo push (awaiting approval); first real run (Marco's); `CF4`
+remediation (two call sites still unguarded — named, not fixed, per "no new instrumentation"); Phase 11
+scoping (untouched, as instructed). Cost this session: $0.
+
+---
+
+## Session log — 2026-08-15 (continued; sync attempted and blocked at 75-commit scope; cascade corrected
+in `CLAUDE.md`/`COSTS.md`; guard bypass remediated, all raw `boto3.client()` sites reported; `CF3`/`CF5`
+contamination checked; `C14` phrasing standardized; Phase 11 revised draft written, not started)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Full technical account: `docs/RESULTS.md` §12.6–§12.10. Summary against Marco's six numbered tasks:
+
+**1 — Divergence: synced, re-verified, committed. Not pushed — blocked, and bigger than scoped.** Deployed
+copy resynced from source, `diff`/`sha256sum` both re-verified identical
+(`a7ccf0f143a7e68eb3d3683f8de3a4dbd9849450bf82c7e945cad4dd2630672d`), committed locally (`7a5d6f0`).
+**`git push origin main` was denied by this session's tool-permission layer.** Separately, attempting it
+surfaced that `origin/main` has been pinned at `a4d8ae6` (2026-08-12) the whole time — **75 commits, 173
+files never reached GitHub**, including the eval-gate workflow's original landing commit. "Push to sync
+one file" is no longer the action available; it is now "push a 75-commit backlog spanning Phases 7–10,"
+which this entry does not do unilaterally. Reported as a blocked task, not reframed as done via commit.
+
+**2 — Cascade corrected.** Phase 10's own "criterion 6... `D85` discharged" claim is false for the same
+reason row 3 was — `D85`'s enumeration named `CF4` "Discharged." `CLAUDE.md` line 236 carried the same
+claim as live project instruction (not append-only history) and is corrected in place, not just annotated.
+`COSTS.md`'s Stage 5–6 row gets an appended correction note, per that file's own existing convention. One
+further cascade found rather than assumed absent: the entry that closed Phase 10 criterion 3 also asserted
+*"Phase 6 has no remaining open criteria"* — resting on `CF3`'s now-corrected false discharge. Named for
+Marco; **Phase 6's phase-status row is not edited by this entry** — a different phase, not this correction's
+to reopen unilaterally.
+
+**3 — Guard bypass remediated; full grep reported.** Both named sites
+(`measure_composed_pipeline.py:125`, `verify_inference_profiles.py:74`) now call
+`assert_real_aws_allowed` before constructing the raw `boto3.client("bedrock", ...)` control-plane client.
+Unit suite still **639/639** after the fix. Grepped every remaining raw `boto3.client()`/`boto3.Session()`
+site: 2 are DynamoDB (excluded by `ADR-013`'s own design, not a gap); **7 more (Lex ×5, Lambda ×1, Logs
+×1) are unassessed** — no `mock_aws()` active near any of them today, but `ADR-013`'s moto-fidelity test
+has never been run against those three services. Named, not remediated — out of this task's authorized
+scope ("fix both," not "fix every raw client in the repo").
+
+**4 — `CF3`/`CF5` contamination checked.** Every `CF3` reference grepped (13 hits). **The mislabeled
+`COSTS.md` line was never cited as evidence by anything else** — both "discharged" claims (`PROJECT_STATE.md`
+line 476, and the Phase 10 close-out's "per line 477") are bare, uncited assertions, one of them predating
+the mislabeled cost row by hours. Two independent errors, not one propagating — stated precisely rather
+than merged. `CF3`'s n=5 labeled an **existence proof against its own n≥20 threshold — the same category
+as `C1`'s cold-start coverage (1/19)** — ledger row updated with this label.
+
+**5 — `C14` phrasing standardized.** The literal string "failing by 19ms" does not exist anywhere in the
+record — checked directly, reported precisely rather than claimed fixed. The close terser shorthand
+("19ms floor over budget") in five short-form summary rows (header, phase-status row 9, both copies of
+open-item `H`, both copies of entry-condition row 2) is replaced with: *"warm-path p95 1,819ms, measured on
+a sample excluding cold starts; true p95 over real traffic mix is ≥1,819ms, distance to the 1,800ms target
+unmeasured."* The long-form `RESULTS.md` analysis sections are untouched — already careful, no rewrite
+needed. `README.md`/`docs/runbooks/` checked directly: zero `C14`/"19ms" hits, confirming nothing needed
+fixing there yet.
+
+**6 — Phase 11 revised draft, below. Not started, per Marco's explicit constraint.**
+
+### Phase 11 exit criteria — REVISED DRAFT, proposed 2026-08-15, awaiting `APPROVED: Phase 11`
+
+Supersedes the draft sketched earlier the same day (never written to this file as a formal proposal — that
+exchange was chat-only). Keeps criteria 1–5 and 7 from that sketch; criterion 6 marked **blocked**, not
+pending; a liveness-proof requirement added to 1/3/4; a cross-phase recheck added ahead of any dashboard
+panel depending on it; a new criterion 8.
+
+| # | Criterion | Liveness requirement |
+|---|---|---|
+| 1 | **Budget alarm** — Terraform-managed `AWS Budget`, threshold under the $25 ceiling, `IncludeCredit: false` / `IncludeRefund: false` (mandatory — a default-settings budget on this account can never fire, per the credits finding in this file's Verified-environment-facts table) | **End-to-end firing proof required**: the alarm must actually fire once (a deliberately-lowered threshold or a synthetic breach) and a human must confirm receiving the SNS notification. An alarm that has never fired is indistinguishable from a misconfigured one — not satisfied by "the Terraform applied cleanly" |
+| 2 | **Cost dashboard** — reads gross usage (`RECORD_TYPE=Usage`, never net, per the same credits finding), batched Cost Explorer queries (`$0.01`/request — no polling loop) | Same firing-adjacent bar as criterion 3's panels: the dashboard must be checked against a known real number at least once, not only against its own successful render |
+| 3 | **Operational CloudWatch dashboard** — Lambda errors/duration, Lex recognition, guardrail usage units, turn-latency sub-components (Phase 9's profiling) | **Every panel needs a heartbeat or synthetic-injection proof with known ground truth.** A panel that cannot distinguish "zero errors" from "the emitter is dead" is not delivered — each panel's build includes deliberately triggering the condition it's meant to show and confirming the panel reflects it. **Before any panel is built against guardrail usage units: recheck the Phase 7 Stage 8 claim (`GuardrailResult.usage` captures exact per-call units) against the *current* build** — cross-phase dependency, unrechecked since Phase 7, and this project's own recurring defect class is exactly "true then, assumed true now, unrechecked" |
+| 4 | **PII-redaction verification at the logging sink** | **Positive control, not a code-read.** Inject marked synthetic PII upstream, confirm it reaches the sink path pre-redaction (proving the injection worked), then confirm its **absence** in the persisted log. A redaction step nobody has ever watched catch anything is a claim, not a verification |
+| 5 | **Ops runbooks** in `docs/runbooks/` — incident response for `C14`'s measured warm-path exceedance and a guardrail false-positive spike | Runbook content only — no liveness proof implied by a document, but any latency figure it cites must use the §12.10 canonical phrasing, not "19ms" shorthand |
+| 6 | **Branch protection** (`MANUAL-STEPS.md` item 5) | **BLOCKED, not pending** — GitHub only offers a status check as selectable once it has reported at least once, and per this session's finding (§12.6), the workflow is not even on `origin/main` yet, let alone run. Cannot be started until that changes |
+| 7 | **Record hygiene** — `CF2`/`CF3` row annotations | **Already substantially done** by this session's correction pass (§12.5/§12.9 equivalent, `PROJECT_STATE.md` ledger) — this criterion closes on confirmation there's nothing further, not on new work |
+| 8 | **NEW — regression observability for `C1` and `C14`** | Nothing currently monitors either. The mechanism must answer, in production: *how would this project learn that intent-classification recall degraded, or that turn-latency p95 drifted, without someone manually re-running an eval script?* Requires naming a real signal (CloudWatch alarm on a proxy metric, a scheduled eval re-run, a canary conversation) with the same liveness bar as criteria 1/3/4 — a monitor that has never been exercised against a real degradation is the same unproven-alarm shape as criterion 1 |
+
+**Explicitly out of scope**, unchanged: Contact Lens real-time analytics (banned-by-default list).
+
+**Not started** — this is a proposal only, per Marco's "revise the draft, do not start work." No Terraform,
+no code, no AWS call. Awaiting `APPROVED: Phase 11` or further amendment.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED, corrected in two passes 2026-08-15, not reopened. Phase 11 revised draft written, awaiting approval.
+Open defects: 75-commit GitHub gap (named, not resolved, Marco's call on how to proceed). 7 of 9 raw-boto3 sites checked this pass remain unassessed (Lex/Lambda/Logs — named, not remediated, out of authorized scope). Phase 6's "no remaining open criteria" claim shown false — named for Marco, not acted on.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: the push (denied + scope-expanded); Marco's decision on it. Phase 11 approval.
+Last apply + gate result: none — no apply, no deploy, no billable resource. Local commit 7a5d6f0 exists, unpushed.
+```
+
+**Not done:** push to `origin/main`; Lex/Lambda/Logs guard assessment; Phase 6 status-row edit (named, not
+this entry's call); Phase 11 work of any kind (draft only, per constraint). Cost this session: $0.

@@ -4114,3 +4114,431 @@ it for the ADR specifically.
 
 **Not done:** `ADR-009` not edited, no new ADR written, no apply, no redeploy, no spend. Phase 10 entry
 conditions — written from these files alone, per this project's own convention — are in `PROJECT_STATE.md`.
+
+---
+
+## 12. Phase 10 — scope correction (2026-08-15)
+
+**This is a correction to a closed record, not a reopening of Phase 10.** Phase 10 stays closed
+2026-08-14; the phase-status table keeps its ✅. What follows corrects two claims within that closed
+record that were true in one frame and silently carried into a broader one — the project's recurring
+defect class (`D67`, `D69`, the `RecordingBehavior` amendment in `CLAUDE.md`, `D85` itself). Triggered
+by Marco naming the specific instance: file identity on disk was verified; runtime on GitHub was not,
+and the record did not say so.
+
+### 12.1 Criterion 3 — file identity verified, pipeline execution not
+
+The 2026-08-14 close-out (`PROJECT_STATE.md`) reported criterion 3 as satisfied on the strength of `diff`
+and `sha256sum` between the authored source and the monorepo-root copy. Both checks are real and both
+passed — that is not in question. What the close-out's own language did not separate clearly enough:
+byte-identity is a claim about the **file**, and a working CI gate is a claim about **execution**. The two
+were reported in the same sentence ("landed... verified byte-identical") in a context (a criterion table
+row marked ✅) that reads as "the gate is in place and works." It is in place. Whether it works had not
+been checked, because it had never run.
+
+**As of this correction, the workflow has never executed on GitHub — not once, in any form.** No
+`pull_request` touching this project's paths and no `push:main` touching them has occurred since the file
+landed (`git log` on `.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` shows one
+commit, `6c78733`, the landing commit itself). Zero Actions runs exist for this workflow. So as of Phase
+11 entry, every one of the following was **unproven, not merely unmeasured**: the workflow parses the way
+`actions/checkout`, `actions/setup-python`, and the shell steps are written to be read; the `pip install -e
+'.[dev]'` step resolves this project's dependency set inside `ubuntu-latest`'s environment; every step's
+`working-directory: AWS-Insurance-FNOL-Voice-Agentic-AI` default actually scopes correctly under a
+monorepo checkout; the job has no OIDC/secret dependency it silently picked up (the workflow's own header
+comment asserts none are configured — that assertion has never been exercised by a real run either).
+**This section exists to say plainly: CI was unproven at Phase 10's close, and the criterion-3 row should
+have said so.**
+
+Fixed this entry: `workflow_dispatch: {}` added to the trigger block (diff shown to and applied by Marco,
+`.github/workflows-for-monorepo-root/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`), so a first run no
+longer depends on waiting for a real PR or push. Landing that change at the monorepo-root deployed path,
+and any subsequent trigger, is a separate step under the same scope rule and approval discipline as the
+original copy — not performed by this correction, named as the next action.
+
+### 12.2 `CF6` — unit-verified as a function; not yet executed inside the pipeline it guards
+
+`CF6`(b)/(c) (`evals/regression.py::same_run_compare`/`sd_tolerance`/`load_measured_sd`) are **unit-tested**
+(11 tests, `tests/unit/test_regression.py` — passing locally, part of the `pytest tests/unit -q` step) and
+were **demonstrated locally** against real committed `D29` data via `scripts/demonstrate_cf6_gate.py`, run
+by hand on this machine, not by GitHub Actions. The workflow file wires that same script in as its
+"CF6(b)/(c) mechanism self-check" step — but per §12.1, the workflow itself has never executed, so that
+step has never executed either. **The function is verified. Its presence and correctness *inside the
+pipeline it is meant to guard* is not** — those are two different claims, and Phase 10's close folded them
+into one ("wired into the eval-gate workflow as a $0 per-PR mechanism self-check," stated as an
+accomplished fact rather than as "wired in, pending its own first run"). `CF6`(a) (`load_baseline`'s
+staleness check) is in the same position: unit-tested and previously exercised in isolation (Phase 7 Stage
+8, a direct script invocation, not this workflow), never yet exercised as a step of `fnol-eval-gate.yml`
+on GitHub.
+
+This is unchanged in substance from the `CF6`/`CF7` split Phase 10 already drew (`CF7`: a *live Tier B*
+number was never gated; that gap was named). §12.1/§12.2 name an **earlier, narrower gap in the same
+direction**: even the Tier-A-only, $0, no-credentials mechanism self-check that `CF6` itself *does* cover
+has never run as CI, only as a local invocation. `CF6`'s ledger row (`PROJECT_STATE.md`) is corrected to
+say this explicitly rather than leave "discharged... wired into the eval-gate workflow" read as "running
+in the eval-gate workflow."
+
+### 12.3 Criterion 2 (gate re-demonstrated against a deliberately bad flow) — ran locally
+
+Same question asked of criterion 2: where did it run? Checked directly rather than assumed — the
+2026-08-14 entries for both halves of this criterion (the lexicon-removal regression at Stage 8, and the
+`|| true` removal proven against a deliberately bad recording-behavior flow at Phase 10) describe `pytest`
+and script invocations run in the working session, against the local checkout. Neither was run through
+GitHub Actions, because neither could have been — the workflow was not installed at the monorepo root
+until criterion 3 landed later the same phase. **Both demonstrations are real** (a genuine before/after,
+red-then-green, on the actual check) **and both inherit the same unexecuted-in-CI scope** as §12.1/§12.2:
+proof that the check catches what it claims to catch, run locally; not yet proof that GitHub's copy of the
+same steps, in `ubuntu-latest`, produces the same result. The gap is `ubuntu-latest`-vs-local environment
+drift (dependency resolution, Python patch version, path handling) — a small, ordinary category of risk,
+but named rather than left implicit, per this section's whole point.
+
+### 12.4 `CF4` — mapping the concern to a covering assertion; row downgraded
+
+Task: produce the mapping from `CF4`'s concern (a real-AWS call inside `scripts/verify_*.py` or
+`scripts/measure_*.py` silently answered by a mock) to the specific assertion that covers it, per file,
+rather than re-argue the Phase 10 discharge's own reasoning.
+
+**The literal mapping is empty.** No file under `scripts/verify_*.py` or `scripts/measure_*.py` contains
+the covering assertion itself — grepped directly (`assert_real_aws_allowed`, `moto_is_patching`,
+`RealAWSCallInsideMockError`) across every script file: zero matches. The assertion
+(`assert_real_aws_allowed`, `src/fnol_voice_agent/aws/mock_guard.py:99-113`) lives in `src/`, and is
+inherited transitively by any script that constructs one of three wrapper classes that call it in their own
+`__init__`: `BotoBedrockConverseClient` (`src/fnol_voice_agent/aws/bedrock_router.py:101`), `BedrockEmbedder`
+(`src/fnol_voice_agent/knowledge/ingest.py:190`), `BedrockGuardrailClient`
+(`src/fnol_voice_agent/guardrails/client.py:147`). This is `ADR-013`'s own stated design ("the guard is in
+the client constructors, not in test-local discipline") and it is real — but it means a literal
+per-script assertion mapping has nothing to cite, only an import-graph argument. Stated precisely rather
+than glossed: coverage is structural, not enumerable per file.
+
+**Checked whether the structural coverage is actually complete — it is not.** Grepping every `scripts/*.py`
+file for a real-AWS-call surface (`mock_aws`, `BotoBedrockConverseClient`, `BedrockEmbedder`,
+`GuardrailClient`/`BedrockGuardrailClient`) finds **16 files**, not the 11 the Phase 10 discharge
+enumerated. Of those 16, **14 go through one of the three guarded wrapper classes** and are covered exactly
+as `ADR-013` claims. **Two do not:**
+
+| File | Line | Call | Guard coverage |
+|---|---|---|---|
+| `scripts/measure_composed_pipeline.py` | 119 | `boto3.client("bedrock", region_name=region).get_guardrail(...)` — raw client, bypasses `BedrockGuardrailClient` entirely | **None.** Carries an `ADR-013` comment ("no `mock_aws()` in this file") but the comment is not backed by any assertion on this call path — if a future edit opened a `mock_aws()` scope anywhere in this file, this line would not raise |
+| `scripts/verify_inference_profiles.py` | 68 | `boto3.client("bedrock", region_name=DEFAULT_REGION)` for `GetInferenceProfile` — same pattern | **None.** No `ADR-013` boundary comment at all, no assertion |
+
+Both calls are against the Bedrock **control plane** (`get_guardrail`, `GetInferenceProfile`), not the
+`bedrock-runtime` data plane `ADR-013`'s guard was built against — a real, previously-unnamed distinction:
+the guard covers `Converse`/`InvokeModel`/embedding/guardrail-apply calls made through the three wrapped
+classes, and has no coverage at all for a raw `boto3.client("bedrock", ...)` control-plane call, wrapped or
+not. **Practically low-risk today** — neither file currently opens a `mock_aws()` scope anywhere near
+these lines, checked directly — but "no covering assertion" is exactly the bar this task set, not "no
+observed failure yet," and the whole reason `CF4`/`mock_guard.py` exist is that this failure mode is
+silent until it isn't.
+
+**A second, separate finding: the discharge's own file count was already stale when it was written.**
+Three of the 16 files predate the 2026-08-14 discharge commit (`f2943f3`) and construct real clients
+through the guarded classes, yet none is named in the discharge's 11-file enumeration:
+`scripts/measure_authority_check.py` (added 2026-08-12, `f63cb0e`), `scripts/measure_bias_pairs.py` (added
+2026-08-12, `4e5d22f`), `scripts/measure_composed_pipeline_deployed.py` (added 2026-08-13, `4693b95`). A
+fourth, `scripts/measure_guardrail_safety_interference.py` (added 2026-08-12, `99a26d5`), constructs a real
+`BedrockGuardrailClient` and carries no `ADR-013` boundary comment at all —
+`docs/TESTING-CONVENTIONS.md` §1's "comment the boundary" convention, not followed there, though the
+runtime guard still fires regardless. All four are structurally covered (they go through a guarded class),
+so this is a **process/enumeration-accuracy defect in how the discharge was audited, not a live coverage
+gap** — distinct from the two-file finding above, and worth separating rather than blending the two: one
+means the population inspected was undercounted; the other means the population itself has a real hole.
+
+**Resolution: `CF4`'s ledger row is downgraded from DISCHARGED to UNAUDITED**, per this task's own rule —
+a mapping that finds two uncovered real-call sites cannot be cited as complete. Not because the underlying
+design (`ADR-013`'s constructor-level guard) is wrong — it demonstrably works for 14 of 16 files, and the
+canary test that protects it (`tests/unit/test_mock_guard.py`) runs in CI — but because "discharged" was
+asserted as a closed, complete claim, and it was not complete. Remediation (wrap the two control-plane
+calls, or add an equivalent assertion at those two call sites) is **not performed by this correction** —
+named as the concrete next action, consistent with this task's "no new instrumentation" constraint.
+
+### 12.5 `CF2`/`CF3` — neither was actually discharged; corrected, not just annotated
+
+Requested as a low-severity annotation pass ("record state that doesn't match actual state... fix it").
+Checked against the actual evidence rather than annotated on the strength of the existing prose claims, and
+**neither row supports a DISCHARGED annotation** — this is a larger correction than the framing anticipated,
+stated plainly rather than downgraded to match the expected severity.
+
+**`CF3` (Nova Micro tight-turn path, n ≥ 20, owner Phase 6) — not discharged.** Phase 6's own exit-criteria
+table (`PROJECT_STATE.md`, criterion 6) was **never checked off** — it still reads "⬜ Stage 6," the same
+empty state it has held since the table was written; that cell was never wrong. What *was* wrong is the
+prose layered on top of it: a "`CF3` discharged here — criterion 6" note elsewhere in the same file, and the
+Phase 10 close-out's "`CF3` (Phase 6's, discharged per line 477)." Neither claim is supported by any
+recorded measurement. The only real Nova Micro tight-turn sampling on record is Stage 8's **n=5**
+(`COSTS.md`, `PROJECT_STATE.md` §Stage 8) — the exact figure criterion 6's own text names as insufficient
+("not... Stage 8's n=5"). No n≥20 run, or any run beyond that n=5, appears anywhere in `RESULTS.md` or
+`COSTS.md` — grepped directly, zero hits for "tight-turn" in `RESULTS.md`. The one other cost-log line that
+invokes `CF3`'s name (`COSTS.md`, Stage 5–6, "9 generation trials... discharging CF3's repeated-sampling
+requirement") does not describe the tight-turn path at all: it is 9 trials on **Nova Lite**, described
+identically in `RESULTS.md` §5.1 ("Nova Lite judging Nova Lite... 3 trials × 3 cases") as the redundancy-
+detector judge-model trials that belong to **`CF5`**, a different carry-forward item on a different model.
+`CF3` was never run at the scale its own criterion specifies, and the one entry that cites it by name is
+mislabeled. **Ledger row corrected to OPEN**, criterion 6 restated as still unmet, and the Phase 10 close-out's
+"discharged per line 477" reference marked incorrect at that entry (the entry itself is not rewritten,
+per this project's append-only session-log convention — this section is the correction of record).
+
+**`CF2` (load testing should concentrate on the two generation paths, owner Phase 9) — not discharged,
+never attempted.** Phase 9's own approved exit criteria (`PROJECT_STATE.md`, 2026-08-14) explicitly
+**dropped the load-test approach entirely** at the amendment stage: "the load-test option was dropped — a
+simulated arrival pattern can't reproduce AWS's own execution-environment teardown behavior." Phase 9
+pivoted to direct instrumentation (`_build_graph()` profiling, CloudWatch recovery) instead, which answered
+different, arguably better, questions about `C14` — but no load test, concentrated on the generation paths
+or otherwise, was ever built or run. Zero mentions of "load test" or "load-test" anywhere in `RESULTS.md`.
+Phase 9 closed 2026-08-14 with `CF2` never actioned, and the close-out did not carry `CF2` forward into the
+Phase 11 entry-conditions table by name (only into a "flagged, not resolved" record-hygiene row). **Ledger
+row corrected to OPEN, owner-less since Phase 9's close** — the same "an assigned item silently dropped
+from a phase close" shape `D85` was built to catch (`PROJECT_STATE.md`), recurring here on a different item
+Phase 10 wasn't scoped to check.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes on every sub-finding — the `workflow_dispatch` grep, the two
+   `boto3.client("bedrock", ...)` bypasses, and the "tight-turn"/"load test" zero-hit greps in `RESULTS.md`
+   could each have come back the other way; none were assumed going in.
+2. *Asserted-but-unchecked?* This whole section is that question applied to Phase 10's own close-out:
+   "byte-identical" read as "works," "discharged" read without checking the cited line, "wired into the
+   workflow" read as "has run in the workflow." Each was checked against the file tree or the actual
+   git/grep evidence, not against the prior entry's own words.
+3. *Infra error scored as a result?* N/A — no AWS call made this entry; all checks are local file/git/grep
+   reads.
+4. *Cost below estimate?* $0 exactly — this entire correction is local reads, `git log`, `git diff`, and
+   doc edits.
+5. *Identical markers, different paths?* Named directly in §12.4: `bedrock-runtime` (data plane, guarded)
+   vs. `bedrock` (control plane, unguarded) — two different boto3 service names under the same "Bedrock"
+   label, the same shape as the `ADR-009` provisioned-concurrency / provisioned-throughput conflation
+   §11.23 already caught once.
+6. *Has this check ever failed for the right reason?* Not demonstrated here — no new instrumentation was
+   built (out of scope, per Marco's constraint); the two uncovered call sites are named, not yet exercised
+   against an injected failure the way `mock_guard.py`'s own canary test is.
+7. *Headline-number interpretation change?* Yes, three times: criterion 3 moves from "the gate works" to
+   "the file is right, the gate has never run"; `CF4` moves from "discharged" to "unaudited, two known
+   gaps"; `CF2`/`CF3` move from "discharged" to "never actually done."
+8. `C1` a tradeable term? Not touched — nothing in this section makes an AWS call or scores `C1`.
+
+**Not done (as of the pass above):** no CI run triggered; deployed copy not synced; `CF4` gaps not
+remediated; Phase 11 not started. **All four addressed in the continuation below, same day.**
+
+---
+
+### 12.6 The divergence: real, closed, and bigger than the one line it was reported against
+
+**Marco named the specific instance: source had `workflow_dispatch`, the deployed copy did not, so
+row 3's byte-identity claim was false as of 2026-08-15.** Re-checked directly rather than assumed fixed by
+the prior entry's own account of itself:
+
+```
+source   a7ccf0f1...630672d
+deployed a35260a0...16519fb   (pre-sync — the original 2026-08-14 landing, unchanged)
+```
+
+**Divergence window: from the `workflow_dispatch` edit (2026-08-15, working-tree only, never committed
+until this pass) to the sync below — under one working session, but real for its duration**, and it was
+real specifically *because* the prior entry described the file as installed and correct without rechecking
+it against the deployed copy a second time after editing the source. Synced (`cp`), re-verified two ways:
+
+```
+$ diff source deployed        → files identical
+$ sha256sum source deployed   → a7ccf0f143a7e68eb3d3683f8de3a4dbd9849450bf82c7e945cad4dd2630672d  (both)
+```
+
+Committed (`7a5d6f0`, both files in one commit — the source edit had never been committed either, a second
+small gap in the prior entry: it showed a diff and described the edit as "applied," which was true of the
+working tree and not yet true of git history).
+
+**A materially larger finding, surfaced only by attempting the push `git push origin main` requires:**
+`origin/main` (`git@github.com:MAOFILHO/Portfolio-Projects.git`, the real GitHub remote — confirmed via
+`git remote -v`, not assumed) is pinned at `a4d8ae6`, **2026-08-12**. Local `main` is **75 commits ahead**,
+173 files, ~44.5k lines — effectively all of Phases 7 through 10. `git branch -r --contains 6c78733` (the
+eval-gate landing commit) returns **nothing**: the workflow was never on GitHub at all, landing commit
+included, before this pass. §12.1's "one commit, zero Actions runs" was accurate about local git and
+under-stated the real picture — there was no commit on GitHub for a run to be missing *from* to begin
+with. This reframes zero Actions runs from "the trigger hasn't fired yet" to "the file has never existed
+on the branch GitHub reads."
+
+**The push itself did not happen — reported as a failure, not reframed.** `git push origin main` was
+denied by this session's own tool-permission layer before it reached git at all. Separately, and more
+importantly: **pushing "to sync one file" now means pushing 75 unreviewed commits spanning four phases**,
+which is a materially different action than the one-file sync Marco's instruction described, and well
+outside what "push to main" was written to authorize. Not attempted after the denial, and would not have
+been re-attempted verbatim even absent it — the scope changed under the instruction, and that change is
+reported here rather than pushed through. **Commit `7a5d6f0` exists locally, ready; `origin/main` is
+unchanged; the workflow remains absent from GitHub as of this entry.** Marco's call on how to proceed —
+push the full 75-commit backlog, or something narrower — is not decided here.
+
+### 12.7 Cascade — Phase 10's own criterion 6, `D85`'s enumeration, and one prior-phase sign-off
+
+**Phase 10's close-out summary itself ("All six exit criteria satisfied... 6 (`D85` discharged, enumeration
+above)") is now false in the same way row 3 was** — `D85`'s enumeration table named `CF4` "Discharged," and
+`CF4` is `UNAUDITED` as of §12.4. `D85`'s *mechanism* (perform an enumeration pass over every
+carried-forward row a phase owns) was followed; its *output* for the `CF4` row was wrong, because the
+enumeration didn't check the two control-plane bypass sites or the discharge's own file count against git
+history — the same "asserted, not checked" gap `D85` exists to catch, now found inside `D85`'s own first
+application. `PROJECT_STATE.md` phase-status table row 10 and the header are corrected in place (both
+edited this pass); the original close-out paragraph is left as written, per this file's append-only
+convention — this section is the correction.
+
+**A summary row outside `PROJECT_STATE.md` carried the same false claim as settled fact: `CLAUDE.md`.**
+Line 236 (monorepo-conventions section) read *"the guard lives in the client constructors... (`CF4`,
+discharged Phase 10 on this same finding)"* — stated as current project instruction, read fresh every
+session, not append-only history. **Corrected in place** (not just annotated) to name the two uncovered
+call sites and point at this section, since `CLAUDE.md` has no convention of leaving superseded claims
+standing.
+
+**`COSTS.md`'s Stage 5–6 row, item (c), carried the `CF3`/`CF5` mislabel independently** — see §12.9. Fixed
+with an appended correction note, per that file's own existing convention ("every per-run row above stays
+as written... recorded rather than quietly amended," already used once in that file for the 22%
+reconciliation gap).
+
+**One further, larger cascade, found checking rather than assumed clean: a prior phase's own sign-off
+rested on the same false premise.** The 2026-08-14 entry that closed Phase 10 criterion 3 also wrote:
+*"This was the last open item on Phase 6's own exit-criteria table; **Phase 6 has no remaining open
+criteria as of this entry**"* — a direct claim that criterion 6 (`CF3`) was already resolved. §12.5 (below)
+shows it was not, and was never checked off in Phase 6's own table to begin with. **This means Phase 6's
+"no remaining open criteria" status, asserted in a Phase 10 entry, does not hold** — named here as a
+finding for Marco's attention; Phase 6's phase-status row is **not** edited by this pass (out of the scope
+Marco set — "do not reopen Phase 10," and Phase 6 is a different phase again, not this pass's to decide
+unilaterally).
+
+**Checked for other aggregating rows and found none live:** `README.md`'s phase table and "Known issues"
+section — grepped for `CF4`, `CF2`, `CF3`, `discharged`, `byte-identical` — zero hits, nothing to correct.
+`docs/adr/ADR-013-...md` §Consequences ("this is `CF4`'s discharge *mechanism*") is a claim about
+architecture, not about `CF4`'s status, and is unedited per the ADR-immutability rule — it remains true
+that the guard mechanism is what a correct discharge would rest on; §12.4 is exactly the finding that the
+mechanism has two unrepaired-at-the-time-of-writing gaps in its actual coverage.
+
+### 12.8 Guard bypass — remediated, and every other raw `boto3.client()` call reported
+
+**Both named sites fixed**, by adding the missing call at the point of construction — repairing an
+existing guard, not new instrumentation, per Marco's framing:
+
+- `scripts/measure_composed_pipeline.py:125` (`get_guardrail`) — `assert_real_aws_allowed("bedrock
+  (control plane) / measure_composed_pipeline.get_guardrail")` added immediately before the client
+  construction it names.
+- `scripts/verify_inference_profiles.py:74` (`GetInferenceProfile`) — `assert_real_aws_allowed("bedrock
+  (control plane) / verify_inference_profiles.GetInferenceProfile")` added the same way.
+
+Both scripts still import and execute cleanly (`.venv/bin/python`, direct module load); the full unit suite
+(`pytest tests/unit -q`) still passes **639/639**, unchanged from before the edit — the fix touches no
+tested code path, only adds a check ahead of two real-call scripts neither runs in CI.
+
+**Grep for every remaining raw `boto3.client()`/`boto3.Session()` construction across `scripts/` and
+`src/`, reported in full rather than filtered to Bedrock:**
+
+| File:line | Service | Guarded? |
+|---|---|---|
+| `src/fnol_voice_agent/aws/bedrock_router.py:104` | `bedrock-runtime` | ✅ — behind `assert_real_aws_allowed` at line 101, inside `BotoBedrockConverseClient.__init__` |
+| `src/fnol_voice_agent/knowledge/ingest.py:193` | `bedrock-runtime` | ✅ — behind the guard at line 190, `BedrockEmbedder.__init__` |
+| `src/fnol_voice_agent/guardrails/client.py:148` | `bedrock-runtime` | ✅ — behind the guard at line 147 |
+| `scripts/measure_composed_pipeline.py:125` | `bedrock` (control plane) | ✅ — **fixed this pass** |
+| `scripts/verify_inference_profiles.py:74` | `bedrock` (control plane) | ✅ — **fixed this pass** |
+| `src/fnol_voice_agent/knowledge/ingest.py:215` | `dynamodb` | **N/A by design** — `ADR-013` explicitly excludes DynamoDB: moto implements it faithfully, so a moto-answered call there is the intended dual-mode behavior, not a false-verification risk |
+| `src/fnol_voice_agent/aws/checkpointer.py:56` | `dynamodb` | **N/A by design**, same reason |
+| `scripts/lexpoc_gate.py:148,238` | `lexv2-models` | **Unassessed** — no `ADR-013` boundary comment, no guard, and `ADR-013`'s own text never evaluated Lex against its "does moto implement this faithfully" test the way it did for DynamoDB and Bedrock |
+| `scripts/lexpoc_gate.py:204` | `lexv2-runtime` | **Unassessed**, same reason |
+| `scripts/measure_composed_pipeline_deployed.py:428` | `lexv2-runtime` | **Unassessed** — carries an `ADR-013` comment ("no `mock_aws()` in this file") but, like the two now-fixed Bedrock sites before this pass, the comment is not backed by an assertion |
+| `scripts/measure_composed_pipeline_deployed.py:509` | `logs` | **Unassessed** |
+| `scripts/verify_lex_release.py:281` | `lexv2-models` | **Unassessed** |
+| `scripts/wait_for_lex_build.py:131` | `lexv2-models` | **Unassessed** |
+| `scripts/verify_lambda_execution.py:381` | `lambda` | **Unassessed** — carries an `ADR-013` comment, same unenforced-comment shape |
+
+**None of the seven "unassessed" sites currently sit inside a `mock_aws()` scope** — checked directly
+(grepped each file for `mock_aws`; zero hits in any of the five files involved) — so, like the two Bedrock
+sites before today, the practical risk is nil *today*. That is not the same claim as "covered," and this
+pass does not resolve the question either way: `ADR-013`'s own stated test (does moto implement this
+service faithfully enough that a mock answer is a deliberate, correct substitution, the way it is for
+DynamoDB, rather than a false-verification risk, the way it is for Bedrock) has never been run against
+Lex, Lambda, or CloudWatch Logs. **Named as an open question for a future item, not remediated here** —
+remediating seven more sites on three more services is a larger scope than "repair the two named bypasses"
+authorized, and doing it well requires first answering the moto-fidelity question `ADR-013` answers for
+DynamoDB and Bedrock but never asked of these three.
+
+### 12.9 `CF3`/`CF5` — every `CF3` reference grepped, and what actually depended on the mislabeled line
+
+**Every `CF3` reference in the repository** (`grep -rn "CF3"`, all file types, 13 hits going in):
+
+| Location | What it says | Relied on the mislabeled `COSTS.md` line? |
+|---|---|---|
+| `PROJECT_STATE.md`:234, 1132 | Unrelated — a different "criterion 6," Phase 4's own | No — different item, same ordinal by coincidence |
+| `PROJECT_STATE.md`:476 | "`CF3`... discharged here — criterion 6" | **No citation given at all** — a bare assertion, written 2026-08-12 in the Stage 1–4 gate section, which is dated *before* the Stage 5–6 `COSTS.md` row existed. Wrong independently, not because of the mislabel |
+| `PROJECT_STATE.md`:621 (ledger row) | Original `CF3` definition, owner Phase 6 | Corrected this pass, §12.5-equivalent below |
+| `PROJECT_STATE.md`:5277 | `D85`'s own text, referencing "criterion 6 — not yet due" at Phase 9's close | No — correctly notes it wasn't due yet at that point, doesn't claim it was met |
+| `PROJECT_STATE.md`:5682 (Phase 10 close-out) | "`CF3` (Phase 6's, discharged per line 477)" | **No** — cites line 477 (the bare assertion above), not `COSTS.md`. Wrong, but not *because of* the cost-log mislabel — an independent, uncited claim repeating an earlier uncited claim |
+| `COSTS.md`:14 | "9 generation trials... discharging `CF3`'s repeated-sampling requirement" | **Is** the mislabeled line — describes `CF5`'s Nova Lite judge trials, not `CF3`'s Nova Micro path |
+| `docs/adr/ADR-013-...md` | Not present | — |
+| `docs/phase5/BUILD-PLAN.md`:33, `docs/phase6/BUILD-PLAN.md`:37 | Describe Stage 8's real n=5 sampling and Stage 6's planned sampling | Accurately describe what ran (n=5, and a plan), don't themselves claim the n≥20 threshold was met |
+
+**Conclusion: the mislabeled `COSTS.md` line was never cited as evidence by anything else in the
+project.** Both places that claimed `CF3` was "discharged" did so as bare, uncited assertions — one of
+them (line 476) predates the mislabeled cost row by hours. This is two independent errors pointing the
+same wrong direction, not one error propagating downstream through citation. Stated precisely rather than
+merged into one story, because the fix differs: the ledger claims needed correcting on their own evidence
+(§12.5 below, done), and `COSTS.md`'s line needed correcting on its own terms (done, this file, §12.6),
+and neither correction depended on the other.
+
+**`CF3`'s n=5 labeled precisely: an existence proof against its own n≥20 threshold, same category as
+`C1`'s cold-start coverage.** `RESULTS.md` §11.7 already uses this exact category for `C1`'s cold path
+(1/19 — "remains an existence proof, not a measurement"). `CF3`'s Stage 8 sampling is the same shape: 5
+real trials, all clean (no padding, no restated question), which is evidence the defect *can* fail to
+appear, not a distribution over the n≥20 the criterion specifies. `PROJECT_STATE.md`'s `CF3` ledger row
+is updated with this label in place.
+
+### 12.10 `C14` phrasing — corrected everywhere it appears in short form
+
+**The literal string "failing by 19ms" does not appear anywhere in the current record** — grepped
+directly (`PROJECT_STATE.md`, `docs/RESULTS.md`, `README.md`); reported precisely rather than silently
+"fixed" as if it had been found. What *does* appear, in several short-form summary rows (not the long
+`§11.12`–`§11.23` prose, which was already careful — "a floor, not the true overage," "structurally
+excludes ASR/TTS/telephony" — throughout), is the terser **"19ms floor over the 1,800ms budget"**
+construction, close enough to the phrasing Marco flagged that it invites exactly the misreading he named:
+implying a known, specific gap rather than a floor on an unmeasured one.
+
+**Every short-form instance replaced with the canonical phrasing** ("warm-path p95 1,819ms, measured on a
+sample excluding cold starts; true p95 over real traffic mix is ≥1,819ms, distance to the 1,800ms target
+unmeasured") in `PROJECT_STATE.md`: the header Progress line, phase-status table row 9, both copies of
+open-item-row `H`, and both copies of Phase 9/Phase 11 entry-condition row 2. The long-form `RESULTS.md`
+prose sections are **not** rewritten — they already state the qualification in full each time it's used
+(§11.12's "floor, not a target to shave," §11.14, §11.23) and rewriting settled analysis to match a
+shorter canonical phrase risks the opposite failure, thinning language that was already precise. Checked
+`README.md` and `docs/runbooks/` directly for any `C14`/"19ms" mention before concluding there was nothing
+to fix there — zero hits in both, confirming the phrasing hadn't reached a runbook yet, matching Marco's
+"before it reaches" framing as prevention rather than remediation.
+
+### Self-review (`REVIEW-CRITERIA.md` §1) — this continuation
+
+1. *Opposite result possible?* Yes throughout — the push could have succeeded, the 75-commit gap could
+   have been zero, the `CF3` grep could have turned up a real citation of the mislabeled line, the seven
+   "unassessed" sites could have turned up an active `mock_aws()` scope. None assumed; each checked.
+2. *Asserted-but-unchecked?* The biggest one this pass: the prior entry's "one commit, zero Actions runs"
+   read as "the file is on GitHub, just unused." Attempting the actual push is what surfaced that it was
+   never on GitHub at all — an infrastructure step (the push) revealing a fact the file-only check couldn't.
+3. *Infra error scored as a result?* The denied `git push` is reported as a blocked/failed action, not
+   silently reframed as "not needed" or "done via commit." The commit is real and reported as exactly
+   that: committed locally, not pushed.
+4. *Cost below estimate?* $0 — local git/grep/read, two script edits, doc edits. No AWS call.
+5. *Identical markers, different paths?* `bedrock` (control plane) vs. `bedrock-runtime` (data plane),
+   named again here since it's the load-bearing distinction for §12.8's entire table.
+6. *Has this check ever failed for the right reason?* The two new `assert_real_aws_allowed` calls have
+   not been demonstrated failing against an injected `mock_aws()` scope the way `mock_guard.py`'s own
+   canary test is — named as a real gap in the fix's own verification, not claimed as tested when it
+   wasn't. The unit suite passing (639/639) confirms the fix doesn't break anything; it does not confirm
+   the fix catches the failure it's meant to catch.
+7. *Headline-number interpretation change?* Yes: "the workflow has never run in CI" becomes "the workflow
+   has never been on the branch CI reads from"; "`CF3` discharged" becomes "`CF3` an existence proof, same
+   category as `C1`'s cold path"; "19ms" retired as a headline figure in favor of "≥1,819ms, distance
+   unmeasured."
+8. `C1` a tradeable term? Not touched — nothing here makes an AWS call or scores `C1`; the existence-proof
+   *label* is borrowed from `C1`'s own §11.7 finding, not applied to `C1` itself.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED 2026-08-14, scope-corrected 2026-08-15 (two passes), not reopened. Phase 11 revision drafted, not started.
+Open defects: the 75-commit GitHub gap (origin/main pinned at 2026-08-12, local 75 commits ahead) — named, not resolved. 5 of 7 "unassessed" raw-boto3 sites (Lex/Lambda/Logs) still uncovered by any guard — named, not remediated (out of this pass's authorized scope). Phase 6's "no remaining open criteria" claim shown to rest on CF3's false discharge — named for Marco, Phase 6 status not edited.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: the push (denied by tool permissions, and scope-expanded to 75 commits regardless); Marco's decision on how to proceed with it.
+Last apply + gate result: none — no apply, no deploy, no billable resource. Local commit only (7a5d6f0); not on GitHub.
+```
+
+**Not done:** push to `origin/main` (blocked, and scope larger than authorized — Marco's call); the five
+Lex/Lambda/Logs sites left unassessed (named, not remediated); Phase 6's phase-status row left unedited
+(named for Marco, not this pass's to decide); no new CI run (nothing to trigger it against — the branch
+still has no workflow). Phase 11 revision: drafted in `PROJECT_STATE.md`, presented for approval, no work
+started, per Marco's explicit constraint.
