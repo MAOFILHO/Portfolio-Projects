@@ -4727,3 +4727,197 @@ Last apply + gate result: none — no apply, no deploy, no billable resource, no
 **Not done:** the push itself (explicitly deferred to Marco's approval of this report, per instruction);
 remediating the `.serena/` scope violation (named, decision not made here); the 6 remaining unassessed
 raw-boto3 sites; a committed regression test for the Logs moto-fidelity finding; Phase 11 work of any kind.
+
+---
+
+## 14. Push landed; sweep recall check; `.serena/` scope-violation mechanism found and remediated; stale
+commit-counts retired (2026-08-15, continued)
+
+Marco pushed `origin/main` to `c08184c` from a terminal outside the working session. This section covers
+four tasks against that fact: verify it from the remote (14.1), re-run the git-mediated claim sweep against
+terms the first pass didn't try (14.2), determine and fix the `.serena/` scope-violation mechanism (14.3),
+and retire stale commit-count prose (14.4). No Phase 11 work.
+
+### 14.1 First real CI run — verified from the remote, not local state
+
+`git fetch origin main` first (forces a network round-trip; a cached ref would not catch a stale read),
+then cross-checked against GitHub directly via `gh`, not inferred from the fetch alone:
+
+| Check | Result |
+|---|---|
+| `origin/main` HEAD, post-fetch | `c08184c5d96c4e5b3bceeb0fff48b4f6d7fbd5ea` |
+| Local `main` HEAD | same |
+| `git rev-list --left-right --count main...origin/main` | `0	0` |
+| Eval-gate workflow present on `origin/main` at repo root | yes — `.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` |
+| GitHub Actions run for this push | **`31887876709`**, `event: push`, `head_branch: main`, `head_sha` = exact match to current HEAD |
+| Run outcome | `status: completed`, `conclusion: success` |
+| Run window | `run_started_at 2026-08-15T13:41:24Z`, `updated_at 2026-08-15T13:42:51Z` (87s) |
+| Job `eval-gate` steps | all 9 named steps succeeded: checkout, setup-python, Install, Unit tests, **Evaluation gate (Tier A + regression vs committed baseline)**, **Baseline freshness**, **`CF6`(b)/(c) mechanism self-check**, **Recording must be disabled in every contact flow (constraint 18)**, plus setup/teardown steps |
+
+This closes the gap this project's record has carried since Phase 10's close: "the workflow has never run on
+GitHub" (§12.1, and the current-state locations listed in §13.2) was true from **2026-08-12** (`origin/main`
+pinned at `a4d8ae6`) through **2026-08-15T13:41:24Z**. Per Marco's instruction, that statement is not deleted
+from the record — it is given the end date above, and the current-state locations that carried it
+(`PROJECT_STATE.md` header Progress line, phase-status row 10, Definition-of-Done row 11, Phase 11
+entry-conditions rows 5–6, Phase 11 revised-draft criterion 6, `MANUAL-STEPS.md` item 5) are each updated in
+place with this section as the pointer, consistent with this file's own established convention (§13.2:
+"current-state locations, not history").
+
+**Phase 11 criterion 6 (branch protection) — unblocked, not satisfied.** The revised draft's own liveness
+bar for criterion 6 was "the workflow is not even on `origin/main` yet, let alone run" — both conditions are
+now false. GitHub will offer `eval-gate` as a selectable required status check (it only does so once a
+check has reported at least one status, which it now has). The manual console step itself — actually adding
+the branch-protection rule — has **not** been performed by this entry; it stays Marco's, per
+`MANUAL-STEPS.md`'s own convention.
+
+### 14.2 Sweep recall check
+
+**a) Was the 312 non-overclaim remainder individually inspected, or pattern-classified?**
+
+**Pattern-classified.** Two independent lines of evidence, not one assertion:
+
+1. **§13.3's own table is written in categorical language, not a hit-by-hit log** — "every hit is
+   `ADR-004`'s 'merged router+L2 call'... or 'merged configuration'", "the bulk are 'committed
+   baseline'/'committed real defective outputs'... or already-precise this-session language." A sentence
+   naming two patterns that "every hit" falls into is a claim about the *shape* of a population, not a
+   record of 114 or 150 individual judgments — there is no per-line disposition anywhere for those hits.
+2. **The raw artifact still exists and confirms it directly**: `/private/tmp/claimsweep/raw.txt` (28KB, 644
+   lines) is the grep dump the prior pass worked from — a flat, unannotated list of matching lines with no
+   disposition column, no per-hit marker of any kind. It is exactly what a categorization pass reads and
+   groups, not a record of individual review.
+
+This is not a defect in §13.3's conclusion — pattern classification is a legitimate, standard technique for
+150-hit populations, and re-running the exact grep this section reproduces §13.3's own counts almost
+exactly (36 "landed", 114 "merged", 13 "in the repo" — exact matches; 151 vs. 150 "committed", 9 vs. 8
+"pushed" — off by one, plausibly hand-tally drift on a >150-line category, not a methodology break). But
+"pattern-classified" and "individually inspected" are different claims, and §13.3 did not name which one it
+was — asked directly, the answer is the former.
+
+**b) Re-run against terms the first pass would have missed:** `shipped`, `deployed`, `in place`, `at the
+monorepo root`, `verified at` (`landed` was already one of the five original terms — re-checked anyway,
+below, for completeness against the current, one-commit-larger range).
+
+Same protocol as §13.3: `git diff a4d8ae6..main | grep '^\+[^+]'` (added lines only), AWS/Terraform state
+claims excluded per the same standing instruction that scoped the original sweep (this is a *git*-mediated
+claim sweep; a false "the Lambda is deployed" is a different verification question, already covered
+elsewhere in `RESULTS.md` §12, not re-audited here).
+
+| Term | Raw hits | Git-mediated overclaims found | Disposition |
+|---|---|---|---|
+| `landed` | 36 | 0 new (the 3 already known — row 3 family — are the only ones; re-confirmed, not re-litigated) | Consistent with §13.3 |
+| `shipped` | 150 | 0 | Exhaustively checked for any co-occurrence with `github`/`origin/main`/`push`/`branch protection`/`monorepo` — **zero**. Every hit is "the shipped `[code path]`" (e.g., "the shipped `classify_turn` path," "the shipped default"), a build/config-state sense — what's currently in the source tree — not a deployment claim. Same class as `committed baseline`: accurately scoped, no remote implication made |
+| `deployed` | 342 (excluding 25 hits that are only the filename `measure_composed_pipeline_deployed.py`) | 0 new | Exhaustively checked the same co-occurrence filter — **8 hits**, all already carrying the corrected, precise phrasing from §12.6/§13.1 ("blocked," "not yet synced," "not pushed," "understates it"). The remaining ~330 are the AWS/Lambda/infrastructure sense (excluded per standing instruction) or JSON field names (`deployed_worst_case`, `composed_recall_deployed` — data, not prose) |
+| `in place` | 38 | 0 new | Checked the same co-occurrence filter — all hits are the doc-editing sense ("corrected in place," "annotated in place"), matching this file's own stated convention for that phrase, not a deployment claim |
+| `at the monorepo root` | 3 | 0 | All three are negated/corrected uses ("didn't exist at the monorepo root yet," "was not installed at the monorepo root") — the opposite of an overclaim |
+| `verified at` | 4 | 0 | All four are the metric-accuracy sense ("re-verified at 1.000," "verified at $0") not a deployment-verification sense |
+
+**Net: zero new overclaim types found** — but this re-run's raw-hit count (573 across the five new terms,
+against 321 for the original five) confirms Marco's framing precisely: **the original "zero new overclaim
+types" was a claim about the five search terms, not the corpus.** The corpus turns out to use "deployed"
+almost ten times more than "landed," and "shipped" nearly as often as "committed" — a search scoped to five
+words left a majority of the corpus's own git/deploy-adjacent vocabulary unchecked. This re-run checks that
+larger vocabulary and finds the same, single overclaim family (row 3) and nothing outside it — a broader
+search converging on the same answer, not a narrower one being trusted past its scope.
+
+### 14.3 `.serena/` scope violation — mechanism and remediation
+
+**Mechanism: judgment-enforced, not tooling-enforced — confirmed by inspection, not inferred.**
+
+- `AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/settings.json` permits `Bash(git add:*)` and
+  `Bash(git commit:*)` with no path restriction of any kind — a broad `git add` from any working directory
+  is not denied, flagged, or intercepted.
+- No pre-commit hook exists: `.git/hooks/` at the monorepo root contains only Git's shipped `.sample` files,
+  none installed. `CLAUDE.md`'s own pre-commit hook list (ruff, black, mypy, terraform fmt, tflint,
+  detect-secrets, gitleaks) covers code quality and secrets, not path scope, and per §13.1, `gitleaks`/
+  `detect-secrets` are not even installed in this environment.
+- No CI check inspects staged/committed file paths against `PROJECT_ROOT`.
+- **The PROJECT_ROOT boundary exists in exactly one place: `CLAUDE.md`'s prose, read and applied by
+  whichever agent is acting.** There is no second, independent enforcement layer.
+
+**How it happened, reconstructed from git:** `git log --diff-filter=A -- .serena/` shows exactly one commit
+ever added those paths — `e0452cb`, whose own commit message ("docs(phase8): amend constraint 18...") is
+unrelated to Serena and names five in-scope files. `.serena/project.yml` did not exist in `e0452cb^`
+(confirmed: `git show e0452cb^:.serena/project.yml` → "exists on disk, but not in" that commit) — so the
+files were untracked in the git root before this commit, almost certainly written by the Serena MCP tool's
+own onboarding step in an earlier session, sitting untracked and unnoticed. The commit that added them was a
+docs-only change to five files inside `PROJECT_ROOT`; the two `.serena/` paths were swept in by whatever
+`git add` invocation staged that commit, without the scope check being applied at staging time.
+
+**This decides the trustworthiness question Marco asked, directly:** a control that lives only in text an
+agent must remember to re-apply at every `git add`/`git commit` — with no tooling backstop — failed on
+exactly its easiest case: a docs-only commit, five in-scope files, where vigilance should have cost nothing.
+**Not trustworthy as currently implemented for Phase 11's Terraform work.** Terraform work raises the same
+failure mode's stakes (a broad add during a `terraform`-adjacent commit could as easily sweep in `.terraform/`
+lock files, a local `.tfvars`, or state-adjacent scratch outside `PROJECT_ROOT`) without changing the
+mechanism at all. **Recommendation, not actioned here** (new tooling is outside this task's scope): a
+pre-commit hook or `make`-target check that fails a commit if any staged path's prefix is outside
+`AWS-Insurance-FNOL-Voice-Agentic-AI/` relative to the git root — cheap, mechanical, and exactly the kind of
+backstop the current all-judgment control lacks.
+
+**Remediated.** `.serena/.gitignore` and `.serena/project.yml` removed from git tracking, new commit
+`e4c9d55` at the monorepo root (`/Users/marco/K21/Real-world/.serena/` — absolute path named per `CLAUDE.md`'s
+scope-rule corollary 1), **history not rewritten** — a new commit, not a rebase or filter, per Marco's
+explicit instruction. Content re-confirmed harmless before removal (per §13.1: generic Serena onboarding
+config, no project-specific paths, no credentials). Untracked local runtime state (`.serena/cache/`,
+`.serena/memories/`, `.serena/project.local.yml`) was already excluded by the now-untracked `.gitignore` and
+remains on disk, untracked, unaffected. **Not pushed** — a new local commit, same undecided-push status as
+the rest of this session's work; Marco's call, same as every other unpushed commit in this record.
+
+### 14.4 Stale commit-count figures retired
+
+Every raw commit-count figure in a **current-state-carrying** location (a table cell, header line, or Report
+block meant to be read as "now," per this file's own established distinction between current-state and
+append-only history — §13.2) has been either removed or bound to a hash and date, in the edits made across
+§14.1 above: `PROJECT_STATE.md`'s header Progress line, phase-status row 10, Definition-of-Done row 11, Phase
+11 entry-conditions rows 5–6, Phase 11 revised-draft criterion 6, and `MANUAL-STEPS.md` item 5 no longer say
+a bare "75" or "76" — each now points to `40e9c17`/`c08184c` with a date, or to this section.
+
+**What was deliberately left alone:** the historical session-log entries in `PROJECT_STATE.md` (the ones
+under "Session log — 2026-08-15 (continued...)") and this file's own §12/§13 narrative prose still say "75"
+and "76" where they did at the time of writing. This follows the exact precedent §13's own opening note set
+for this identical problem — "§12.6/§12.9's historical text is unedited (append-only); this section states
+the current, re-measured figure" — rather than deviating from it. A commit count inside a sentence
+describing what was measured *at that point in the investigation* is a contemporaneous record, not a live
+claim; rewriting it to match today's number would be editing history to look like it always knew the
+ending. The rule this task asks for — remove from prose, or bind to a hash and date — is applied to every
+location that functions as a **live** answer to "how many commits are unpushed"; nowhere does one still
+exist. (There is now exactly one live answer to that question: zero — `origin/main` and local `main` match,
+per §14.1.)
+
+### Self-review (`REVIEW-CRITERIA.md` §1) — this continuation
+
+1. *Opposite result possible?* Yes throughout — the CI run could have failed or not existed; the broader
+   sweep could have surfaced a real new overclaim type; the `.serena/` mechanism could have turned out to be
+   tooling-enforced-but-buggy rather than absent; none assumed, each checked against a primary source
+   (`gh api`, a raw grep re-run, `.git/hooks/` + `settings.json` inspected directly).
+2. *Asserted-but-unchecked?* Whether §13.3's sweep was individual or categorical was exactly this — not
+   stated either way in the original text, resolved here by finding and reading the actual raw artifact
+   rather than inferring from the prose's confidence level.
+3. *Infra error scored as a result?* N/A — no apply, no AWS call. The CI run itself is a real result, not an
+   infra error: distinguished by reading `conclusion: success` from `gh api`, not from the run merely
+   existing (a run that existed but failed would not have been reported as this).
+4. *Cost below estimate?* $0 — `git fetch`, `gh api` reads (free), local greps, one local commit, doc edits.
+5. *Identical markers, different paths?* The `.serena/` finding is exactly this shape one level up: the same
+   words ("PROJECT_ROOT boundary respected") were true for 76 commits running and false for one, with no
+   marker distinguishing which commits actually checked it from the one that didn't.
+6. *Has this check ever failed for the right reason?* Reproducing §13.3's grep and finding it match almost
+   exactly (36/114/13 exact; 150↔151, 8↔9 off-by-one) is itself evidence the original sweep's counting
+   mechanism works as described — a check that reproduces closely, checked directly rather than assumed.
+7. *Headline-number interpretation change?* "The workflow has never run on GitHub" → "ran once, 2026-08-15,
+   success." "76-commit GitHub gap" → "zero, confirmed against the remote." "BLOCKED" (criterion 6) →
+   "pending."
+8. `C1` a tradeable term? Not touched, not scored, not implicated by anything in this entry.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED 2026-08-14, scope-corrected 2026-08-15 (three passes), not reopened. Push landed 2026-08-15T13:41Z (Marco, outside session); first real CI run verified green. Phase 11 revised draft unchanged, still awaiting approval.
+Open defects: sweep recall check found zero new overclaim types across a 573-hit broader term set (row-3 family remains the only one). .serena/ scope violation remediated (commit e4c9d55, not pushed) — mechanism found to be judgment-enforced only, no tooling backstop, flagged as not trustworthy for Phase 11 Terraform work without one. 6 of 7 raw-boto3 sites (Lex/Lambda) still unassessed, unchanged.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: branch-protection console click (Marco's, now unblocked); Phase 11 approval; a tooling backstop for the PROJECT_ROOT scope check (named, not built, out of this task's authorized scope).
+Last apply + gate result: run 31887876709, head_sha c08184c5, 2026-08-15T13:41:24Z, conclusion success, all 9 steps green. No apply, no billable resource created this entry.
+```
+
+**Not done:** the branch-protection console click itself (Marco's); a tooling backstop for the PROJECT_ROOT
+scope check (named, not built); the 6 remaining unassessed raw-boto3 sites (Lex/Lambda, unchanged from
+§13.5); Phase 11 work of any kind, per explicit instruction. Cost this session: $0.

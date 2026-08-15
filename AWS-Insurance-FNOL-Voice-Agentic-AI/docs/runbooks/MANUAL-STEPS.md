@@ -114,11 +114,13 @@ note if that's still outstanding.
   newer equivalent) on `main`, enabling **"Require status checks to pass before merging"** and selecting
   the `eval-gate` job once it has run at least once (GitHub only offers a check as selectable after it has
   reported at least one status).
-- **Status:** ⬜ **OPEN, not yet done.** Update 2026-08-14: Phase 10 criterion 3 (the workflow copy) is
-  **landed** — `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`,
-  Marco-approved by absolute path, byte-identical to the authored source (sha256 verified). The blocker that
-  remains is narrower than before: **a real green run on a real push/PR**, which is Marco's to trigger, not
-  this session's — GitHub only offers a check as selectable in branch-protection settings after it has
-  reported at least one status. Recorded here now, precisely so the gap between "the workflow file exists"
-  and "the workflow actually blocks a bad merge" stays visible rather than being assumed closed the moment
-  the file was copied.
+- **Status:** ⬜ **OPEN, not yet done — but the blocker cleared 2026-08-15T13:41Z.** Update 2026-08-14: Phase
+  10 criterion 3 (the workflow copy) is **landed** —
+  `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`,
+  Marco-approved by absolute path, byte-identical to the authored source (sha256 verified). Update
+  2026-08-15: Marco pushed `origin/main` to `c08184c` from a terminal outside the working session; the
+  first real run — `31887876709`, event `push`, `head_sha c08184c5`, `2026-08-15T13:41:24Z`,
+  `conclusion: success` — now exists (verified against the remote via `git fetch` + `gh api`, not local
+  state; `docs/RESULTS.md` §14). GitHub will now offer `eval-gate` as a selectable required status check.
+  **What remains is only the console click itself** — adding the branch-protection rule — which is still
+  not done and is still Marco's to do, per the manual-step convention this file exists to track.
