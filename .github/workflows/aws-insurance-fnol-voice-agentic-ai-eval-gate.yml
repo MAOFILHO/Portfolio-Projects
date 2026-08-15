@@ -1,0 +1,100 @@
+# FNOL voice agent — evaluation regression gate.
+#
+# ⚠ NOT INSTALLED. GitHub Actions reads workflows only from the repository root, and a
+# `.github/workflows/` directory inside a project folder is silently ignored — no error, no warning.
+# Copying this file to /Users/marco/K21/Real-world/.github/workflows/ is Phase 10's job and requires
+# its own approval by absolute path, per PROJECT_ROOT's scope rule. It is authored here so the gate is
+# reviewable now and installing it later is a copy rather than a design exercise.
+#
+# Runs Tier A only: no AWS credentials, no model calls, $0.00 per run. Tier B costs money and is
+# stochastic, so gating a PR on it would make the build both expensive and flaky. Tier B's numbers enter
+# CI through the committed baseline instead — which is what the baseline-freshness job protects.
+#
+# CF6(a)/(b)/(c) — baseline provenance+age, same-run control, sd-based tolerance for model-dependent
+# metrics — live in evals/regression.py. (a) is exercised for real every run, inside the "Evaluation
+# gate" step below (load_baseline() refuses a stale/unstamped baseline before comparing against it).
+# (b)/(c) are NOT live-gating a Tier B number here, for the same cost/flakiness reason Tier A is the only
+# thing this job scores — but the mechanism itself is exercised every run by the step below, against real
+# committed data, at $0: it reproduces the exact D29 drift (a real ~0.105 macro-F1 gap between a committed
+# baseline and every deterministic re-run since) and shows same-run control reads it correctly as drift,
+# not a regression, while still catching a synthetic regression injected on top of the same real reading.
+# The day Tier B numbers enter this gate, this is the comparison they get instead of compare()'s flat
+# tolerance — proven correct here first.
+
+name: AWS-Insurance-FNOL-Voice-Agentic-AI Eval Gate
+
+on:
+  pull_request:
+    paths:
+      - 'AWS-Insurance-FNOL-Voice-Agentic-AI/**'
+  push:
+    branches: [main]
+    paths:
+      - 'AWS-Insurance-FNOL-Voice-Agentic-AI/**'
+
+defaults:
+  run:
+    working-directory: AWS-Insurance-FNOL-Voice-Agentic-AI
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # baseline-freshness needs the merge base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Unit tests
+        run: python -m pytest tests/unit -q
+
+      - name: Evaluation gate (Tier A + regression vs committed baseline)
+        # No AWS credentials are configured for this job, deliberately. If a change ever makes the gate
+        # require them, this step fails — which is the intended alarm, not an inconvenience.
+        run: python -m evals.report --check-regression
+
+      - name: Baseline freshness
+        # A prompt, model-config, lexicon or corpus change without a baseline update means the committed
+        # baseline no longer describes the system it claims to.
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then echo "not a PR; skipping"; exit 0; fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- . | sed 's|^AWS-Insurance-FNOL-Voice-Agentic-AI/||')
+          python - "$CHANGED" <<'PY'
+          import sys
+          from evals.regression import baseline_is_stale
+          changed = [p for p in sys.argv[1].split() if p]
+          message = baseline_is_stale(changed, any(p.startswith("evals/baselines/") for p in changed))
+          if message:
+              print(f"BASELINE STALE: {message}")
+              sys.exit(1)
+          print("Baseline freshness OK.")
+          PY
+
+      - name: "CF6(b)/(c) mechanism self-check (offline, $0 — does NOT gate this PR's own Tier B numbers)"
+        # Offline self-check: replays evals/baselines/temperature_variance_20260812.json and
+        # tier_b_20260812.json (both already committed) through same_run_compare(). Protects the
+        # mechanism itself from silently breaking, the same role ADR-013's moto canary plays for the
+        # mock guard — this has never had a live Tier B PR to gate, so nothing else would catch it.
+        # The step name is deliberately explicit about scope: a green check here is easy to misread as
+        # "this PR's own intent classifier was measured" when it was not. CF7 (PROJECT_STATE.md) names
+        # what closing that gap would take.
+        run: python -m scripts.demonstrate_cf6_gate
+
+      - name: Recording must be disabled in every contact flow (constraint 18)
+        # `|| true` removed 2026-08-14 (Phase 10). It was added 2026-08-12 (commit 4724fbf), a full day
+        # before scripts/check_flows.py and its tests existed at all (commit dd28b55, 2026-08-13) — `-k
+        # recording` matched zero tests at the time, which pytest reports as exit 5, and `|| true` kept
+        # that from failing a step whose real check hadn't been built yet. It was never removed once the
+        # real tests landed, so this step has been structurally unable to fail for the entire time
+        # constraint 18 has had a real, dedicated check. Verified against real deliberately-bad flows
+        # before removal — see PROJECT_STATE.md, this entry.
+        run: python -m pytest tests/unit -q -k recording

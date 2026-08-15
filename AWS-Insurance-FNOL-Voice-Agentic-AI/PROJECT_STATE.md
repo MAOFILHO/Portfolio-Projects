@@ -10,12 +10,11 @@
 
 ---
 
-**Last updated:** 2026-08-12
-**Current phase:** Phase 7 — Responsible AI and red-teaming — **approved 2026-08-12 (`APPROVED: Phase 7`); Stage 0 complete, reported, paused for Marco's decision before the ablation rungs.** Phase 6 signed off 2026-08-12 (`APPROVED: Phase 6`); Phase 5 signed off 2026-08-12.
-**Progress:** Phase 2 signed off; Connect Customer Basic tier switch approved, executed, and verified same day. Phase 3: Ontario-specific policy corpus, coverage logic, endorsements, 6 policyholders/7 vehicles/8 claims (machine-validated), data card, and the ingestion pipeline (chunking → embedding → DynamoDB, tested) all complete and signed off. Phase 4: conversation design (taxonomy, slots, dialogue policies incl. barge-in×L1 ordering and the retry ceiling, prompt registry with a real-Bedrock length-discipline verification, persona) — signed off. Phase 5: `ADR-012` (MCP transport) plus Stages 1–5 (foundations, MCP servers, knowledge retrieval, Bedrock router, guardrails) built by four parallel subagents plus the main thread; Stages 6–7 (LangGraph nodes incl. a new real L1 injury lexicon, graph assembly with a construction-time L1-dominance check, DynamoDB checkpointer, 12 real-graph integration tests) built directly on the main thread. All integrated, 199/199 tests green, ruff/black/mypy strict clean, zero real AWS calls across all seven stages.
-**Running spend attributable to this project:** **$0.00** provisioned by us.
-Pre-existing accrual only: the claimed Canada DID (rate unverified, est. $0.90–$3.00/mo).
-Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-budget **$0.0134 of $1.00**.
+**Last updated:** 2026-08-14 (this header was stale since 2026-08-12 through Phases 7–10's progress; refreshed at Phase 10's close rather than left to drift further — see this date's session log for what changed)
+**Current phase:** Phase 11 — Observability and operations — **not yet scoped; no exit criteria proposed, no approval sought.** Phase 10 (CI/CD and progressive delivery) closed 2026-08-14, all six criteria satisfied. Phase 9 (Testing) closed 2026-08-14. Phase 8 (Integration and telephony) closed 2026-08-14. Phase 7 (Responsible AI and red-teaming) closed within Phase 9's carry-forward resolution — see Phase status table for the authoritative per-phase state; this line only tracks the frontier.
+**Progress:** Phases 0–6 signed off 2026-08-11/12 (see Phase status table for detail — this line is intentionally not re-itemized here to avoid a second copy of the same drift risk this update exists to fix). Phase 7: `D25`/`D27`/`D29`/`D32` investigated, ablation ladder run, `CF5` tuning pass (did not reproduce). Phase 8: Connect/Lex/Lambda integration, `C1` VERIFIED warm-path 1.000 (26/26). Phase 9: `C14` measured-failing (19ms floor over the 1,800ms budget), mitigation investigated and closed via carry-forward (open item `H`). Phase 10: `CF6` same-run regression-control mechanism built/tested/demonstrated against real `D29` drift; `CF4` discharged; eval-gate workflow authored, hardened (dead `|| true` removed and proven to fail for real), renamed to sibling convention, and landed at the monorepo root — not yet exercised by a real push/PR.
+**Running spend attributable to this project:** **≈$0.525 of the $5.00 Bedrock standing cap** (CloudWatch-reconciled figure, `COSTS.md` — the self-reported log under-counts by ~22%; CloudWatch is the reference, not this log). Phases 8–10 added $0.00 real spend (integration verification, testing, and CI/CD work this session were $0 diagnostics/mocked/local). Provisioned-resource spend: **$0.00** — nothing beyond Phase 8's approved, destroyable resources.
+Pre-existing accrual only: the claimed Canada DID, confirmed **$0.06/day = $1.83/month** (`docs/phase8/COST-ATTRIBUTION-AUDIT.md` §3), plus unmeasured per-minute inbound telephony.
 
 ---
 
@@ -33,7 +32,7 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
 | 8 | Integration and telephony | ✅ Closed 2026-08-14 — Stage 4 closed same day; `C1` VERIFIED (warm path, build `u9iIy...`, 1.000/26/26); cold-start coverage remains an existence proof (1/19), not a measurement |
 | 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing, 19ms floor; open item `H` re-opens on five named triggers |
-| 10 | CI/CD and progressive delivery | 🟡 **OPEN** 2026-08-14 — criteria 1 (`CF6`(a)/(b)/(c) built, tested, demonstrated), 2 (gate re-demonstrated) and 4 (`CF4`, discharged) done same day; criteria 3 (monorepo copy, its own go/no-go), 5 (carry Phase 9 items unchanged) and 6 (`D85` close-out enumeration) outstanding |
+| 10 | CI/CD and progressive delivery | ✅ **Closed 2026-08-14** — all six criteria satisfied same day: 1 (`CF6`(a)/(b)/(c)), 2 (gate re-demonstrated), 3 (monorepo copy, Marco-approved, landed), 4 (`CF4`, discharged), 5 (open item `H` + Phase 9 entry conditions carried forward unchanged), 6 (`D85` close-out enumeration: `CF4`/`CF6` discharged, `CF7` filed unscheduled, `D86` resolved). First real CI run and branch-protection required-status-check remain open, tracked in Phase 11 entry conditions and `MANUAL-STEPS.md` item 5 |
 | 11 | Observability and operations | ⬜ Not started |
 | 12 | Documentation and demo | ⬜ Not started |
 | 13 | Continuous improvement design | ⬜ Not started |
@@ -371,7 +370,7 @@ of them can be discovered as a convenient surprise later:
 | 8 | **Tier B (real-model) harness** covering every metric that needs a live model: intent macro-F1, out-of-scope detection, groundedness, answer relevance, abstention correctness, compound-case correctness, task success. **Cost and agent-internal latency reported on the same run as quality**, per `SUCCESS-METRICS.md` §9 | ⬜ Stage 6 |
 | 9 | **Judge implemented with a named, argued model choice** — recommended `us.anthropic.claude-haiku-4-5`, deliberately a different vendor and family from both models under test, because Nova Lite judging Nova Lite is a self-preference setup. **Every judge-scored metric carries a human-reviewed sample** with a defined sample size and a recorded review, per Phase 1's standing caveat | ⬜ Stage 6 |
 | 10 | **Baseline committed as a reviewed artifact** and **`docs/RESULTS.md`** written with the real numbers — including every gate and target that failed, at its real value, with the `BUILD-PLAN.md` §5 caveats attached rather than appended as fine print | ⬜ Stage 7 |
-| 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | 🟡 **Half done.** Gate build: ✅ Stage 8 — authored, demonstrated on a real regression (lexicon removal, L1 1.000→0.818, caught). Monorepo-root copy: ⬜ open, Phase 10's, not yet approved (2026-08-14: named "rank 2," scope approved, the copy itself still needs its own go/no-go) |
+| 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | ✅ **Done, both halves.** Gate build: Stage 8 — authored, demonstrated on a real regression (lexicon removal, L1 1.000→0.818, caught); extended Phase 10 with `CF6`(b)/(c) same-run control + sd-based tolerance, demonstrated against the real `D29` drift. Monorepo-root copy: **landed 2026-08-14, Phase 10 criterion 3, Marco-approved by absolute path** — `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`, byte-identical to the source (sha256 verified). Not yet exercised by a real push/PR — that trigger is Marco's, see Phase 10 close-out |
 | 12 | **Spend inside the proposed $1.00 sub-budget**, every run logged in `COSTS.md`, stop-and-report at $0.75. **No provisioned resource created** — no DynamoDB table, no Bedrock Guardrail, no Connect/Lex/Lambda resource; all remain Phase 8's with their own approvals, since the standing cap covers inference, not provisioning | ⬜ |
 | 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 6`, typed 2026-08-12, with criterion 14 added before work began |
 | 14 | **A genuinely independent injury-phrasing set**, generated before Stage 7 without reference to `agents/lexicon.py`, covering indirect and euphemistic phrasings — not just clean keyword variants. **L1 and L2 recall reported separately against it**, and separately again from the weakly-held-out set of criterion 3 | ✅ Stage 6 — 43 phrasings by an isolated agent. **L1 0.192 (uncontaminated, sealed before the fix); L2 19/19 on L1's misses; union 26/26.** Reported separately, never blended |
@@ -5601,3 +5600,147 @@ Last apply + gate result: none — no apply, no deploy, no billable resource, no
 
 **Not done:** nothing copied to `/Users/marco/K21/Real-world/.github/workflows/` yet — brought again for
 decision, per the full-review tier. Cost this session: $0.
+
+---
+
+## Session log — 2026-08-14 (continued; criterion 3 GO — workflow copied and verified byte-identical;
+Phase 6 criterion 11 and `MANUAL-STEPS.md` item 5 updated; Phase 10 closed — criteria 5 and 6 satisfied,
+`D85` discharged; Phase 11 entry conditions written)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Marco: "Criterion 3: GO. Copy... approved for that absolute path."** The write this authorizes is outside
+`PROJECT_ROOT` (`/Users/marco/K21/Real-world/.github/workflows/`), named by absolute path per the scope
+rule — the approval this session acted on, not a standing one.
+
+### 1 — Copy performed and verified byte-identical
+
+`cp .github/workflows-for-monorepo-root/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml
+/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`. Verified
+two independent ways, not just a directory listing: `diff` reports the files identical, and `sha256sum`
+matches exactly —
+`a35260a0021b04b127c6ac04ed1e88530c7c7294b067d5bc16de4243516519fb` on both copies. The monorepo-root
+`.github/workflows/` directory now lists 16 files; the new one sits alongside the sibling projects'
+workflows, matching their naming convention.
+
+### 2 — What it takes for a first real run
+
+The workflow has **no `workflow_dispatch` trigger** — checked directly against the copied file's `on:`
+block, not assumed. It fires only on:
+
+- **`pull_request`**, paths `AWS-Insurance-FNOL-Voice-Agentic-AI/**`
+- **`push` to `main`**, paths `AWS-Insurance-FNOL-Voice-Agentic-AI/**`
+
+So the first real run needs either a PR touching a file under that path, or a direct push to `main` that
+touches one — nothing else triggers it, and nothing was triggered this entry, per Marco's own "don't
+trigger it; that's mine to do." `MAOFILHO/Portfolio-Projects` is a public repo (`gh repo view` confirmed
+`isPrivate: false` earlier this phase), so Actions minutes are unmetered — the $0/PR figure already
+reported holds for this first run too, whenever it happens.
+
+### 3 — Phase 6 criterion 11 checkbox closed
+
+Line 374 of this file updated: both halves of the CI-regression-gate criterion are now ✅ — the gate build
+(Stage 8, extended Phase 10 with `CF6`) and the monorepo-root copy (landed this entry, Marco-approved by
+absolute path). This was the last open item on Phase 6's own exit-criteria table; **Phase 6 has no
+remaining open criteria as of this entry** (its phase-status row already read "Signed off," this is closing
+the one criterion whose checkbox had been left half-done since 2026-08-12 pending Phase 10).
+
+### 4 — `MANUAL-STEPS.md` item 5 updated
+
+Status line changed from "blocked on Phase 10 criterion 3 landing" to: criterion 3 **is** landed, the
+remaining blocker is narrower — a real green run on a real push/PR, which is Marco's to trigger. The gap
+between "workflow present" and "workflow blocking" stays visible exactly as instructed; item 5 remains
+⬜ **OPEN**.
+
+### Phase 10 criteria 5 and 6 — closed
+
+**Criterion 5 — open item `H` and the Phase 9 entry-conditions table, carried forward unchanged.** Checked
+directly: nothing in this phase's scope (`CF6`, `CF4`, the workflow) touched `C1`, `C14`, or the router
+latency investigation, so there is nothing to update, only to restate. Both are carried into the Phase 11
+entry-conditions table below verbatim in substance (rows 1–3), satisfying the criterion by carrying them
+into the *next* phase's starting table rather than leaving them referenced only in Phase 9's now-closed
+entry.
+
+**Criterion 6 — `D85` discharged: every carry-forward row Phase 10 owns, enumerated.** Per
+`REVIEW-CRITERIA.md` §5, an affirmative pass over the "Carried forward" table (`PROJECT_STATE.md` §"Carried
+forward to future phases"), row by row, for every row whose `Owner phase` names Phase 10 — not a summary
+from memory:
+
+| Row | Owner phase (as recorded) | Resolution at this close |
+|---|---|---|
+| `CF4` | Phase 9 → reassigned to Phase 10 (2026-08-14 sequencing change) | **Discharged** this phase, before `CF6`, exactly as sequenced — no integration suite exists; the real integration-style work lives in `scripts/verify_*.py`/`scripts/measure_*.py`, `ADR-013`-compliant, checked against the file tree rather than the ADR's own word. Row updated in place |
+| `CF6` | Phase 10 | **Discharged** this phase, criterion 1 — (a) built Phase 7 Stage 8, (b)/(c) built and unit-tested this phase (`same_run_compare`/`sd_tolerance`/`load_measured_sd`), demonstrated against the real `D29` drift, wired into the eval-gate workflow as a $0 per-PR self-check. Row updated in place, with the live-Tier-B caveat explicitly split out rather than folded in |
+| `CF7` | **None — deliberately unscheduled** (filed 2026-08-14, during this phase) | Not owned by any phase, so §5's three-way resolution doesn't strictly apply — but recorded here for completeness since it was created inside Phase 10: **explicitly dropped from scheduling, with a stated reason** (credentials/cost/wantedness all named but unsolved, per Marco's instruction that a limitation be "a named, findable item," not a plan to build it). This satisfies §5's spirit even though the row predates any phase owning it |
+
+No other row in the table names Phase 10 as owner. Two rows outside Phase 10's scope were noticed in
+passing and are named rather than silently left, per the same discipline `D85` exists to enforce — **not
+acted on**, since neither is Phase 10's to resolve: `CF2` (Phase 9's, load-testing concentration) and `CF3`
+(Phase 6's, discharged per line 477 of this file, but the `CF3` row itself was never annotated with a
+`DISCHARGED` marker the way `CF4`/`CF6` now are — a small inconsistency in record-keeping, not a live
+defect, since the work itself is done and cited elsewhere). Flagging both rather than fixing them: fixing
+`CF2`/`CF3`'s record hygiene is not this entry's approval, and `CF2` in particular deserves the same
+"was it actually checked against Phase 9's close-out, or just assumed" scrutiny `D85` was built for — worth
+a future session's five minutes, not this one's scope-creep.
+
+**`D86`** (the lifecycle-directory convention) was filed and resolved in the same earlier entry this phase
+— `CLAUDE.md` corrected, not a carry-forward row, so it needs no further action here; named per Marco's
+"at minimum" list for completeness.
+
+**`D85` itself is now discharged** — this section is the enumeration `REVIEW-CRITERIA.md` §5 requires at a
+phase's own close, applied to the phase that produced the rule.
+
+### Phase 10 — CLOSED
+
+All six exit criteria satisfied: 1 (`CF6`), 2 (gate re-demonstrated against a deliberately bad flow), 3
+(workflow copied, verified byte-identical), 4 (`CF4` discharged), 5 (open item `H` + Phase 9 entry
+conditions carried forward), 6 (`D85` discharged, enumeration above). Phase-status table row 10 updated to
+✅ **Closed 2026-08-14**.
+
+### Phase 11 entry conditions — written here so Phase 11 can start from these files alone
+
+Same convention Phase 8's and Phase 9's closes set. Rows 1–3 restate Phase 9's entry-conditions table
+unchanged (criterion 5's carry-forward); rows 4–6 are new, from this phase's own work.
+
+| # | Condition | Current state, with scope | Source |
+|---|---|---|---|
+| 1 | `C1` status | **VERIFIED, WARM PATH, build `u9iIy...`.** 1.000 (26/26), provenance-gated, `fail-closed: 0`, independently corroborated. Unchanged since Phase 8 — Phase 9 added only a scoping finding, Phase 10 touched nothing `C1`-adjacent. Cold-start coverage remains an existence proof (1/19), not a measurement | `RESULTS.md` §11.7, §11.22 |
+| 2 | `C14` status | **Measured-failing, not unresolved-pending.** Warm-path sub-component p95 exceeds the 1,800ms budget by **19ms — a floor**, structurally excluding ASR/TTS/telephony. Budget is a stated product decision, not derived. Stays GATE, unchanged by Phase 10 | `RESULTS.md` §11.12, §11.14, §11.16, §11.22, §11.23 |
+| 3 | Open item `H` and its triggers | Unchanged — re-opens on: a real inbound call measured; Tier A instrumentation built; a scoped lexical short-circuit designed + `C1` re-verified against it; a Nova Micro serving-characteristics/caching change; the cost ceiling or Bedrock PT pricing changing materially | Ledger row `H`, `RESULTS.md` §11.22 |
+| 4 | `CF6` / same-run regression control | **Discharged, live-wired.** `evals/regression.py::same_run_compare`/`sd_tolerance`/`load_measured_sd`, 11 unit tests, demonstrated against real `D29` data via `scripts/demonstrate_cf6_gate.py`, running as a $0 per-PR mechanism self-check inside the eval-gate workflow. **Does not gate a live Tier B number of any given PR** — that gap is `CF7`, named and unscheduled, not folded into this discharge | `CF6`/`CF7` rows, "Carried forward" table; this entry |
+| 5 | Eval-gate workflow — deployment status | **Landed** at `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`, Marco-approved by absolute path, verified byte-identical to the authored source. **Not yet exercised by a real push/PR** — triggers are `pull_request`/`push:main` on paths under `AWS-Insurance-FNOL-Voice-Agentic-AI/**`, no `workflow_dispatch`; the first real trigger is Marco's to fire, not automated by this project | This entry |
+| 6 | Branch protection (`eval-gate` required status check) | **OPEN**, `MANUAL-STEPS.md` item 5. Confirmed `main` on `MAOFILHO/Portfolio-Projects` carries no branch protection today. Explicitly sequenced *after* condition 5's first real green run — GitHub only offers a check as selectable once it has reported at least one status. Not bundled with the copy, per Marco's instruction | `MANUAL-STEPS.md` item 5 |
+| 7 | `ADR-009` status | **Unedited, stands** — cold-start mitigation order (package → SnapStart → warmer → PT, cost-gated) uncontradicted. Point-4 fallback's implicit assumption (any residual breach is cold-start-shaped) is corrected in scope, not content, by §11.23: the warm path alone already breaches, router-serving-tail-dominated, which provisioned concurrency would not close | `RESULTS.md` §11.23 |
+| 8 | Record-hygiene note, not a gate | `CF2` (Phase 9's) and `CF3` (Phase 6's, done but its row unmarked) — flagged this entry, not resolved, not Phase 10's or Phase 11's to fix by default. Worth a future session checking `CF2` the way `D85` checked `CF4` | This entry, "Carried forward" table |
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED 2026-08-14, all six criteria satisfied. Phase 11 (Observability and operations) not yet scoped — no exit criteria proposed, no approval sought.
+Open defects: none new. Record-hygiene note filed (CF2/CF3 row annotations), not acted on, not urgent.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: nothing for Phase 10 close. Phase 11 scope awaits Marco's direction. Condition 5/6 above (first real CI run, branch protection) await Marco triggering a push/PR.
+Last apply + gate result: none — no apply, no deploy, no billable resource. One write outside PROJECT_ROOT performed under explicit absolute-path approval (the workflow copy), verified byte-identical.
+```
+
+**Checklist run (`REVIEW-CRITERIA.md` §1), what each caught:**
+1. Could this have gone the other way? Yes — `diff`/`sha256sum` could have shown a mismatch; they didn't.
+2. Any asserted-but-unchecked claim? The `workflow_dispatch` absence was checked against the file's `on:`
+   block directly rather than assumed from memory. `CF2`/`CF3` row hygiene was checked rather than assumed
+   clean, and found imperfect — named rather than silently passed over.
+3. Infra error scored as a result? N/A — no infra call this entry.
+4. Cost below estimate? $0 exactly as expected — a copy and doc edits, no liveness concern.
+5. Identical markers, different paths? N/A this entry.
+6. Has this check ever failed for the right reason? The byte-identity check (`diff`+`sha256sum`) would fail
+   loudly on a bad copy; not separately demonstrated failing here since a copy operation has no interesting
+   failure mode to inject, unlike the recording check two entries ago.
+7. Headline-number interpretation change? No new number; Phase 10's closure is a status change, not a
+   metric.
+8. `C1` a tradeable term? Not touched, not scored, not implicated by anything in this entry.
+
+**Not done:** no push/PR triggered (Marco's to do); branch protection not added (sequenced after that);
+`CF2`/`CF3` record-hygiene note filed but not fixed; Phase 11 exit criteria not proposed (scope is Marco's
+next call). Cost this session: $0.
