@@ -4542,3 +4542,188 @@ Lex/Lambda/Logs sites left unassessed (named, not remediated); Phase 6's phase-s
 (named for Marco, not this pass's to decide); no new CI run (nothing to trigger it against — the branch
 still has no workflow). Phase 11 revision: drafted in `PROJECT_STATE.md`, presented for approval, no work
 started, per Marco's explicit constraint.
+
+## 13. Phase 10 correction, final pass (2026-08-15) — push scope review, strengthened wording, git-mediated claim sweep, Phase 6 annotation, Logs guard assessment
+
+Continues §12 without reopening Phase 10. Nothing pushed. **The unpushed-commit count itself drifted
+between passes — 75 in §12.6/§12.9's Report block, 76 now** — because two more local commits (`7a5d6f0`,
+`40e9c17`) landed after that count was taken. Recorded here rather than silently corrected in place,
+because it is a small, live instance of exactly the defect this whole correction exists to catch: a true
+count, carried forward past the point another commit made it stale. §12.6/§12.9's historical text is
+unedited (append-only); this section states the current, re-measured figure.
+
+### 13.1 Push scope review (task 1) — not pushed, report only
+
+`git rev-list --count a4d8ae6..main` → **76**, confirmed two ways (`--count` and `log --oneline | wc -l`
+agree). `git diff --stat a4d8ae6..main` → **173 files, 45,171 insertions(+), 391 deletions(-)**, spanning
+Phases 7–10 (first commit in range: `818a066`, "Phase 6 signed off... Phase 7 scoped"; last: `40e9c17`,
+this session's own cascade fix).
+
+**Files touched outside `AWS-Insurance-FNOL-Voice-Agentic-AI/`:**
+
+| Path | Assessment |
+|---|---|
+| `.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml` | Expected — the Phase 10 monorepo-root copy, Marco-approved by absolute path (§12.1/§12.6). Not a new finding |
+| `.serena/.gitignore`, `.serena/project.yml` | **New finding — unreviewed scope violation.** Introduced at `e0452cb` ("docs(phase8): amend constraint 18..." — an unrelated commit message), never approved by absolute path per `CLAUDE.md`'s scope rule. Content checked directly: `.serena/project.yml` is Serena's own generic tool config (language server = python, no project-specific paths, no credentials); `.serena/.gitignore` excludes `/cache` and `/project.local.yml`, so the memory/cache directory itself was never tracked. **Low severity — no secret, no account data — but it is exactly the "same git repo ≠ in scope" violation `CLAUDE.md` names explicitly**, and it was never surfaced or approved. Named here per that rule's own corollary 2 ("if a change crosses a boundary... say so plainly and record the criterion as violated"), not fixed — removing it from history is a separate decision, not this pass's to make unilaterally |
+
+**Secrets:** this repo's configured scanners (`gitleaks`, `detect-secrets`, per `CLAUDE.md`'s pre-commit
+hook list) are **not installed in this environment** — `which gitleaks detect-secrets` found neither.
+Reported as a real tooling gap, not silently substituted. Ran a manual regex sweep instead (AWS access-key
+pattern, PEM private-key headers, `password=`/`api_key=` literal assignments) over every added line in the
+range: **one hit**, `"AWS_SECRET_ACCESS_KEY"` — checked in context, it is a test enumerating env-var *names*
+to clear (`tests/unit`, a fail-open test), not a literal secret value. **No secret found by this sweep**,
+with the explicit caveat that a manual regex pass is weaker than the project's own configured tools, which
+were unavailable to actually run.
+
+**Account IDs:** grepped every added line for 12-digit numbers, excluding the known-public
+`759316130780`. Raw hit count was large (~200+) and **all traced to one source**: floating-point
+embedding-vector coefficients in `evals/fixtures/embeddings_titan_v2.json` (e.g. `0.003211229108...`
+contains a matching 12-digit digit run) — a false-positive of the regex, not account data, confirmed by
+inspecting the source file directly. **No real account ID beyond the known-public one found.**
+
+**Absolute local paths:** `/Users/marco/K21/Real-world/.github/workflows/...` appears repeatedly — expected,
+it names the real deployed path, itself already a matter of record. One more:
+`PROJECT_STATE.md:1726`, *"Marco supplied `/Users/marco/Downloads/Template1234.md`..."* — a benign process
+note (a README template Marco provided), not a secret, but an absolute local filesystem path that would go
+to a **public** repo (`gh repo view MAOFILHO/Portfolio-Projects` → `"visibility":"PUBLIC"`, checked directly,
+not assumed). Low severity — reveals a username and a folder name, nothing more — named rather than left
+unmentioned, per this task's own standard.
+
+**Large artifacts:** three files over 200KB by blob size — `evals/fixtures/embeddings_titan_v2.json`
+(736KB, cached Titan embeddings, the project's own "runs locally without AWS" fixture, not accidental),
+`PROJECT_STATE.md` (580KB), `docs/RESULTS.md` (361KB) — both are this project's append-only logs, large by
+design, not binary blobs. No unexpected large or binary artifact found.
+
+**Net assessment: nothing found that should block a push on content-safety grounds** (no live secret, no
+real account ID beyond the known-public one, no vendored image, no repo-scope files from the do-not-propagate
+list in `CLAUDE.md`). **The `.serena/` scope violation is real and should be resolved — by decision, not by
+this pass — before or alongside any push.** The push itself remains not-done: still blocked by this
+session's tool-permission denial, and still a 76-commit action, not the one-file sync originally described.
+**Not pushed. Report only, as instructed.**
+
+### 13.2 Row 3 wording — strengthened in place, not just in §12.6
+
+"Never run on GitHub" understated the finding; §12.6 already carried the stronger claim ("the file has
+never existed on the branch GitHub reads"). What had **not** been carried to the same standard: `PROJECT_STATE.md`'s header Progress line, Definition-of-Done row 11, and Phase 11 entry-condition row 5 all still
+said "landed"/"never executed on GitHub" without the sharper distinction. **All three corrected in place**
+this pass (current-state locations, not history, per this file's own edit-in-place convention) to state
+plainly: byte-identity was verified **between two local copies only**; `origin/main` was pinned at `a4d8ae6`
+throughout; the file has never existed on the branch GitHub reads. Definition-of-Done row 4 (`CF6`) was
+found in the same stale state — "running as a $0 per-PR mechanism self-check inside the eval-gate
+workflow," contradicted by §12.2 since the prior pass but never corrected in that row — fixed alongside row
+5 for the same reason: a "current state" table left saying something a dated correction elsewhere had
+already retracted is the same defect class as the row-3 miss itself.
+
+### 13.3 Git-mediated claim sweep — every "committed"/"landed"/"pushed"/"merged"/"in the repo" claim in the 76-commit range
+
+Grepped every added line (`git diff a4d8ae6..main`) for the five terms. AWS/Terraform state claims excluded
+per instruction — those went over the API, not git.
+
+| Term | Raw hits | Real git-mediated claims found | Disposition |
+|---|---|---|---|
+| `landed` (+ `land`/`lands`) | 36 | 3 — the "landed at monorepo root" instances (row 3, row 11, row 5) | **Corrected**, §13.2 above |
+| `pushed` | 8 | 0 — one is Marco "pushing a decision" (unrelated sense); the rest already carry the corrected, precise phrasing from §12.6/§12.9 ("committed locally, not pushed") | None needed |
+| `merged` | 114 | 0 — every hit is `ADR-004`'s "merged router+L2 call" (architecture) or "merged configuration" (system config), zero refer to a git merge to `origin` | None needed |
+| `in the repo` | 13 | 0 — every hit is a **local-filesystem** claim ("grep over files already in the repo," "in the repo" meaning the checkout), accurately scoped as written, no remote implication made or needed | None needed |
+| `committed` | 150 | 0 beyond what §12 already fixed — the bulk are "committed baseline"/"committed real defective outputs" (eval fixture files, a claim about local git state that local `pytest` reads directly, not a CI/remote claim) or already-precise this-session language ("committed locally, not pushed") | None needed |
+
+**Severity of the 3 corrected instances: same as the original row-3 finding — a true claim in one frame
+(file on disk) carried into a table cell that reads as a broader claim (the gate is live) without saying
+so.** No new instance of a *different* kind of git-mediated overclaim (a false "merged to main," a false
+"pushed," a false "in CI") was found in the 76-commit range. **AWS/Terraform state claims were excluded
+from this sweep, per instruction** — those are a different verification question (§12 already treats
+several of them: `terraform apply` outputs, `GetInferenceProfile` reads, etc.) and were not re-audited here.
+
+### 13.4 Phase 6 annotation
+
+Done in place: phase-status table row 6 now carries a dated annotation — "Phase 6 has no remaining open
+criteria," asserted in Phase 10's criterion-3 entry and resting on `CF3`'s discharge, is contradicted;
+`CF3` is OPEN (§12.5/§12.7/§12.9). **Phase 6's own ✅ sign-off status is unchanged, and the phase is not
+reopened** — the annotation says the downstream claim about it was wrong, not that the phase's original
+close-out criteria were unmet.
+
+### 13.5 CloudWatch Logs guard site — assessed, not remediated (different class from the two Bedrock sites)
+
+`scripts/measure_composed_pipeline_deployed.py:509` (`logs = boto3.client("logs", ...)`, inside
+`read_path_attribution`) is the site named in §12.8 as "Unassessed," and the one Phase 11 criterion 4 (PII
+redaction, reading persisted logs) will exercise.
+
+**Is `assert_real_aws_allowed` reachable?** No — checked the file's imports directly; `mock_guard` is not
+imported anywhere in this module. The guard cannot fire here regardless of moto state, the same starting
+condition as the two now-fixed Bedrock sites.
+
+**Has `ADR-013`'s moto-fidelity determination ever run against Logs?** No — `ADR-013`'s table names exactly
+four clients (`BotoBedrockConverseClient`, `BedrockEmbedder`, `DynamoVectorStore`, the checkpointer
+builders); CloudWatch Logs is not among them, and no test in the repo asserts moto's Logs behaviour either
+way, faithful or fabricating.
+
+**Empirical check run to answer the actual question** (cheap, local, $0, no AWS call — the same kind of
+check `ADR-013` itself ran to justify the DynamoDB carve-out, not a new permanent instrumentation):
+
+```
+$ python3 -c "... mock_aws + boto3 logs.filter_log_events on a nonexistent log group ..."
+RAISED: ResourceNotFoundException — "The specified log group does not exist."
+
+$ ... create_log_group + put_log_events + filter_log_events on a seeded group ...
+seeded group events: ['escalating contact hello']   # exactly what was put in, correctly filtered
+```
+
+**Result: moto's CloudWatch Logs behaviour matches the DynamoDB class, not the Bedrock class.** A
+nonexistent resource raises a real, correctly-shaped exception (loud failure) rather than fabricating a
+plausible-looking 200 the way moto's Bedrock stub does; a seeded resource returns exactly what was seeded.
+**Per the instruction ("fix only if the gap is the same class as the two Bedrock sites"): not fixed.**
+Adding the guard here would be the "guard everything for consistency" move `ADR-013`'s own Alternatives
+section rejected as a rule that is simpler to state and wrong — DynamoDB is deliberately unguarded for
+exactly this reason (faithful mock = intended substitution, not a false-verification risk).
+
+**Named rather than banked clean, one residual gap:** this finding is from an ad hoc probe, not a committed
+test. `ADR-013` required the DynamoDB carve-out to be backed by
+`test_dynamodb_paths_are_deliberately_not_guarded` specifically so a future change can't silently reverse
+it. This Logs finding has no equivalent — a future moto upgrade could change this behaviour with nothing in
+the suite to catch it, the same residual risk `ADR-013` §4 names for its own canary. **Not built this
+pass** (would be new instrumentation, out of scope here) — flagged as a real gap for whoever picks up Phase
+11 criterion 4, since that criterion is the one that will actually depend on this path staying faithful.
+
+**Ledger, per instruction — Logs gets a verdict, Lex/Lambda stay named-and-unassessed:**
+
+| Site | Status after this pass |
+|---|---|
+| `scripts/measure_composed_pipeline_deployed.py:509` (`logs`) | **Assessed — same class as DynamoDB, not fixed, verified empirically this pass. Residual gap: finding is ad hoc, not a committed regression test** |
+| `scripts/lexpoc_gate.py:148,238,204`, `scripts/measure_composed_pipeline_deployed.py:428`, `scripts/verify_lex_release.py:281`, `scripts/wait_for_lex_build.py:131` (`lexv2-models`/`lexv2-runtime`, 5 sites) | **Unassessed, unchanged from §12.8** |
+| `scripts/verify_lambda_execution.py:381` (`lambda`) | **Unassessed, unchanged from §12.8** |
+
+`docs/RESULTS.md` §12.8's table is superseded for the `logs` row only by this section; the Lex/Lambda rows
+stand as written there.
+
+### Self-review (`REVIEW-CRITERIA.md` §1) — this continuation
+
+1. *Opposite result possible?* Yes — the Logs probe could have shown fabrication (same class as Bedrock,
+   would have required the fix); the `.serena/` file content could have carried a real path or secret; the
+   claim sweep could have turned up a real "pushed"/"merged" overclaim. None assumed; each checked.
+2. *Asserted-but-unchecked?* The commit count itself (§13, opening note) — 75 was asserted at rest in two
+   places in the prior pass's own Report block and had already drifted to 76 by the time this pass started.
+3. *Infra error scored as a result?* N/A this section — no apply, no push attempted (task 1 was explicit:
+   report, do not push).
+4. *Cost below estimate?* $0 — local git/grep/read, one local moto probe (no AWS call), doc edits.
+5. *Identical markers, different paths?* `bedrock` control-plane vs. `bedrock-runtime` data-plane (§12.8)
+   has a Logs-shaped sibling here: "moto answers the call" is not one fact, it is faithful-for-DynamoDB and
+   fabricated-for-Bedrock under the same words — Logs turned out to sit with DynamoDB, checked, not assumed.
+6. *Has this check ever failed for the right reason?* The Logs probe's negative case (nonexistent log
+   group) is exactly this: proof the check can fail loudly, run before concluding it wouldn't.
+7. *Headline-number interpretation change?* "75 unpushed commits" → "76"; "Unassessed" (Logs) →
+   "assessed, same class as DynamoDB, not fixed."
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED 2026-08-14, scope-corrected 2026-08-15 (three passes), not reopened. Phase 11 revision drafted, not started.
+Open defects: 76-commit GitHub gap (recount from 75; origin/main still pinned at 2026-08-12) — named, not resolved, not pushed this pass by instruction. .serena/.gitignore + .serena/project.yml — unreviewed PROJECT_ROOT-scope violation at e0452cb, named, not fixed. 6 of 7 raw-boto3 sites (Lex x5, Lambda x1) still unassessed. Phase 6's contradicted downstream claim now annotated in place, phase not reopened.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: the push (still denied/scope-expanded; Marco's decision, not resolved by this pass, and not attempted per explicit instruction).
+Last apply + gate result: none — no apply, no deploy, no billable resource, no AWS call (the Logs check ran entirely against local moto).
+```
+
+**Not done:** the push itself (explicitly deferred to Marco's approval of this report, per instruction);
+remediating the `.serena/` scope violation (named, decision not made here); the 6 remaining unassessed
+raw-boto3 sites; a committed regression test for the Logs moto-fidelity finding; Phase 11 work of any kind.
