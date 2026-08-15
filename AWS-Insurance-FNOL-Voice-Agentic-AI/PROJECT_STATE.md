@@ -33,7 +33,7 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
 | 8 | Integration and telephony | ✅ Closed 2026-08-14 — Stage 4 closed same day; `C1` VERIFIED (warm path, build `u9iIy...`, 1.000/26/26); cold-start coverage remains an existence proof (1/19), not a measurement |
 | 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing, 19ms floor; open item `H` re-opens on five named triggers |
-| 10 | CI/CD and progressive delivery | 🟡 Scope approved 2026-08-14 (ranks 1+2 of a proposed ranking); exit-criteria table approved same session but not yet recovered into this file — see session log |
+| 10 | CI/CD and progressive delivery | 🟡 **OPEN** 2026-08-14 — scope (ranks 1+2) and exit criteria written verbatim in this file, session log; `CF4` (criterion 4) already discharged same session; criteria 1/2/3/5/6 outstanding |
 | 11 | Observability and operations | ⬜ Not started |
 | 12 | Documentation and demo | ⬜ Not started |
 | 13 | Continuous improvement design | ⬜ Not started |
@@ -620,7 +620,7 @@ cannot be both."*
 | CF1 | State explicitly in the README: only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | Phase 12 | `D20`, `docs/phase4/PROMPT-REGISTRY.md` |
 | CF2 | Load testing should concentrate on the two generation paths rather than distributing effort uniformly across all six intents — every other intent's latency is fixed-string/template latency, not model latency | Phase 9 | Marco, 2026-08-11 |
 | CF3 | The Nova Micro tight-turn result from Phase 4's closing verification is **n=1** — a smoke test, not evidence the pre-flight padding behaviour is absent. The length check must sample **repeatedly** on that specific path, since it's the one with a known prior failure | Phase 6 | Marco, 2026-08-11 |
-| CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's** | Phase 9 (rule authored Phase 6) | Marco, 2026-08-12 |
+| CF4 | **The Stage 8 moto scoping bug generalises.** Phase 9's integration tests need an explicit rule about what `mock_aws()` covers, or the same false-verification pattern recurs — a real call silently answered by a mock, failing in the direction of looking like it worked. The rule itself is written in Phase 6 (`ADR-013`, `docs/TESTING-CONVENTIONS.md`); **applying it to the integration suite is Phase 9's**. **DISCHARGED 2026-08-14, Phase 10, before `CF6` per the sequencing change — resolved, not re-assigned.** `tests/integration/` and the lifecycle-phased tree `CLAUDE.md`'s monorepo convention names (`pre_provision`/`post_provision`/`post_run`/`post_teardown`) were never built; only `tests/unit/` exists. This item's own target — "the integration suite" — never came into being, in Phase 9 or since: the same never-checked-artifact shape the sequencing change existed to catch. The real integration-style work lives instead in `scripts/verify_*.py`/`scripts/measure_*.py` (cost-gated, real-AWS, outside `tests/` entirely). Every one of the 11 such scripts referencing `mock_aws`/`BotoBedrockConverseClient`/`BedrockEmbedder` was inspected directly: each real-call script carries the `ADR-013` boundary comment `TESTING-CONVENTIONS.md` §1 requires, and the one script that opens a real `mock_aws()` scope (`measure_cf5_redundancy.py`) closes it before constructing the real client — the documented safe shape, not merely the documented rule. `tests/unit/test_mock_guard.py` is the only unit test touching the guarded clients, and it is the guard's own test. `ADR-013` §Consequences already asserted *"this is `CF4`'s discharge mechanism"* (Phase 6, 2026-08-12) — that claim is checked against the actual file tree here, per `REVIEW-CRITERIA.md` §1 item 2, rather than taken on the ADR's word, and it holds | Phase 9 (rule authored Phase 6) → **discharged Phase 10, 2026-08-14** | Marco, 2026-08-12 |
 | CF5 | **Updated 2026-08-12 (`D32`): the intermittency was most likely a temperature symptom, not only a prompt weakness.** The generation path was sampling at 0.7 the whole time, and a defect that appears on some runs from an unchanged prompt is what a sampled decoder produces — so **the Phase 4 prompt fix may look better than it did**, and the detector's tuning pass must be re-judged at 0.0 before the prompt is blamed further. This is a mechanism, not a measurement: this phase has withdrawn three causal stories, so it is written as the leading explanation with the measurement still owed. Original entry: `RentalTowingEntitlement`'s redundancy-by-restatement is a **known failing case with real evidence**, not a hypothetical — the Phase 4 prompt fix is probabilistic, and Stage 8's second real trial reproduced the defect. Phase 6's detector must catch **that specific output** and must be red on real output today; Phase 7 is where tuning gets its pass at it | Phase 7 (detector built Phase 6) | Marco, 2026-08-12 |
 | CF6 | **The regression gate needs a re-baseline discipline, not just a tolerance.** Three properties the Phase 10 CI gate must have, all consequences of `D29`/`D31`: **(a)** every committed baseline records the **date, model ID, temperature and k** it was produced at, and the gate **fails on a baseline older than a stated max age** rather than silently comparing against it; **(b)** the gate distinguishes *"this PR regressed the system"* from *"the model moved"* by re-running the **unchanged** baseline configuration in the same CI job and comparing PR-vs-baseline **within that run**, not PR-vs-committed-number — a same-run control, which is the only construction that survives serving-side drift; **(c)** any tolerance on a model-dependent metric is expressed in **measured standard deviations of that metric at k≥5**, not in fixed percentage points, and no such tolerance may be set for a metric whose sd has never been measured. `SUCCESS-METRICS.md` §9's flat 3-point rule stays in force for deterministic metrics, where it is sound | Phase 10 | Marco, 2026-08-12; `D29`, `D31`, `RESULTS.md` §3.3 |
 
@@ -5164,3 +5164,122 @@ Last apply + gate result: none this entry — no apply, no redeploy, no billable
 **Not done:** Phase 10 exit criteria not written into this file (blocked on the gap above); `CF4`/`CF6`
 work not started; rank 2's workflow copy not touched, per instruction; rank 3 not touched, per instruction.
 Cost this session: $0.
+
+---
+
+## Session log — 2026-08-14 (continued; Phase 10 exit criteria supplied verbatim by Marco and written to
+this file — gap from the prior entry closed; Phase 10 formally OPEN; `CF4` investigated and discharged)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**The gap from the prior entry is closed.** Marco supplied the Phase 10 exit-criteria table verbatim, with
+his own amendment/addition/not-yet-approved markers already in the text. Reproduced below exactly as given —
+not paraphrased, per his instruction.
+
+### Phase 10 exit criteria — approved as proposed, with one sequencing change and one addition
+
+1. `CF6`'s three properties implemented in the workflow under `.github/workflows-for-monorepo-root/`: dated
+   baselines with a max-age fail, same-run PR-vs-baseline control, and sd-based tolerance for model-dependent
+   metrics. Demonstrated against a real committed baseline, not merely described.
+
+2. The gate re-demonstrated to block a deliberately bad change under the new discipline. Phase 6 Stage 8
+   demonstrated the original gate; this confirms the re-baseline logic doesn't quietly weaken it.
+
+3. Workflow copied to `/Users/marco/K21/Real-world/.github/workflows/` — only after separate explicit
+   approval of that absolute path, per the monorepo scope rule. **[NOT YET APPROVED — bring as its own
+   go/no-go when the workflow is ready.]**
+
+4. `CF4`'s status resolved one way or the other: applied, or explicitly re-assigned with a stated reason.
+   Not left silently dropped a second time. **[AMENDED — sequencing: `CF4` resolves FIRST, before `CF6`
+   gate work. A regression gate built over a test tree with no integration directories is a gate over a gap;
+   knowing whether an integration suite exists changes what the gate should cover.]**
+
+5. Open item `H` and the Phase 9 entry-conditions table carried forward into Phase 10's close-out unchanged,
+   since nothing in this scope touches `C14` or `C1`.
+
+6. **[ADDED]** `D85` discharged: the carry-forward tracking defect filed, and `REVIEW-CRITERIA.md` §5
+   enforced at this phase's own close — every carry-forward row Phase 10 owns enumerated as discharged,
+   re-assigned, or explicitly dropped with a reason.
+
+Scope is ranks 1 + 2 only. Rank 3 (Tier 2 real inbound call) is out of this phase. Rank 4 (Tier A) not
+scheduled.
+
+*(Marco's message closed: "Then begin `CF4`: determine whether an integration suite exists, and resolve or
+re-assign with a stated reason. Approve-and-go." — the instruction acted on below.)*
+
+**Phase status table (row 10) and this entry now constitute Phase 10's written, approved exit criteria** —
+the STOP CONDITION ("no phase begins without written exit criteria... and my explicit approval") is satisfied
+as of this entry. Phase 10 is **OPEN**.
+
+### `CF4` — investigated and discharged, approve-and-go
+
+Determined whether an integration suite exists before doing anything else, per the sequencing change and per
+Marco's explicit instruction. Findings, each checked against the actual repository rather than assumed:
+
+1. **No integration suite exists.** `find tests -type d` returns only `tests/unit` (and its `__pycache__`).
+   None of `tests/{pre_provision,post_provision,post_run,post_teardown}` — the lifecycle-phased layout
+   `CLAUDE.md`'s monorepo-conventions section names as this project's pattern, copied from
+   `AWS-Bedrock-Agentic-FineTuning-Platform` — were ever built, and there is no `tests/integration/` either.
+   `CF4`'s own text ("applying it to the integration suite is Phase 9's") had a target that never came into
+   existence, in Phase 9 or since — the same never-checked-artifact shape the sequencing change was written
+   to catch, one level down from `D85`.
+
+2. **The real integration-style work exists, just not under `tests/`.** It lives in `scripts/verify_*.py`
+   and `scripts/measure_*.py` — cost-gated, real-AWS scripts run via `make verify-*` or invoked directly,
+   outside pytest entirely. Grepped every script referencing `mock_aws`, `BotoBedrockConverseClient`, or
+   `BedrockEmbedder` (11 files) and read each hit:
+   - Every script that makes a real Bedrock call carries an explicit `ADR-013` boundary comment
+     (`build_embedding_fixture.py`, `measure_cf5_redundancy.py`, `measure_composed_pipeline.py`,
+     `measure_l2_precision.py`, `measure_router_schema_latency.py`, `measure_temperature_variance.py`,
+     `measure_union_baseline.py`, `profile_cold_start.py`, `run_ablation_ladder.py`,
+     `stage0_forensics.py`, `verify_lambda_execution.py`) — `TESTING-CONVENTIONS.md` §1's "comment the
+     boundary" rule, actually followed, not just written down.
+   - The one script that opens a real `mock_aws()` scope — `measure_cf5_redundancy.py`, to seed corpus
+     ingestion — closes it **before** constructing `BotoBedrockConverseClient` (line 234, after the scope
+     exits at line 100–~230), the exact safe shape `TESTING-CONVENTIONS.md` §1 documents. Not merely
+     described as safe — read the actual line ordering.
+   - In `tests/unit/`, only `test_mock_guard.py` imports the guarded real clients, and it is the guard's
+     own test (asserts `RealAWSCallInsideMockError` inside `mock_aws()`, clean construction outside it) —
+     the intended use, not a violation.
+
+3. **`ADR-013` already named this outcome and it was untested until now.** §Consequences (Phase 6,
+   2026-08-12): *"Phase 9's integration suite inherits the guard automatically — it is in the client
+   constructors, not in test-local discipline... This is `CF4`'s discharge mechanism."* That sentence was
+   asserted, not checked, for two full phases — exactly `REVIEW-CRITERIA.md` §1 item 2's question ("is any
+   'verified' claim actually asserted-but-unchecked?"). It is now checked against the file tree above, and
+   it holds: the guard fires on construction regardless of which directory calls it, so it covers
+   `scripts/` exactly as it would have covered a `tests/integration/` that was never built.
+
+**Resolution: discharged, not re-assigned.** There is no integration suite to apply the rule to, and every
+site outside `tests/unit` that could plausibly mix a mock scope with a real Bedrock call already respects
+the boundary — verified by direct inspection of every matching file, not inferred from the ADR's own claim
+about itself. `Carried forward` table row updated in place (§ above) rather than deleted, per this file's
+convention of appending resolution to a standing row. If a `tests/integration/` or the lifecycle-phased tree
+is built in a later phase, `ADR-013`'s guard covers it automatically by construction — that is the existing
+mechanism, not deferred work.
+
+**Named but out of scope for `CF4` itself, flagged rather than silently noticed:** `CLAUDE.md`'s
+monorepo-conventions section states this project follows the sibling project's
+`tests/{unit,pre_provision,post_provision,post_run,post_teardown}` layout; only `unit` was ever built. `CF4`
+was specifically about applying an existing rule to an integration suite, not about building missing
+lifecycle-phased test infrastructure — those are different tasks, and this entry resolves only the first.
+Whether the missing four directories are themselves a gap worth a future item is Marco's call, not assumed
+here.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — OPEN. Exit criteria written verbatim (criterion 4 / CF4 discharged this entry).
+Open defects: none new. D85's process fix (REVIEW-CRITERIA.md §5) stands; D85 itself is not "discharged" until Phase 10's own close enumerates every CF row it owns (criterion 6) — not yet due.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged this entry, not touched. Nothing in this entry's scope reaches C1.
+Blocked on: nothing. Criteria 1/2/3/5/6 remain open; criterion 3 additionally blocked on separate go/no-go approval before any copy to the monorepo-root path.
+Last apply + gate result: none this entry — no apply, no redeploy, no billable resource created, $0 spend (local grep/read only).
+```
+
+**Not done:** criteria 1, 2, 3, 5, 6 not started — criterion 1 (`CF6`'s three gate properties in the
+workflow) is next. Rank 2's workflow copy and rank 3 remain untouched, per standing instruction. Cost this
+session: $0.
