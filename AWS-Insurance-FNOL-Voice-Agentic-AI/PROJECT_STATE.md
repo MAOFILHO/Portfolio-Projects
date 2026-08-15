@@ -31,9 +31,9 @@ Bedrock standing-approval budget consumed: **≈$0.0138 of $5.00**; Phase 6 sub-
 | 5 | Agent implementation | ✅ **Signed off** 2026-08-12 |
 | 6 | Evaluation harness | ✅ **Signed off** 2026-08-12 — three GATEs failed at their real values, which is the specified outcome of a pre-tuning phase |
 | 7 | Responsible AI and red-teaming | 🟡 Approved 2026-08-12; Stage 0 complete — `D25` confirmed, and a larger finding (`D27`) paused the ladder |
-| 8 | Integration and telephony | ⬜ Not started |
-| 9 | Testing | ⬜ Not started |
-| 10 | CI/CD and progressive delivery | ⬜ Not started |
+| 8 | Integration and telephony | ✅ Closed 2026-08-14 — Stage 4 closed same day; `C1` VERIFIED (warm path, build `u9iIy...`, 1.000/26/26); cold-start coverage remains an existence proof (1/19), not a measurement |
+| 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing, 19ms floor; open item `H` re-opens on five named triggers |
+| 10 | CI/CD and progressive delivery | 🟡 Scope approved 2026-08-14 (ranks 1+2 of a proposed ranking); exit-criteria table approved same session but not yet recovered into this file — see session log |
 | 11 | Observability and operations | ⬜ Not started |
 | 12 | Documentation and demo | ⬜ Not started |
 | 13 | Continuous improvement design | ⬜ Not started |
@@ -371,7 +371,7 @@ of them can be discovered as a convenient surprise later:
 | 8 | **Tier B (real-model) harness** covering every metric that needs a live model: intent macro-F1, out-of-scope detection, groundedness, answer relevance, abstention correctness, compound-case correctness, task success. **Cost and agent-internal latency reported on the same run as quality**, per `SUCCESS-METRICS.md` §9 | ⬜ Stage 6 |
 | 9 | **Judge implemented with a named, argued model choice** — recommended `us.anthropic.claude-haiku-4-5`, deliberately a different vendor and family from both models under test, because Nova Lite judging Nova Lite is a self-preference setup. **Every judge-scored metric carries a human-reviewed sample** with a defined sample size and a recorded review, per Phase 1's standing caveat | ⬜ Stage 6 |
 | 10 | **Baseline committed as a reviewed artifact** and **`docs/RESULTS.md`** written with the real numbers — including every gate and target that failed, at its real value, with the `BUILD-PLAN.md` §5 caveats attached rather than appended as fine print | ⬜ Stage 7 |
-| 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | ⬜ Stage 8 |
+| 11 | **CI regression gate authored and demonstrated to work** — fails on any GATE breach or any TARGET degrading >3pp against the committed baseline; plus a check that fails when a prompt or model-config file changes without an accompanying baseline update. **Demonstrated by opening a deliberately bad change and showing it blocked**, per `SUCCESS-METRICS.md` §9: an untested gate is not a gate. Workflow authored in `.github/workflows-for-monorepo-root/` only — **copying it to `/Users/marco/K21/Real-world/.github/workflows/` is Phase 10 and needs its own approval by absolute path** | 🟡 **Half done.** Gate build: ✅ Stage 8 — authored, demonstrated on a real regression (lexicon removal, L1 1.000→0.818, caught). Monorepo-root copy: ⬜ open, Phase 10's, not yet approved (2026-08-14: named "rank 2," scope approved, the copy itself still needs its own go/no-go) |
 | 12 | **Spend inside the proposed $1.00 sub-budget**, every run logged in `COSTS.md`, stop-and-report at $0.75. **No provisioned resource created** — no DynamoDB table, no Bedrock Guardrail, no Connect/Lex/Lambda resource; all remain Phase 8's with their own approvals, since the standing cap covers inference, not provisioning | ⬜ |
 | 13 | Marco's explicit approval to begin, per the STOP CONDITIONS | ✅ `APPROVED: Phase 6`, typed 2026-08-12, with criterion 14 added before work began |
 | 14 | **A genuinely independent injury-phrasing set**, generated before Stage 7 without reference to `agents/lexicon.py`, covering indirect and euphemistic phrasings — not just clean keyword variants. **L1 and L2 recall reported separately against it**, and separately again from the weakly-held-out set of criterion 3 | ✅ Stage 6 — 43 phrasings by an isolated agent. **L1 0.192 (uncontaminated, sealed before the fix); L2 19/19 on L1's misses; union 26/26.** Reported separately, never blended |
@@ -5087,3 +5087,80 @@ Last apply + gate result: none this entry — no apply, no redeploy, no billable
 **Not done:** no `terraform apply`, no redeploy, no billable resource, `ADR-009` unedited, Phase 10 not opened
 (no exit criteria proposed or approved — Marco's message closes Phase 9 and names Phase 10's *scope class*,
 full review, not its content). Cost this session: $0.
+
+## Session log — 2026-08-14 (continued; fresh session post-`/clear`; Phase 10 scope approval received;
+`CF4` ledger defect filed as `D85`, `REVIEW-CRITERIA.md` §5 added; two stale-record fixes applied; exit-
+criteria text itself not recoverable from any file — flagged rather than reconstructed)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Session opened post-`/clear` with Marco's Phase 10 scope-approval message already in hand** — not
+preceded by re-reading this file first, because the message itself was the first thing in this session's
+context. Read `PROJECT_STATE.md` (Phase 9 close, entry-conditions table, `CF4`/`CF6` definitions) and
+`REVIEW-CRITERIA.md` §4 before acting, per the message's own instruction to work under those tiers.
+
+**Marco's message, what it approved, and what it named:**
+- **Phase 10 scope APPROVED: ranks 1 + 2**, of a ranking proposed earlier the same day (ranks not
+  otherwise recorded in any file — see gap below). Rank 3, named in the message as "Tier 2 real call" (the
+  ~20-real-call / ≈$4 attribution run named in `RESULTS.md` §11.10/§4167 region), **stays unapproved and
+  out of this phase.**
+- **Sequencing change**: `CF4` (mock-scope rule applied to the integration suite, `docs/TESTING-CONVENTIONS.md`
+  / `ADR-013`) resolved **before** `CF6`'s gate work (regression-gate re-baseline discipline) — "a
+  regression gate built over a test tree with no integration directories is a gate over a gap."
+- **Addition**: the `CF4` ledger defect — filed below as `D85` — plus the close-out-enumeration
+  requirement, added to `REVIEW-CRITERIA.md` as new §5.
+- **Two approve-and-go fixes**, applied this entry: the Phase status table's stale rows 8/9 (both read "not
+  started," both closed), and Phase 6 criterion 11's checkbox (gate-build done, monorepo-copy still open).
+- **Rank 2's monorepo-root copy is explicitly NOT approved** — "bring it to me as its own go/no-go when the
+  workflow is ready." Distinct from rank 2's scope being approved.
+- **Rank 3 stays unapproved and out of this phase.**
+- Tiering instruction for the phase: **approve-and-go** for the $0 code and record work, **full review**
+  for the path copy and anything touching `C1` — per `REVIEW-CRITERIA.md` §4, applied literally rather than
+  summarized.
+
+**`D85` — the carry-forward ledger can silently drop an assigned item, and did.** `CF4` was assigned to
+Phase 9 (`PROJECT_STATE.md`, 2026-08-12: "applying it to the integration suite is Phase 9's"). Phase 9's
+close-out (`RESULTS.md` §11.23, `PROJECT_STATE.md` 2026-08-14 entry) enumerates what the phase satisfied
+and carries forward exactly one open item (`H`, `C14`) — `CF4` is named nowhere in the close, neither
+discharged, re-assigned, nor dropped with a reason. It surfaced only because Phase 10's scoping went back to
+the "Carried forward" table directly rather than trusting the close-out summary, per Marco's own framing:
+*"the carry-forward mechanism can silently drop items, which is a tracking defect, not just one missed
+task."* Nothing before this entry checked a close-out against the table it draws from — the same shape as
+`D67` (a log that was never checked) and `D69` (count the instruments before trusting the one you wrote):
+an artifact that could have caught this existed the whole time and nobody read it against the thing it was
+supposed to cover. **Fix**: `REVIEW-CRITERIA.md` §5, added this entry — a phase close must now enumerate
+every carry-forward row it owns as discharged, re-assigned, or explicitly dropped with a reason, no fourth
+option. `CF4` itself is **not yet resolved** by this entry — filing the defect and fixing the process are
+not the same act as doing `CF4`'s actual work, which is Phase 10's, first, per the sequencing change above.
+
+**The gap this entry does not close: Phase 10's actual exit-criteria table.** Marco's message says "Exit
+criteria approved as proposed, with one sequencing change and one addition" — but the proposal itself was
+made in the conversation that preceded this session's `/clear`, and nothing on disk records it: `git status`
+is clean, no uncommitted changes exist, and the prior session-log entry (immediately above this one) closes
+with "Phase 10 not opened — no exit criteria proposed" as the last thing written before context was cleared.
+The approval therefore refers to a document this session has never seen. Writing a reconstructed criteria
+table into this file and labelling it "approved as proposed" would assert a match to text I don't have — the
+same failure shape `REVIEW-CRITERIA.md` §1 item 2 already names ("is any 'verified' claim actually
+asserted-but-unchecked?") and the same class of defect `D85` above was just filed for, one layer up: a
+decision that exists only in a conversation, not yet in the file the next session reads. **Flagged to Marco
+rather than reconstructed or guessed at** — see chat response this turn. Everything else in his message
+(sequencing, the ledger addition, the two record fixes, rank 2's copy withheld, rank 3 out of scope) is
+self-contained and independent of the missing table, and is applied in full above.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — scope approved (ranks 1+2), NOT opened. Exit-criteria table approved by Marco but not recovered into this file — see gap above.
+Open defects: D85 filed (CF4 dropped from Phase 9 close-out, ledger defect) — process fix applied (REVIEW-CRITERIA.md §5), CF4 itself still open, owned Phase 10, first per sequencing change.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged this entry, not touched.
+Blocked on: Marco supplying or confirming Phase 10's exit-criteria table text before it can be written into this file as approved.
+Last apply + gate result: none this entry — no apply, no redeploy, no billable resource created.
+```
+
+**Not done:** Phase 10 exit criteria not written into this file (blocked on the gap above); `CF4`/`CF6`
+work not started; rank 2's workflow copy not touched, per instruction; rank 3 not touched, per instruction.
+Cost this session: $0.

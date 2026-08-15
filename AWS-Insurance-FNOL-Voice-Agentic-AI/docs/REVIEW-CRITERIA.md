@@ -104,3 +104,26 @@ condition fired and where.
 - Never create the Connect instance or DID.
 - `PROJECT_STATE.md` updated before any session ends.
 - `C1` is a gate, not a tradeable term.
+
+## 5. Phase close-out completeness
+
+Added 2026-08-14 (`D85`), Marco, after `CF4` was assigned to Phase 9 (2026-08-12) and Phase 9's close-out
+(`RESULTS.md` §11.23, `PROJECT_STATE.md` 2026-08-14) named zero of the carry-forward items by number —
+`CF4` did not appear, discharged or otherwise, and the gap was found only because the next phase's scoping
+went back to the "Carried forward" table directly rather than trusting the close-out's own summary. The
+carry-forward table records an *assignment*; nothing before this section enforced that assignment against
+completion, so a close-out could — and did — drop an item silently, in the direction that looks like
+nothing is wrong.
+
+**A phase close must enumerate every carry-forward item whose `Owner phase` names the phase closing**, and
+resolve each one exactly one of three ways — no fourth option:
+
+- **discharged** — the item's own row updated with how and where;
+- **re-assigned** — to a named future phase, with the re-assignment itself written into the "Carried
+  forward" table's `Owner phase` column, not left implicit in prose;
+- **explicitly dropped**, with a stated reason.
+
+An item silently absent from a close-out is not equivalent to any of these — it is the defect this section
+exists to prevent. This is additional to, not a substitute for, §3's report header: "Open defects:" invites
+whatever the closing session happened to remember, while this requires an affirmative pass over the
+carry-forward table itself, row by row, for every row owned by the phase closing.
