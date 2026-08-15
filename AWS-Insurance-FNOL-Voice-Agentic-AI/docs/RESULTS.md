@@ -4921,3 +4921,73 @@ Last apply + gate result: run 31887876709, head_sha c08184c5, 2026-08-15T13:41:2
 **Not done:** the branch-protection console click itself (Marco's); a tooling backstop for the PROJECT_ROOT
 scope check (named, not built); the 6 remaining unassessed raw-boto3 sites (Lex/Lambda, unchanged from
 §13.5); Phase 11 work of any kind, per explicit instruction. Cost this session: $0.
+
+---
+
+## 15. Push attempted and denied; sweep lesson written as a standing rule; scope-boundary backstop built
+and demonstrated both ways (2026-08-15, continued)
+
+Three follow-ups. No Phase 11 work.
+
+### 15.1 Push — attempted, denied, not forced
+
+`git push origin main` (commits `e4c9d55`, `2613888`) was denied by this session's Bash tool-permission
+layer — the same denial §13.1/§14.1 already established for this repo. Not retried with a different
+invocation, not force-pushed. Reported so Marco can run it from a terminal, per his own instruction for
+exactly this outcome.
+
+### 15.2 Sweep lesson — written as a standing rule, not only as an event
+
+`docs/REVIEW-CRITERIA.md` §6 ("Grep/sweep-based claims — recall is bounded by the search terms, not the
+corpus") added: every future sweep report must state the term list, the raw hit count, and whether the
+remainder was individually inspected or pattern-classified. `REVIEW-CRITERIA.md` is the document every
+report is already required to self-review against before sending (§1) — Phase 11 reads it by the same
+mechanism every phase since `D83` has. A pointer was also placed directly in the Phase 11 revised-draft
+table (`PROJECT_STATE.md`), immediately under the criteria table, so the rule is visible from the plan
+itself and not only from a cross-reference.
+
+### 15.3 Scope-boundary backstop — built, demonstrated both directions
+
+**Built:** `scripts/check_project_root_scope.py` — rejects any staged path outside `PROJECT_ROOT`
+(`AWS-Insurance-FNOL-Voice-Agentic-AI/`) that isn't in its `ALLOWLIST`, currently exactly one entry: the
+Phase-10-approved monorepo-root eval-gate workflow copy. `scripts/git-hooks/pre-commit` is the tracked shim
+that execs it; `make install-hooks` installs the shim to `.git/hooks/pre-commit` (the one write this whole
+mechanism makes outside `PROJECT_ROOT`, and the only one it *can* make one there — `.git/hooks/` is not
+git-tracked, so this is a per-clone step, named as a real limitation, not glossed over: a fresh clone or
+`git commit --no-verify` bypasses it entirely). `make verify-project-root-scope` runs the same check
+standalone, against whatever is currently staged.
+
+**Demonstrated failing, not just asserted to work — per Marco's own standard (`REVIEW-CRITERIA.md` §1.6,
+"a check that has only ever passed is untested"):**
+
+1. Unit-level: `scope_violations()` called directly against four cases (in-scope path, the allowlisted
+   path, an out-of-scope path, a mixed list) — all four asserted and passed, checkable independent of git
+   state.
+2. **Live, end-to-end:** staged `scope-guard-test-file.txt` at the monorepo root, ran a real `git commit` —
+   the installed hook printed the violation and the file's path, and `git commit` exited 1, refusing the
+   commit. `git reset HEAD` unstaged it, the file was deleted, `git status` confirmed nothing left behind.
+3. **Demonstrated passing, not only failing** — the same standard cuts both ways; a hook shown only
+   rejecting hasn't proven it lets real work through. The five legitimate, in-`PROJECT_ROOT` files this
+   session actually changed (`Makefile`, `PROJECT_STATE.md`, `REVIEW-CRITERIA.md`, and the two new hook
+   files) were staged and committed for real (`9af99c3`) *through* the installed hook, not with
+   `--no-verify` — the commit that records this backstop is itself the green-path proof.
+
+**Scope, stated precisely:** this hook protects this one local clone once `make install-hooks` has been
+run in it. No CI-side equivalent exists — flagged in the script's own docstring, not left for someone to
+discover by testing a fresh clone. If a server-side backstop is wanted (checking a PR's full commit range
+the same way, inside the eval-gate workflow or a sibling job), that is new work, out of this task's
+explicit scope ("build it," not "build every layer of it").
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED, corrected, not reopened. Push landed 2026-08-15T13:41Z; a further two commits (e4c9d55, 2613888) remain unpushed, denied again this entry. Phase 11 revised draft has a standing-rule pointer added, still awaiting approval.
+Open defects: none new. The 6 unassessed raw-boto3 sites (Lex/Lambda) and the no-CI-side-equivalent gap on the new scope hook are both named, neither remediated, neither in this task's scope.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: the push (Marco's, from a terminal); branch-protection console click (Marco's).
+Last apply + gate result: none — no apply, no billable resource. Two new local commits (9af99c3, plus this doc commit), a real git-hook install at /Users/marco/K21/Real-world/.git/hooks/pre-commit, no AWS call.
+```
+
+**Not done:** the push (denied, Marco's to run); a CI-side (server-enforced) equivalent of the scope hook;
+Lex/Lambda guard assessment; Phase 11 work of any kind, per explicit instruction ("Do not begin Phase 11
+work. Report and stop."). Cost this session: $0.

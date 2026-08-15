@@ -6091,3 +6091,50 @@ Last apply + gate result: run 31887876709, head_sha c08184c5, 2026-08-15T13:41:2
 check (named, not built, out of this task's authorized scope); Lex/Lambda guard assessment (6 sites,
 unchanged); Phase 11 work of any kind, per explicit instruction ("Do not begin Phase 11 work. Report and
 stop."). Cost this session: $0.
+
+---
+
+## Session log — 2026-08-15 (continued; push attempted and denied, not forced; sweep lesson written as a
+standing rule in `REVIEW-CRITERIA.md`; PROJECT_ROOT scope-boundary pre-commit hook built and demonstrated
+both ways)
+
+**STOP CONDITIONS — restated verbatim:**
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Phase 10 stays CLOSED. No Phase 11 work. Full account: `docs/RESULTS.md` §15. Summary against Marco's three
+items:
+
+**1 — Push: denied, not forced.** `git push origin main` (`e4c9d55`, `2613888`) was denied by this session's
+Bash tool-permission layer. Reported, not retried differently, not forced. Marco's to run from a terminal.
+
+**2 — Sweep lesson, written as a rule.** `docs/REVIEW-CRITERIA.md` §6 added: a sweep's "found"/"not found"
+claim is scoped to its search terms until a recall check with different wording agrees; every future sweep
+report must state the term list, the raw hit count, and individually-inspected-vs-pattern-classified. A
+pointer sits directly under the Phase 11 revised-draft criteria table too, so it's visible from the plan
+Phase 11 will actually read, not only from `REVIEW-CRITERIA.md`.
+
+**3 — Scope-boundary backstop, built and demonstrated, not deferred.** `scripts/check_project_root_scope.py`
+rejects staged paths outside `PROJECT_ROOT` against an explicit `ALLOWLIST` (one entry: the Phase-10-approved
+workflow copy). `scripts/git-hooks/pre-commit` is the tracked shim; `make install-hooks` installs it to
+`.git/hooks/pre-commit` (the one write outside `PROJECT_ROOT` this mechanism makes, and the only one it can
+— hooks aren't git-tracked, so this is a per-clone step, named as a real limitation). Installed and
+demonstrated **both directions**: a real `git commit` staging a file outside `PROJECT_ROOT` was rejected
+(exit 1), unstaged and cleaned up; a real commit of this session's five legitimate in-scope files went
+*through* the installed hook and succeeded (`9af99c3`) — not run with `--no-verify`. No CI-side (server-
+enforced) equivalent exists yet — named in the script's own docstring, not left to be discovered later.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 10 — CLOSED, not reopened. Push landed 2026-08-15T13:41Z; two further commits (e4c9d55, 2613888) plus this entry's (9af99c3, and the doc commit recording it) remain unpushed, denied again this entry. Phase 11 revised draft carries a new standing-rule pointer, still awaiting approval.
+Open defects: none new. No CI-side equivalent of the new scope hook (named, not built, out of scope). 6 unassessed raw-boto3 sites (Lex/Lambda) unchanged.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this entry.
+Blocked on: the push (Marco's, from a terminal); branch-protection console click (Marco's).
+Last apply + gate result: none — no apply, no billable resource. Real git-hook install at /Users/marco/K21/Real-world/.git/hooks/pre-commit, no AWS call.
+```
+
+**Not done:** the push (denied, Marco's); a CI-side scope-check equivalent; Lex/Lambda guard assessment;
+Phase 11 work of any kind, per explicit instruction. Cost this session: $0.
