@@ -106,3 +106,43 @@ for a real reason (an undisclosed baseline-relevant change) on the remote — a 
 `evals.report --check-regression`'s live-metric comparison, but one of the four steps Marco named as an
 acceptable target, and the only one of the four not already covered by this session's committed-source
 fixes or by existing unit-test duplication.
+
+**Marco's ruling, 2026-08-16, on this substitution**: accepted, and it is the correct choice, not a
+concession — "it is a real gate step, past Unit tests, and it is what branch protection now guards. Forcing
+the literal 'Evaluation gate' step means manufacturing a regression to satisfy a step name." Recorded
+explicitly at criterion 6's closure (`PROJECT_STATE.md`, once that file is safe to edit) rather than left
+implicit: the criterion's own written text says "Evaluation gate"; the demonstration used "Baseline
+freshness" because Finding B showed the criterion's named class of regression is structurally caught by
+`test_eval_harness.py` inside "Unit tests" first, on this repository, as it exists today. **What was
+demonstrated and what was not, stated separately**: the branch-protection mechanism blocking a real CI
+failure on the remote — demonstrated. The literal "Evaluation gate" step's own failure behavior, the step
+that gives the workflow its name — **still never observed failing on GitHub.** Filed as its own open item
+below (`OI13`), not folded into criterion 6's closure as if it were satisfied by the substitution.
+
+## `D95`/`OI12` — the double `git checkout <branch> -- <path>` overwrite, filed same family as `D91`/`D94`
+
+Two accidental overwrites this entry, same mechanism both times: `git checkout ci-negative-control-2026-08-16-v3
+-- <paths>` was run against an **assumption** about what that branch contained (that it carried the `_paths.py`
+fix, then later that it carried the five test-file fixes), not a **check** — in both cases the branch had
+never actually had that content committed to it, so the command silently overwrote genuinely uncommitted
+local work (the same fixes this whole audit is about) with the branch's own stale, committed content.
+
+**Recovery worked both times, and that is luck, not process**: the full diffs happened to already be
+captured earlier in the same conversation (from `git diff main -- <path>` calls run for unrelated reasons),
+so reconstruction was possible and was verified afterward (58 tests, then 643 tests, passing). Had those
+diffs not already been on hand, both fixes would have been silently lost a second time, in the same session
+that exists to document the first time this class of loss happened (`D87`'s fix, originally).
+
+**Same family as `D91`/`D94`, one level closer to the tool itself**: `D91` is uncommitted work getting swept
+into an unrelated commit; `D94` is a tracked file importing an untracked one; this is a targeted git
+operation overwriting uncommitted content because its source ref was assumed rather than verified to have
+that content. All three are "the working tree and the repository disagree, and something acted on the
+repository's version without checking."
+
+**Guard proposed, not built** (per this project's own standing convention for this class of finding —
+record and propose, don't fix silently mid-task): before any `git checkout <ref> -- <path>`, either (1)
+check `git status --porcelain -- <path>` is non-empty and diff it against `<ref>:<path>` first, refusing
+(or requiring explicit confirmation) if the working copy has uncommitted changes the ref doesn't already
+contain, or (2) `git stash push -- <path>` before the checkout and `git stash pop` after, so an incorrect
+assumption about the ref's content becomes a stash conflict to resolve rather than a silent loss. Which of
+the two — or a session-level habit rather than a scripted guard — is Marco's call, not decided here.
