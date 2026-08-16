@@ -10052,3 +10052,65 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducibl
 Blocked on: nothing. Next: criterion 2 (cost-dashboard cross-check), per Marco's stated order.
 Last apply + gate result: none this entry. $0.00 real spend -- one free-tier CloudWatch metrics read.
 ```
+
+## 75. Criterion 2 — cost dashboard cross-checked against a live independent number; the weekly schedule
+itself has never fired, named rather than worked around
+
+`§75`, `session-auditfold` block. No `D`/`OI` -- a cross-check closing a criterion, one real named gap
+folded into the same closure rather than hidden by it.
+
+**The cross-check.** A fresh, independent `ce get-cost-and-usage` call, identical query shape to
+`lambda_src/ce_pull.py` (`RECORD_TYPE=Usage` filter, `Granularity=MONTHLY`, no tag filter -- this Lambda
+pulls account-wide untagged gross usage, unlike the budget's tagged-only scope), MTD `2026-08-01`–`2026-08-17`,
+`us-east-1` (Cost Explorer's platform-wide-only region, per the module's own docstring):
+
+| | Amount | `Estimated` | When |
+|---|---|---|---|
+| Dashboard's own datapoint (`FNOL/Observability`/`MTDGrossUsageUSD`, `Estimated=True` dimension) | $3.7828941608 | true | 2026-08-14T19:40:00-04:00 |
+| This entry's independent read | $4.3355138372 | true | 2026-08-16, live |
+
+$0.55 growth over ~2 days -- correctly directioned (CE spend within a month only grows) and consistent in
+magnitude with this session's own Bedrock/CE usage in the interim, not an anomaly. **The mechanism is
+confirmed correct**: right query shape, right MTD window semantics (`_mtd_range`'s exclusive-end handling
+verified by inspection against this same live call), right relationship to a number derived independently
+of the Lambda's own code path.
+
+**Finding the Lambda's history required a self-correction.** The first `GetMetricStatistics` read against
+`FNOL/Observability`/`MTDGrossUsageUSD` with no `--dimensions` argument returned zero datapoints -- read
+naively, that looks like "the pipeline has never produced a metric point," exactly Marco's named blocker
+condition. It was not: `ce_pull.py` writes every point with an `Estimated` dimension (`str(is_estimated)`),
+so a dimensionless query can never match it -- CloudWatch's `GetMetricStatistics` requires an exact
+dimension match, not a superset/subset relationship. Re-run with `--dimensions Name=Estimated,Value=True`
+found the one real datapoint above. `list-metrics` against the namespace confirms this is the *only*
+dimension combination that has ever been published. Recorded because the almost-report ("blocker: no data
+has ever been written") would have been wrong for a mechanical reason, not a design one -- the same
+"verify before reporting" discipline this project has needed repeatedly today.
+
+**The named gap, not folded into the closure.** `aws_scheduler_schedule.ce_pull_weekly` (`rate(7 days)`,
+`State: ENABLED`) was created `2026-08-15T18:40:12-04:00` -- confirmed live via `get-schedule`. The one
+existing datapoint is timestamped `2026-08-14T19:40:00-04:00`, **almost a full day before the schedule
+existed** -- it is a manual test invocation from Stage A's own build/verification, not a schedule-triggered
+run. **`aws_scheduler_schedule.ce_pull_weekly` has never fired.** Next scheduled fire is
+~`2026-08-22T18:40:12-04:00`. Per Marco's explicit instruction ("if the Lambda's weekly pull has not run
+yet, say so — that is a real blocker, not something to work around"): said here, not worked around. It is
+not, however, the same claim as "the pipeline has never produced real data" -- one real, correct datapoint
+exists, just not yet one the schedule itself produced. Criterion 2 closes on the cross-check (mechanism
+proven correct against a live independent number); the schedule's first self-triggered run remains
+unconfirmed and is not blocking anything else in this phase -- it will confirm itself on ~2026-08-22 with no
+action needed, or it will not, in which case that is `aws_scheduler_schedule.ce_pull_weekly`'s own defect to
+diagnose then, not now.
+
+Cost: one `ce get-cost-and-usage` call, $0.01, as budgeted (`COSTS.md`). A second, earlier CE call this
+session -- `D93`/`OI10`'s $0.25 threshold re-derivation, $0.4795457178 tagged MTD -- was made and reported to
+Marco in real time but never logged in `COSTS.md`; backfilled alongside this entry's own row, found while
+adding this one, not left for later.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- criterion 2 closed. Independent ce get-cost-and-usage read ($4.3355138372, Estimated:true, same query shape as ce_pull.py) compared against the dashboard's one existing datapoint ($3.7828941608, Estimated:true, 2026-08-14) -- correctly directioned $0.55 growth, mechanism confirmed correct. Named gap not folded in: aws_scheduler_schedule.ce_pull_weekly has never fired (created 2026-08-15T18:40:12-04:00, next fire ~2026-08-22); the one existing datapoint predates the schedule and is a manual test invocation, not a scheduled run. First GetMetricStatistics read (no --dimensions) wrongly looked like zero data ever written -- self-corrected before reporting; ce_pull.py writes an Estimated dimension, dimensionless query can't match it.
+Open defects: none new. Criterion 2 closes done, with the schedule's first self-triggered run named as unconfirmed-not-blocking, not silently assumed.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducible from main as of 8f140bc. Not touched this entry.
+Blocked on: nothing. Next: criterion 3 claim (b), per Marco's stated order.
+Last apply + gate result: none this entry. $0.01 real spend, one CE call, as budgeted; a second, earlier session CE call ($0.01, D93/OI10) backfilled into COSTS.md this entry, found while logging this one.
+```
