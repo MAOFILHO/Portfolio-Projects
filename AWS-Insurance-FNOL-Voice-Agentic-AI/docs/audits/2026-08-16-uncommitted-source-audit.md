@@ -362,8 +362,113 @@ depends on remembering does not change the failure mode, only its label.
    pending control**, unless and until a real session-start hook point is confirmed and wired up.
 
 **Recommendation, not a decision**: build `D98`'s duplicate-identifier lint and `D97`'s checkout wrapper —
-both fit the project's existing hook pattern exactly. Record `D91`'s session-start check and `D92`'s
-baseline-archive step as accepted-risk conventions explicitly, in whatever record eventually carries them
-into `PROJECT_STATE.md`, rather than letting them sit next to `D97`/`D98` looking like the same kind of
-thing. Marco's call on sequencing and on whether `D91` gets a real hook point investigated before being
-downgraded to convention.
+both fit the project's existing hook pattern exactly. Record `D91`'s session-start check as an
+accepted-risk convention explicitly, in whatever record eventually carries it into `PROJECT_STATE.md`,
+rather than letting it sit next to `D97`/`D98`/`D92` looking like the same kind of thing — `D92` is
+convertible too (item 3 above), just costlier, so it is not in the same bucket as `D91`. Marco's call on
+sequencing and on whether `D91` gets a real hook point investigated before being downgraded to convention.
+
+## `D98`'s duplicate-identifier lint — built, per Marco's instruction 2026-08-16
+
+**Files**: `scripts/check_duplicate_identifiers.py` (new), `tests/unit/test_check_duplicate_identifiers.py`
+(new, 9 tests), `scripts/git-hooks/pre-commit` (extended, second check appended — `set -e` still exits on
+the first failure, only the last check keeps the `exec`), `Makefile` (`verify-duplicate-identifiers`
+target + `.PHONY` entry, same "STAGED not tree, manual escape hatch for the hook" scope comment as
+`verify-project-root-scope`). `make install-hooks` re-run — the installed `.git/hooks/pre-commit` now
+runs both checks.
+
+**Design question 1 — section numbers included, not just `D`/`OI`.** Same regex-scan mechanism, no real
+added cost, per the framing this was asked under. Scope: `docs/RESULTS.md`'s top-level `## <n>.`/
+`## <n>.<n>...` headings only — `PROJECT_STATE.md` doesn't use numbered section headings for its own
+structure, only the `D`/`OI` row scheme, so there was nothing parallel to check there.
+
+**Design question 2 — a pre-existing duplicate does not block every future commit.** `GRANDFATHERED_OI`/
+`GRANDFATHERED_D`/`GRANDFATHERED_SECTIONS`, three empty `frozenset`s today, same shape and same discipline
+as `check_project_root_scope.py`'s own `ALLOWLIST` — add an entry only alongside the specific, recorded
+reason a collision was left unresolved, never in advance. A sweep at build time found **no actual
+pre-existing duplicate** in either file (confirmed both by the regex directly and by the two "shipped
+ledger is clean" pytest baselines below), so the list ships empty rather than seeded speculatively. Stated
+plainly in the docstring: an entry silences one specific identifier, not a permanent exemption — a THIRD
+row later claiming an already-grandfathered number still fails, because duplicate-ness is recomputed from
+content every run, not cached as a count.
+
+**Definition site, not every mention** — the actual design problem this check exists to solve. A raw
+`grep -oE 'D[0-9]+'` sweep run earlier in this session's own investigation returned dozens of hits per
+identifier (prose cross-references: "`D91`'s hazard realized", "cross-referenced into `OI6`") against
+exactly one row that legitimately owns each. The checker only counts a `D` number when it headlines an
+`OI` row (`| OI<n> | **\`D<n>\`` immediately after) and only counts an `OI` number at the row it starts —
+never a bare mention. `test_cross_reference_mentions_do_not_count_as_duplicate_definitions` encodes this
+directly: a fixture where `D87` is mentioned 6 times but legitimately headlines only once passes clean.
+
+**Red before green, demonstrated without touching `PROJECT_STATE.md`/`RESULTS.md`**, per the explicit
+instruction not to touch either file this pass. Same discipline `tests/unit/test_check_flows.py` already
+uses for the shipped contact flow — "the shipped ledger is the fixture, and every test mutates **a copy**
+of it into one specific collision," never the file on disk:
+
+- 9 pytest cases, all against real file content read once and mutated in memory:
+  `test_the_shipped_project_state_ledger_has_no_duplicate_oi_or_d_identifiers` and
+  `test_the_shipped_results_doc_has_no_duplicate_section_numbers` (green, against the real, current,
+  unmodified files — proves the check doesn't just pass on synthetic fixtures);
+  `test_duplicate_oi_row_number_is_caught`, `test_duplicate_d_headline_across_two_different_oi_rows_is_caught`,
+  `test_duplicate_results_section_number_is_caught` (red, each constructs a real collision by duplicating
+  an actual row/heading from the real content, in memory only); `test_project_state_with_zero_oi_rows...`
+  and `test_results_with_zero_section_headings...` (red, "found nothing" case); the two definition-vs-mention
+  tests above. `.venv/bin/python -m pytest tests/unit/test_check_duplicate_identifiers.py -v` — 9/9 passed.
+  Full suite re-run after: 673/673 passed (664 before this entry + 9 new).
+- A second, CLI-shaped demonstration, run directly against the real `PROJECT_STATE.md` content
+  (read, mutated in memory, never written back), exercising the same `check_project_state` the installed
+  hook calls:
+  ```
+  --- RED: real content + one injected D87 duplicate (never written to disk) ---
+   - DUPLICATE D87: headlines more than one Open Items row, on PROJECT_STATE.md line(s) [750, 7689].
+  exit code would be: 1
+
+  --- GREEN: real, untouched content ---
+  violations: []
+  exit code would be: 0
+  ```
+- `make verify-duplicate-identifiers` run for real against the actual git index (no mutation at all):
+  `check-duplicate-identifiers: ok — no duplicate OI/D identifiers, no duplicate RESULTS.md section
+  numbers` — exit 0, real git plumbing, real current content.
+
+**Why the demonstration took this shape rather than a live commit against the tracked files**: Marco's
+instruction this turn was explicit — do not touch `PROJECT_STATE.md`/`RESULTS.md`, still under live edit
+by two other sessions. Injecting a real duplicate into either file, even temporarily, to stage-then-revert
+it would itself be a write to a file under someone else's live edit, the exact category the instruction
+excludes. The pytest-plus-direct-CLI demonstration above is the same logical proof (a real collision built
+from real content, shown red; real content, shown green) without ever landing a byte on either tracked
+file — this is a substitution of *mechanism*, not of *rigor*, stated so a later reader doesn't have to
+guess whether the standard was actually met.
+
+**`D91`, `D97`, `D92` — status recorded explicitly, per Marco's instruction, so none of the three is left
+looking like a pending control it isn't:**
+
+| Guard | Status | Why |
+|---|---|---|
+| `D98` (this entry) | **BUILT** | Fits the existing pre-commit-hook pattern directly; demonstrated red/green above |
+| `D97` (checkout hazard) | **Assessed convertible, not built** | Needs a `git checkout` wrapper (no native git hook exists for path-scoped checkouts) — same bypass profile as the `PROJECT_ROOT` hook, which this project already accepted as good enough once. Not built this pass; next candidate |
+| `D92` (baseline archive) | **Assessed convertible, not built** | Needs a same-commit check that a superseded baseline blob is archived before being overwritten — same shape as the already-real `baseline_is_stale` mechanism, one lifecycle step earlier, more machinery than `D97`/`D98`. Not proposed for immediate build |
+| `D91` (session-start check) | **ACCEPTED-RISK CONVENTION, not a pending control** | No verified interception point exists in this project's own `.claude/settings.json` — only a `PreToolUse` hook (for `rtk`) is configured; no session-start-shaped hook has been confirmed wired here. Recorded as convention explicitly rather than left implying a control is coming. Reclassify to convertible only once a real hook point is confirmed |
+
+**A fresh collision, found while confirming the "no pre-existing duplicate" premise above — not
+resolved, surfaced instead.** `PROJECT_STATE.md`'s live working tree now shows `OI14`/`D97` and
+`OI15`/`D98` already claimed by the *other* session, for entirely different content than this file's own
+use of those numbers:
+
+- `OI14`/`D97` (other session) = the guardrail-version production outage — the same finding this audit's
+  earlier "Numbering collision" section recorded as their `D95`/`OI12`.
+- `OI15`/`D98` (other session) = the `D89`/`D90` confirmation-turn compounding — recorded earlier in this
+  audit as their `D96`/`OI13`.
+
+**This directly collides with the renumbering Marco approved for this session at the start of this
+turn** ("Renumber yours: `D95`/`OI12` -> `D97`/`OI14`, unpaired `OI13` -> `OI15`. File the parallel-session
+collision hazard as `D98`/`OI16`.") — the other session moved to claim `D97`, `D98`, and `D99` (plus
+`OI14`/`OI15`/`OI17`) independently, in the time between that approval and this entry. No duplicate exists
+yet — each number still appears exactly once in the live table — but this file's own internal labels
+(`D97` for the checkout hazard, `D98` for this numbering-collision hazard, used throughout the two
+sections above) are no longer safe to fold into `PROJECT_STATE.md` under those numbers without a fresh
+reconciliation. Not renumbered here, per the standing instruction not to renumber unilaterally — flagged
+instead, and it is itself a live instance of exactly the hazard `D98`'s own write-up describes: a number
+claimed against a reading of the ledger that was already stale by the time it was used. This needs a new,
+short reconciliation pass, against the ledger's state *at the time of that pass*, not against this
+entry's own now-stale approval.

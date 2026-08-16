@@ -1,14 +1,20 @@
 #!/bin/sh
 # Installed as .git/hooks/pre-commit by `make install-hooks` (from PROJECT_ROOT). This shim is the only
-# thing that lives outside PROJECT_ROOT once installed; the actual check is
-# scripts/check_project_root_scope.py, tracked and reviewable inside PROJECT_ROOT like everything else.
+# thing that lives outside PROJECT_ROOT once installed; the actual checks are
+# scripts/check_project_root_scope.py and scripts/check_duplicate_identifiers.py, both tracked and
+# reviewable inside PROJECT_ROOT like everything else.
 #
-# git hooks run with CWD at the repo root (the monorepo root here), not PROJECT_ROOT, so the path to the
+# git hooks run with CWD at the repo root (the monorepo root here), not PROJECT_ROOT, so the path to each
 # real script and its venv is resolved explicitly rather than assumed.
+#
+# Two checks, not one `exec` -- `set -e` means the first failing check exits this shim immediately
+# (correct: either failure must block the commit), and the LAST check is still the one that's `exec`'d,
+# so its exit code becomes the hook's own, same shape as before this had a second check at all.
 set -eu
 
 PROJECT_ROOT="AWS-Insurance-FNOL-Voice-Agentic-AI"
-CHECK="$PROJECT_ROOT/scripts/check_project_root_scope.py"
+SCOPE_CHECK="$PROJECT_ROOT/scripts/check_project_root_scope.py"
+DUPLICATE_ID_CHECK="$PROJECT_ROOT/scripts/check_duplicate_identifiers.py"
 
 if [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
     PYTHON="$PROJECT_ROOT/.venv/bin/python"
@@ -16,4 +22,5 @@ else
     PYTHON="python3"
 fi
 
-exec "$PYTHON" "$CHECK"
+"$PYTHON" "$SCOPE_CHECK"
+exec "$PYTHON" "$DUPLICATE_ID_CHECK"

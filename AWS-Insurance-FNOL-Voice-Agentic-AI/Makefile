@@ -1,6 +1,6 @@
 .PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
         verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
-        verify-project-root-scope install-hooks \
+        verify-project-root-scope verify-duplicate-identifiers install-hooks \
         deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
@@ -132,6 +132,13 @@ verify-charset:
 # checks a commit-in-progress, which only exists mid-`git add`).
 verify-project-root-scope:
 	@$(VENV)/python scripts/check_project_root_scope.py
+
+# The duplicate-identifier ledger backstop (docs/audits/2026-08-16-uncommitted-source-audit.md's
+# "Numbering collision" / "Fail-loud controls vs. conventions" sections): same STAGED-not-tree scope as
+# verify-project-root-scope above, for the same reason -- a manual escape hatch for the check
+# `install-hooks` wires into the same pre-commit shim.
+verify-duplicate-identifiers:
+	@$(VENV)/python scripts/check_duplicate_identifiers.py
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook itself
 # (scripts/git-hooks/pre-commit) is tracked and reviewable inside PROJECT_ROOT; this target is the only
