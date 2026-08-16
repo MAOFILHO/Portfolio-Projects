@@ -146,3 +146,45 @@ check `git status --porcelain -- <path>` is non-empty and diff it against `<ref>
 contain, or (2) `git stash push -- <path>` before the checkout and `git stash pop` after, so an incorrect
 assumption about the ref's content becomes a stash conflict to resolve rather than a silent loss. Which of
 the two — or a session-level habit rather than a scripted guard — is Marco's call, not decided here.
+
+## Phase 11 criterion 6 — CLOSED, both halves recorded
+
+**Configuration** (§1 above): classic branch-protection rule on `main`, "Require status checks to pass
+before merging" enabled, `eval-gate` selected as the required check; "Require a pull request before
+merging" and "Require branches to be up to date" both deliberately left off. `MANUAL-STEPS.md` item 5 marked
+Done.
+
+**Negative control, demonstrated 2026-08-16, run `31971816508`** (`ci-negative-control-2026-08-16-v4`, PR
+#4, closed and branch deleted after capture): a comment-only addition to `lexicon.py` — a
+`BASELINE_SENSITIVE_PATHS` entry, no accompanying `evals/baselines/` update — pushed to a branch and opened
+as a PR against `main`. Result:
+
+- `Unit tests`: **success** (664/664, on the now-fixed base).
+- `Evaluation gate (Tier A + regression vs committed baseline)`: **success** — no live metric moved.
+- `Baseline freshness`: **failure** — `BASELINE STALE: These changed without any update to
+  evals/baselines/: ['src/fnol_voice_agent/agents/lexicon.py']. They can move every model-dependent number
+  in the report, so the committed baseline no longer describes the system it claims to. Re-run make eval
+  and commit the new baseline, or say in the PR why the numbers cannot have moved.`
+- Everything downstream of the failing step: skipped, as designed.
+- PR #4: `mergeStateStatus: BLOCKED`, required check `eval-gate`: `FAILURE`.
+
+**The substitution, stated explicitly, per Marco's ruling** (recorded in full above, at the point Finding B
+was resolved): criterion 6's own written text names "Evaluation gate" as the step under test. What was
+demonstrated on the remote is "Baseline freshness" failing for a real reason and correctly blocking a merge
+— accepted as the correct substitute, not a shortfall, because Finding B showed the criterion's implied
+regression class (a live Tier A metric moving) is structurally caught by `test_eval_harness.py` inside
+"Unit tests" first, on this repository as it exists today, before "Evaluation gate" is ever reached. That
+is real information about this CI pipeline's actual failure-detection order, not a workaround chosen to
+dodge a harder case.
+
+**What remains genuinely undemonstrated, filed as `OI13`**: the literal `Evaluation gate` step — the one
+that gives the eval-gate workflow its name — has **never been observed failing on GitHub**, this session or
+before it. Every real regression this project has caught in CI so far (this entry's `Baseline freshness`
+demonstration, and structurally, any future live-metric regression) has been shown to be caught by "Unit
+tests" instead, given the current test suite's duplication of both Tier A GATEs as pinned unit-test
+assertions. Whether "Evaluation gate" can ever be the first-observed failing step for *any* real regression
+under this repository's current test composition — or whether that duplication should be loosened so the
+named step can do the job its name implies — is an open question, not decided or attempted here.
+
+**Criterion 6: CLOSED.** Both the configuration and a real, correctly-targeted negative control are done and
+recorded, with the one honest gap (`OI13`) named rather than folded into the closure silently.
