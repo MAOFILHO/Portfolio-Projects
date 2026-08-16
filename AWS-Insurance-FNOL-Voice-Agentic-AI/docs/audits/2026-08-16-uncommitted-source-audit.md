@@ -187,4 +187,100 @@ under this repository's current test composition — or whether that duplication
 named step can do the job its name implies — is an open question, not decided or attempted here.
 
 **Criterion 6: CLOSED.** Both the configuration and a real, correctly-targeted negative control are done and
-recorded, with the one honest gap (`OI13`) named rather than folded into the closure silently.
+recorded, with the one honest gap (referred to below as `OI13[this file]`, pending renumbering — see next
+section) named rather than folded into the closure silently.
+
+## Numbering collision — `D95`/`OI12`/`OI13` assigned twice, by two parallel sessions
+
+Neither this file's numbers nor the other session's numbers have been committed to `PROJECT_STATE.md`'s
+ledger as of this entry — confirmed via `git status --short PROJECT_STATE.md docs/RESULTS.md`, both still
+show `M` (working-tree modifications, not commits). This is a live collision on a shared, uncommitted
+draft, not a merge conflict between two already-recorded histories.
+
+### 1. Every identifier this file (this session) assigned
+
+| ID as written in this file | Subject |
+|---|---|
+| `D94`/`OI11` | `main`'s committed `lex_codehook.py` imports `fnol_voice_agent.observability`, never committed — the untracked-package gap that broke the negative control's first run |
+| `D95`/`OI12` | The double `git checkout <branch> -- <path>` overwrite hazard — two accidental losses of uncommitted local fixes this session, both recovered from diffs captured earlier in this same conversation |
+| `OI13` (no paired `D` number) | The literal "Evaluation gate" CI step has never been observed failing on GitHub, this session or before — criterion 6's demonstration used "Baseline freshness" instead, per Finding B |
+
+`D94`/`OI11` is not in collision — cross-referenced correctly and consistently by the other session's own
+`RESULTS.md` entries (e.g. "carrying Terminal 1's `D87`/`D94` commits"). The collision is confined to
+`D95`/`OI12` and `OI13`.
+
+### 2. Highest identifier actually committed to `PROJECT_STATE.md`'s ledger
+
+Read via `git show HEAD:PROJECT_STATE.md` (this session's own last commit, `288ed92`) — the true committed
+state, not the shared working tree's live draft: **`OI11`/`D94`** is the highest row actually in a commit.
+Rows `OI12` and `OI13` currently visible in the working tree (both sessions' versions) are uncommitted.
+
+### 3. What the other session assigned to the same numbers (read from the shared working tree, not acted on)
+
+| ID as the other session wrote it | Subject | Where it lives |
+|---|---|---|
+| `D95`/`OI12` | A live production outage: `stacks/main`'s deployed Lambda requests guardrail version `"3"`, which the guardrails stack's own `D89`-driven `v4` replace destroyed — `aws_bedrock_guardrail_version.fnol` is a single replace-on-change resource with no coupling back to `stacks/main`'s pinned version. 10/13 gate events failing, window `2026-08-16T18:21:13Z` onward. Marked **URGENT**, exposure assessed as real-world-zero (no real caller has ever used this DID) but the coupling defect itself is real and will recur | `docs/RESULTS.md` §45 §4, §46; `PROJECT_STATE.md` `OI12` row |
+| `D96`/`OI13` | `D89`/`D90` part 1 compounding on single-word confirmation turns (`FileAutoClaim`'s `confirm_file_claim`, `UpdateContactInfo`'s `confirm_update_contact_info`) — both defects share the same low-context exposure surface, cross-referenced into both original entries, not a new independent mechanism | `PROJECT_STATE.md` `OI13` row |
+
+### 4. Proposed reconciliation — this file's items renumber, not the other session's
+
+**Rationale, not a coin flip.** The other session's `D95`/`OI12` is a live, urgent, currently-unfixed
+production-outage finding, already written across two `RESULTS.md` sections (§45, §46) with self-checks,
+Report blocks, and cross-references into `OI6`/`OI7` — renumbering it now would mean editing a
+substantially larger, higher-stakes, already-cross-referenced body of text, for a finding whose urgency
+argues for stability, not disruption. This file's own `D95`/`OI12`/`OI13` are confined to one document
+(this one), self-contained, and were never committed to `PROJECT_STATE.md` at all — the cheaper and safer
+side to move.
+
+**Proposed new numbers, this file's items only:**
+
+| Old (this file) | New (proposed) | Subject |
+|---|---|---|
+| `D95`/`OI12` | **`D97`/`OI14`** | The double `git checkout <branch> -- <path>` overwrite hazard |
+| `OI13` (unpaired) | **`OI15`** | The literal "Evaluation gate" step never observed failing on GitHub |
+
+`D96` is the other session's highest committed-in-prose `D` number; `D97` is the next free one. `OI13` is
+the other session's highest `OI`; `OI14`/`OI15` are the next two free ones. Neither collides with anything
+either session has written, as of this entry.
+
+**Records needing the update, once Marco confirms:**
+- This file: every internal reference to `D95`/`OI12` (the checkout hazard) → `D97`/`OI14`; every reference
+  to the unpaired `OI13` (Evaluation gate) → `OI15`.
+- This file's own git history (commits `60a65a5`, `288ed92`) used the old numbers in their commit
+  messages — commit messages are immutable without a history rewrite, which is a worse trade than a stale
+  number in a message (same precedent as `D91`'s own resolution: "a history rewrite to fix a
+  message-accuracy issue is a worse trade than the accuracy issue itself"). Not proposed here.
+- `PROJECT_STATE.md`'s eventual `OI14`/`OI15` rows (once this file is folded in) carry the new numbers from
+  the start — no renumbering needed there, since this file's content has never been committed to that
+  ledger yet.
+
+### 5. The underlying hazard, filed as its own item — proposed `D98`/`OI16`, pending confirmation
+
+**Parallel sessions appending to a shared, uncommitted ledger will collide on sequential identifiers, and
+nothing today prevents it.** Both this session and the other picked "the next number after the last one I
+saw" independently, at different times, against the same shared working-tree file, with no coordination
+mechanism between them. The collision was caught only because Marco was reading both threads and noticed
+the reused numbers — not because any check in the repository, workflow, or convention would have caught it
+otherwise. Same shape as `D91`/`D94`/`D95`(this file's)/`D97`(proposed): the working state and the recorded
+state can disagree, and nothing structural stops it.
+
+**Guard proposed, not built** (per this project's own standing convention — record and propose, don't fix
+silently mid-task), two shapes, Marco's call which:
+
+1. **A session claims a block of numbers up front.** Before starting substantive filing work, a session
+   reads the ledger, announces (in its own first record of the session, or verbally to Marco if working
+   live) "claiming `D95`–`D99`/`OI12`–`OI16`," and uses only that block. Cheap, no tooling, but relies on
+   every session actually doing it — the same "protected only by remembering" shape `D91`/`D92`'s own
+   guards were proposed against, one level up.
+2. **Read the ledger immediately before assigning, every time, not once per session.** Rather than
+   claiming a block up front, re-read `PROJECT_STATE.md`'s current highest `D`/`OI` number right before
+   writing a new row, not from memory of an earlier read in the same session. Cheaper to describe, harder
+   to enforce without tooling (still relies on remembering to re-read), and does not fully prevent a race
+   if two sessions read-then-write in close succession — only shrinks the window `D91`'s own guard was
+   about, doesn't close it.
+
+Neither is a mechanism that fails loud when skipped, which is the same gap `D91`'s and `D92`'s own proposed
+guards were named for. A structural fix (e.g. a numbering scheme that doesn't require sequential
+coordination at all — UUIDs, or a per-session prefix like `D-T1-1`/`D-T2-1`) would close the race entirely
+but breaks this project's existing convention of a single flat sequence read at a glance — a larger change
+than this entry proposes unilaterally deciding. Marco's call.
