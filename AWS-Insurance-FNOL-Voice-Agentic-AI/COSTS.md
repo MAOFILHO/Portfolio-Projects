@@ -352,6 +352,35 @@ rather than quietly amended") — corrected here rather than by editing the 2026
 
 ---
 
+## Phase 11 — `D90` part 1 (Option 1) build, latency measurement, and the `D97` gate re-run
+
+**Logging gap, named rather than fixed here**: this is the first Phase 11 entry in this file. The phase's
+substantial earlier real spend (the `D89` investigation's 33 `ApplyGuardrail` probes across `RESULTS.md`
+§41/§43, the `verify-lambda-execution` gate's several prior runs, the Stage A/criterion-1 `ce` calls already
+logged in the Non-Bedrock section below) was tracked inline in `RESULTS.md`'s own per-entry "Real spend"
+lines but not ported here. Not backfilled retroactively this entry — flagged to Marco as a gap, not silently
+left unmentioned.
+
+| Date | What ran | Real AWS call? | Units | Actual cost |
+|---|---|---|---|---|
+| 2026-08-16 | **`D90` part 1, Option 1 latency smoke test.** `scripts/measure_router_context_latency.py --n-pairs 3`, paired real `classify_turn` calls (session-context-enriched vs. bare), `us.amazon.nova-micro-v1:0`, before the full run | **Yes** | 6 calls, 5,602 in / 272 out | **$0.00023415** |
+| 2026-08-16 | **`D90` part 1, Option 1 latency measurement, full run.** Same script, `--n-pairs 141` — every real turn in `evals/golden/*.yaml`, paired and interleaved, bootstrap CI on delta-p95. Result: delta_p95 = +38.7ms, 95% CI [-51.3, +157.9]. `RESULTS.md` §45 §2 | **Yes** | 282 calls, 265,222 in / 12,777 out | **$0.01107155** |
+| 2026-08-16 | **`verify-lambda-execution`, live re-run to re-confirm event 13 before writing the `D90` part 1 report.** This is the run that surfaced `D97`/`OI14` (live guardrail-version outage) — 10 of 13 events reached the real, now-failing `ApplyGuardrail` call before erroring; a `ValidationException` on a nonexistent identifier/version is very likely billed at $0 policy units (not independently confirmed against a `usage` block, since the error response carries none) | **Yes** | 10 events attempted `ApplyGuardrail`, all `ValidationException` | **$0.0032 (script's own pre-call estimate; likely an overstatement given the error path, not corrected down without a real `usage` block to confirm it)** |
+| 2026-08-16 | **`verify-lambda-execution`, post-`stacks/main`-apply re-run confirming `D97`/`OI14` resolved.** 10/13, zero outage-shaped failures; 10 events reach real `ApplyGuardrail`/router calls, 1 (event 13) also makes a real generation call (`RESULTS.md` §52 §2) | **Yes** | ~10 guardrail+router events + 1 generation call | **$0.0032 (same pre-call estimate basis as the row above)** |
+| 2026-08-16 | **Event 13 local repro** — one real `classify_turn` call against the exact `AgentState` `verify-lambda-execution`'s event 13 produces, confirming directly whether Option 1's context reaches the classifier (`RESULTS.md` §52 §3) | **Yes** | 1 call, small prompt | **~$0.0003 (estimate, not separately metered)** |
+| 2026-08-16 | **Full `C1` harness, `scripts/measure_composed_pipeline_deployed.py`, against `CodeSha256 /4FFnR9Q7...`** — the post-batched-apply re-verification. Composed recall **1.000 (26/26)**, 0 contingency, 0 unstable, no per-item divergence. `C1` restored to VERIFIED. `RESULTS.md` §52 §4 | **Yes** | 95 `RecognizeText` requests (78 positive-path + 17 negative), graph-path Bedrock/guardrail calls per the script's own cost basis | **$0.097668** |
+
+**Phase 11 running total, this table:** $0.01454570 + $0.0032 + $0.0003 + $0.097668 ≈ **$0.1157**.
+
+**Approval basis, stated plainly rather than assumed:** `CLAUDE.md`'s standing Bedrock approval is scoped to
+Phases 3–7. Phase 9's own precedent (above) needed, and got, a separate explicit `APPROVED: Phase 9 — ...`
+line rather than being read as covered by that clause. **No equivalent `APPROVED: Phase 11 — ...` phrase was
+typed for this entry.** What was given is Marco's explicit, current-turn instruction — *"Measure the latency
+delta... I want the number before the apply, not after"* — read as authorization for this specific, small,
+bounded, non-provisioning measurement, consistent with how the live diagnostic gate re-run earlier this
+session was treated. Flagged here rather than silently treated as equivalent to a typed `APPROVED:` line, so
+Marco can correct the convention if this reading was wrong.
+
 ## Non-Bedrock real spend — outside the $5.00 standing cap
 
 Everything above is scoped to `CLAUDE.md`'s Bedrock standing approval. This section is for real AWS spend
