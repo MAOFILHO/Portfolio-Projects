@@ -264,6 +264,17 @@ the reused numbers — not because any check in the repository, workflow, or con
 otherwise. Same shape as `D91`/`D94`/`D95`(this file's)/`D97`(proposed): the working state and the recorded
 state can disagree, and nothing structural stops it.
 
+**Stated plainly, per Marco's instruction**: `PROJECT_STATE.md` and `docs/RESULTS.md` were themselves
+uncommitted working-tree drafts — `git status --short` shows both `M`, not clean — at the exact moment
+**three sessions** were appending rows to them. That is not a separate hazard from `D94`/`D95`(this
+file's own, pre-renumber)/`D97`(proposed renumber) — it is the *same* working-tree-vs-repo disagreement
+those entries describe, showing up one layer up: `D94` was a tracked file importing an untracked one;
+`D95`/`D97` was a git operation acting on an assumption about a ref's committed content instead of a
+check; here, the artifact multiple sessions are reading and appending to *as if it were the shared source
+of truth* was never actually committed at any point during the collision, so "read the ledger, take the
+next number" was reading a draft, not a record. The record-keeping layer inherited the same disease as the
+source layer: uncommitted state was treated as if it were authoritative, by everyone, independently.
+
 **Guard proposed, not built** (per this project's own standing convention — record and propose, don't fix
 silently mid-task), two shapes, Marco's call which:
 
@@ -284,3 +295,75 @@ guards were named for. A structural fix (e.g. a numbering scheme that doesn't re
 coordination at all — UUIDs, or a per-session prefix like `D-T1-1`/`D-T2-1`) would close the race entirely
 but breaks this project's existing convention of a single flat sequence read at a glance — a larger change
 than this entry proposes unilaterally deciding. Marco's call.
+
+## Fail-loud controls vs. conventions dressed as controls
+
+Four guards are on the table right now, across three entries: `D91`'s session-start status check, `D92`'s
+baseline-archive step, `D97`'s (formerly `D95`) check-before-checkout, `D98`'s number-block claim. All four
+share a property worth naming directly: **none of them fails loud when skipped.** Each is a step a session
+is supposed to remember to take, with no mechanism that notices the step was skipped and stops anything.
+Skipping any of the four produces silence, not an error — which is exactly the failure mode `D91`, `D95`
+(original), and this entry's own record-keeping-layer note all independently ran into today.
+
+**Compare against the two guards this project already built that do fail loud:**
+
+- **The pre-commit `PROJECT_ROOT` scope hook** (`scripts/git-hooks/pre-commit` → `scripts/
+  check_project_root_scope.py`, installed via `make install-hooks`). Every `git commit` invocation in this
+  workspace runs it unconditionally — not "a step a session should remember," a step `git` itself executes
+  before the commit is allowed to complete. A staged path outside `PROJECT_ROOT` (absent an `ALLOWLIST`
+  entry with a recorded, absolute-path approval) makes the hook exit non-zero, and the commit does not
+  happen. Demonstrated red at `e0452cb`'s own investigation (`.serena/` swept in outside `PROJECT_ROOT`),
+  per that script's own module docstring.
+- **`.claude/settings.json`'s `permissions.deny` list**, this project's own copy (`AWS-Insurance-FNOL-
+  Voice-Agentic-AI/.claude/settings.json`), which denies `Bash(git push:*)`, every destructive/mutating
+  `terraform` subcommand, and several billable/high-risk `aws` calls outright. This is enforced by the
+  harness itself, before the shell ever sees the command — not a check the agent runs and might skip, a
+  gate the agent's own tool call cannot get past. It is *why* every `git push` this session ran as `!
+  <command>` from Marco directly, not as a tool call from me.
+
+**What actually distinguishes these two from the four pending proposals** is not rigor of design — `D97`'s
+check-before-checkout proposal is just as precisely specified as the `PROJECT_ROOT` hook's check — it's
+*where the check is wired in*. The two built guards are invoked by something other than the actor's own
+discipline: `git commit` calls the hook automatically; the harness's permission layer intercepts the tool
+call automatically. Every one of the four pending proposals, as currently written, is invoked by the same
+discipline that already failed once today — "remember to run the check before you act" is exactly the
+sentence that was true of the checkout hazard's own missing check, and writing a *new* step that also
+depends on remembering does not change the failure mode, only its label.
+
+**Which of the four can actually be converted, and which can't, honestly assessed:**
+
+1. **`D97` (checkout hazard) — convertible.** A `git checkout <ref> -- <path>` cannot be intercepted by a
+   native git hook (git has no pre-checkout hook for path-scoped checkouts), but it *can* be routed through
+   a wrapper — a `bin/`-installed script or shell function that requires path-scoped checkouts to go through
+   it, and that runs the diff-and-refuse check from this entry's original proposal before ever invoking real
+   `git checkout`. That wrapper is bypassable by calling the real `git` binary directly, exactly as the
+   `PROJECT_ROOT` hook is bypassable with `--no-verify` — but this project already accepted that exact
+   bypass shape as good enough to call a control, once, for the scope hook. Same standard applied here says
+   this one clears the bar. Not built this pass; proposed as the next candidate.
+2. **`D98` (numbering collision) — convertible, and cheap.** A duplicate-identifier lint — scan
+   `PROJECT_STATE.md` and `docs/RESULTS.md` for every `D\d+`/`OI\d+` token and fail if any appears as more
+   than one row header — is mechanical, requires no judgment call, and can be wired into the *same*
+   pre-commit hook that already runs `check_project_root_scope.py`, or as its own `make verify-*` target.
+   It would have caught today's exact collision, at the moment either session tried to commit the colliding
+   row, not after the fact via Marco reading two threads. This is the strongest candidate of the four —
+   recommend building it before the next multi-session week, not just recording it as accepted risk.
+3. **`D92` (baseline archive) — convertible, more expensive.** The check would need to detect that
+   `evals/baselines/composed_pipeline_deployed_k3_lineE.json` changed in a commit and require the
+   previous blob's content to also exist under an archive filename in the same commit — buildable (it is
+   the same shape as the already-real `baseline_is_stale` mechanism, one step earlier in the lifecycle), but
+   more machinery than 1 or 2. Worth it eventually, not proposed for immediate build.
+4. **`D91` (session-start status check) — not obviously convertible.** This step happens before any single
+   tool call the harness can gate — it is about what a session reads or does at its own start, not a `git`
+   or `terraform` invocation with a natural interception point. Claude Code's hook system is understood to
+   expose a session-start-shaped event in general, but whether it can carry a check strong enough to block
+   a session's first substantive write has not been verified in this project's own `.claude/settings.json`
+   (only a `PreToolUse` hook is configured here, for `rtk`). Recording this honestly rather than assuming a
+   mechanism exists: **`D91`'s guard should be filed as an accepted-risk convention, not implied to be a
+   pending control**, unless and until a real session-start hook point is confirmed and wired up.
+
+**Recommendation, not a decision**: build `D98`'s duplicate-identifier lint and `D97`'s checkout wrapper —
+both fit the project's existing hook pattern exactly. Record `D91`'s session-start check and `D92`'s
+baseline-archive step as accepted-risk conventions explicitly, in whatever record eventually carries them
+into `PROJECT_STATE.md`, rather than letting them sit next to `D97`/`D98` looking like the same kind of
+thing. Marco's call on sequencing and on whether `D91` gets a real hook point investigated before being
+downgraded to convention.
