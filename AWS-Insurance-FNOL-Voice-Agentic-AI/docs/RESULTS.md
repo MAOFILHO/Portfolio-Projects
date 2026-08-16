@@ -8161,3 +8161,97 @@ C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaS
 Blocked on: D93's fix-shape choice is Marco's; D92's block-vs-auto-archive, D91's guard, option A, D88/D89 dispositions all still pending, unchanged.
 Last apply + gate result: none -- no Terraform touched. Real spend: $0.02 (2x ce:GetCostAndUsage, one more than the $0.01 declared -- operator error, logged in full in COSTS.md). Budgets/SNS reads: $0.00.
 ```
+
+## 40. Branch protection configured on `main` — the last of Phase 10's three carry-forward items resolved;
+Phase 11 criterion 6's console-click half done, its negative-control half not yet reported
+
+### 1. Configuration, recorded as set — not just as done
+
+Marco's report, confirmed visually against a GitHub Settings → Branches screenshot showing `main` under
+**"Branch protection rules"** (the classic page — distinct from the separate **"Rulesets"** nav item the
+same screenshot shows alongside it, and the row's own **"Convert to ruleset"** button, which only exists
+on a classic rule, not a ruleset already):
+
+- **Rule type: classic branch protection rule**, not a repository ruleset. GitHub is actively steering new
+  configuration toward rulesets (the screenshot's own banner: "Level up your branch protections with
+  Repository Rules... Go to rulesets") — this was deliberately configured as the older classic type,
+  consistent with `MANUAL-STEPS.md` item 5's own console path ("Add branch protection rule (or Rulesets,
+  GitHub's newer equivalent)"), which named classic first.
+- **"Require status checks to pass before merging"** — enabled.
+- **Required check selected: `eval-gate`** — the job name inside `aws-insurance-fnol-voice-agentic-ai-
+  eval-gate.yml`, now selectable because it has reported a real status at least once (`31887876709`,
+  `head_sha c08184c5`, `conclusion: success`, `RESULTS.md` §14) — the exact precondition `MANUAL-STEPS.md`
+  item 5 named as blocking until it existed.
+- **"Require a pull request before merging"** — left **unchecked**, deliberately, per Marco's report.
+- **"Require branches to be up to date"** — left **unchecked**, deliberately, per Marco's report.
+- **Consequence of both being off, stated plainly, not left implicit: direct pushes to `main` still work.**
+  The rule blocks a merge whose required check hasn't passed; it does not require a PR to exist at all, and
+  a push straight to `main` bypasses the check entirely (there is no merge event for it to gate). This is a
+  real, load-bearing scope limit on what "branch protection" means here, not a gap in how it was recorded.
+
+`MANUAL-STEPS.md` item 5 updated to **Done** — its own "What" was scoped narrowly to the console click
+itself ("marking the... `eval-gate` job as a required status check"), which is exactly what's confirmed
+here; the negative control (§3 below) was never part of that file's own scope, only Phase 11 criterion 6's.
+
+### 2. Phase 10's three carry-forward items — all now resolved
+
+Named together because Phase 10's close-out (`RESULTS.md` §12, `PROJECT_STATE.md`'s Phase 11 entry-
+conditions rows 5–6) tracked them as one dependency chain, each unblocking the next:
+
+1. **The workflow existing only locally, never on `origin/main`.** `origin/main` was pinned at `a4d8ae6`
+   (2026-08-12) through `2026-08-15T13:41Z`, despite the workflow being authored and committed locally
+   days earlier — resolved when Marco pushed `origin/main` to `c08184c` from outside this session.
+2. **The workflow never having run.** No commit existed on the branch GitHub reads, so there was no commit
+   for a run to be missing from — resolved by the first real run, `31887876709`, `success`, same timestamp
+   as item 1's push.
+3. **Branch protection being unconfigurable until a status existed to select.** GitHub only offers a check
+   as a selectable required status once it has reported at least once (`MANUAL-STEPS.md` item 5's own
+   stated precondition) — resolved by item 2 clearing the precondition, and now **configured**, per §1
+   above.
+
+**All three resolved.** Each was a strict prerequisite for the next — no branch protection was configurable
+before a run existed, no run could exist before the workflow reached `origin/main` — so their resolution
+order (push → run → configure) is not incidental, it's the dependency chain itself playing out.
+
+### 3. Criterion 6 — not marked fully CLOSED; a second, distinct requirement remains unreported
+
+Phase 11's own exit-criteria table states criterion 6's liveness requirement in two parts, added on
+approval as Marco's amendment 3: the console-click configuration (§1 above, now done) **"before/alongside"**
+a **negative control** — push a branch with a deliberately broken flow, confirm the gate blocks it, report
+the run ID and failing step, delete the branch. Marco's instruction this entry names only the configuration;
+the negative control is not mentioned as run. **Recording the configuration as done and the three carry-
+forward items as resolved does not, by itself, close criterion 6** — its own written liveness bar names
+both, and only one has been reported. Flagged here rather than let lapse silently, per this project's own
+standing rule (`CLAUDE.md` "Scope rule" corollary 2: if a change or a status claim touches a criterion a
+plan already stated in writing, say so plainly rather than let the gap go unrecorded) — the same shape of
+discipline this project has applied to itself repeatedly (`D84`/`D90`'s call-site enumeration, `REVIEW-
+CRITERIA.md` §5's phase-close-out completeness pass). Criterion 6 row updated to reflect exactly this split,
+not marked ✅.
+
+### Self-review (`REVIEW-CRITERIA.md` §1, §5)
+
+1. *Opposite result possible?* Yes — Marco's report could have also confirmed the negative control; it
+   didn't mention one, checked against his literal words rather than assumed complete because "close
+   criterion 6" was the instruction.
+2. *Asserted-but-unchecked?* The classic-vs-ruleset distinction is confirmed from the screenshot's own UI
+   (the "Convert to ruleset" button only appears on a classic rule), not inferred from Marco's prose alone.
+3. *Infra error scored as a result?* N/A — no AWS call this entry; a GitHub console setting, confirmed by
+   Marco's report and a screenshot, not queried via API this entry.
+4. *Cost below estimate?* $0.00 — a repo setting, no billable resource.
+5. *Identical markers, different paths?* Yes, this entry's own §3 — "branch protection is configured" and
+   "criterion 6 is closed" read identically at a glance but are not the same claim; the criterion's own text
+   requires a second, distinct action.
+6. *Has this check ever failed for the right reason?* Not yet exercised — that is exactly what the negative
+   control (still outstanding) is for; recorded as open, not assumed to pass.
+7. *Headline-number interpretation change?* No.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage F -- branch protection configured on main: classic rule (not ruleset, confirmed via screenshot's "Convert to ruleset" button), "Require status checks to pass before merging" enabled, eval-gate selected as the required check; "Require a pull request before merging" and "Require branches to be up to date" both deliberately left off, so direct pushes to main still bypass the check. MANUAL-STEPS.md item 5 marked Done. This resolves the last of Phase 10's three carry-forward items (workflow-only-local, workflow-never-run, branch-protection-unconfigurable-until-a-status-existed), a strict dependency chain that has now fully played out. Criterion 6 itself is NOT marked CLOSED -- its own liveness requirement (Marco's amendment 3) also names a negative control (push a deliberately broken flow, confirm blocked, report run ID + failing step, delete branch), not reported as run this entry. Flagged rather than silently closed on the configuration alone.
+Open defects: unchanged -- D88/OI5, D89/OI6, D90/OI7 part 1, D91/OI8, D92/OI9, D93/OI10 all OPEN, unchanged this entry.
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not touched.
+Blocked on: criterion 6's negative control, Marco's to run. All prior blocked items unchanged.
+Last apply + gate result: none -- a GitHub repo setting, not Terraform. Real spend: $0.00.
+```

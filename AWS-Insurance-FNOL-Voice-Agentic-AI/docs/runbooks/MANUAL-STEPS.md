@@ -114,13 +114,17 @@ note if that's still outstanding.
   newer equivalent) on `main`, enabling **"Require status checks to pass before merging"** and selecting
   the `eval-gate` job once it has run at least once (GitHub only offers a check as selectable after it has
   reported at least one status).
-- **Status:** ⬜ **OPEN, not yet done — but the blocker cleared 2026-08-15T13:41Z.** Update 2026-08-14: Phase
-  10 criterion 3 (the workflow copy) is **landed** —
-  `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml`,
-  Marco-approved by absolute path, byte-identical to the authored source (sha256 verified). Update
-  2026-08-15: Marco pushed `origin/main` to `c08184c` from a terminal outside the working session; the
-  first real run — `31887876709`, event `push`, `head_sha c08184c5`, `2026-08-15T13:41:24Z`,
+- **Status:** ✅ **Done — 2026-08-16.** Update 2026-08-14: Phase 10 criterion 3 (the workflow copy) is
+  **landed** — `/Users/marco/K21/Real-world/.github/workflows/aws-insurance-fnol-voice-agentic-ai-
+  eval-gate.yml`, Marco-approved by absolute path, byte-identical to the authored source (sha256 verified).
+  Update 2026-08-15: Marco pushed `origin/main` to `c08184c` from a terminal outside the working session;
+  the first real run — `31887876709`, event `push`, `head_sha c08184c5`, `2026-08-15T13:41:24Z`,
   `conclusion: success` — now exists (verified against the remote via `git fetch` + `gh api`, not local
-  state; `docs/RESULTS.md` §14). GitHub will now offer `eval-gate` as a selectable required status check.
-  **What remains is only the console click itself** — adding the branch-protection rule — which is still
-  not done and is still Marco's to do, per the manual-step convention this file exists to track.
+  state; `docs/RESULTS.md` §14). GitHub then offered `eval-gate` as a selectable required status check.
+  **Update 2026-08-16: the console click itself done.** Classic branch-protection rule (not a ruleset) on
+  `main`, "Require status checks to pass before merging" enabled, `eval-gate` selected; "Require a pull
+  request before merging" and "Require branches to be up to date" both deliberately left unchecked, so a
+  direct push to `main` still bypasses the check entirely — recorded, not an oversight. `docs/RESULTS.md`
+  §40. **Scoped narrowly to this file's own "What" above** — the console click only. Phase 11 criterion 6
+  (`PROJECT_STATE.md`) adds a separate negative-control requirement on top of this step, tracked there, not
+  here; this item's own completion does not by itself close that criterion.

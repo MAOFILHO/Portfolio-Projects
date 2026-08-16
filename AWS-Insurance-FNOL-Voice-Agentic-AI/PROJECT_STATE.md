@@ -10,7 +10,18 @@
 
 ---
 
-**Last updated:** 2026-08-16 (continued: `D93`/`OI10` filed — criterion 1's real breach never fired because
+**Last updated:** 2026-08-16 (continued: branch protection configured on `main` — classic rule, not a
+ruleset; "Require status checks to pass before merging" enabled, `eval-gate` selected; "Require a pull
+request before merging" and "Require branches to be up to date" both deliberately left off, so direct
+pushes to `main` still bypass the check. `MANUAL-STEPS.md` item 5 marked Done. This resolves the last of
+Phase 10's three carry-forward items (workflow-only-local, workflow-never-run, branch-protection-
+unconfigurable-until-a-status-existed — a strict dependency chain, now fully played out). **Criterion 6
+itself NOT marked CLOSED**: its own written liveness requirement (Marco's amendment 3) also names a
+negative control — push a deliberately broken flow, confirm blocked, report run ID + failing step, delete
+the branch — not reported as run this entry. Flagged rather than silently closed on the configuration
+alone. `RESULTS.md` §40 has the full account.
+
+**Prior entry, same day:** `D93`/`OI10` filed — criterion 1's real breach never fired because
 `budget.tf`'s cost filter scopes to `Project`-tagged spend only and this project's own tagged MTD spend is
 $0.48, well under the $2.00 test threshold, which was set against the account-wide untagged total instead
 (§19's own $3.7828941608 figure). Confirmed via one real `ce get-cost-and-usage` call (`GroupBy TAG:Project`)
@@ -5994,7 +6005,7 @@ negative-control run; Stage 0 gained a README-correction task (done, `RESULTS.md
 | 3 | **Operational CloudWatch dashboard** — Lambda errors/duration, Lex recognition, guardrail usage units, turn-latency sub-components (Phase 9's profiling). **Split by Marco 2026-08-16 into B1 (first three categories, built) and B2 (turn-latency, scoped jointly with Stage D's `C14` signal, not built)** | **Every panel needs a heartbeat or synthetic-injection proof with known ground truth.** A panel that cannot distinguish "zero errors" from "the emitter is dead" is not delivered. **Guardrail-usage-units recheck: done, Stage 0, `RESULTS.md` §16.1** — code-identity confirmed, sufficient to build on. **B1 built and applied** (`RESULTS.md` §27/§28): `observability/guardrail_metrics.py` emitter wired into both `guardrails_nodes.py` node functions (7 new tests, 656/656 suite), operational dashboard (`aws_cloudwatch_dashboard.operational`) with native Lambda/Lex panels + a guardrail-usage Logs Insights widget, both applied 2026-08-16. **Emitter confirmed working in the real deployed runtime** — a real INPUT-side `guardrail_usage` line captured live, `sensitiveInformationPolicyUnits: 0` agreeing with Stage 8. **Panel liveness proof (a forced guardrail intervention) — UNBLOCKED by `D87`'s close (2026-08-16) but STILL NOT OBTAINED, and now BLOCKED ON `D88` SPECIFICALLY, not merely "not yet attempted."** `D87` no longer stands in the way (the crash before `guardrails_output_check` is fixed and confirmed from the deployed runtime), but the first real attempt to reach it post-fix (the `CheckClaimStatus` regression event) surfaced a NEW finding instead (`D88`, `OI5`): the OUTPUT guardrail evaluated the claim number (`sensitiveInformationPolicyUnits: 1`) but did not mask it (`masked: false`). **`D88`'s scoping (2026-08-16, `RESULTS.md` §33 §2) found this is not incidental**: the live guardrail config (read directly from AWS) has zero PII entities configured that would ever fire on this domain's own data spoken back to its owner — the four identifier regexes that used to be the reliable trigger were deliberately removed, Marco-approved, before this stage began. Until `D88` is resolved, there may be **no ordinary in-scope conversational path left** that would ever fire a real OUTPUT intervention, meaning this claim cannot be closed by any real call along the six intents' ordinary flows without either `D88` restoring a live trigger or a deliberately off-nominal turn (e.g. speaking an email address) — a different, and differently-defensible, kind of "real" than the claim/policy/plate readback used as the trigger all along. The dashboard's guardrail-usage widget still has not shown a real intervention line — not retried via a different trigger to force one, per Marco's standing instruction. **B2 not built** — turn-latency sub-components need live latency instrumentation that doesn't exist yet, deliberately scoped with Stage D rather than built as a separate path |
 | 4 | **PII redaction at the CloudWatch Logs sink** — Marco's amendment 1: sink named explicitly. **Corrected 2026-08-15, before build**: the criterion's original wording ("confirming redaction is wired") presupposed a redactor already sat at the log boundary. Stage C's own pre-build scoping found **nothing does** — `lex_codehook.py` has exactly 3 `logger` calls, none logging raw PII, so today's clean logs are an absence of violations enforced by a module docstring's assertion, not an active mechanism. The deliverable is **building** a sink-level `logging.Filter` that runs every record through the existing `redact_for_transcript` (`ADR-011` Layer 1) before it reaches CloudWatch — not verifying one that pre-existed. **Built**: `observability/log_redaction.py`, wired into `lex_codehook.py`, 7/7 unit tests pass, 646/646 full suite, lint/typecheck clean. **Stage C, $0 (accepted cost table, no new provisioned resource).** | **Positive control, both directions, plus a negative case. Run 1 (local simulation of Lambda's logging setup) PASSED 2026-08-15** — `scripts/verify_log_redaction.py`, real wiring, real logger, pre-filter/post-filter toggle on the same filter instance/handler/log call, plus the negative case (`contact_id`/`triggering_layer`/`route`/`escalation_reason` unchanged). **`C1` re-verified 1.000 (26/26) against the redeployed build (`otOV3...`) confirming the redeploy itself was safe — but that redeploy predates option (c) below, so it does not close run 2.** **Run 2 (proof the filter is installed in the DEPLOYED Lambda's own runtime): still OPEN, tracked as `OI2`, not closed on a proxy.** Option (c) (Marco, 2026-08-15, `RESULTS.md` §26): `install_pii_log_filter()` now self-reports (`pii_log_filter_installed handlers=N`) every time it runs, readable from real CloudWatch Logs with no diagnostic branch and no dedicated `C1` cycle — written, 10/10 unit tests + local script pass, **deliberately held undeployed and bundled with the next `stacks/main` change that ships anyway** (Stage B's guardrail emitter, expected) rather than spending a redeploy+re-verification cycle on this alone. **Residuals recorded** (`RESULTS.md` §23): no deployed-runtime redaction proof exists yet (expected — guard against a future violation, not a current fix); `exc_info`/traceback text remains unredacted, re-classified as the **higher**-risk gap (a frame's repr can carry a full local-variable payload) — revisit if exception logging expands past its one current call site |
 | 5 | **Ops runbooks** in `docs/runbooks/` — incident response for `C14`'s measured warm-path exceedance and a guardrail false-positive spike | Runbook content only — no liveness proof implied by a document, but any latency figure it cites must use the §12.10 canonical phrasing, not "19ms" shorthand. Written against Stages A–D's *actual* built mechanisms, not before they exist |
-| 6 | **Branch protection** (`MANUAL-STEPS.md` item 5) | **Pending, not blocked — updated 2026-08-15T13:41Z.** Workflow ran green on `origin/main` (`31887876709`, `c08184c`); `eval-gate` now selectable as a required status check. **Marco's amendment 3: Stage F adds a negative control** — push a branch with a deliberately broken flow, confirm the gate blocks it, report the run ID and failing step, delete the branch — before/alongside the console click itself (still Marco's) |
+| 6 | **Branch protection** (`MANUAL-STEPS.md` item 5) | **Console click DONE 2026-08-16 — negative control NOT YET REPORTED, criterion not fully closed.** Classic branch-protection rule (not a ruleset) on `main`, "Require status checks to pass before merging" enabled, `eval-gate` selected as the required check; "Require a pull request before merging" and "Require branches to be up to date" both deliberately left off — direct pushes to `main` still bypass the check entirely. `MANUAL-STEPS.md` item 5 marked Done. **Marco's amendment 3's second half — the negative control** (push a branch with a deliberately broken flow, confirm the gate blocks it, report the run ID and failing step, delete the branch) — **has not been reported as run.** `RESULTS.md` §40 has the full account, including why this row is not marked ✅ on the configuration alone |
 | 7 | **Record hygiene** — `CF2`/`CF3` row annotations | **Confirmed, Stage 0, `RESULTS.md` §16.2** — both rows re-read against the 2026-08-15 correction, nothing added since, nothing inconsistent. Closed |
 | 8a | **`C14` regression signal** (Marco's amendment 2, split from the original criterion 8). **Scope corrected 2026-08-15, before measurement — Marco's own instruction named "real-traffic p95," and that was wrong.** Stage D's pre-build scoping found `RESULTS.md`'s own record: **no real caller has ever spoken to this system** — zero inbound calls to the live DID, no Connect-side telephony leg ever exercised. There is no real-traffic signal to derive. The corrected scope is **Lambda invocation p95 over eval-harness calls**: real cold/warm mix (real elapsed time, real idle gaps between batches), synthetic load (not a real caller), turn-processing latency only (not voice-to-voice — no Lex STT/Polly TTS leg exists in this number). **Stage D.** | Exit evidence is **the first Lambda-invocation p95 number over real eval-harness call history, whatever it is** — not a threshold to hit, a measurement to report, shipped with this scope qualifier attached from the start rather than acquiring one after the fact |
 | 8b | **`C1` regression signal** (Marco's amendment 2) — a scheduled eval re-run against the 26-turn set, as a build-regression tripwire. **Stage D.** No canary conversation (real telephony minute) — explicitly ruled out this pass; revisit only if the written gap below looks worse on paper than it does now. | Exercised once against a forced/synthetic degradation, same liveness bar as 1/3/4. **`RESULTS.md` must state explicitly that no signal currently detects real-traffic recall drift, and that `C1` remains scoped to today's topology — naming the gap is part of the deliverable, not a caveat on it** |
@@ -7507,4 +7518,52 @@ Open defects: D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (gua
 C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not touched this entry.
 Blocked on: D93's fix-shape choice is Marco's; D92's block-vs-auto-archive, D91's guard, option A, D88/D89 dispositions all still pending, unchanged.
 Last apply + gate result: none -- no Terraform touched. Real spend: $0.02 (2x ce:GetCostAndUsage, one more than the $0.01 declared -- operator error). Budgets/SNS reads: $0.00.
+```
+
+## Session log — 2026-08-16 (continued; branch protection configured on `main`, the last of Phase 10's
+three carry-forward items resolved; Phase 11 criterion 6's negative-control half flagged as still
+outstanding, not silently closed)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+- Restate these four conditions verbatim at the top of every session summary and after every `/compact`.
+
+Marco reported branch protection configured: classic rule on `main`, "Require status checks to pass before
+merging" enabled, `eval-gate` selected as the required check; "Require a pull request before merging" and
+"Require branches to be up to date" both left unchecked, so direct pushes to `main` still work. Confirmed
+visually against a GitHub Settings → Branches screenshot: `main` listed under "Branch protection rules"
+(the classic page, distinct from the adjacent "Rulesets" nav item), its row carrying a "Convert to ruleset"
+button — which only exists on a classic rule, confirming rule type independently of Marco's own description.
+
+**`MANUAL-STEPS.md` item 5 marked Done** — its own scope was the console click alone, which this confirms.
+
+**Phase 10's three carry-forward items — all now resolved**, recorded as the dependency chain they actually
+were: (1) the workflow existing only locally, never on `origin/main` — resolved by Marco's push to
+`c08184c`, 2026-08-15; (2) the workflow never having run — resolved by the first real run, `31887876709`,
+`success`, same timestamp; (3) branch protection being unconfigurable until a status existed to select —
+resolved by (2) clearing the precondition, and now configured, this entry. Each was a strict prerequisite
+for the next.
+
+**Phase 11 criterion 6 itself NOT marked CLOSED.** Its own written liveness requirement (Marco's amendment
+3, added on Phase 11's approval) names two things: the console-click configuration **and** a negative
+control — push a branch with a deliberately broken flow, confirm the gate blocks it, report the run ID and
+failing step, delete the branch. Marco's report names only the configuration. Flagged rather than let lapse
+silently, per this project's own scope-rule corollary ("if a change crosses a boundary a plan or
+verification criterion asserted, say so plainly and record the criterion as violated") — the same
+discipline this project has applied to itself repeatedly. Criterion 6's row updated to show the split
+explicitly, not marked ✅. `CLAUDE.md`'s own manual-steps line updated to reflect the console click as done.
+Full account: `RESULTS.md` §40.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage F -- branch protection configured on main (classic rule, eval-gate required check, PR-required and up-to-date both deliberately off). MANUAL-STEPS.md item 5 marked Done. Resolves the last of Phase 10's three carry-forward items (workflow-only-local / never-run / branch-protection-unconfigurable), a dependency chain now fully played out. Criterion 6 itself NOT marked CLOSED -- its negative-control half (Marco's amendment 3) is not reported as run; flagged explicitly rather than silently closed on the configuration alone. RESULTS.md S40 has the full account.
+Open defects: unchanged -- D88/OI5, D89/OI6, D90/OI7 part 1, D91/OI8, D92/OI9, D93/OI10 all OPEN.
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not touched.
+Blocked on: criterion 6's negative control, Marco's to run. All prior blocked items unchanged.
+Last apply + gate result: none -- a GitHub repo setting, not Terraform. Real spend: $0.00.
 ```
