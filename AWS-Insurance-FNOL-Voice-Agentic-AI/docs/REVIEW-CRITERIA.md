@@ -209,3 +209,27 @@ only the one whose failure was loud enough to be noticed.** Grep for the defect'
 deliberately left as-is with a stated reason (`D90`'s escalation call sites, where echoing Lex's intent is
 a different claim, not the same defect), or filed open — the same three-way disposition §5 already requires
 for carry-forward items, applied here to call sites of one defect instead of phases of one project.
+
+## 9. A summary carrying a scoped claim must cite its source line, and the scope must be verified against it
+
+Added 2026-08-16, Marco, after a handoff document (`docs/handoffs/2026-08-16-phase11-midflight.md`, `RESULTS.md`
+§38) was **explicitly instructed** to keep `C1`'s three canonical scope qualifiers intact — "these must
+survive intact — this is the thing most likely to compress into 'C1 verified'" — and still, on first draft,
+dropped one (topology-scope, collapsed into build-scope) and substituted a real-but-non-canonical item in
+its place (k=1 sampling) without labelling it as a different kind of caveat.
+
+**The direct instruction to preserve the claim was not sufficient to preserve it.** Summarization degrades
+scoped claims by default — merging distinct axes that happen to co-occur (here: build identity and
+topology, both properties of "the same `C1` run," but answering different questions), or restating a
+qualifier from memory of its gist rather than from the words that state it. Telling the summarizer to be
+careful is not a mechanism; re-reading the source is.
+
+**Any summary, handoff, or post-`/compact` continuation that carries a scoped or qualified claim (a
+"VERIFIED, but only under conditions X/Y/Z" statement, a caveat-bearing metric, a scope-restated finding)
+must cite the specific file:line the claim was checked against, and that scope must be re-verified against
+the cited source at write time — not restated from memory of an earlier read, however recent.** If the
+claim has more than one independent qualifier, state each as its own bullet against its own citation rather
+than merging them into prose that can silently drop or blend one. The mitigation that actually worked in
+the `C1` case was not "write more carefully" — it was Marco asking for a source-checked verification before
+accepting the summary's phrasing, which is the check this section now requires by default rather than on
+request.

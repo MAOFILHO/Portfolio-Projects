@@ -7902,3 +7902,95 @@ C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaS
 Blocked on: D92's guard needs Marco's choice between block-and-instruct vs. auto-archive before it can be scoped further. D91's guard, option A (D90 part 1's own fix), D88/D89 dispositions all still pending, unchanged.
 Last apply + gate result: none this entry -- documentation only. Real spend: $0.00.
 ```
+
+## 38. `docs/handoffs/2026-08-16-phase11-midflight.md` moved into the repo; a handoff-quality defect found and
+corrected — `C1`'s scope qualifiers, under direct instruction to preserve them intact, still degraded
+
+### 1. Handoff moved into the repo
+
+The handoff document (written per Marco's `/handoff` invocation, `PROJECT_STATE.md` open-items/criteria
+tables as its source) was first saved to `/tmp`, per the `handoff` skill's own literal instruction to save
+outside the workspace. **Marco's correction:** that defeats the purpose here — this project's convention is
+that state lives in files inside the repo, and `/tmp` is cleared on reboot, uncommitted, and undiscoverable
+by a future session. The `CLAUDE.md` `PROJECT_ROOT` scope rule blocks writes *outside* the project tree; it
+was never a reason to keep project documentation *out* of the tree. Moved to `docs/handoffs/
+2026-08-16-phase11-midflight.md`, committed (`9de55ea`), `check-project-root-scope` pre-commit hook passed.
+
+### 2. `D92`/`OI9` — a reviewer error, not a process failure
+
+Marco asked what `D92`/`OI9` was, stating it had "never been reported." Checked against the actual
+transcript: it was filed at Marco's own explicit request (his instruction: *"BASELINE OVERWRITE — treat as
+a process defect... File it and propose (do not build) a cheap guard"*, §37 above) and was reported back to
+him in the very next reply, before `/handoff` was ever invoked. **Marco's own correction, next turn:** "my
+error, not yours... I missed it in your reply. No action needed beyond noting the correction... if you
+track reviewer errors there" — recorded here per that instruction. No mechanism failure on this project's
+side; a reviewer (Marco) missed a report that was in fact delivered. Noted for the record, not treated as a
+defect in the harness or process.
+
+### 3. `C1`'s scope qualifiers — the actual finding
+
+Marco's audit request compared the handoff's `C1` section against the canonical source
+(`PROJECT_STATE.md:5087`, `:5746`): "warm-path-only, scoped-to-today's-graph-topology, and
+cold-start-as-existence-proof." The handoff instead read: "k=1 sampling, warm-path-only/1-of-19 cold-start
+coverage, scoped-to-this-build/immune-only-to-checked-mechanisms."
+
+Checked directly against source (`PROJECT_STATE.md:5087`, `:5746`, `:5041-5042`, `:6638`, `:7174`, `:563`):
+the handoff **did not preserve the canonical three intact**, despite the invocation instructing exactly
+that ("these must survive intact — this is the thing most likely to compress into 'C1 verified'"). Two
+distinct failures, not one:
+
+- **Topology-scope was collapsed into build-scope.** The record treats them as orthogonal
+  (`PROJECT_STATE.md:5041-5042`): build identity (`CodeSha256`) tracks the artifact and is the
+  re-verification trigger (`:6638`, `:7174`); topology-scope is a structural claim about the graph
+  ("every turn reaches the merged `classify_turn` call") that a routing change could invalidate **even on
+  an identical build hash**. The handoff's single bullet ("scoped-to-this-build") named only the first and
+  silently dropped the second.
+- **A real-but-non-canonical item was added without being marked as a different kind of caveat.** "k=1
+  sampling" is genuine and sourced (`PROJECT_STATE.md:563`) but is a separate, older (Phase 7), still-open
+  interpretive question about the sampling depth behind the 1.000 figure — not one of the three qualifiers
+  the record states together at `:5087`/`:5746`. Presenting it inside the same three-item list as the
+  canonical set risks a reader treating it as co-equal with them.
+
+**The headline finding: direct instruction to preserve a scoped claim intact was not sufficient to preserve
+it.** The failure mode was not carelessness in the ordinary sense — it was summarization's default
+behavior (merging axes that co-occur on the same object, restating a qualifier from the gist of an earlier
+read rather than from the words on the page) operating even under an instruction explicitly naming the risk
+in advance. **The mitigation that worked was verifying the summary against source** — Marco's own audit
+request, followed by a direct re-read of the cited `PROJECT_STATE.md` lines, is what surfaced the drop and
+the substitution; no amount of the original instruction being more emphatic would have caught it on its own.
+
+Corrected in `docs/handoffs/2026-08-16-phase11-midflight.md`'s `C1` section: restructured into three tiers
+(canonical scope qualifiers / artifact identity / other live caveats), each qualifier quoted rather than
+paraphrased, topology-scope restored and kept explicitly separate from build-scope, k=1 sampling and the
+`D90`-narrowing caveat both retained but moved to a clearly labelled third tier.
+
+`REVIEW-CRITERIA.md` §9 added: any summary, handoff, or post-`/compact` continuation carrying a scoped
+claim must cite the source file:line and be verified against it at write time, not restated from memory —
+codifying the mitigation that actually worked here as a standing check rather than a one-off correction.
+
+### Self-review (`REVIEW-CRITERIA.md` §1, §9)
+
+1. *Opposite result possible?* Yes — the handoff could have preserved all three qualifiers correctly; it
+   didn't, confirmed by re-reading the cited `PROJECT_STATE.md` lines directly rather than trusting the
+   handoff's own prose.
+2. *Asserted-but-unchecked?* The claim "topology and build identity are orthogonal in the record" is backed
+   by three separate citations (`:5041-5042`, `:6638`, `:7174`), not inferred from one.
+3. *Infra error scored as a result?* No AWS calls made this entry.
+4. *Cost below estimate?* $0.00 — documentation only.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* This is the first time §9's check has been applied —
+   it failed for the right reason on its own inaugural case (the handoff draft it was written in response
+   to), which is itself the evidence it catches a real failure mode rather than a hypothetical one.
+7. *Headline-number interpretation change?* No — `C1`'s underlying 1.000 (26/26) figure is unchanged; only
+   the handoff's *description* of its scope was corrected.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- handoff moved into docs/handoffs/ and committed (9de55ea); D92/OI9 confirmed a reviewer error, not a reporting failure (filed and reported same-turn, per transcript); C1's scope-qualifier section found to have collapsed topology-scope into build-scope and added a non-canonical item (k=1 sampling) despite direct instruction to preserve the canonical three intact -- corrected into three explicit tiers (canonical qualifiers / artifact identity / other caveats), each quoted against PROJECT_STATE.md:5087/:5746/:5041-5042/:6638/:7174/:563. REVIEW-CRITERIA.md S9 added: scoped claims in any summary/handoff/compaction must cite source and be re-verified at write time, not restated from memory.
+Open defects: unchanged from S37 -- D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (guard proposed), D92/OI9 OPEN (guard proposed).
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not re-run this entry; this entry corrects only how its scope is described in a derived document, not the underlying record.
+Blocked on: same as S37 -- D92's block-vs-auto-archive choice, D91's guard, option A, D88/D89 dispositions, all pending Marco.
+Last apply + gate result: none this entry. Real spend: $0.00.
+```

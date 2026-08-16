@@ -38,29 +38,51 @@ Stage letters, per the table's own mapping: **0** preflight, **A** criteria 1+2,
 **Not yet touched this arc:** Stage A apply, Stage D (both halves), Stage E, Stage F's manual click +
 negative control.
 
-## `C1` — status, with all three scope qualifiers intact (do not compress this to "C1 verified")
+## `C1` — status, three tiers (do not compress this to "C1 verified")
 
-**`C1` = VERIFIED, WARM PATH, 1.000 (26/26), build `CodeSha256`
-`51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=`** (re-verified 2026-08-16, `RESULTS.md` §36 §4;
-`PROJECT_STATE.md` `OI7` row).
+**Corrected 2026-08-16** (this handoff's first draft flattened these into one list and, in doing so, dropped
+the topology qualifier and added a non-canonical item — see `RESULTS.md` §38 for the finding). Restructured
+per Marco's direct instruction into the shape the record itself uses: exactly three canonical scope
+qualifiers, kept separate from build-identity tracking, kept separate from other live caveats.
 
-Three qualifiers that must travel with that line every time it's cited, per this project's own standing
-correction discipline (`PROJECT_STATE.md` lines 563, 5939, 6637; `RESULTS.md` §11.7):
+**Tier 1 — the canonical scope qualifiers. Exactly three, quoted, not merged** (`PROJECT_STATE.md:5087` and
+`:5746`, both state it identically):
 
-1. **k=1 sampling.** The `1.000` is n=26 at **one sample per item**, not a multi-sample distribution.
-   "The k-sample reading of `C1`" is named as an open interpretive question in its own right
-   (`PROJECT_STATE.md` line 563).
-2. **Warm-path only.** Cold-start coverage is a **1-of-19 existence proof, not a measurement**
-   (`RESULTS.md` §11.7) — same epistemic category this project also applies to `CF3`'s n=5 result.
-3. **Scoped to today's topology and this build specifically, immune only to the mechanisms actually
-   checked.** No signal currently detects real-traffic recall drift (criterion 8b's own required disclosure).
-   `D90`'s narrowing (2026-08-16, `RESULTS.md` §34 §3, Marco's own correction) applies here too: `C1` is
-   confirmed structurally immune to `D90`'s wire-contract mechanism specifically (reads
-   `sessionAttributes.escalation_reason`, never `intent.name`) — **that is not a general clean bill** on the
-   26/26 against every other open defect.
+> "VERIFIED, WARM PATH, build `u9iIy...`. 1.000 (26/26)... **Scope, restated:** this figure describes today's
+> topology — every turn reaches the merged `classify_turn` call. A lexical short-circuit... would change
+> that topology and would require re-verifying `C1` against it... Cold-start coverage remains an existence
+> proof (1/19), not a measurement."
 
-Any future session citing `C1` should quote the bolded line above plus these three qualifiers, not a bare
-"1.000 (26/26)."
+(a) **Warm path only.**
+(b) **Scoped to today's topology** — every turn reaches the merged `classify_turn` call. A lexical
+    short-circuit (or any other routing change) would change that topology and would require re-verifying
+    `C1` against it — **even on an identical build hash.** Do not collapse this into build identity below;
+    the record treats them as orthogonal (`PROJECT_STATE.md:5041-5042`, `:6638`, `:7174`): build identity
+    tracks the artifact, topology tracks the structural claim.
+(c) **Cold-start coverage is a 1-of-19 existence proof, not a measurement** — same epistemic category this
+    project also applies to `CF3`'s n=5 result.
+
+**Tier 2 — artifact identity, tracked separately, not itself a scope qualifier:**
+
+`CodeSha256` `51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=` (re-verified 2026-08-16, `RESULTS.md` §36 §4;
+`PROJECT_STATE.md` `OI7` row). This is the re-verification trigger — `C1` reads `VERIFIED` against this
+specific deployed build or `PENDING RE-VERIFICATION` otherwise (`PROJECT_STATE.md:6638`). It answers "is
+this still the build that earned the 1.000," a different question from tier 1(b)'s "is the structure that
+produced the 1.000 still in place."
+
+**Tier 3 — other live caveats, explicitly NOT part of the canonical three:**
+
+- **k=1 sampling.** The `1.000` is n=26 at one sample per item. "The k-sample reading of `C1`" is a
+  **separate, older (Phase 7), still-open interpretive question** — never resolved to k=5 as recommended,
+  still live (`PROJECT_STATE.md:563`) — not one of the three canonical qualifiers above.
+- **Immune only to the mechanisms actually checked.** This session's `D90`-narrowing finding
+  (`RESULTS.md` §34 §3, Marco's own correction): `C1` is confirmed structurally immune to `D90`'s
+  wire-contract mechanism specifically (reads `sessionAttributes.escalation_reason`, never `intent.name`) —
+  that is not a general clean bill against every other open defect.
+
+Any future session citing `C1` should quote tier 1's three qualifiers in full, state tier 2's build hash
+separately, and only add tier 3's items when the caveat they name is actually relevant — never fold any of
+the three tiers into another.
 
 ## `C14` — canonical phrasing, verbatim (do not use "19ms" shorthand anywhere)
 
