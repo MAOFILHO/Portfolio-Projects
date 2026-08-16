@@ -9995,3 +9995,60 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7cbkbuWmCR1Yth2ba
 Blocked on: Terminal 1's Phase 11 triage -- MEASURE or ACCEPT on D100/OI18; any decision on D101/OI19's three named gaps.
 Last apply + gate result: none this entry. $0.00 real spend -- filing only.
 ```
+
+## 74. Criterion 8a — first Lambda-invocation p95 number over real eval-harness call history
+
+Block reserved first (`session-auditfold`, `D120`–`D139`/`OI38`–`OI57`/`§74`–`§93`); this entry spends `§74`,
+no `D`/`OI` (a measurement closing a criterion, not a defect or open question).
+
+**Scope, stated up front, per Marco's explicit instruction not to let this read as a `C14` re-measurement.**
+This is `fnol-codehook`'s own `AWS/Lambda` `Duration` metric — real cold/warm mix (real elapsed time, real
+idle gaps between calls), synthetic load (eval-harness/probe traffic, no real caller — confirmed, still true,
+no inbound call to the live DID has ever occurred), turn-processing latency only. **It is not, and must not
+be read as, a measurement of the 1,800ms voice-turn budget** (`CLAUDE.md`'s own constraint, Lex STT
+completion → Polly audio stream start) — there is no Lex/Polly leg in this number at all, only the Lambda
+handler's own execution window. This is exactly criterion 8a's corrected scope (`PROJECT_STATE.md` criteria
+table, row 8a, corrected 2026-08-15 before measurement): "Lambda invocation p95 over eval-harness calls,"
+not "real-traffic p95," because no real-traffic signal exists to derive.
+
+**Sample window**: the current deployed build only, `CodeSha256 /4FFnR9Q7cbkbuWmCR1Yth2baW/cxp7F+r/fPP+JCOo=`
+(`LastModified 2026-08-16T21:07:08Z` — confirmed live via `get-function-configuration` before the read, same
+discipline as `C1`'s own build checks), so the number reflects the code this repo's `main` actually is, not
+a mix of superseded builds. Window: deploy time → read time (`2026-08-16T23:37:28Z`), ~2.5 hours. All
+invocations in that window are this session's own `C1` harness run and `verify-lambda-execution`/`D88`
+confirmation probes — no other caller exists.
+
+**Read** (`GetMetricStatistics`, `AWS/Lambda`/`Duration`, single 3-hour period so CloudWatch computes one
+aggregate percentile across every datapoint in the window, not a per-bucket average of percentiles):
+
+| | |
+|---|---|
+| SampleCount | 121 |
+| Minimum | 1.69 ms |
+| p50 | 841.25 ms |
+| Average | 921.61 ms |
+| **p95** | **1,651.06 ms** |
+| p99 | 12,279.58 ms |
+| Maximum | 12,707.69 ms |
+
+**The max/p99 gap is a real cold start, not an anomaly to explain away.** `D83`/this project's own prior
+finding measured `_get_graph()`'s lazy cold-start construction at ~10.3–11.4s; AWS/Lambda's `Duration` metric
+(unlike `Init Duration`) *does* include that time here, because the construction happens lazily inside the
+handler body on first use, not in Lambda's own INIT phase — consistent with, not contradicting, the prior
+finding. 121 samples means a small number of cold invocations pull `p99`/`Maximum` far above `p95`; `p95`
+itself sits below that tail, which is the number criterion 8a asked for.
+
+**Reported as a measurement, not a threshold met or missed** — this is the criterion's own exit evidence
+verbatim ("the first Lambda-invocation p95 number over real eval-harness call history, whatever it is"), no
+pass/fail framing implied, no comparison to `C14`'s 1,800ms budget attempted or claimed. Cost: $0.00 —
+`GetMetricStatistics` reads on the free-tier-eligible standard resolution, no new resource, no apply.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 Stage D -- criterion 8a closed. Lambda-invocation p95 = 1,651.06ms over 121 real eval-harness-sourced invocations against the current deployed build (CodeSha256 /4FFnR9Q7..., LastModified 2026-08-16T21:07:08Z), real cold/warm mix, synthetic load, turn-processing only -- explicitly not a C14 (voice-turn, Lex-to-Polly) measurement and not compared against the 1,800ms budget. p99/Maximum (12.3s/12.7s) reflect real cold-start graph construction (D83's own finding, consistent), not new.
+Open defects: none new. Criterion 8a closes as done -- a measurement reported, not a threshold to hit.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducible from main as of 8f140bc. Not touched this entry.
+Blocked on: nothing. Next: criterion 2 (cost-dashboard cross-check), per Marco's stated order.
+Last apply + gate result: none this entry. $0.00 real spend -- one free-tier CloudWatch metrics read.
+```
