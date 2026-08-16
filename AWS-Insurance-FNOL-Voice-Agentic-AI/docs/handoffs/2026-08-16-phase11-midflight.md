@@ -48,10 +48,11 @@ qualifiers, kept separate from build-identity tracking, kept separate from other
 **Tier 1 — the canonical scope qualifiers. Exactly three, quoted, not merged** (`PROJECT_STATE.md:5087` and
 `:5746`, both state it identically):
 
-> "VERIFIED, WARM PATH, build `u9iIy...`. 1.000 (26/26)... **Scope, restated:** this figure describes today's
-> topology — every turn reaches the merged `classify_turn` call. A lexical short-circuit... would change
-> that topology and would require re-verifying `C1` against it... Cold-start coverage remains an existence
-> proof (1/19), not a measurement."
+> "VERIFIED, WARM PATH, build `u9iIy...` [historical hash as originally written — see Tier 2 below for the
+> current build]. 1.000 (26/26)... **Scope, restated:** this figure describes today's topology — every
+> turn reaches the merged `classify_turn` call. A lexical short-circuit... would change that topology and
+> would require re-verifying `C1` against it... Cold-start coverage remains an existence proof (1/19), not
+> a measurement."
 
 (a) **Warm path only.**
 (b) **Scoped to today's topology** — every turn reaches the merged `classify_turn` call. A lexical

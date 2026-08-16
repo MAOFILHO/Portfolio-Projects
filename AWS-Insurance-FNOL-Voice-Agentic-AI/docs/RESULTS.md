@@ -7904,7 +7904,8 @@ Last apply + gate result: none this entry -- documentation only. Real spend: $0.
 ```
 
 ## 38. `docs/handoffs/2026-08-16-phase11-midflight.md` moved into the repo; a handoff-quality defect found and
-corrected — `C1`'s scope qualifiers, under direct instruction to preserve them intact, still degraded
+corrected — `C1`'s scope qualifiers, under direct instruction to preserve them intact, still degraded; a
+second defect found on re-test — verbatim quotation carried a stale build hash forward, §9 extended
 
 ### 1. Handoff moved into the repo
 
@@ -7968,6 +7969,35 @@ paraphrased, topology-scope restored and kept explicitly separate from build-sco
 claim must cite the source file:line and be verified against it at write time, not restated from memory —
 codifying the mitigation that actually worked here as a standing check rather than a one-off correction.
 
+### 4. Handoff test passed; one further finding — verbatim quotation is not immune to staleness
+
+Marco ran the corrected handoff through a fresh session: it reconstructed `C1`'s three canonical qualifiers
+with topology intact and separate from build identity, `C14` verbatim, and all nine open items with
+dependencies. `/handoff` is adopted as the session-boundary tool on the strength of this result.
+
+One further defect found in the same read: Tier 1's verbatim quote (§38 above, and the handoff itself)
+carries `"build u9iIy..."` — the hash current when the quoted `PROJECT_STATE.md` line was **first written**
+— sitting next to Tier 2's correctly current `51JN903e...`. **Quoting §9-compliant source exactly is not
+the same claim as the quoted content being current.** §9 requires citing source and verifying scope against
+it; it does not by itself guard against a *verbatim* quote embedding a fact (a build hash, a count, a date,
+a measurement) that was accurate when the source line was written and has since moved. Faithful quotation
+preserves *what was said*, not *what is currently true* — those come apart exactly when the source itself
+records history rather than only current state, which `PROJECT_STATE.md`'s own append-and-correct
+convention guarantees will happen routinely.
+
+**Fixed, not by altering the quote** (altering a quote to make it currently accurate defeats the reason to
+quote at all — verbatim-ness is the point, since it lets a reader see the record's own words rather than a
+paraphrase that could introduce a new drift). Bracketed instead: `` `u9iIy...` [historical hash as
+originally written — see Tier 2 below for the current build] `` — the quote stays intact and inspectable,
+the staleness is flagged inline rather than left for a reader to notice or miss, and Tier 2 remains the one
+place the current value is asserted.
+
+**Extending §9**: any quoted claim containing a build hash, a count, a date, or a measurement must either be
+bracketed with a pointer to the current value, or be accompanied by that current value directly alongside
+it — the same discipline §9 already requires for a *restated* scoped claim, extended to cover a *verbatim*
+one, since verbatim quotation was shown here to carry a stale fact forward exactly as readily as paraphrase
+does, just via a different mechanism (accurate authorship instead of imprecise restatement).
+
 ### Self-review (`REVIEW-CRITERIA.md` §1, §9)
 
 1. *Opposite result possible?* Yes — the handoff could have preserved all three qualifiers correctly; it
@@ -7980,7 +8010,10 @@ codifying the mitigation that actually worked here as a standing check rather th
 5. *Identical markers, different paths?* N/A this entry.
 6. *Has this check ever failed for the right reason?* This is the first time §9's check has been applied —
    it failed for the right reason on its own inaugural case (the handoff draft it was written in response
-   to), which is itself the evidence it catches a real failure mode rather than a hypothetical one.
+   to), which is itself the evidence it catches a real failure mode rather than a hypothetical one. §4's
+   stale-hash finding is a *second*, distinct failure the same first application surfaced: §9 as originally
+   written caught the collapsed/added qualifiers but did not by itself catch a verbatim quote embedding a
+   fact that had since moved — extended in §4 to close that gap.
 7. *Headline-number interpretation change?* No — `C1`'s underlying 1.000 (26/26) figure is unchanged; only
    the handoff's *description* of its scope was corrected.
 8. `C1` a tradeable term? Not touched.
@@ -7988,7 +8021,7 @@ codifying the mitigation that actually worked here as a standing check rather th
 **Report** (`REVIEW-CRITERIA.md` §3 header):
 
 ```
-Phase/Stage: Phase 11 -- handoff moved into docs/handoffs/ and committed (9de55ea); D92/OI9 confirmed a reviewer error, not a reporting failure (filed and reported same-turn, per transcript); C1's scope-qualifier section found to have collapsed topology-scope into build-scope and added a non-canonical item (k=1 sampling) despite direct instruction to preserve the canonical three intact -- corrected into three explicit tiers (canonical qualifiers / artifact identity / other caveats), each quoted against PROJECT_STATE.md:5087/:5746/:5041-5042/:6638/:7174/:563. REVIEW-CRITERIA.md S9 added: scoped claims in any summary/handoff/compaction must cite source and be re-verified at write time, not restated from memory.
+Phase/Stage: Phase 11 -- handoff moved into docs/handoffs/ and committed (9de55ea); D92/OI9 confirmed a reviewer error, not a reporting failure (filed and reported same-turn, per transcript); C1's scope-qualifier section found to have collapsed topology-scope into build-scope and added a non-canonical item (k=1 sampling) despite direct instruction to preserve the canonical three intact -- corrected into three explicit tiers (canonical qualifiers / artifact identity / other caveats), each quoted against PROJECT_STATE.md:5087/:5746/:5041-5042/:6638/:7174/:563. REVIEW-CRITERIA.md S9 added: scoped claims in any summary/handoff/compaction must cite source and be re-verified at write time, not restated from memory. Handoff test PASSED in a fresh session (topology intact, C14 verbatim, all nine open items reconstructed); /handoff adopted as the session-boundary tool. Same read found a second defect: Tier 1's verbatim quote carried a stale build hash (u9iIy...) beside Tier 2's current one (51JN903e...) -- fixed via inline bracket, not by altering the quote. S9 extended: any quoted claim containing a build hash, count, date, or measurement needs a bracket to the current value or the current value stated alongside it -- verbatim quotation is accurate about authorship, not about current state.
 Open defects: unchanged from S37 -- D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (guard proposed), D92/OI9 OPEN (guard proposed).
 C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not re-run this entry; this entry corrects only how its scope is described in a derived document, not the underlying record.
 Blocked on: same as S37 -- D92's block-vs-auto-archive choice, D91's guard, option A, D88/D89 dispositions, all pending Marco.

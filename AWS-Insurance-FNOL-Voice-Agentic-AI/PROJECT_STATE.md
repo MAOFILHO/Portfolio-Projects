@@ -10,13 +10,19 @@
 
 ---
 
-**Last updated:** 2026-08-16 (continued: handoff moved from `/tmp` into `docs/handoffs/` and committed
+**Last updated:** 2026-08-16 (continued: handoff test PASSED in a fresh session — `C1`'s three qualifiers
+reconstructed with topology intact, `C14` verbatim, all nine open items with dependencies; `/handoff`
+adopted as the session-boundary tool. Same test surfaced a second defect: Tier 1's verbatim `C1` quote
+carried a stale build hash (`u9iIy...`) beside Tier 2's current one (`51JN903e...`) — fixed via inline
+bracket, quote left unaltered; `REVIEW-CRITERIA.md` §9 extended, any quoted build hash/count/date/
+measurement needs a bracket to the current value or the current value stated alongside it. `RESULTS.md`
+§38 §4 has the account. Prior same-day entry: handoff moved from `/tmp` into `docs/handoffs/` and committed
 (`9de55ea`) — `/tmp` defeats the point for a project whose convention is that state lives in files; `D92`/
 `OI9` confirmed a reviewer error, not a reporting failure (filed and reported same-turn per transcript);
 `C1`'s scope-qualifier section in the handoff found to have collapsed topology-scope into build-scope and
 added a non-canonical item, despite direct instruction to preserve the canonical three intact — corrected
-into three explicit tiers, `RESULTS.md` §38; `REVIEW-CRITERIA.md` §9 added, scoped claims in any summary
-must cite source and be re-verified at write time, not restated from memory)
+into three explicit tiers, `RESULTS.md` §38 §1-3; `REVIEW-CRITERIA.md` §9 added, scoped claims in any
+summary must cite source and be re-verified at write time, not restated from memory)
 
 **Prior entry, same day:** (`D90` part 2 root-caused — `_close()` echoes Lex's original intent at all 3 call sites, unconditionally; confirmed the same defect class `D84` already fixed at `_elicit_slot()`, left untouched at the sibling site because `ElicitSlot` had a live Lex `ValidationException` forcing the fix and `Close` has no equivalent; reproduced $0/local/deterministic. Recorded-verification sweep run: `C1`, `D84`'s own tests, and `D47`'s bias-routing finding confirmed structurally immune to this mechanism specifically (not a general clean bill — narrowed per Marco); `verify-lambda-execution` events 10-12 found inferred-not-asserted (content-check accident, not a structural node-identity check); event 13 confirmed actually exposed, as §33 already suspected. `REVIEW-CRITERIA.md` §8 added: a defect fixed at one call site isn't fixed until every site of that class is enumerated — absence of a loud failure is not evidence of correctness. **Option B shipped and verified, 2026-08-16 (`RESULTS.md` §36).** `terraform apply "d90.tfplan"` (Marco): `CodeSha256` `8Ch4kDuL...`→`51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=`. Before applying, `OI3`'s "phantom diff" was corrected against the provider's own docs (checked live via `head-object`/`list-object-versions`, not assumed): the etag diff **does** trigger a real re-upload (`etag` "triggers updates when the value changes"), harmlessly — identical bytes, same key, versioning off, no new version. Post-apply: `C1` re-verified 1.000 (26/26) real, **restored to VERIFIED**; 3 direct smoke-test invokes confirmed `executed_node_intent`'s exact designed shape live (present+agreeing on `ElicitSlot` and ordinary `Close`, correctly absent on escalation); `verify-lambda-execution` events 10-13 tightened to assert the field directly — still 10/13, but event 11 now passes structurally rather than by template accident, event 12 (`D89`) now fails with a direct field-absence message, event 10 still fails on the unrelated `D88` (field silently confirmed first), **event 13 unchanged — same failure, same message, proving part 2's fix does not touch part 1's misrouting.** `D91`/`OI8` filed separately (staged-index-carries-across-sessions hazard; guard proposed, not built) and the prior session's commit-scope question decided (left as-is). `D90`/`OI7`: **part 2 CLOSED, part 1 (zero-context routing) remains OPEN and unscoped — `D90` does not close until part 1 does.** **`D92`/`OI9` filed** (`RESULTS.md` §37): the baseline overwrite noted in §36 §4 is the same defect class as `D91`, not an isolated slip — a convention protected only by operator memory, no mechanism that fails loud when skipped; root cause read directly from the harness script (unconditional write, no existing-file check, and the JSON carries no build-identifying field today, so the guard is two changes, not one); guard proposed (compare-and-refuse or compare-and-auto-archive, Marco's call), not built. §34's three tiers updated to reflect the post-tightening state, and event 11's PASS explicitly recorded as having moved footing — inferred-from-template to structurally-asserted-via-the-new-field — same result, different proof. `RESULTS.md` §34/§36/§37 have the full account)
 
@@ -7394,6 +7400,51 @@ derived document's description of `C1`'s scope, not the record itself.
 Phase/Stage: Phase 11 -- handoff moved into docs/handoffs/ and committed (9de55ea). D92/OI9 confirmed a reviewer error (filed and reported same-turn, per transcript), not a reporting failure -- no action beyond this note, per Marco. C1's handoff scope-qualifier section found to have collapsed topology-scope into build-scope and added a non-canonical item (k=1 sampling) despite direct instruction to preserve the canonical three intact -- corrected into three explicit tiers against PROJECT_STATE.md:5087/:5746/:5041-5042/:6638/:7174/:563. REVIEW-CRITERIA.md S9 added: scoped claims in any summary/handoff/compaction must cite source and be re-verified at write time. RESULTS.md S38 has the full account.
 Open defects: unchanged -- D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (guard proposed), D92/OI9 OPEN (guard proposed).
 C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not re-run this entry; only a derived document's description of its scope was corrected.
+Blocked on: same as prior entry -- D92's block-vs-auto-archive choice, D91's guard, option A, D88/D89 dispositions, all pending Marco.
+Last apply + gate result: none this entry. Real spend: $0.00.
+```
+
+## Session log — 2026-08-16 (continued; handoff test PASSED in a fresh session, `/handoff` adopted as the
+session-boundary tool; second defect found on re-test — verbatim `C1` quote carried a stale build hash,
+fixed via inline bracket; `REVIEW-CRITERIA.md` §9 extended)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+- Restate these four conditions verbatim at the top of every session summary and after every `/compact`.
+
+Documentation only, no AWS calls, no code change.
+
+**Handoff test passed.** Marco ran the corrected `docs/handoffs/2026-08-16-phase11-midflight.md` through a
+fresh session: it reconstructed `C1`'s three canonical qualifiers with topology intact and separate from
+build identity, `C14`'s phrasing verbatim, and all nine open items with dependencies, with no
+re-explanation needed. `/handoff` is adopted as the session-boundary tool going forward.
+
+**Second defect found on the same read.** Tier 1's verbatim quote of `C1`'s status line — correct, faithful
+to `PROJECT_STATE.md:5087`/`:5746` — carried `"build u9iIy..."`, the hash current when that source line was
+first written, sitting beside Tier 2's correctly current `51JN903e...`. Faithful quotation preserves what
+was said, not what is currently true, and those come apart whenever the quoted source is itself a running,
+corrected record — exactly `PROJECT_STATE.md`'s own convention. Fixed without altering the quote (altering
+it would defeat quoting's own purpose and reintroduce the same risk via a new paraphrase): bracketed inline
+— `` `u9iIy...` [historical hash as originally written — see Tier 2 below for the current build] ``.
+
+**`REVIEW-CRITERIA.md` §9 extended**: any quoted claim containing a build hash, count, date, or measurement
+must be bracketed with a pointer to the current value, or accompanied by that current value stated directly
+alongside it. §9 as first written required citing source and verifying scope against it; this closes the
+gap that a verbatim quote can satisfy both of those and still go stale, because citation attests to
+authorship, not currency. Full account: `RESULTS.md` §38 §4.
+
+No change to `C1`'s underlying figure, no change to any open defect's disposition.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- handoff test PASSED in a fresh session (C1 topology intact, C14 verbatim, all nine open items reconstructed); /handoff adopted as the session-boundary tool. Same read found a second, distinct defect: Tier 1's verbatim C1 quote carried a stale build hash (u9iIy...) beside Tier 2's current one (51JN903e...) -- fixed via inline bracket, quote left unaltered. REVIEW-CRITERIA.md S9 extended: quoted build hash/count/date/measurement needs a bracket to the current value or the current value stated alongside it. RESULTS.md S38 S4 has the full account.
+Open defects: unchanged -- D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (guard proposed), D92/OI9 OPEN (guard proposed).
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not re-run this entry; only a derived document's quoted description was corrected.
 Blocked on: same as prior entry -- D92's block-vs-auto-archive choice, D91's guard, option A, D88/D89 dispositions, all pending Marco.
 Last apply + gate result: none this entry. Real spend: $0.00.
 ```

@@ -233,3 +233,18 @@ than merging them into prose that can silently drop or blend one. The mitigation
 the `C1` case was not "write more carefully" — it was Marco asking for a source-checked verification before
 accepting the summary's phrasing, which is the check this section now requires by default rather than on
 request.
+
+**Extended 2026-08-16, Marco, after the corrected handoff passed a fresh-session reconstruction test and the
+same test surfaced a second, distinct defect** (`RESULTS.md` §38 §4): Tier 1's fix for the above quoted
+`C1`'s status line verbatim, correctly, from `PROJECT_STATE.md` — and the quote itself carried a stale build
+hash (`u9iIy...`, current when that line was first written) sitting beside a second tier's correctly current
+one (`51JN903e...`). **Verbatim quotation satisfies "cite the source" but does not by itself satisfy "verify
+against current state."** Quoting exactly preserves what the source *said*; it does not refresh what the
+source's own facts currently *are* when that source is a running, corrected record rather than a fixed
+document — which is what `PROJECT_STATE.md`'s own append-and-correct convention guarantees it will
+routinely be. **Any quoted claim containing a build hash, a count, a date, or a measurement must either be
+bracketed with a pointer to the current value (preferred — the quote stays inspectable and the staleness
+risk is flagged inline, e.g. `` `u9iIy...` [historical hash as written — see current value below] ``) or be
+accompanied by the current value stated directly alongside it.** Do not "fix" a quote by editing the number
+inside it — that defeats the reason to quote (a reader seeing the record's own words) and reintroduces the
+exact risk this section exists to close, just via a new paraphrase instead of an old one.
