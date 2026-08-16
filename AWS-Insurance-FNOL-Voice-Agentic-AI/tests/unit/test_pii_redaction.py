@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fnol_voice_agent.guardrails.pii import redact_for_transcript
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "synthetic"
+DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "fnol_voice_agent" / "data" / "synthetic"
 
 
 def _first_policyholder() -> dict[str, object]:

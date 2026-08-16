@@ -14,7 +14,7 @@ from fnol_voice_agent.validation.identifiers import (
     vin_is_deliberately_invalid,
 )
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "synthetic"
+DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "fnol_voice_agent" / "data" / "synthetic"
 
 
 def test_luhn_worked_example_from_data_contracts_md() -> None:

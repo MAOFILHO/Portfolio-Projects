@@ -10,7 +10,7 @@ from fnol_voice_agent.validation.coverage import (
     rental_days_remaining,
 )
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "synthetic"
+DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "fnol_voice_agent" / "data" / "synthetic"
 
 
 def test_total_loss_worked_example_from_coverage_logic_md() -> None:

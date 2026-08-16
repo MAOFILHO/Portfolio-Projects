@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate data/synthetic/{policyholders,vehicles,claims}.json for internal consistency.
+"""Validate src/fnol_voice_agent/data/synthetic/{policyholders,vehicles,claims}.json for internal
+consistency. (`D87`, Option A, 2026-08-16: these three moved from repo-root `data/synthetic/` into the
+package itself -- see `mcp/_paths.py`'s module docstring. `data/synthetic/policy/`, referenced in check 4
+below, did NOT move -- it is the RAG corpus, read only by local ingestion/eval tooling, never by the
+deployed Lambda.)
 
 Checks, each tied to a specific Phase 3 spec document:
   1. Every claim number's Luhn check digit is correct, per docs/phase3/DATA-CONTRACTS.md §1.
@@ -30,7 +34,9 @@ from fnol_voice_agent.validation.identifiers import (  # noqa: E402
     vin_correct_check_digit,
 )
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "synthetic"
+DATA_DIR = (
+    Path(__file__).resolve().parent.parent / "src" / "fnol_voice_agent" / "data" / "synthetic"
+)
 
 
 def main() -> int:

@@ -21,7 +21,7 @@ from fnol_voice_agent.models import (
 )
 from fnol_voice_agent.models.enums import CoverageQuestionType, Intent, LossType
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "synthetic"
+DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "fnol_voice_agent" / "data" / "synthetic"
 
 
 def test_all_synthetic_policyholders_validate() -> None:
