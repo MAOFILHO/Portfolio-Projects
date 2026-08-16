@@ -197,3 +197,11 @@ def detect_safety_trigger(text: str) -> tuple[bool, str | None]:
         return True, match.group(0).strip()
 
     return False, None
+
+
+# Comment-only, deliberate: Phase 11 criterion 6's negative control, take 2 (docs/audits/
+# 2026-08-16-uncommitted-source-audit.md, Finding B). No keyword, pattern, or behavior below this line
+# changed. This file is a BASELINE_SENSITIVE_PATHS entry (evals/regression.py:146); touching it without a
+# matching evals/baselines/ update should trip the "Baseline freshness" CI step specifically, and nothing
+# else -- every live-computed Tier A metric is untouched, so both "Unit tests" and "Evaluation gate" (the
+# regression-vs-committed-baseline comparison) should read clean.
