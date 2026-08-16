@@ -50,20 +50,12 @@ resource "aws_budgets_budget" "project" {
     subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
   }
 
-  # TEMPORARY -- firing-proof for criterion 1, docs/RESULTS.md §17.3/§19. ABSOLUTE_VALUE, not a percent
-  # of budget_limit_usd, so it stays fixed at test_breach_threshold_usd regardless of the budget ceiling.
-  # Set comfortably below the real re-verified MTD gross usage ($3.7828941608, 2026-08-15) so it is
-  # already breached at the first Budgets evaluation after apply.
-  #
-  # REMOVE ONCE MARCO CONFIRMS RECEIPT OF THE BREACH EMAIL -- tracked as an open item in
-  # PROJECT_STATE.md. Left live, this is a permanent $2.00 hair-trigger alert.
-  notification {
-    comparison_operator       = "GREATER_THAN"
-    threshold                 = var.test_breach_threshold_usd
-    threshold_type            = "ABSOLUTE_VALUE"
-    notification_type         = "ACTUAL"
-    subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
-  }
+  # The TEMPORARY synthetic-breach test notification (ABSOLUTE_VALUE, test_breach_threshold_usd) that
+  # lived here has been removed -- OI1/D93/OI10, 2026-08-16. It did its job: threshold $0.25 against
+  # $0.4795 tagged MTD spend, applied, NotificationState:ALARM confirmed live within a minute, real
+  # breach email received and confirmed by Marco 18:45 local the same day (ACTUAL $0.71 at fire time).
+  # Removing it now, per Marco's explicit instruction, so a hair-trigger alert set up for one proof
+  # doesn't become a permanent fixture. See PROJECT_STATE.md's OI1 row for the full chain.
 
   depends_on = [aws_sns_topic_policy.budget_alerts]
 }

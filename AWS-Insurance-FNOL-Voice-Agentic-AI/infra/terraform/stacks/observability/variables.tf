@@ -25,29 +25,9 @@ variable "budget_limit_usd" {
   default     = 20
 }
 
-variable "test_breach_threshold_usd" {
-  description = <<-EOT
-    Temporary synthetic-breach notification, docs/RESULTS.md §19, corrected §39/§FIX-D93 2026-08-16. The
-    original $2.00 figure was set against the account-WIDE untagged MTD gross usage ($3.78) -- but
-    budget.tf's own cost_filter scopes this budget's evaluation to Project=AWS-Insurance-FNOL-Voice-
-    Agentic-AI-tagged spend only, which was never past $2.00 (D93/OI10: confirmed $0.48 MTD, twice,
-    against `aws budgets describe-budget`'s own CalculatedSpend.ActualSpend to the cent). $2.00 could
-    never have fired under this budget's actual scope.
-
-    Re-derived from a fresh `ce get-cost-and-usage` call, GroupBy Type=TAG,Key=Project, RECORD_TYPE=Usage
-    (same methodology as D93's original diagnosis): this project's tagged MTD spend is $0.4795457178,
-    unchanged to 10 decimal places from D93's own measurement (CE's known ~24h processing lag, not zero
-    new spend). Set at $0.25 -- comfortably below that figure (47% margin, wider than the original
-    design's own 53% margin against its now-corrected reference number), so it is certain to already be
-    breached at the first Budgets evaluation cycle after apply, against the number this budget actually
-    watches.
-
-    REMOVE THIS after Marco confirms receipt of the breach email -- tracked as an open item in
-    PROJECT_STATE.md so a hair-trigger alert does not become permanent.
-  EOT
-  type        = number
-  default     = 0.25
-}
+# test_breach_threshold_usd (temporary synthetic-breach notification, docs/RESULTS.md §19/§39) removed
+# 2026-08-16, OI1 -- it fired, Marco confirmed the breach email, its job is done. See budget.tf's comment
+# and PROJECT_STATE.md's OI1 row for the full chain.
 
 variable "cost_metric_namespace" {
   description = "CloudWatch namespace the CE-pull Lambda writes to and the dashboard reads from."
