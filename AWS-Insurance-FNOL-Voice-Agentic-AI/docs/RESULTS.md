@@ -10114,3 +10114,87 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducibl
 Blocked on: nothing. Next: criterion 3 claim (b), per Marco's stated order.
 Last apply + gate result: none this entry. $0.01 real spend, one CE call, as budgeted; a second, earlier session CE call ($0.01, D93/OI10) backfilled into COSTS.md this entry, found while logging this one.
 ```
+
+## 76. Claim (b) closed by a live ordinary-path OUTPUT intervention -- and the intervention itself is a new,
+real, live-confirmed defect: `UpdateContactInfo`'s email/phone confirmation is unconfirmable by voice
+
+`§76`, `session-auditfold` block. New defect filed: `D121`/`OI39`.
+
+**The live check** (`/private/tmp/.../scratchpad/live_check_update_contact_email.py`, one-off, not the
+permanent gate). Real `lambda:Invoke` against `fnol-codehook`'s current deployed build, `UpdateContactInfo`
+intent, `policy_number=PY4821` (real), `field=email`, `new_value=priya.n.updated@example.com` (synthetic),
+`confirm_update_contact_info` **deliberately not pre-filled** -- pre-filling it (the shape `verify-lambda-
+execution`'s own event 11 uses, with `field=phone`) skips past the confirmation-readback turn entirely and
+would have exercised the wrong line. This turn stops exactly where `update_contact_info_node`'s confirmation
+readback (`agents/nodes/update_contact_info.py:54`) fires.
+
+**1. Does the OUTPUT guardrail fire?** Yes. Real `guardrail_usage` log lines, same `requestId`
+(`7d0006e9-e41b-41c4-982a-c8c3b01c89b5`), both sides:
+
+```
+INPUT:  blocked=false masked=false sensitiveInformationPolicyUnits=0 contentPolicyUnits=1 topicPolicyUnits=1
+OUTPUT: blocked=false masked=true  sensitiveInformationPolicyUnits=1 contentPolicyUnits=1 topicPolicyUnits=1
+```
+
+INPUT's `sensitiveInformationPolicyUnits=0` is the same standing Bedrock behavior this project already had
+on record (`guardrails_nodes.py`'s own comment, Stage 8) -- Bedrock does not evaluate the sensitive-
+information policy on `source="INPUT"` at all, so this is expected, not a new finding. OUTPUT masked, not
+blocked -- `masked:true`/`blocked:false` is `guardrails_output_check`'s "forward the masked text" branch
+(`guardrails_nodes.py:108-118`), not `_OUTPUT_BLOCKED_FALLBACK`.
+
+**2. What does the caller actually receive?** The `dialogAction`:
+
+```json
+{"type": "ElicitSlot", "slotToElicit": "confirm_update_contact_info"}
+```
+
+and the message: **`"That's {EMAIL} -- is that right?"`** -- Bedrock's own anonymization placeholder,
+verbatim, not the email address the caller just gave, not a guardrail-intervention notice either. The caller
+is being asked to confirm a literal, meaningless token string.
+
+**3. Does the flow complete or break?** It does not crash and it is not blocked -- `dialogAction.type` is a
+legal `ElicitSlot`, `FunctionError` absent, same "legal-shape" bar `verify-lambda-execution`'s `invoke()`
+checks. **But it cannot be completed by any real caller**: nothing a caller could say in response to
+`"That's {EMAIL} -- is that right?"` is a truthful "yes" (their email is not literally the string `{EMAIL}`),
+and `update_contact_info_node`'s own logic (`_CONFIRM_CEILING = 1`) re-asks the identical masked string on a
+"no" (line 69, same masking applies to the retry, deterministically), then escalates
+(`_ESCALATION_SCRIPT`) after that one retry. **`UpdateContactInfo` cannot reach fulfillment by voice for
+`field=email` or `field=phone` at all -- every attempt runs the one allowed retry and escalates.** Only
+`field=mailing_address` (not a configured PII entity type) is unaffected. This is not a degraded experience;
+it is a full, structural break of two of three values for one of the six in-scope intents, on its own
+designed confirmation step -- confirmed from the deployed runtime, not inferred.
+
+**Filed as `D121`/`OI39`, new, real, OPEN.** Framing decided before the result was seen, per Marco's
+instruction, and matches: this is the same class as `D16`'s identifier regexes, removed at v2->v3
+specifically because "the guardrail masking a caller's own claim number, policy number and plate back to the
+caller who owns them is a defect with no upside" (`docs/phase7/NOT-FIXED.md` #8) -- that fix removed the
+custom regexes but left the PII entity policy's `EMAIL`/`PHONE` `ANONYMIZE` config in place, and those two
+entities reach the identical outcome by a different mechanism on a different node. The v2->v3 fix was
+**incomplete**, not wrong in kind -- it closed the regex-shaped instance of this problem and left the
+entity-shaped instance of the same problem live. Not filed as a correction to `D88` itself (which stays
+closed on its own narrow, correctly-scoped finding, claim-number masking specifically) -- filed fresh because
+this is a different node, a different guardrail mechanism (entity list vs. custom regex), and a different,
+worse effect (unconfirmable, not merely unmasked).
+
+**`OI5` re-closes here** on the scope question it was reopened for: an ordinary in-scope path to a real
+OUTPUT intervention does exist (confirmed, not just found by reading code). **Claim (b) closes** (`OI4`'s
+row, criterion 3's B1 panel-liveness proof) -- a real, deployed-runtime, ordinary-flow OUTPUT intervention is
+now on record, dashboard-widget-visible via the same `guardrail_usage` log line this entry read. The B1
+guardrail-usage widget's liveness proof was the one thing blocking criterion 3 from being fully closed;
+`D121`/`OI39` is now the new open item in its place, not a continuation of the old one.
+
+**Cost**: one live `lambda:Invoke`, real `ApplyGuardrail` (INPUT: 2 units content+topic; OUTPUT: 2 units
+content+topic + 1 unit sensitive-information) + one real router `Converse` call (Nova Micro, short prompt).
+`2 * $0.15/1000 + (2 * $0.15/1000 + 1 * $0.10/1000) ≈ $0.0007`, plus a fraction of a cent for the router call
+-- same order of magnitude as `verify-lambda-execution`'s own per-event estimate (~$0.0003), **not separately
+metered** against the `$5` Bedrock standing approval cap; no apply, no `C1` cycle, no new resource.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- claim (b) closed via a real ordinary-path OUTPUT intervention (UpdateContactInfo, field=email, confirmation readback). guardrail_usage confirms OUTPUT masked=true, sensitiveInformationPolicyUnits=1, blocked=false. Caller receives "That's {EMAIL} -- is that right?" verbatim -- unconfirmable by any real caller. New defect filed: D121/OI39 -- UpdateContactInfo cannot reach fulfillment by voice for field=email or field=phone at all (1-retry ceiling always exhausts on the identical re-masked readback, escalates every time); only mailing_address unaffected. Same class as D16 (masking the caller's own data back to them), different mechanism (PII entity ANONYMIZE, not custom regex) -- the v2->v3 fix was incomplete, not wrong in kind. D88 stays closed on its own narrow finding. OI5 re-closes on the scope question it was reopened for.
+Open defects: D121/OI39 new, OPEN, real, live-confirmed. All prior open items unchanged.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducible from main as of 8f140bc. Not touched this entry -- D121/OI39 is a live-path defect the 26-turn eval set's own coverage did not include (no email/phone-field UpdateContactInfo confirmation turn in it), not a C1 regression.
+Blocked on: Marco's decision on D121/OI39 -- fix now or triage into ACCEPT/DEFER, same bucketing discipline as this phase's earlier triage.
+Last apply + gate result: none this entry. ~$0.0007 real spend, one live Lambda invoke with real guardrail+router calls, well inside the $5 Bedrock cap.
+```
