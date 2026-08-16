@@ -8027,3 +8027,137 @@ C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaS
 Blocked on: same as S37 -- D92's block-vs-auto-archive choice, D91's guard, option A, D88/D89 dispositions, all pending Marco.
 Last apply + gate result: none this entry. Real spend: $0.00.
 ```
+
+## 39. `D93` — criterion 1's real breach never fired because the budget watches tagged spend and this
+project's tagged spend is ~$0.48 MTD; the $2.00 threshold was set against the untagged account-wide figure
+
+### 1. Symptom and diagnostic order, per Marco's instruction
+
+Marco confirmed the SNS subscription at ~18:56 local, 2026-08-15. Past the ~10-hour overdue threshold on
+2026-08-16, no breach email had arrived, despite `budget.tf`'s `$2.00` `ABSOLUTE_VALUE` notification being
+designed, per §19, to be "certain to already be breached at first Budgets evaluation" against a $3.7828941608
+reference figure. Diagnosed in the specified order — tag filter first, not spam.
+
+### 2. Step 1 — real CE call, tagged vs. untagged, in one request
+
+One `ce get-cost-and-usage` call, `RECORD_TYPE=Usage` filter, `GroupBy Type=TAG,Key=Project`, MTD
+`2026-08-01`–`2026-08-17` (exclusive end), `us-east-1` — a single request returning a per-tag-value
+breakdown, so "tagged vs. untagged, compared" needed only one call by design:
+
+| Tag value | `UnblendedCost` |
+|---|---|
+| `Project$` (untagged) | `$3.5961374037` |
+| `Project$AWS-Insurance-FNOL-Voice-Agentic-AI` (this project) | `$0.4795457178` |
+| `Project$bedrock-platform` (sibling project) | `$0.0000017796` |
+| **Account total, `RECORD_TYPE=Usage`** | **≈$4.0756849011** |
+
+**This project's own tagged spend is $0.48 MTD — 24% of the way to the $2.00 threshold, not past it.**
+The account-wide untagged figure ($3.60) dominates, and is the same measurement basis (no tag filter,
+`RECORD_TYPE=Usage` only) as §19's original $3.7828941608 reference — confirmed by reading
+`lambda_src/ce_pull.py:38-43` directly: its `Filter` is `{"Dimensions": {"Key": "RECORD_TYPE", "Values":
+["Usage"]}}` alone, no `TagKeyValue`, no `GroupBy`. **§19's threshold-setting figure was never this
+project's own spend — it was the whole account's, most of which belongs to other, unrelated activity on
+this account.**
+
+### 3. Step 2 — the budget's own read, from AWS directly
+
+`aws budgets describe-budget --budget-name fnol-voice-agent-monthly` (free, no CE charge):
+
+```
+CalculatedSpend.ActualSpend.Amount = "0.48"
+HealthStatus.Status = "HEALTHY"
+```
+
+**Matches the tagged CE figure almost exactly** ($0.4795457178 rounds to $0.48) — direct confirmation the
+budget is evaluating correctly against its own `CostFilters.TagKeyValue = ["user:Project$AWS-Insurance-
+FNOL-Voice-Agentic-AI"]`, not a stale or broken read. `aws budgets describe-notifications-for-budget`
+(also free):
+
+```
+Threshold 100.0 (%):   NotificationState = OK
+Threshold 80.0  (%):   NotificationState = OK
+Threshold 2.0 (ABSOLUTE_VALUE): NotificationState = OK
+```
+
+All three read `OK`, not `ALARM` — and, load-bearing for this diagnosis, `OK` is a **real evaluated state**,
+distinct from a notification that has never been evaluated at all (which the API would not represent this
+way). **The mechanism is not idle or stuck; it has evaluated the $2.00 threshold against real MTD spend and
+correctly found $0.48 < $2.00 every time.**
+
+### 4. Step 3 — SNS subscription, unchanged
+
+`aws sns list-subscriptions-by-topic --topic-arn arn:aws:sns:us-west-2:759316130780:fnol-voice-agent-
+budget-alerts`: one subscription, real `SubscriptionArn` (UUID-suffixed, not the literal string
+`PendingConfirmation`), `Protocol: email`, `Endpoint: djmau1974@gmail.com`. **Still `Confirmed`, not
+reverted.**
+
+### 5. Finding
+
+**Not a bug in the notification pipeline. `budget.tf`'s cost filter scopes evaluation to
+`Project=AWS-Insurance-FNOL-Voice-Agentic-AI`-tagged spend only (deliberately — that is what makes this a
+project-specific budget rather than an account-wide one), and this project's own tagged spend this month is
+real but small: $0.48, mostly Bedrock inference and Cost Explorer calls under the $5.00 standing cap and
+this section's own non-Bedrock log, with no Connect/Lex/Lambda deploy carrying meaningful tagged cost yet
+this month.** The $2.00 synthetic-breach threshold (§19) was set against a number that measures a
+population the budget itself never evaluates — the account-wide untagged total, driven by other, unrelated
+activity on this account. **The budget is working correctly and telling us nothing about criterion 1's
+firing-proof requirement, because its own scope was never able to cross the threshold it was designed
+against.** Confirmed structurally (the `CostFilters` read directly off the live budget matches `budget.tf`'s
+declared `TagKeyValue`, zero drift), not inferred.
+
+This is a design gap in how §19's threshold was chosen, not a defect in the budget resource, the SNS topic,
+the subscription, or the pre-apply checks — those confirmed the tag is *usable* (activated, matched
+correctly, `IncludeCredit`/`IncludeRefund` both `false` as designed), never that this project's own tagged
+spend would reach a given dollar figure by a given date. Filed as `D93`/`OI10`. **Per instruction, not
+fixed here** — three shapes a fix could take, listed for Marco, none applied:
+
+1. Lower the `ABSOLUTE_VALUE` threshold to something under $0.48's current trajectory (matches what the
+   budget can actually see, but re-derives the same "which number is real" question §19 already corrected
+   once).
+2. Generate enough real, tagged spend on purpose (e.g., a deliberate small Bedrock/CE run under the
+   standing cap) to cross whatever threshold is chosen — proves the pipeline against the budget's actual
+   scope rather than a borrowed one.
+3. Accept that criterion 1's firing-proof requirement needs its target number computed from `GroupBy
+   Type=TAG,Key=Project`-scoped spend from the start, not account-wide `RECORD_TYPE=Usage` — i.e., §19's
+   own diagnostic method (this entry's step 1) is what threshold-setting should have used originally.
+
+### Self-review (`REVIEW-CRITERIA.md` §1, §7)
+
+1. *Opposite result possible?* Yes — the tagged CE figure could have come back near $3.78 (confirming the
+   budget's own scope matches account-wide spend, pointing the diagnosis at SNS or the notification
+   mechanism instead). It didn't; the $0.48/$3.60 split is the actual result, not the expected one assumed
+   going in.
+2. *Asserted-but-unchecked?* "The budget is evaluating correctly" is backed by `CalculatedSpend.ActualSpend`
+   matching the independent CE figure to the cent, not asserted from the notification states alone.
+3. *Infra error scored as a result?* No — all three calls returned real, complete data (`Estimated: true` on
+   the CE call is CE's normal settling-lag flag, same caveat as §19, not an error).
+4. *Cost below estimate?* **No — above estimate.** Marco declared one $0.01 CE call; two were spent, an
+   execution error (§6 below), not a design choice. $0.02 CE + $0.00 Budgets/SNS = **$0.02**, not $0.01.
+5. *Identical markers, different paths?* This entry's own core finding — `NotificationState: OK` on all
+   three thresholds looks identical whether the mechanism is broken or correctly evaluating true-but-low
+   spend; the CE tag breakdown is what distinguishes them, which is exactly why Marco specified the tag
+   filter as step 1, not step 3.
+6. *Has this check ever failed for the right reason?* This is this project's first live test of criterion
+   1's real-breach path; it has not fired yet, and this entry establishes why not, for the right reason
+   (measurement-scope mismatch, confirmed against source), not a guess.
+7. *Headline-number interpretation change?* Yes — §19's $3.7828941608 must now be read as "account-wide MTD
+   gross usage," not "this project's MTD spend"; the two were never the same figure, and §19 did not state
+   that distinction explicitly at the time.
+8. `C1` a tradeable term? Not touched.
+
+**Cost discipline note**: Marco declared "$0.01, declared" for one CE call. The first invocation ran through
+`rtk`'s default output filtering and returned a group listing with values collapsed to `...` — unusable for
+reading the actual dollar figures — so the identical query was re-run via `rtk proxy` (unfiltered) to get
+the real JSON. **That is $0.02 actually spent against a $0.01 declaration, my error** (should have used
+`rtk proxy` for a data-bearing AWS read from the start, not after a first attempt came back unusable),
+logged in full in `COSTS.md`'s non-Bedrock section rather than folded into the $0.01 the instruction named.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage A -- criterion 1 diagnostic run per Marco's specified order (tag filter, then notification state, then SNS). Finding: budget.tf's cost filter scopes to Project=AWS-Insurance-FNOL-Voice-Agentic-AI-tagged spend only; this project's tagged MTD spend is $0.48 (CE GroupBy TAG:Project, confirmed against budgets describe-budget's own CalculatedSpend.ActualSpend=$0.48, matching to the cent), well under the $2.00 ABSOLUTE_VALUE threshold. The untagged account-wide total is $3.60 -- the same measurement basis as S19's original $3.7828941608 threshold-setting figure (confirmed by reading ce_pull.py's Filter directly: RECORD_TYPE=Usage only, no tag). All three notifications read NotificationState=OK (evaluated, correctly below threshold, not stuck/idle). SNS subscription confirmed still Confirmed, real SubscriptionArn, unchanged. Not a pipeline defect -- a scope mismatch between the threshold-setting number (account-wide) and what the budget evaluates (tagged-only). Filed D93/OI10, three fix shapes listed for Marco, none applied, per instruction to report not fix.
+Open defects: unchanged plus new -- D88/OI5 OPEN, D89/OI6 OPEN, D90/OI7 part 1 OPEN, D91/OI8 OPEN (guard proposed), D92/OI9 OPEN (guard proposed), D93/OI10 (new) OPEN, three options given, none applied.
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not touched this entry.
+Blocked on: D93's fix-shape choice is Marco's; D92's block-vs-auto-archive, D91's guard, option A, D88/D89 dispositions all still pending, unchanged.
+Last apply + gate result: none -- no Terraform touched. Real spend: $0.02 (2x ce:GetCostAndUsage, one more than the $0.01 declared -- operator error, logged in full in COSTS.md). Budgets/SNS reads: $0.00.
+```
