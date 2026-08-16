@@ -11,7 +11,11 @@ never existing: the check was written about the thing next to the thing that mat
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any
+
+import pytest
 
 from fnol_voice_agent.agents.authority import ELIGIBILITY_DEFLECTION
 from fnol_voice_agent.agents.nodes.guardrails_nodes import (
@@ -110,3 +114,55 @@ def test_the_input_node_sends_the_raw_turn_onward_and_reports_only_the_block_dec
 
     assert result == {"guardrail_input_blocked": False}
     assert "turn_input" not in result
+
+
+def _guardrail_usage_lines(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
+    return [
+        json.loads(r.getMessage().removeprefix("guardrail_usage "))
+        for r in caplog.records
+        if r.name == "fnol_voice_agent.observability.guardrail_metrics"
+    ]
+
+
+def test_output_node_emits_guardrail_usage_on_a_real_call(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Phase 11 Stage B1: `.usage` used to be discarded entirely (`RESULTS.md` §16.1's finding). This is
+    the wiring proof -- a node call that reaches the guardrail must leave exactly one emitted line behind,
+    reflecting the real `blocked`/`masked` outcome."""
+    caplog.set_level(logging.INFO, logger="fnol_voice_agent.observability.guardrail_metrics")
+    node = make_guardrails_output_node(client=MockGuardrailClient(output_rules=(_CLAIM_MASK,)))
+
+    node(_state(response_text="Your claim number is CLM-2608-00042-4."))
+
+    lines = _guardrail_usage_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0]["source"] == "OUTPUT"
+    assert lines[0]["blocked"] is False
+    assert lines[0]["masked"] is True
+
+
+def test_output_node_emits_nothing_when_the_authority_check_short_circuits(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Matches `test_the_authority_check_runs_before_the_guardrail_and_wins`: zero guardrail calls in
+    this branch means zero emissions is correct, not a missed wiring site."""
+    caplog.set_level(logging.INFO, logger="fnol_voice_agent.observability.guardrail_metrics")
+    node = make_guardrails_output_node(client=MockGuardrailClient(output_rules=(_CLAIM_MASK,)))
+
+    node(_state(response_text="Your claim has been approved for $18,000."))
+
+    assert _guardrail_usage_lines(caplog) == []
+
+
+def test_input_node_emits_guardrail_usage_on_every_call(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="fnol_voice_agent.observability.guardrail_metrics")
+    node = make_guardrails_input_node(client=MockGuardrailClient())
+
+    node(_state(turn_input="a clean turn with no PII"))
+
+    lines = _guardrail_usage_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0]["source"] == "INPUT"
+    assert lines[0]["blocked"] is False
+    assert lines[0]["units"] == {}  # MockGuardrailClient never populates usage -- emitted anyway

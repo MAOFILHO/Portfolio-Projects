@@ -22,6 +22,7 @@ from fnol_voice_agent.agents.authority import ELIGIBILITY_DEFLECTION, check_auth
 from fnol_voice_agent.agents.state import AgentState, EscalationRecord, NodeFn
 from fnol_voice_agent.guardrails.client import GuardrailClient, MockGuardrailClient
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
+from fnol_voice_agent.observability.guardrail_metrics import emit_guardrail_usage
 
 _OUTPUT_BLOCKED_FALLBACK = (
     "I'm sorry, I'm not able to share that -- let me connect you with someone who can help."
@@ -33,6 +34,10 @@ def make_guardrails_input_node(*, client: GuardrailClient | None = None) -> Node
 
     def guardrails_input_check(state: AgentState) -> dict[str, Any]:
         result = guardrail.apply_guardrail("INPUT", state.get("turn_input", ""))
+        # Phase 11 Stage B1: emitted before the discard below, so `.usage` has a consumer. See
+        # `observability/guardrail_metrics.py` for why this is a log line and not a custom metric, and
+        # why it fires even when `.usage` is empty (every call today, via `MockGuardrailClient`).
+        emit_guardrail_usage("INPUT", result.usage, blocked=result.blocked, masked=result.masked)
         # `result.output_text` is deliberately NOT written back to `turn_input`, and the reason is a
         # `C1` decision rather than an oversight. If Bedrock ever masks on the input path, forwarding
         # the masked text would send L2 a turn with spans replaced by `{PLACEHOLDER}` -- and L2 is the
@@ -91,6 +96,13 @@ def make_guardrails_output_node(*, client: GuardrailClient | None = None) -> Nod
             }
 
         result_gr = guardrail.apply_guardrail("OUTPUT", candidate)
+        # Phase 11 Stage B1: emitted once per real call, after the authority short-circuit above (which
+        # never calls the guardrail at all -- `test_the_authority_check_runs_before_the_guardrail_and_wins`
+        # asserts zero guardrail calls in that branch, so zero emissions there is the correct behaviour,
+        # not a gap).
+        emit_guardrail_usage(
+            "OUTPUT", result_gr.usage, blocked=result_gr.blocked, masked=result_gr.masked
+        )
         if result_gr.blocked:
             return {"guardrail_output_blocked": True, "response_text": _OUTPUT_BLOCKED_FALLBACK}
         if result_gr.masked:
