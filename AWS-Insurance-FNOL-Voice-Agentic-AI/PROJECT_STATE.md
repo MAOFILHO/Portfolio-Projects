@@ -855,6 +855,33 @@ could be extended to also flag two rows here with overlapping ranges, the same "
 mention" shape it already uses for `D`/`OI` rows. Not proposed as urgent — a reservation-table collision is
 lower-frequency than the number collision it exists to prevent, and the table is small enough to eyeball.
 
+### Phase 11 triage — final buckets, 2026-08-16, per Marco's explicit instruction
+
+Every open item, one bucket each. FIX NOW items are applied above, in their own rows. **ACCEPT** carries the
+accepted-risk reason inline, not just a link — closes the item as an open obligation. **DEFER** carries a
+named home, not "filed findably" — a specific later phase/decision point, per `CF8`'s own pattern.
+
+**ACCEPT (accepted-risk, closed as open obligations):**
+
+| Item | Accepted-risk reason |
+|---|---|
+| `OI3` (S3 `etag` phantom diff) | Confirmed harmless (bucket versioning off, byte-identical re-upload, `storage.tf`'s content-hash-in-key design absorbs it) — real, will show as "1 to change" on every future `stacks/main` plan/apply against this object, costs one redundant 43.8MB `PutObject` per apply, no data-integrity or availability impact. Not worth a Terraform-mechanics fix (`source_hash` swap) ahead of a change that touches this stack anyway |
+| `D91`/`OI8` (session-start staged-file check) | No verified session-start-shaped interception point exists in this project's own `.claude/settings.json` (only `PreToolUse`, for `rtk`) — recorded ACCEPTED-RISK CONVENTION explicitly in `OI8`'s own row, not implied to be a pending control. Impact to date: null (confirmed both times this class of finding occurred) |
+
+**DEFER (named home):**
+
+| Item | Home |
+|---|---|
+| `D89`/`OI6` (guardrail: file-a-claim false-block + pre-existing medical-example gap, v5 = v3 restored) | Phase 12 entry condition — a guardrail-definition review pass (Option B prompt reword or a surgical definition split), alongside `D99` and `REVIEW-CRITERIA.md` §10's `examples`-verification rule, same review pass rather than three separate ones |
+| `D90` part 1/`OI7` (RentalTowingEntitlement zero-context misroute, Option 1 shipped and confirmed insufficient) | Phase 12 entry condition — the triage decision itself (fix/accept, and if fix, what shape) is explicitly Marco's to make there, not pre-scoped here, per his own standing instruction on this item |
+| `D98`/`OI15` (compounding tracker, `D89`×`D90` shared exposure surface) | No standalone home needed — closes automatically when both `D89` and `D90` part 1 close at their own Phase 12 entry condition, per `OI15`'s own row |
+| `D99`/`OI17` (life-insurance scope-containment gap, inconclusive probe) | Phase 12 entry condition — same guardrail-definition review pass as `D89` (above), both trace to unverified `examples` entries |
+| `D100`/`OI18` (continuation-turn exposure — MEASURE vs. ACCEPT framing) | Phase 12 entry condition — deciding MEASURE (one live multi-turn probe through the checkpointer) or ACCEPT (record unmeasured) itself requires the probe to be meaningful, which is investigation; deferred rather than decided blind |
+| `D120`/`OI38` (checkout-hazard guard, assessed convertible) | Phase 12 entry condition — next candidate after `D98`'s lint, per the audit's own recommendation ranking; not built this pass |
+| `D92`/`OI9` (baseline-archive guard, assessed convertible, costlier) | Phase 13 scope item — more machinery than `D97`(`D120`)/`D98`, explicitly not proposed for immediate build |
+| `D101`/`OI19` (cross-session coordination is an unrecorded trust surface) | Phase 12 entry condition — three open sub-questions named in `OI19`'s own row (log exchanges into the record? independently re-verify a peer's self-reported diff? how are session self-labels assigned/verified), all Marco's to decide together, not split across three fixes |
+| `CF8` (generalized `D87`-shaped root-resolution check) | Unchanged — Phase 12 entry condition, proposed, per its own carried-forward row |
+
 ### Proposed, pending Phase 2 ADR
 
 P1 is **resolved** — accepted as `docs/adr/ADR-007-iac-tool-selection.md` (2026-08-11). Nothing pending here.
