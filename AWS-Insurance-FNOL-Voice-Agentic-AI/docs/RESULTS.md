@@ -9893,3 +9893,105 @@ C1 status: VERIFIED, 1.000 (26/26), build /4FFnR9Q7cbkbuWmCR1Yth2baW/cxp7F+r/fPP
 Blocked on: Terminal 1's Phase 11 triage decision on D90 part 1 (fix/accept/defer) and, separately, whether/when the continuation-turn exposure (D98/OI15) gets its own live multi-turn probe.
 Last apply + gate result: none this entry -- two scoped commits and one cross-session coordination message only. $0.00 real spend.
 ```
+
+## 54. `D100`/`OI18` filed — event 13 has been standing in for a risk it does not represent; the real `D90`
+part 1 triage question reframed as MEASURE/ACCEPT, not FIX/DEFER. `D101`/`OI19` filed — cross-session
+coordination is a new, unrecorded trust surface
+
+Both filed per Marco's explicit instruction to hand these to triage as their own items rather than fold them
+into `D90`/`OI7`. Block reserved first (`session-4c7dcca4`, `D100`–`D119`/`OI18`–`OI37`/`§54`–`§73`) via the
+identifier reservation table `d93ac35` added, so this entry adds no collision risk to the ledger it's
+recorded in.
+
+### 1. `D100`/`OI18` — the reframing
+
+§53 §4 characterized event 13 as closer to the recoverable first-turn case than to the continuation-turn
+exposure. Marco's correction, recorded in substance rather than paraphrased away: that framing understated
+the finding. **Event 13 has been standing in for a risk it does not represent** — every measurement of
+`D90` part 1 to date (Option 1's latency script, `verify-lambda-execution`'s own event 13) has exercised a
+single synthetic invocation with no real conversational history, while the risk `D90` part 1 was originally
+filed to name is a misroute or false-block landing on a low-information turn *deep in an actual multi-turn
+conversation*, accumulated through the DynamoDB checkpointer turn over turn. No instrument built or run this
+phase has ever touched that path.
+
+**This changes what the triage decision actually is.** Not "build `turn_history` (or intent-level context)
+or don't" — a FIX/DEFER framing that presupposes the risk is real and only the remedy is in question. The
+prior question is unanswered: **is the continuation-turn exposure real at all?** That is a MEASURE/ACCEPT
+choice, not a FIX/DEFER one:
+
+- **MEASURE** — one live multi-turn probe through the checkpointer: a real conversation, several turns,
+  slots accumulating exactly as production would build them, landing a low-information confirmation turn
+  ("yes") at a point analogous to `D98`/`OI15`'s named exposure, and checking whether it misroutes or gets
+  false-blocked. Cheap (a handful of real `Converse`/`ApplyGuardrail` calls, the same order of magnitude as
+  every other probe this phase) and decisive — it settles whether the risk is real before anything is built
+  to address it.
+- **ACCEPT** — record the exposure explicitly as a known, unmeasured, accepted risk, rather than leaving it
+  in the ambiguous state it has been in since `D98`/`OI15` was filed (open, but neither measured nor
+  formally accepted as unmeasured).
+
+**What building a context fix now would actually be:** committing engineering effort to a specific remedy
+for a risk whose existence has not been checked — the same shape as building the medical-example guardrail
+probe before running the control that could have killed both hypotheses at once (`§50`/`§51`), generalized
+from a probe-design mistake to a phase-level resourcing one. Filed separately from `D90`/`OI7` per
+instruction, cross-referenced into it rather than merged, since `D90`/`OI7`'s own record should not carry a
+framing correction that arrived after its last entry closed.
+
+### 2. `D101`/`OI19` — cross-session coordination, checked and held, but not recorded anywhere until now
+
+`§53` reported a coordination sequence with two peer sessions before committing `guardrails_nodes.py`. That
+sequence has since been checked, not just asserted:
+
+- The first peer (self-identifying "Terminal 1") confirmed non-ownership via its own `git diff --stat`
+  against its own session's edit history, and gave the go-ahead.
+- A second peer, also self-identifying "Terminal 1", pushed back after the fact — correctly, on principle —
+  that two sessions agreeing with each other is not the same as Marco's approval. Corrected in the same
+  exchange: Marco's own instruction this turn was the actual authorization; the coordination step was to
+  check for an ownership conflict, which the first peer's reply settled. The second peer then **independently
+  re-checked** the landed commits itself (confirmed `d1af6f2`/`8f140bc` exist, land cleanly, `routing.py`/
+  `guardrails_nodes.py` no longer show modified) rather than taking the first exchange on trust, and agreed.
+
+**The mechanism worked, and the checking was real, not just gestured at.** Three gaps remain, named rather
+than fixed:
+
+1. **No file records that any of this happened.** The full exchange exists only in transcript form across
+   three separate sessions' contexts. If a fourth session (or a human) needed to reconstruct why
+   `guardrails_nodes.py` was committed by a session that didn't author it, nothing in `PROJECT_STATE.md` or
+   `RESULTS.md` said so before this entry.
+2. **Trusting a peer's self-report is not the same as independent verification.** This session acted on the
+   first peer's stated `git diff --stat` result; it did not re-run that diff itself before committing. In
+   this instance the second peer's independent re-check after the fact caught nothing wrong — but "checked
+   after the fact, found fine" is a different guarantee than "checked before acting."
+3. **Two different peer sessions both self-identified as "Terminal 1"** in this same conversation. Not
+   flagged as a security concern on its own — sessions are cooperating, not adversarial, throughout this
+   project — but it is exactly the kind of ambiguity a naming/identity scheme should resolve rather than
+   leave to whichever session speaks first.
+
+Not resolved here — Marco's call on whether coordination gets logged as it happens, whether a peer's
+self-reported diff should be independently re-verified before being acted on, and how session labels get
+assigned so they don't collide the way `D95`/`OI12` once did.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the reframing could have been unnecessary (event 13 could have been a
+   faithful proxy for the continuation-turn risk); it wasn't, and `§53`'s own framing is the thing being
+   corrected here, not a strawman.
+2. *Asserted-but-unchecked?* The "mechanism worked" claim in §2 is checked against the actual message
+   contents exchanged this session, not asserted from memory.
+3. *Infra error scored as a result?* N/A — no AWS calls this entry.
+4. *Cost below estimate?* $0.00 — filing only.
+5. *Identical markers, different paths?* N/A.
+6. *Check ever failed for the right reason?* N/A — no gate run this entry.
+7. *Headline-number interpretation change?* Yes — `D90` part 1's open status is unchanged, but what "closing
+   it" would even mean changes: no longer "ship a context fix," but "first decide, cheaply, whether there's
+   a real risk to fix."
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- D100/OI18 filed: event 13 has been standing in for a risk (continuation-turn exposure, D98/OI15) it does not represent -- every measurement this phase used a single synthetic invocation, none exercised a real checkpointer-accumulated conversation. D90 part 1's triage question reframed MEASURE (one live multi-turn probe through the checkpointer, cheap and decisive) vs ACCEPT (record the exposure as a known, unmeasured, accepted risk) -- not FIX/DEFER, which presupposes the risk is real. D101/OI19 filed: cross-session coordination before committing guardrails_nodes.py worked and was independently checked (not just trusted) by a second peer session, but exists in no record until this entry, relied on a peer's self-reported git diff without independent re-verification before acting, and surfaced two peer sessions both self-identifying as "Terminal 1." Block reserved first (session-4c7dcca4, D100-D119/OI18-OI37/§54-§73) per the new reservation table, no collision.
+Open defects: D100/OI18 new, OPEN, framing filed for triage. D101/OI19 new, OPEN, needs a bucket. D90/OI7 part 1 unchanged in status, cross-referenced not merged. D98/OI15 unchanged -- its exposure is the one D100/OI18 names as unmeasured. All other open items unchanged.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7cbkbuWmCR1Yth2baW/cxp7F+r/fPP+JCOo=, reproducible from main as of 8f140bc. Not touched this entry.
+Blocked on: Terminal 1's Phase 11 triage -- MEASURE or ACCEPT on D100/OI18; any decision on D101/OI19's three named gaps.
+Last apply + gate result: none this entry. $0.00 real spend -- filing only.
+```
