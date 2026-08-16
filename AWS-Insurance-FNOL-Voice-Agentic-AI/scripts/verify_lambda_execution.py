@@ -366,9 +366,18 @@ def _expect_claim_status_fulfilled(payload: dict[str, Any]) -> str | None:
     """`D87`. Pre-fix, this event crashes inside `claims_server.py::_load_claims` on `CLAIMS_PATH
     .read_text()` -- the handler's top-level `try/except` swallows it and returns `Delegate` with no
     message (`handler()`'s fail-open path, module docstring). Post-fix, `check_claim_status.py`'s real
-    template response reaches `guardrails_output_check`, which live-verified (Stage 7 Stage 8) masks a
-    `CLM-####-#####-#`-shaped string via `ANONYMIZE` -- so the real claim number is expected ABSENT from
-    the spoken message even on a real pass, not merely "some non-empty string".
+    template response reaches `guardrails_output_check` -- which, per `D88` (`RESULTS.md` §33 §2, `OI5`),
+    does NOT mask it: the live guardrail config (read directly via `bedrock:GetGuardrail`, not assumed)
+    has zero PII entities configured that would ever fire on this domain's own data spoken back to its
+    owner. The four identifier regexes that used to trigger `ANONYMIZE` here (including the one that
+    matched claim numbers) were deliberately removed at v2->v3, 2026-08-12, Marco-approved, specifically
+    because masking a caller's own identifier back to them was assessed a defect with no upside, not a
+    protection. **CORRECTED 2026-08-16 (`D88` Option 1, Marco-approved 2026-08-16, applied this entry):**
+    this assertion previously expected the claim number ABSENT/masked -- that was this test's own stale
+    assumption, not the guardrail's actual, approved, current behavior; the assertion was simply never
+    updated when v3 shipped four days before this check was written. Corrected to match v3's real
+    behavior: the claim number is expected PRESENT, verbatim, exactly as the events 12/13 checks below
+    already (correctly) assert for their own freshly-generated claim numbers.
 
     `D90` part 2, tightened: the `'...is currently...'` substring used to be this check's only proxy for
     "the CheckClaimStatus node actually produced this" -- replaced with a direct `executed_node_intent`
@@ -385,8 +394,8 @@ def _expect_claim_status_fulfilled(payload: dict[str, Any]) -> str | None:
     message = _message(payload)
     if "is currently" not in message:
         return f"expected the fulfilled claim-status template ('...is currently...'), got message={message!r}"
-    if _REAL_CLAIM_NUMBER in message:
-        return f"expected the real claim number masked by the OUTPUT guardrail, found it verbatim in message={message!r}"
+    if _REAL_CLAIM_NUMBER not in message:
+        return f"expected the real claim number present verbatim (v3's approved, unmasked behavior -- D88), got message={message!r}"
     return None
 
 
