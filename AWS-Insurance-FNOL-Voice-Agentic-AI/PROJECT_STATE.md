@@ -656,6 +656,7 @@ way `CF`-table items are for future phases.
 | OI4 | **`D87` — Phase 11's headline finding — CLOSED 2026-08-16** (`RESULTS.md` §29/§31/§32). `mcp/_paths.py`'s repo-root resolution was structurally wrong in the deployed Lambda; `data/synthetic/` was never packaged and the arithmetic didn't resolve correctly even if it were. Affected 4 of 5 ordinary intents: `CheckClaimStatus`, `RentalTowingEntitlement`, `FileAutoClaim`, `UpdateContactInfo`. **Fixed via Option A** (`data/synthetic/{policyholders,claims,vehicles}` moved into `src/fnol_voice_agent/data/synthetic/`, `_paths.py` rewritten to two fixed levels from its own file location), applied to `stacks/main` 2026-08-16, live `CodeSha256` confirmed `8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=`. **Confirmed fixed from the DEPLOYED runtime, not only in-process**: `make verify-lambda-execution`'s slot-filled `CheckClaimStatus`/`UpdateContactInfo` events both reach real `Close`/`Fulfilled` against the live Lambda (red→green, `RESULTS.md` §31/§32), zero `codehook failed` log lines across the 11/13-event gate (the real denominator — see this row's own correction of the "106 invocations" figure, `RESULTS.md` §33 §3). `FileAutoClaim`/`RentalTowingEntitlement` were subsequently given their own dedicated events too (`RESULTS.md` §33): neither shows `D87`'s crash signature, so `D87`'s closure holds for all four intents on the specific crash question — but both events now FAIL for two new, unrelated, real reasons (`D89`, `D90`, `OI6`/`OI7`), so the gate is honestly 10/13, not 13/13. `policy_server.py`'s latent status: RESOLVED, confirmed not assumed | **CLOSED** | Closed by the deployed-runtime confirmation above, on the crash question specifically. `D88`/`D89`/`D90` (new, separate findings) and claim (b) (still OPEN, now blocked on `D88`) are tracked separately, not as part of this item |
 | OI5 | **`D88` — filed 2026-08-16, found by the same pass that closed `D87`; SCOPED 2026-08-16** (`RESULTS.md` §32, §33 §2). The real, slot-filled `CheckClaimStatus` regression event (event 10) reaches genuine fulfillment post-`D87`-fix, but the OUTPUT guardrail did NOT mask the real claim number in the spoken response (`'Your claim CLM-2608-00042-4 is currently RepairInProgress.'`, verbatim) — contradicting `guardrails/client.py`'s own comment that this trigger shape has been "live-verified to trigger ANONYMIZE... since Stage 8." **Scoped by reading the live guardrail config directly from AWS** (`bedrock:GetGuardrail`, not Terraform, not docs): v3, zero regexes, zero drift from `main.tf`'s own declaration. **Neither of Marco's two named options** (config drift / a per-entity action that was never `ANONYMIZE`) **is what happened** — the four identifier regexes (including the one that used to match a claim number) were deliberately removed at v2->v3, 2026-08-12, Marco-approved, specifically because masking a caller's own identifier back to them was assessed a defect with no upside. That change predates this session's regression test by four days; **the test's own assertion was stale, not the guardrail** | **OPEN, scoped, not fixed** | Three options given to Marco, none applied: (1) close as "not a defect," fix the test's assertion to expect the claim number present verbatim, matching v3's real, approved behavior; (2) re-litigate the v2->v3 decision itself (not recommended — nothing new argues against the original reasoning); (3) leave both open indefinitely (not recommended past this session). Directly relevant to claim (b) (Stage B1 panel-liveness proof, still OPEN, now explicitly recorded as blocked on this item — v3's config may have removed every ordinary-flow OUTPUT trigger) but not to be closed by finding a different trigger that happens to fire |
 | OI6 | **`D89` — new, filed 2026-08-16, found while tightening `D87`'s closure** (`RESULTS.md` §33 §3). The new `FileAutoClaim` gate event (all slots pre-filled, confirming with "yes, go ahead and file it") never reaches `file_auto_claim` — the INPUT `ApplyGuardrail` call blocks the turn first. Confirmed via 3 real, direct `ApplyGuardrail` calls: `"yes, go ahead and file it"` → BLOCKED, topic `legal_and_medical_advice`, `detected: true`; `"yes, please submit that"` → `action: NONE`; `"yes that's correct, go ahead"` → `action: NONE`. Narrowed to the word **"file"**, evaluated by `guardrails_input_check` with zero conversational context (confirmed from `guardrails_nodes.py`'s own code, not assumed) — a real caller confirming `FileAutoClaim`'s own prompt ("...Should I go ahead and file this claim?") with the domain's own core verb risks exactly this block, mid-conversation, on an otherwise-complete claim | **OPEN** | Marco to scope. Likely fix shape is denied-topic definition/examples tuning on `legal_and_medical_advice`, not attempted here. The gate event's transcript was deliberately NOT changed to dodge the trigger word — doing so would hide a real defect behind a euphemism |
+| OI8 | **`D91` — new, filed 2026-08-16, found committing this session's `D90` record additions** (`RESULTS.md` §35). 3 pre-staged file renames (`data/synthetic/{claims,policyholders,vehicles}.json` → `src/fnol_voice_agent/data/synthetic/...`, part of `D87`'s Option A fix) were left staged, uncommitted, by an earlier session. This session's `git add` named only 3 unrelated doc files; `git commit` swept the pre-staged renames in anyway, because it commits the whole index, not only what the current session added. **Impact this instance: null** — confirmed via `git show`, the 3 renames are pure (0/0 insertions/deletions, 100% content match), already described as applied in `RESULTS.md` §31. **The mechanism is general, not this-instance-specific**: any session's commit can silently carry forward whatever an unrelated prior session left staged, with no relationship to the committing session's own intent or message. `check-project-root-scope` (the pre-commit hook) does not catch this — it validates staged PATHS are in scope, not why or when they were staged; a pre-staged, in-scope path passes it identically to one staged this session | **OPEN, found not fixed. This instance left as-is** — Marco's call: a history rewrite to fix a message-accuracy issue is a worse trade than the accuracy issue itself | **Guard proposed, not built**: a session-start `git status --porcelain` read (reports, does not block) so a session sees what's already staged before it adds anything of its own — cheap ($0, no AWS), and unlike the pre-commit hook, it runs at the point where the risk is still avoidable, not at commit time where the two are already merged and indistinguishable |
 | OI7 | **`D90` — new, filed 2026-08-16, found while tightening `D87`'s closure** (`RESULTS.md` §33 §3). The new `RentalTowingEntitlement` gate event (`"am I still covered for a rental car"`) was classified as `CoverageQuestion` instead (`ElicitSlot`/`coverage_topic` returned) — confirmed `agents/nodes/routing.py`'s `route_and_classify` calls `classify_turn` with only the current turn's raw text, no prior turns, no slot context, every turn. A second, ad-hoc, real probe with different phrasing (`"how many rental car days do I have left on my claim"`) reached `Close`/`Fulfilled` — but its response text was `check_claim_status.py`'s own fixed template verbatim, not `rental_towing_entitlement`'s RAG+generation shape: that turn was silently routed to `CheckClaimStatus` instead. Traced to why the wire response gave no sign of it: `_close()` (`api/lex_codehook.py`) builds the returned `intent` object from the ORIGINAL Lex-supplied intent name always, regardless of which internally-classified node actually produced the message — Lex and the caller would see `RentalTowingEntitlement`/`Fulfilled` while the content is a bare claim-status readback. **Part 2 root-caused 2026-08-16** (`RESULTS.md` §34): `_close()` has exactly 3 call sites, all confirmed by grep; the ordinary-fulfillment one never reads `result["intent"]`. Same defect class `D84` already fixed at `_elicit_slot()` — the sibling site went unfixed because `ElicitSlot` had a live `ValidationException` forcing the discovery and `Close` has no equivalent (`REVIEW-CRITERIA.md` §8, new standing rule). Reproduced $0/local/deterministic. Recorded-verification sweep run: `C1`/`D84`'s tests/`D47` confirmed immune to this specific mechanism (not a general clean bill); `verify-lambda-execution` events 10-12 found inferred-not-asserted; event 13 confirmed actually exposed | **OPEN — both halves.** Part 1 (zero-context routing) untouched by the 2026-08-16 root-cause pass; part 2 (wire contract) has a scoped, unimplemented fix plan | Marco's disposition, 2026-08-16, recorded not implemented: **option B first** (new `sessionAttributes["executed_node_intent"]` field, set from `result["intent"]` whenever the graph ran; then tighten `verify-lambda-execution` events 10-13 to assert it directly, closing event 13's real gap and events 10-12's inferred-not-asserted status) — **then option A** (mirror `D84` inside `_close()` itself), gated on a live check of whether Lex accepts a `Close` whose intent disagrees with the turn's own NLU intent, the same way `D84`'s own fix was verified live rather than assumed. Option B's plan and cost table (~$0.004-0.006 one-time real spend, step 4/the redeploy itself gated FULL REVIEW regardless of its near-zero price, $0/month recurring, no new resource) are in `RESULTS.md` §34 §6-7. No transcript was substituted to force this event green; doing so risked shipping a check that cannot currently distinguish the right node running from a different one coincidentally producing a well-formed `Close` (`REVIEW-CRITERIA.md` §7) |
 
 ### Proposed, pending Phase 2 ADR
@@ -7124,4 +7125,80 @@ Open defects: D87 (OI4) CLOSED (unchanged). D88/OI5 OPEN, scoped. D89/OI6 (new) 
 C1 status: unchanged this entry — still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=. Not re-run this entry.
 Blocked on: Marco's disposition on D88 (3 options given), D89, D90. Claim (b) blocked on D88.
 Last apply + gate result: no apply this entry — code/doc changes only, not yet deployed. Real spend this entry: ~$0.0032 (13-event gate run) + ~$0.0009 (3 diagnostic ApplyGuardrail calls) + ~$0.0004 (1 diagnostic Lambda invoke) ≈ $0.0045.
+```
+
+## Session log — 2026-08-16 (continued; commit-scope decided (left as-is), `D91` filed and guard proposed,
+option B steps 1-3 built, corrected cost table adds `C1` re-verification — real total ≈$0.10, not ≈$0.005)
+
+**STOP CONDITIONS, restated verbatim:** No phase begins without written exit criteria from the prior phase
+and Marco's explicit approval. No billable AWS resource is created without Marco typing
+`APPROVED: <phase name>`. The Amazon Connect instance and DID already exist — never create either.
+`PROJECT_STATE.md` is updated before any session ends.
+
+**Commit-scope question decided: leave it.** Three pure renames (0/0 diff, already described in
+`RESULTS.md` §31) swept into the prior entry's docs-only commit alongside 3 doc files this session
+actually staged. Marco's reasoning: a history rewrite to fix a commit-message accuracy issue is a worse
+trade than the accuracy issue itself. Recorded here as the session-log note Marco asked for, rather than
+left implicit in the commit itself.
+
+**`D91` filed — the underlying hazard, as its own finding, not just this instance** (`OI8`, new row,
+`RESULTS.md` §35). Git's index persists staged-but-uncommitted work across sessions; `git commit` commits
+the whole index, not only what the committing session `git add`ed. Any later session's commit can silently
+carry forward whatever an unrelated earlier session left staged — with no relationship to the committing
+session's own intent or message — and `check-project-root-scope` (the pre-commit hook) does not catch it,
+because it checks staged PATHS against the scope boundary, not staging PROVENANCE; a pre-staged, in-scope
+path is indistinguishable to that hook from one staged this session. **Guard proposed, not built**, per
+instruction: a session-start `git status --porcelain` read that reports (does not block) a non-empty index
+before any work begins — cheap, `$0`, no AWS — so a session has visibility into what it would inherit
+before it adds anything of its own, at the one point in the sequence where the risk is still avoidable.
+
+**Option B, steps 1-3 built** (`RESULTS.md` §35 has the full account; code/tests/plan only, no apply):
+
+1. `api/lex_codehook.py` — `sessionAttributes["executed_node_intent"]` added, set from `result["intent"]`
+   on the ordinary (non-escalation) `_close()` fulfillment path and on `_elicit_slot()` (corroborating
+   there, post-`D84`); deliberately absent on both escalation paths (no reliable per-node signal exists —
+   `injury_escalation` never sets `state["intent"]`, so a leftover value would name the wrong thing, not
+   merely an absent one). `intent.name`'s own value is unchanged everywhere — option A, not this option,
+   is what would change it.
+2. 5 new/updated tests in `tests/unit/test_lex_codehook.py`, including a direct regression test at `D90`'s
+   own repro seam. **47/47 in this file, 660/660 full suite, ruff/black/mypy --strict all clean.**
+3. `terraform plan` against `stacks/main`, real, reviewed, **not applied**: `0 to add, 2 to change, 0 to
+   destroy` — `aws_lambda_function.codehook.source_code_hash` changes for real
+   (`8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=` → `51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=`) and
+   `aws_s3_object.codehook_deps_layer`'s etag shows `OI3`'s pre-existing, unrelated phantom diff — exactly
+   the shape `D84`'s own precedent predicted, no new resource, no new SKU. Plan saved to
+   `infra/terraform/stacks/main/d90.tfplan`.
+
+**Cost table corrected — Marco caught a real omission.** Step 4 (the redeploy) moves `CodeSha256` off
+`8Ch4kDuL...`, which is `C1`'s own scope qualifier for "VERIFIED" — the standing rule requires the full
+`C1` harness after any redeploy that does this, not a spot-check. That step alone is **~$0.0977, ~1m41s**,
+not folded into the prior table at all. **Real total for shipping option B end-to-end is ≈$0.10-0.11, not
+≈$0.005** — restated plainly rather than left standing as the earlier, incomplete figure.
+
+| Step | Action | Real AWS call? | Est. cost | Est. time | Approval needed |
+|---|---|---|---|---|---|
+| 1 | Code change (`lex_codehook.py`) — **done this entry** | No | $0.00 | — | No |
+| 2 | New/updated unit tests — **done this entry, 47/47 + 660/660 green** | No | $0.00 | — | No |
+| 3 | `terraform plan`, reviewed — **done this entry, 0/2/0** | No | $0.00 | — | No |
+| 4 | `terraform apply` (redeploy) | Yes — `UpdateFunctionCode`/S3 `PutObject` | ~$0.00 (sub-cent) | seconds | **Yes — FULL REVIEW, redeploy** |
+| 5 | `C1` → PENDING RE-VERIFICATION; live `CodeSha256` confirmed from AWS | Yes — 1 `GetFunction` read | ~$0.00 | seconds | Bundled with step 4 |
+| 6 | `make verify-lambda-execution` (sanity run, pre-tightening) | Yes | ~$0.003–0.004 | ~seconds | Bundled with step 4 |
+| 7 | **Full `C1` harness — only a real 1.000 (26/26) restores VERIFIED** | Yes | **~$0.0977** | **~1m41s** | Bundled with step 4 |
+| 8 | Smoke-test invokes confirming `executed_node_intent` appears and Lex/Connect accept the field | Yes | ~$0.001–0.002 | seconds | Bundled with step 4 |
+| 9 | Tighten events 10-13 to assert `executed_node_intent` directly | No | $0.00 | — | No |
+| 10 | Re-run the full 13-event gate (post-tightening) | Yes | ~$0.003–0.004 | ~seconds | Bundled with step 4 |
+| **Total, one-time real spend** | | | **≈$0.104–0.107** | **≈1m45-50s** | |
+
+No new resource, no new SKU, $0.00/month recurring, unchanged cost if teardown is forgotten. Everything
+real-AWS above stays well inside the $5.00 Bedrock standing cap; only step 4 needs sign-off (the redeploy
+itself, not its price).
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — commit-scope question decided (leave it, session-log note recorded). D91/OI8 filed (staged-index-carries-across-sessions hazard) and a session-start git-status guard proposed, not built. Option B steps 1-3 built: executed_node_intent field added (api/lex_codehook.py), 5 new/updated tests (47/47 + 660/660 suite green, ruff/black/mypy clean), real terraform plan reviewed (0 add/2 change/0 destroy, source_code_hash change confirmed real, OI3's known etag diff present, no new resource). Cost table corrected per Marco: C1 re-verification (~$0.0977, ~1m41s) was missing; real total for shipping option B is ~$0.10-0.11, not ~$0.005.
+Open defects: D87 (OI4) CLOSED. D88/OI5 OPEN. D89/OI6 OPEN. D90/OI7 OPEN (part 2's fix built but not applied). D91/OI8 (new) OPEN, guard proposed not built.
+C1 status: unchanged — still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=. Will move to PENDING RE-VERIFICATION the moment step 4 applies, per the corrected sequence above.
+Blocked on: Marco's apply sign-off for step 4 (terraform apply "d90.tfplan") and the post-apply sequence (steps 5-10) that sign-off unblocks.
+Last apply + gate result: no apply this entry -- code + tests + a real, reviewed terraform plan only. Real spend this entry: $0.00 (terraform plan and git operations carry no charge; the corrected cost table above is an estimate for unrun, sign-off-gated work).
 ```

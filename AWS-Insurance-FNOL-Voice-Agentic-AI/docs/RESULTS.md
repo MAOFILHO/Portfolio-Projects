@@ -7457,3 +7457,155 @@ C1 status: unchanged -- still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL
 Blocked on: Marco's approval to implement option B's code change and, separately, to run its redeploy (step 4, FULL REVIEW). Option A additionally blocked on its own live-verification question.
 Last apply + gate result: no apply, no deploy, no live gate run this entry. Real spend: $0.00 (local repro only). Cost table for option B's unrun work: ~$0.004-0.006 one-time, $0.00/month recurring, $0.00 if teardown forgotten (see SS7).
 ```
+
+## 35. Commit-scope decided (left as-is); `D91` filed — staged-but-uncommitted work persists in the index
+across sessions, a guard proposed, not built; option B steps 1-3 built (code, tests, real `terraform plan`);
+cost table corrected — `C1` re-verification was missing, real total ≈$0.10-0.11, not ≈$0.005
+
+### 1. Commit-scope question — decided, recorded, not rewritten
+
+§34's flagged issue: 3 pre-staged file renames (`data/synthetic/{claims,policyholders,vehicles}.json` →
+`src/fnol_voice_agent/data/synthetic/...`, part of `D87`'s Option A fix, left staged uncommitted by an
+earlier session) rode along in that entry's docs-only commit, because `git commit` acts on the whole index,
+not only what that session's own `git add` named. **Marco's decision: leave it.** Confirmed harmless before
+deciding, not assumed: `git show` on the commit shows all three as pure renames, `0` insertions/`0`
+deletions each, 100% content match, already described as applied in `RESULTS.md` §31. A history rewrite to
+correct the commit message's accuracy would be a worse trade than the inaccuracy itself. This section is
+the session-log note Marco asked for, recording what the commit actually contains rather than leaving that
+fact implicit in the commit object alone.
+
+### 2. `D91` filed — the general hazard, not just this instance
+
+**The instance was harmless. The mechanism is not instance-specific, and is filed as its own finding.**
+Git's index persists staged-but-uncommitted work across sessions — nothing about this project's tooling
+resets it between sessions, and nothing in this project's own workflow (`CLAUDE.md`: "commit at every
+meaningful checkpoint") assumes anyone will notice a stray staged file before the next commit runs. `git
+commit` commits the whole index, not a diff against what the current invocation `git add`ed. **Consequence:
+any session's commit can silently carry forward whatever an unrelated prior session left staged, with no
+relationship to the committing session's own intent or commit message** — this instance happened to be
+null-impact and already-described, but the mechanism does not know that in general; the next occurrence
+could as easily be an unreviewed, half-finished change from a session that stopped mid-task for an unrelated
+reason.
+
+**`check-project-root-scope` (the pre-commit hook, `scripts/check_project_root_scope.py`) does not catch
+this — confirmed by reading what it checks, not assumed from its name.** It validates that every staged
+PATH is inside `PROJECT_ROOT` or explicitly allowlisted. It has no notion of *when* or *by which session* a
+path was staged — a pre-staged, in-scope path (exactly this instance: `src/fnol_voice_agent/data/...` is
+squarely inside `PROJECT_ROOT`) passes it identically to a path staged the same second as the commit. The
+hook's job is a scope boundary, not a staging-provenance check, and asking it to be both would be scope
+creep on a hook that is already doing its one job correctly — the gap is real, but it is a different gap
+from the one that hook exists to close.
+
+**Guard proposed, not built, per instruction.** A session-start read — `git status --porcelain` (or
+equivalent) run once before any work begins, reporting any already-staged entries rather than blocking on
+them. Cheap: `$0`, no AWS, a few lines of shell or Python, no new dependency. The reason this is the right
+point in the sequence, not the pre-commit hook or a `git log` audit after the fact: it runs at the one
+moment the risk is still avoidable — before the session's own `git add` merges its intentional staging with
+whatever was already there — rather than at commit time, where the two are already indistinguishable in
+the index, which is exactly the state this session found itself diagnosing after the fact. Not scheduled to
+any stage or phase; filed as `D91`/`OI8`, open, Marco's to decide whether/when it's worth building.
+
+### 3. Option B — steps 1-3 built (code, tests, real `terraform plan`); **no apply**
+
+**Step 1 — code.** `api/lex_codehook.py`: `_close()` gained an `executed_node_intent: str | None = None`
+keyword-only parameter, written into `sessionAttributes["executed_node_intent"]` when not `None`.
+`_respond_from_graph_result`'s ordinary (non-escalation, non-`active_slot`) fulfillment line now reads
+`_close(event, response_text, executed_node_intent=result.get("intent"))` — the exact line `D90` part 2's
+repro (§34 §1) found empty-handed. `_elicit_slot()` also sets the field, from the same `graph_intent` the
+`D84` guard already validated — corroborating there, not corrective, since `D84` already makes `intent.
+name` agree with the graph's decision on every `ElicitSlot`. **Deliberately absent on both `_close()`
+escalation call sites** (`_escalate()`, and `_respond_from_graph_result`'s graph-detected-escalation
+branch): `injury_escalation` (`agents/nodes/injury_escalation.py`) never sets `state["intent"]` at all, so
+whatever `result["intent"]` holds at that point is a leftover from classification *before* the injury
+escalation preempted the turn — naming it would actively misattribute the message to a node that didn't
+produce it, which is a worse defect than an absent field, not a smaller version of the same one. `intent.
+name`'s own wire value is unchanged everywhere in this step — option A, not option B, is the change that
+would touch it.
+
+**Step 2 — tests.** 5 new/updated tests in `tests/unit/test_lex_codehook.py`: a direct regression test at
+`D90`'s own repro seam (mismatched Lex/graph intents, non-escalation `Close`, asserts `executed_node_intent`
+equals the graph's real decision while `intent.name` stays Lex's echo, unchanged); the agreeing-case
+counterpart; an escalation-path test asserting the field's deliberate absence; and an `ElicitSlot`
+counterpart extending the existing `D84` coverage. **47/47 in this file, 660/660 across the full unit
+suite, `ruff check`/`black --check`/`mypy --strict` all clean** on both changed files (black reformatted one
+new assertion to its line-length convention, accepted as-is, not fought).
+
+**Step 3 — real `terraform plan`, reviewed, not applied.** Run for real against `stacks/main`, correct
+account confirmed first (`759316130780`, matches `CLAUDE.md`'s verified identity):
+
+```
+$ terraform plan -out=d90.tfplan
+  # aws_lambda_function.codehook will be updated in-place
+  ~ source_code_hash = "8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=" -> "51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc="
+  # aws_s3_object.codehook_deps_layer will be updated in-place
+  ~ etag = "ce01dfbd51734440760daaf4200588f5-9" -> "73deb4753ca856a7cc60270092e4be96"
+Plan: 0 to add, 2 to change, 0 to destroy.
+Saved the plan to: d90.tfplan
+```
+
+Exactly the shape predicted: a real, code-driven `source_code_hash` change, plus `OI3`'s already-known,
+pre-existing, unrelated multipart-etag phantom diff (confirmed disjoint — `OI3`'s own record shows this
+exact diff shape on every plan against this stack regardless of code changes). **0 to add, 0 to destroy —
+no new resource, no new SKU, nothing for this plan to add to `make destroy`'s scope.** Plan saved to
+`infra/terraform/stacks/main/d90.tfplan`, not applied.
+
+### 4. Cost table corrected — `C1` re-verification was missing, real total ≈$0.10-0.11
+
+**Marco's catch, stated precisely: step 4 (the redeploy) moves `CodeSha256` off `8Ch4kDuL...`, which is the
+exact build string `C1`'s own "VERIFIED, WARM PATH, 1.000 (26/26)" status line is scoped to.** The standing
+rule (established at Phase 8, reused at every redeploy since, e.g. Phase 11 Stage C in this same file) is
+that a redeploy moving `CodeSha256` requires the FULL `C1` harness re-run to restore VERIFIED status — not
+a spot-check, not an inference from "the change was narrow." §34's cost table omitted this entirely and was
+wrong to. Corrected sequence and table, matching Marco's ordering exactly:
+
+| Step | Action | Real AWS call? | Est. cost | Est. time | Approval needed |
+|---|---|---|---|---|---|
+| 1 | Code change — **done** | No | $0.00 | — | No |
+| 2 | Tests — **done, 47/47 + 660/660 green** | No | $0.00 | — | No |
+| 3 | `terraform plan`, reviewed — **done, 0/2/0** | No | $0.00 | — | No |
+| 4 | `terraform apply` (redeploy) | Yes | ~$0.00 (sub-cent) | seconds | **FULL REVIEW** |
+| 5 | `C1` → PENDING RE-VERIFICATION; live `CodeSha256` confirmed | Yes — 1 `GetFunction` read | ~$0.00 | seconds | Bundled |
+| 6 | `make verify-lambda-execution` (pre-tightening sanity run) | Yes | ~$0.003–0.004 | seconds | Bundled |
+| 7 | **Full `C1` harness — only a real 1.000 (26/26) restores VERIFIED** | Yes | **~$0.0977** | **~1m41s** | Bundled |
+| 8 | Smoke-test invokes — `executed_node_intent` appears, Lex/Connect accept it | Yes | ~$0.001–0.002 | seconds | Bundled |
+| 9 | Tighten events 10-13 to assert `executed_node_intent` directly | No | $0.00 | — | No |
+| 10 | Re-run the full 13-event gate (post-tightening) | Yes | ~$0.003–0.004 | seconds | Bundled |
+| **Total, one-time real spend** | | | **≈$0.104–0.107** | **≈1m45-50s** | |
+
+No new resource, no new SKU, **$0.00/month recurring**, unchanged cost if teardown is forgotten. Every real-
+AWS line stays inside the $5.00 Bedrock standing cap; only step 4 needs sign-off (the redeploy itself, not
+its price) — unchanged from §34's framing, just now totalled correctly.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the plan could have shown a new resource or a third changed attribute
+   (it didn't); the renames could have carried real content changes (`git show` confirmed 0/0); the guard
+   idea could have turned out already covered by the pre-commit hook (reading the hook's actual check ruled
+   that out).
+2. *Asserted-but-unchecked?* The "harmless" claim about the three renames is checked (`git show`), not
+   assumed from "they were pure renames in Terraform once" reasoning alone.
+3. *Infra error scored as a result?* No infra failures this entry — the plan ran clean, tests ran clean.
+4. *Cost below estimate?* No spend yet to compare — this entry is $0.00 real, an estimate for gated future
+   work, stated as such throughout.
+5. *Identical markers, different paths?* Not this entry's shape directly, though `D91` is a structural
+   cousin: two staging events (an intentional one this session, a stale one from a prior session) look
+   identical once both are in the index, the same way two response paths looked identical at the wire layer
+   in `D90`.
+6. *Has this check ever failed for the right reason?* The new tests were run and confirmed passing after
+   the fix, not written and left unrun; `terraform plan` was run for real, not described from memory of what
+   it should show.
+7. *Headline-number interpretation change?* Yes: option B's real one-time cost is ≈$0.10-0.11, not the
+   ≈$0.005 §34 stated — a 20x correction, Marco's own catch, recorded plainly rather than smoothed over.
+8. `C1` a tradeable term? Not touched this entry (no apply ran) — but directly implicated: the corrected
+   table states plainly that `C1` moves to PENDING RE-VERIFICATION the moment step 4 applies, and only a
+   real 1.000 (26/26) restores VERIFIED — no partial-credit path suggested anywhere in the sequence.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- commit-scope question decided (leave it). D91/OI8 filed (staged-index-carries-across-sessions hazard, general not instance-specific) and a session-start git-status guard proposed, not built. Option B steps 1-3 built: executed_node_intent field (api/lex_codehook.py), 5 new/updated tests (47/47 + 660/660 suite, ruff/black/mypy clean), real terraform plan (0 add/2 change/0 destroy, source_code_hash change real, OI3's known etag diff present). Cost table corrected: C1 re-verification (~$0.0977, ~1m41s) was missing; real total ~$0.10-0.11, not ~$0.005.
+Open defects: D87 (OI4) CLOSED. D88/OI5 OPEN. D89/OI6 OPEN. D90/OI7 OPEN (part 2's fix built, not applied). D91/OI8 (new) OPEN, guard proposed not built.
+C1 status: unchanged -- still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=. Moves to PENDING RE-VERIFICATION the moment step 4 applies.
+Blocked on: Marco's apply sign-off for step 4 and the post-apply sequence (steps 5-10) it unblocks.
+Last apply + gate result: no apply this entry -- code, tests, and a real reviewed terraform plan only. Real spend: $0.00 (terraform plan carries no charge). Corrected cost table for the gated post-apply work: ~$0.104-0.107 one-time, ~1m45-50s, $0.00/month recurring, $0.00 if teardown forgotten.
+```

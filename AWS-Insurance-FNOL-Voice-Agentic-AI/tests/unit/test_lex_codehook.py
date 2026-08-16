@@ -297,6 +297,9 @@ def test_a_raw_text_l1_match_escalates_even_when_the_graph_cannot_be_reached(
     # must not be indistinguishable on the wire, which `escalate="true"` alone always was.
     assert response["sessionState"]["sessionAttributes"]["escalation_reason"] == "fail-closed"
     assert "911" in response["messages"][0]["content"]
+    # `D90` part 2 / `RESULTS.md` §34, option B: no graph ever ran on this path, so there is nothing to
+    # name -- absence is the honest value, not a gap the field failed to fill.
+    assert "executed_node_intent" not in response["sessionState"]["sessionAttributes"]
 
 
 def test_a_raw_text_l3_match_escalates_even_when_the_graph_cannot_be_reached(
@@ -533,6 +536,83 @@ def test_elicit_slot_preserves_lexs_slot_values_even_when_it_overrides_the_inten
 
     returned_slots = response["sessionState"]["intent"]["slots"]
     assert returned_slots["policy_number"]["value"]["interpretedValue"] == "PY9001"
+
+
+def test_elicit_slot_sets_executed_node_intent_agreeing_with_intent_name() -> None:
+    """`D90` part 2 / `RESULTS.md` §34, option B. Corroborating here, not corrective -- the `D84` guard
+    already makes `intent.name` agree with the graph's own decision on every `ElicitSlot`, so this field
+    and `intent.name` are always equal at this point. Set anyway, so a harness reads one field regardless
+    of which `dialogAction.type` came back."""
+    event = _event(intent_name="CheckClaimStatus")
+    result = {"intent": "FileAutoClaim", "active_slot": "loss_datetime"}
+
+    response = lex_codehook._elicit_slot(event, result, "loss_datetime", "When did this happen?")
+
+    assert response["sessionState"]["intent"]["name"] == "FileAutoClaim"
+    assert response["sessionState"]["sessionAttributes"]["executed_node_intent"] == "FileAutoClaim"
+
+
+def test_close_carries_executed_node_intent_on_an_ordinary_fulfillment() -> None:
+    """`D90` part 2's exact repro shape (`RESULTS.md` §34 §1): Lex's own echoed intent
+    (`RentalTowingEntitlement`) disagrees with the intent the graph actually routed to and produced
+    `response_text` from (`CheckClaimStatus`). `intent.name` stays Lex's echo, unchanged -- option A (not
+    built this entry) is the separate fix that would change it. `executed_node_intent` is the new,
+    independent ground-truth signal this entry adds.
+    """
+    event = _event(intent_name="RentalTowingEntitlement")
+    result = {
+        "intent": "CheckClaimStatus",
+        "response_text": "Your claim CLM-2608-00055-6 is currently UnderReview.",
+        "active_slot": None,
+        "escalation": None,
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert response["sessionState"]["intent"]["name"] == "RentalTowingEntitlement"
+    assert (
+        response["sessionState"]["sessionAttributes"]["executed_node_intent"] == "CheckClaimStatus"
+    )
+
+
+def test_close_executed_node_intent_agrees_with_intent_name_when_routing_agrees() -> None:
+    """The non-misrouted case -- both fields say the same thing, as they should whenever the graph's
+    classification actually matches what Lex's NLU (and thus `intent.name`) already thought was in
+    progress."""
+    event = _event(intent_name="CheckClaimStatus")
+    result = {
+        "intent": "CheckClaimStatus",
+        "response_text": "Your claim CLM-1103-00001-1 is currently Open.",
+        "active_slot": None,
+        "escalation": None,
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    assert response["sessionState"]["intent"]["name"] == "CheckClaimStatus"
+    assert (
+        response["sessionState"]["sessionAttributes"]["executed_node_intent"] == "CheckClaimStatus"
+    )
+
+
+def test_executed_node_intent_is_absent_on_an_escalation_close() -> None:
+    """No reliable per-node signal exists on the escalation path -- `injury_escalation` (`agents/nodes/
+    injury_escalation.py`) never sets `state["intent"]` at all, so a leftover classification from before
+    it preempted the turn would name the wrong thing, not merely an absent one. Absence is the honest
+    value here, not a gap `_close()` failed to fill."""
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {"contact_id": "c-d90-escalation", "triggering_layer": "L2", "route": 1},
+        "response_text": "connecting you now",
+        "intent": "FileAutoClaim",  # leftover from classification, before injury_escalation preempted it
+        "active_slot": None,
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert "executed_node_intent" not in response["sessionState"]["sessionAttributes"]
 
 
 def test_close_refuses_the_escalation_path_regardless_of_which_intent_the_graph_named() -> None:

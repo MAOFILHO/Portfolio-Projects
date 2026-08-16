@@ -141,8 +141,18 @@ from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 from fnol_voice_agent.models.enums import Intent
+from fnol_voice_agent.observability.log_redaction import install_pii_log_filter
 
 logger = logging.getLogger(__name__)
+
+# Phase 11 Stage C. Installed at import time, deliberately alongside `logger`'s own declaration rather
+# than inside `handler()` -- the Lambda runtime attaches its CloudWatch-shipping handler to the root
+# logger before any user module import runs, so it is already present by the time this line executes.
+# Idempotent (`install_pii_log_filter`'s own docstring) -- safe on a warm container re-importing this
+# module, and safe under SnapStart for the same reason `ADR-009`'s "nothing captured at import" bar
+# already required for this module: this call mutates logging config, not a client connection, so there
+# is nothing here a snapshot/restore cycle could leave stale.
+install_pii_log_filter()
 
 # `D81` item 4, split by path on review -- `"detection-pregraph"` and `"detection-graph"` are BOTH
 # genuine detections (both count toward C1 recall); the split exists so provenance shows which of two
@@ -296,6 +306,7 @@ def _close(
     *,
     escalated: bool = False,
     escalation_reason: EscalationReason | None = None,
+    executed_node_intent: str | None = None,
 ) -> dict[str, Any]:
     intent = _intent_from(event)
     intent["state"] = "Fulfilled"
@@ -315,6 +326,20 @@ def _close(
         session_attributes["escalate"] = "true"
         # `D81` item 4: readable directly from the wire response, no CloudWatch correlation needed.
         session_attributes["escalation_reason"] = escalation_reason
+
+    if executed_node_intent is not None:
+        # `D90` part 2 (`RESULTS.md` §34, option B) -- a ground-truth signal, independent of `intent.name`
+        # above. `intent.name` is, and remains, Lex's own echoed intent (see the module docstring: rebuilding
+        # it is how slot values get dropped) -- this field exists purely so a caller (a harness, a dashboard,
+        # a log query) can check WHICH NODE actually produced `message`, without relying on `message`'s own
+        # text being distinctive enough to infer it, which is the gap `RESULTS.md` §34 §2 found several
+        # existing checks were leaning on by accident. Deliberately NOT set on any `escalated=True` call:
+        # the pre-graph escalation paths never ran the graph at all (nothing to name), and the graph's own
+        # in-band escalation (`injury_escalation`) never sets `state["intent"]` either -- a caller's turn
+        # can be classified `FileAutoClaim` right up until `injury_escalation` preempts it, so a leftover
+        # `result["intent"]` there would name the wrong thing, not merely an absent one. Absent is honest;
+        # a stale classification masquerading as "the node that ran" would not be.
+        session_attributes["executed_node_intent"] = executed_node_intent
 
     return {
         "sessionState": {
@@ -390,11 +415,17 @@ def _elicit_slot(
     # the mistake `_intent_from`'s own docstring warns against (it drops every value collected so far); the
     # graph has no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
     lex_slots = _intent_from(event).get("slots") or {}
+    # `D90` part 2 (`RESULTS.md` §34, option B). Corroborating, not corrective, here -- the `D84` guard
+    # above already makes `intent.name` agree with the graph's own decision on every `ElicitSlot` response,
+    # so this field and `intent.name` are always equal at this point. Set anyway, for the same reason a
+    # harness should read one field rather than two different ones depending on `dialogAction.type`.
+    session_attributes = _session_attributes_from(event)
+    session_attributes["executed_node_intent"] = graph_intent.value
     return {
         "sessionState": {
             "dialogAction": {"type": "ElicitSlot", "slotToElicit": slot_name},
             "intent": {"name": graph_intent.value, "slots": lex_slots, "state": "InProgress"},
-            "sessionAttributes": _session_attributes_from(event),
+            "sessionAttributes": session_attributes,
         },
         "messages": [{"contentType": "PlainText", "content": message}],
     }
@@ -545,7 +576,11 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
     if active_slot:
         return _elicit_slot(event, result, active_slot, response_text)
 
-    return _close(event, response_text)
+    # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from whichever node
+    # the graph actually routed to (`result["intent"]`), but before this fix `_close()` never read that
+    # value, only `_intent_from(event)` (Lex's original echo). `executed_node_intent` is the fix; `intent.
+    # name`'s own value is deliberately unchanged (option A, not this option, is what would change it).
+    return _close(event, response_text, executed_node_intent=result.get("intent"))
 
 
 def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
