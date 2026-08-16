@@ -7332,6 +7332,33 @@ because `rental_towing_entitlement`'s answer is genuinely generated and can't be
 template. §33 already named this precisely; the repro above confirms the reasoning was correct, not just
 asserted.
 
+**Updated 2026-08-16, post-tightening (§36 built the fix this section only scoped; §37 §2 records the
+consequence for event 11 specifically) — these three tiers as they stand now, not as they stood when this
+section was written:**
+
+- **Moved from "inferred, not structurally asserted" to structurally verified:** events 10-12's
+  `_expect_*` functions now call `_expect_executed_node_intent()` and assert `executed_node_intent`
+  directly, before any content check — the node-identity claim is no longer template-specificity accident
+  for any of the three. **Event 11 (`UpdateContactInfo`) is the clean case**: it PASSED before and PASSES
+  now, same top-line result, different footing entirely (§37 §2). Events 10 and 12 remain in their
+  pre-existing FAIL state (`D88`, `D89` respectively, both unrelated to this fix) — but the node-identity
+  check inside each now runs and passes silently before the unrelated failure, confirmed live via direct
+  re-invoke, not inferred from the FAIL message alone.
+- **Still true-by-accident, untouched by this tightening:** `test_file_auto_claim_reaches_fulfilment_and_
+  closes` (`tests/unit/test_lex_codehook.py`) — re-checked 2026-08-16, still pins its fake router to one
+  constant intent (`by_model={_ROUTER_MODEL: _classification("FileAutoClaim")}`) every turn, so it still
+  never exercises a genuine Lex/graph disagreement. This session's tightening targeted `verify_lambda_
+  execution.py` only; this unit test was out of scope for it and was not touched.
+- **Still actually exposed on the live path, for a narrower reason than before:** event 13's `_expect_*`
+  function now has the same `_expect_executed_node_intent()` call as 10-12 — the code-level gap is closed —
+  but the live event has never reached it: `D90` part 1's misroute fails the prior `Close`/`Fulfilled`
+  check first, every run, so the new assertion is unexercised on this event in practice. The capability it
+  would provide (catching a misroute that lands on a real `Close`, rather than the wrong `dialogAction.
+  type` entirely) is proven only at the unit level (`test_close_carries_executed_node_intent_on_an_ordinary_
+  fulfillment`), not live. Not the same exposure as before tightening (the assertion now exists and is
+  correct), but not closed either — a different, narrower gap: "proven correct in isolation, unconfirmed
+  live" rather than "no check exists at all."
+
 **Provenance note:** `_close()`'s behavior here is unchanged since its introduction at Phase 8 Stage 4 —
 `D84` (Phase 9) fixed the sibling call site, not this one. The gap has been latent in every full-pipeline
 `Close` this codehook has produced since Stage 4; it hasn't corrupted a headline number until now only
@@ -7770,4 +7797,108 @@ Open defects: D87 (OI4) CLOSED. D88/OI5 OPEN (event 10's sole cause, confirmed u
 C1 status: RESTORED TO VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=, real, $0.097668, 1m31s.
 Blocked on: option A (mirror D84 inside _close()) -- unbuilt, needs its own live Lex-acceptance verification first. D90 part 1 (zero-context routing) -- unscoped, Marco's to take up next. D88/D89 dispositions still pending.
 Last apply + gate result: terraform apply "d90.tfplan" -- 0/2/0, clean, real. Gate: verify-lambda-execution 10/13 both before and after tightening. Real spend this entry: ~$0.00 (apply) + ~$0.0030 (step 6) + $0.097668 (step 7) + ~$0.0006 (step 8) + ~$0.0006 (step 10 confirm) + ~$0.0030 (step 10 gate) ~= $0.1049, matching the corrected estimate closely.
+```
+
+## 37. `D92` filed — the baseline overwrite (§36 §4) is a process defect, same class as `D91`, not an
+isolated slip; guard proposed, not built. Event 11's tier-move recorded explicitly, tied to §34's own
+tier language
+
+### 1. `D92` — baseline-overwrite is a process defect, same class as `D91`
+
+Marco's framing, and it is correct: §36 §4's process note — the `C1` run overwrote `evals/baselines/
+composed_pipeline_deployed_k3_lineE.json` without first archiving the prior build's result — was written up
+as a slip caught and repaired in the moment. **It is the same shape of hazard as `D91` (`OI8`), not a
+one-off.** `D91` is: a convention (don't carry unrelated staged work into a commit) that is protected only
+by an operator remembering to check `git status` before committing, with no mechanism that fails loud when
+skipped. `D92` is: a convention (archive the prior build's baseline before overwriting it, established at
+§21's `u9iIy` archive) that is protected only by an operator remembering to `cp` before running the
+harness, with no mechanism that fails loud when skipped. Both are "the rule exists in prose and in one
+person's memory of having followed it before," which is exactly the failure mode `REVIEW-CRITERIA.md` §7
+and §8 already exist to name for other shapes of the same problem. **Impact this instance: null** — same as
+`D91`'s own instance — the `otOV3`-build result was never actually lost (preserved in this file's own prose
+at §25) and the repair (archiving to `...51JN903e.json`) was completed the same entry. The mechanism is what
+is being filed, not residual damage from this occurrence.
+
+**Root cause, read from the script, not assumed:** `scripts/measure_composed_pipeline_deployed.py:692-694`
+—
+
+```python
+args.out.parent.mkdir(parents=True, exist_ok=True)
+args.out.write_text(json.dumps(result, indent=2) + "\n")
+print(f"wrote {args.out}")
+```
+
+Unconditional write to `args.out` (default: `evals/baselines/composed_pipeline_deployed_k3_lineE.json`),
+no check for whether a file already exists at that path, no comparison against what build produced it.
+**A guard cannot even be added today without a prior, smaller gap being closed first**, confirmed by
+reading the rest of the file: `result` (the dict that becomes the JSON) carries no build-identifying field
+at all — `CodeSha256` is fetched by the harness's own live AWS calls elsewhere in the run but never written
+into the output — so there is currently nothing inside an existing baseline file for a guard to read and
+compare against the incoming run's build. This is worth stating precisely rather than glossing: the guard
+below is two changes, not one.
+
+**Guard proposed, not built** (per instruction — record and propose only):
+
+1. Add a `deployed_code_sha256` (or equivalent) field to `result`, populated from the same live `aws lambda
+   get-function` read the harness already has the credentials and code path to make — a small, additive
+   change to the JSON shape, not a new mechanism.
+2. Before `args.out.write_text(...)`, if `args.out` already exists: read its `deployed_code_sha256` and
+   compare to the run's own. If they differ (a different build's result is about to be overwritten) and no
+   build-tagged archive already exists at `args.out` with `.{old_sha_prefix}.json` inserted before the
+   extension, **refuse to write and print the archive command the operator needs to run first** (mirroring
+   `D91`'s proposed guard: reports/blocks at the point the risk is still avoidable, rather than a silent
+   convention enforced only by memory) — or, cheaper and consistent with `D91`'s own proposed guard being
+   report-only rather than blocking, print a loud warning and archive automatically before overwriting,
+   removing the operator step from the loop entirely rather than merely flagging its absence. Which of the
+   two (block vs. auto-archive) is Marco's call, not decided here.
+
+Filed as `D92`/`OI9` in `PROJECT_STATE.md`, not built this entry.
+
+### 2. Event 11's status change — recorded explicitly, not left inferable from an unchanged pass count
+
+Per Marco's instruction: event 11 (`UpdateContactInfo`) passed before step 9's tightening and passes after
+it — the gate's own pass/fail count for this event never moved. **That identical top-line result covers two
+different footings, and the difference is the entire point of shipping option B**, so it is stated here
+directly rather than left for a reader to infer from §36 §7's table alone:
+
+- **Before (§34 §2, "affected — inferred, not structurally asserted" tier):** event 11 passed because
+  `update_contact_info.py`'s response template happened to be textually distinct enough from the other four
+  intents' templates that a substring match (`"Done --"`/`"updated"`) was, in practice, never satisfied by
+  the wrong node's output. Nothing in the check read which node had actually run; correctness was inferred
+  from template specificity holding up, not asserted.
+- **After (§34 §2, updated above, "moved to structurally verified"):** event 11 passes because `_expect_
+  contact_info_updated` now calls `_expect_executed_node_intent(payload, "UpdateContactInfo")` and asserts
+  the field directly, confirmed live via direct re-invoke (§36 §7) to read `executed_node_intent
+  ="UpdateContactInfo"` on the actual response, not just inferred from the gate's summary line. The
+  template substring check is still present but is now secondary corroboration, not the only signal.
+
+Same result, structurally different footing — exactly Marco's phrasing, and now on record as such rather
+than only recoverable by reading §36 §7's table and connecting it back to §34's tier language.
+
+### Self-review (`REVIEW-CRITERIA.md` §1, §8)
+
+1. *Opposite result possible?* Yes — the script could have already carried a build-identifying field (it
+   doesn't, checked by reading the file, not assumed); `test_file_auto_claim_reaches_fulfilment_and_closes`
+   could have been touched by the tightening (it wasn't, re-checked directly).
+2. *Asserted-but-unchecked?* The claim "the guard needs two changes, not one" is backed by reading the
+   script's actual output-construction code, not inferred from its behavior.
+3. *Infra error scored as a result?* No AWS calls made this entry.
+4. *Cost below estimate?* $0.00 — documentation and one file read only.
+5. *Identical markers, different paths?* This entry's own §2 — the exact case this project's tier language
+   exists to distinguish, now written down explicitly for the one event Marco asked about by name.
+6. *Has this check ever failed for the right reason?* N/A — no check run this entry; a guard was proposed,
+   not built or exercised.
+7. *Headline-number interpretation change?* No — `C1`, `D90`, and all open-defect counts are unchanged by
+   this entry; it adds one new filed defect (`D92`/`OI9`) and sharpens the record of an already-reported
+   result, nothing more.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- D92 filed: the §36 §4 baseline overwrite is a process defect, same class as D91 (a convention protected only by operator memory, no mechanism that fails loud when skipped), not an isolated slip. Root cause read from measure_composed_pipeline_deployed.py:692-694 -- unconditional write, no existing-file check, and no build-identifying field currently exists in the JSON at all, so the guard is two changes (add the field, then compare-before-overwrite), not one. Guard proposed (compare-or-refuse, or compare-and-auto-archive -- Marco's call), not built. §34's three tiers updated to reflect the post-tightening state: events 10-12's node-identity claim moved from inferred to structurally asserted (event 11's PASS now has a different footing entirely, stated explicitly per Marco's instruction); test_file_auto_claim_reaches_fulfilment_and_closes remains untouched/still true-by-accident (out of this session's tightening scope); event 13 remains actually exposed live, though narrower than before -- the check now exists and is unit-proven correct, just unexercised on this event because D90 part 1 fails it upstream every run.
+Open defects: D87 (OI4) CLOSED. D88/OI5 OPEN. D89/OI6 OPEN. D90/OI7: part 2 CLOSED, part 1 OPEN. D91/OI8 OPEN, guard proposed not built. D92/OI9 (new) OPEN, guard proposed not built.
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=. Not re-run this entry.
+Blocked on: D92's guard needs Marco's choice between block-and-instruct vs. auto-archive before it can be scoped further. D91's guard, option A (D90 part 1's own fix), D88/D89 dispositions all still pending, unchanged.
+Last apply + gate result: none this entry -- documentation only. Real spend: $0.00.
 ```
