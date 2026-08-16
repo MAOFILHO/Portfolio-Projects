@@ -41,11 +41,9 @@ _PRESENCE_KEYWORDS: tuple[str, ...] = (
     "injur",  # injury, injured, injuries
     "bleeding",
     "blood",
-    "unconscious",
     "unresponsive",
     "concussion",
     "dying",
-    "died",
     " dead ",
     "fatal",
     "ambulance",
