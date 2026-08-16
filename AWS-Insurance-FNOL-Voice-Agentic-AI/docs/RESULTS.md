@@ -4991,3 +4991,2469 @@ Last apply + gate result: none — no apply, no billable resource. Two new local
 **Not done:** the push (denied, Marco's to run); a CI-side (server-enforced) equivalent of the scope hook;
 Lex/Lambda guard assessment; Phase 11 work of any kind, per explicit instruction ("Do not begin Phase 11
 work. Report and stop."). Cost this session: $0.
+
+---
+
+## 16. Phase 11, Stage 0 — preflight (2026-08-15). `APPROVED: Phase 11` received; README correction folded in
+
+`APPROVED: Phase 11` typed by Marco, with four amendments to the proposed stage breakdown (criterion 4's
+sink named as CloudWatch Logs; criterion 8 split into a `C14` real-mix-p95 signal and a `C1` scheduled-
+eval tripwire with the detection gap stated as a deliverable, not a caveat; Stage F gets a negative-control
+run; Stage 0 gets a README correction task). This section covers Stage 0 only, per "Start with Stage 0.
+Report before Stage A."
+
+### 16.1 Guardrail-usage-units claim rechecked against the current build
+
+Phase 11 criterion 3 requires this recheck before any panel is built against guardrail usage units — the
+claim being rechecked is Phase 7 Stage 8's: *"`GuardrailResult.usage` captures it... so guardrail rows in
+`COSTS.md` are exact from that point on."*
+
+**What was checked, and how:**
+
+1. `src/fnol_voice_agent/guardrails/client.py` — `_parse_response()` still does
+   `usage = {k: int(v) for k, v in (response.get("usage") or {}).items() if isinstance(v, int)}` and returns
+   it on `GuardrailResult.usage`, unchanged from Phase 7 Stage 8's shape.
+2. `git log --oneline -- src/fnol_voice_agent/guardrails/client.py` — **four commits total, none since
+   `0f50516` (2026-08-12, the Stage 8 v2→v3 fix)**. The parsing code is not merely "probably still right,"
+   it is byte-identical to what Stage 8's live `ApplyGuardrail` calls verified against.
+3. Downstream consumption checked directly (`grep -rn "\.usage\b"` outside `client.py`): exactly one call
+   site reads `result.usage` — `scripts/measure_composed_pipeline.py:166`, the same script Stage 8 ran.
+   The graph's own runtime nodes (`agents/nodes/guardrails_nodes.py`) call `apply_guardrail()` but never
+   read `.usage` — production turns don't currently log guardrail cost at all, a separate gap from the
+   claim being rechecked, named here rather than folded into it.
+
+**What this recheck does *not* establish, stated precisely rather than rounded up:** no real `ApplyGuardrail`
+call has exercised this parsing path since Stage 8 (2026-08-12). The one real-guardrail run since then
+(`COSTS.md`, 2026-08-14, `measure_composed_pipeline_deployed.py`, 78 graph-path guardrail calls) does not
+call `.usage` at all — zero hits for `usage`/`GuardrailResult` in that file; its cost line is captioned
+"cost basis, per script docstring," i.e. an assumed rate, not a measured one. So the claim is confirmed by
+**code-identity** (the exact code Stage 8 verified live has not changed) rather than by a fresh live
+measurement — a different, weaker-sounding but honestly the correct basis. This is sufficient to build
+criterion 3's guardrail-usage panel on: the parsing logic is unchanged and was live-verified once. It is
+not sufficient to claim the units have been re-measured since Stage 8, and the panel's own liveness proof
+(a forced guardrail intervention, synthetic-injected) will be the next real exercise of this path.
+
+### 16.2 `CF2`/`CF3` record hygiene — confirmed, nothing further
+
+Criterion 7 closes on confirming nothing further is needed, not on new work. `PROJECT_STATE.md`'s ledger
+rows for `CF2` and `CF3` (lines 620–621) already carry the full 2026-08-15 correction from `RESULTS.md`
+§12.5/§12.9: both marked OPEN, `CF2` owner-less since Phase 9's close, `CF3` still unmet against Phase 6's
+own criterion 6. Re-read directly this pass — nothing added since, nothing left inconsistent. **Confirmed
+as-is; no edit made.** `CF2`'s owner-less status is a fact carried from the prior correction, not something
+criterion 7 requires assigning — reassigning it would be new work, out of this stage's scope.
+
+### 16.3 README correction
+
+`README.md`'s "Build status" table was three phases stale (last touched 2026-08-12, commit `4e5d22f`) —
+Phases 7–10 shown "in progress"/"not started" against `PROJECT_STATE.md`'s CLOSED status for all four, and
+Phase 11 shown "not started" against today's approval. Corrected to match `PROJECT_STATE.md`'s phase-status
+table exactly, including `C14`'s carried-forward GATE status on the Phase 9 row.
+
+The Results metrics table (same staleness, same 2026-08-12 date) was **date-stamped as a snapshot rather
+than re-measured** — re-deriving current canonical values for macro-F1/retrieval/false-escalation would
+mean synthesizing the full correction history across §3–§8 (the ladder rungs, the retrieval gold-label fix,
+the false-escalation denominator fix), which is documentation-level work well beyond a $0 Stage 0 pass, and
+risks a fifth stale table if done partially. A callout above the table names the three biggest deltas
+(retrieval recall@5 0.800→0.900, macro-F1 0.623 identified as a ~4.3 sd outlier, out-of-scope detection
+0.200→0.000 in all ten runs since) with pointers into `RESULTS.md`, and the table header itself is labelled
+"2026-08-12 snapshot."
+
+A third stale claim was found in the same file, outside the two Marco named, and corrected under the same
+authorization (a same-file, same-class doc correction, approve-and-go per `REVIEW-CRITERIA.md` §4): the "No
+CI badge yet, deliberately" callout near the top still described the `eval-gate` workflow as "not installed"
+at the monorepo root, which was true on 2026-08-12 and has not been true since the push landed
+2026-08-15T13:41Z and run `31887876709` completed `success`. Corrected to state the workflow is installed
+and has run, and that only the branch-protection required-check click (criterion 6, Marco's) remains open —
+no CI badge added, since a badge for a non-required check would overstate what's enforced.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes on all three: `client.py` could have changed since Stage 8 (checked via
+   `git log`, not assumed); the guardrail-consuming call site could have been the runtime graph rather than
+   a one-off script (checked via grep, found it wasn't); the README could have already been accurate
+   (checked against `PROJECT_STATE.md` directly, found three separate stale claims, not one).
+2. *Asserted-but-unchecked?* This section is exactly what it would look like if skipped: §16.1 could have
+   restated "the claim holds" without the git-log/grep evidence, or without naming that no real call has
+   exercised the path since Stage 8. Both are stated, not smoothed over.
+3. *Infra error scored as a result?* N/A — no AWS call this stage, all local git/grep/file reads.
+4. *Cost below estimate?* $0 exactly, matches the approve-and-go tier this stage runs under.
+5. *Identical markers, different paths?* Named directly in §16.1: the runtime graph's `apply_guardrail()`
+   calls and the measurement scripts' calls are the same function, but only the scripts read `.usage` —
+   production turns currently generate no guardrail cost telemetry at all, a gap distinct from the claim
+   being rechecked.
+6. *Has this check ever failed for the right reason?* Not by this pass — the recheck confirmed rather than
+   caught a break. The `git log` step could have found a post-Stage-8 edit and didn't; that's a real check
+   with a real chance of the other outcome, not a check that can only ever pass.
+7. *Headline-number interpretation change?* No new number produced this stage; the README correction
+   changes what several rows *mean* (closed vs. in-progress) without changing any measured figure.
+8. `C1` a tradeable term? Not touched — no AWS call, no scoring, this stage is entirely local reads and doc
+   edits.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — APPROVED 2026-08-15. Stage 0 (preflight) complete: guardrail-usage recheck, CF2/CF3 confirmation, README correction. Stage A not started.
+Open defects: none new. Guardrail usage claim confirmed by code-identity, not by a fresh live ApplyGuardrail call since Stage 8 (2026-08-12) — named, not a blocker for Stage B's panel. Production graph nodes generate no guardrail-cost telemetry today (separate, pre-existing gap).
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this stage.
+Blocked on: nothing for Stage 0. Stage A (budget alarm + cost dashboard, billable) awaits its own cost table before apply, per COST GATE.
+Last apply + gate result: none — no apply, no billable resource, no AWS call this stage. $0.
+```
+
+---
+
+## 17. Phase 11, Stage A — cost table presented, pre-existing sibling-project budget found and left alone
+(2026-08-15). No apply. Not started pending Marco's go.
+
+### 17.1 Account state read directly, not assumed
+
+Before designing criterion 1/2's resources, the live account was checked read-only (all $0 — `budgets:Describe*`,
+`cloudwatch:ListDashboards`, `cloudwatch:DescribeAlarms`, `sns:ListTopics` carry no charge):
+
+- **Zero CloudWatch dashboards, zero CloudWatch alarms, zero SNS topics** exist in this account today — a
+  clean slate for Stage A, no naming or free-tier-budget collision with anything already running.
+- **Two AWS Budgets already exist, neither Terraform-managed by this project, neither in this repo** (grepped
+  `bedrock-platform-marco-demo01-monthly` / `aws_budgets_budget` / `My Zero-Spend Budget` across every `.md`
+  and `.tf` file in `AWS-Insurance-FNOL-Voice-Agentic-AI/` — zero hits):
+  - `My Zero-Spend Budget` — a $1 AWS-suggested default, `TimePeriod.Start` 2026-02-01, no tags, not
+    Terraform-managed. Generic account-level artifact, not investigated further — out of scope either way.
+  - **`bedrock-platform-marco-demo01-monthly`** — $25/month, `IncludeCredit: true` / `IncludeRefund: true`
+    (net cost, notifications keyed to `ActualSpend`/`ForecastedSpend`) — **exactly the misconfiguration
+    this project's own `CLAUDE.md` names as the thing that can never fire on this account.** Subscriber:
+    `djmau1974@gmail.com` (EMAIL, direct — not via SNS). `CloudTrail lookup-events` for `CreateBudget`
+    returned zero results (outside the ~90-day default lookback, so pre-dates 2026-05-17). **Tags resolve
+    it unambiguously: `Project=bedrock-platform`, `CostCenter=bedrock-platform-marco-demo01`,
+    `ManagedBy=terraform`** — matched directly to `AWS-Bedrock-Agentic-FineTuning-Platform/infra/terraform/
+    modules/budget_alerts/`, the **sibling** project sharing this account. **Not this project's resource.
+    Not touched, not imported, not referenced by anything built below** — the same scope discipline
+    `PROJECT_STATE.md`'s "No writes outside PROJECT_ROOT" rule and the `.serena/` finding (§14.3) apply to
+    files, applied here to a live AWS resource instead. Whether that budget's own `IncludeCredit:true`
+    design is a problem is `AWS-Bedrock-Agentic-FineTuning-Platform`'s call, not this session's to make or
+    flag to that project's owner uninvited.
+- **No existing Terraform stack for observability** — `infra/terraform/stacks/` currently has `bootstrap`,
+  `guardrails`, `inference`, `lexpoc`, `main`, `telephony`. Stage A proposes a new `stacks/observability`,
+  following `stacks/main`'s tagging convention (`default_tags { Project = var.project_tag; Owner = "marcos" }`).
+
+### 17.2 Cost table — resource → SKU/tier → free-tier coverage → est. monthly cost at demo volume → cost if teardown forgotten
+
+Pricing verified against current AWS pricing pages this session (`aws.amazon.com/aws-cost-management/
+aws-budgets/pricing`, `/cloudwatch/pricing`, cross-referenced for SNS/EventBridge Scheduler/custom-metrics
+free tiers), not from memory, per `CLAUDE.md`'s pricing-verification rule.
+
+| Resource | SKU / tier | Free-tier coverage | Est. monthly cost, demo volume | Cost if teardown forgotten |
+|---|---|---|---|---|
+| **New `aws_budgets_budget`** (this project, tagged `Project=AWS-Insurance-FNOL-Voice-Agentic-AI`), no actions | Basic monitoring + notifications | **Free unconditionally** — "monitor and receive notifications... free of charge" applies to any number of non-action budgets; the $0.10/day charge only applies to *action-enabled* budgets (IAM/SCP/resource actions), which this is not | **$0.00** | **$0.00** — a budget costs nothing sitting idle |
+| **SNS Standard topic** + 1 email subscription | Standard (not FIFO) | 1M requests/mo free (permanent), 1,000 email deliveries/mo free (permanent) | **$0.00** — a handful of publishes total (firing-proof test + real alerts), nowhere near either ceiling | **$0.00** — usage-based, no idle charge for an empty topic |
+| **CloudWatch custom dashboard** (criterion 2, "cost dashboard") | Custom dashboard, ≤50 metrics | 3 dashboards/mo free; **this is dashboard 1 of that 3** — Stage B's operational dashboard (criterion 3) will be the 2nd, still under the free cap, named here so the allocation is tracked, not silently used up | **$0.00** | **$0.00** while ≤3 total custom dashboards exist account-wide |
+| **CloudWatch custom metric** (`MTDGrossUsageUSD`, written by the Lambda below) | 1 custom metric | 10 custom metrics/mo **always free** (not 12-month-limited) | **$0.00** | **$0.00** |
+| **EventBridge Scheduler rule**, weekly | 1 schedule, ~4–5 invocations/mo | 14,000,000 invocations/mo free, permanent | **$0.00** | **$0.00** |
+| **Lambda function** (CE pull → `PutMetricData`), invoked weekly by the schedule | ~4–5 invocations/mo, sub-second, minimal memory | 1M requests + 400,000 GB-s/mo always-free (`CLAUDE.md`'s own verified-facts table) | **$0.00** | **$0.00** |
+| **Cost Explorer `GetCostAndUsage`, recurring** — the weekly Lambda's own pull, `RECORD_TYPE=Usage` (gross), batched to one call per invocation regardless of date range | $0.01/request, **no free tier at all** | None | **≈$0.04–0.05/mo** (4–5 calls × $0.01) — **the one line with genuine non-zero recurring cost, by design, forever** | **≈$0.04–0.05/mo forever** — the only line that doesn't zero out; small, but stated as ongoing rather than folded into "$0.00 at rest" |
+| **Cost Explorer `GetCostAndUsage`, one-time, threshold-setting** — §19, spent this session ahead of apply | $0.01/request | None | **$0.01, spent** | — (one-time) |
+| **Cost Explorer `GetCostAndUsage`, one-time, liveness comparison** — criterion 2's own liveness check (§17.4/§19 correction), an independent pull *outside* the Lambda, taken **after** the Lambda's first scheduled run, compared against its output at the same point in time — **not** a reuse of the threshold-setting call above | $0.01/request | None | **$0.01, reserved, not yet spent** | — (one-time) |
+| **SNS delivery for the firing-proof breach + confirmation email** | Included in the SNS line above | — | $0.00 | $0.00 |
+| **IAM role, CloudWatch Logs for the Lambda** | Standard | Logs: 5GB ingestion/mo free | $0.00 | $0.00 |
+| **Total, Stage A, this pass** | | | **≈$0.02 one-time (2 calls: 1 spent, 1 reserved) + ≈$0.04–0.05/mo recurring** | **≈$0.05/mo forever if never torn down** — 0.2% of the $25 ceiling |
+
+**Everything in Stage A is destroyable via `make destroy` except the recurring CE-pull cost stops the moment
+the schedule/Lambda are destroyed** — no lingering charge shape like the DID's daily accrual.
+
+### 17.3 Constraint 1 — the alarm's firing proof needs Marco present; proposed mechanism, stated before apply
+
+Two independent waits are involved, not one, and both are named up front rather than discovered after
+applying:
+
+1. **SNS email subscriptions start `PendingConfirmation`.** The moment the topic + subscription are
+   created, AWS sends a "Subscription Confirmation" email to `djmau1974@gmail.com`; **no notification of
+   any kind — test or real — can be delivered until that link is clicked.** This is independent of the
+   budget entirely and would block delivery even for a same-minute test.
+2. **AWS Budgets evaluates on its own internal cadence — up to three times a day, not on demand.** Even
+   with a threshold already breached at apply time, the notification does not fire immediately; it fires at
+   the next evaluation cycle, which could be minutes or several hours after apply.
+
+**Proposed mechanism:**
+
+- The apply adds **one extra, temporary notification** to the new budget — `ACTUAL > $0.50` (chosen because
+  known August gross usage was ≈$2.60 as of `CLAUDE.md`'s last-recorded figure, 2026-08-12 — not
+  re-verified this pass, per §17.4's point about not spending a CE call before Marco's go; a threshold this
+  far under a multi-dollar known figure should already be breached at first evaluation) — subscribed to the
+  new SNS topic, alongside the real operational notifications at 80%/100% of a $20 threshold (under the $25
+  ceiling, per the criterion's own wording).
+- **I will not treat "apply succeeded" as the proof.** After apply, I'll report that the subscription
+  confirmation email has been sent and is Marco's to click; once he confirms he's clicked it, the next step
+  is simply waiting for a Budgets evaluation cycle to run against the already-breached test threshold.
+- **This will very likely need a second sitting** — stated plainly, not glossed over: expect the real
+  breach notification to land anywhere from within the hour to several hours after the confirmation click,
+  not within this same exchange. Marco confirming receipt of *that* email (not the subscription-confirmation
+  one — two different emails, only the second is the liveness proof) closes criterion 1.
+- Once confirmed, the $0.50 test notification is removed in a small follow-up apply, leaving only the real
+  80%/100%-of-$20 notifications live going forward — avoiding a permanent hair-trigger alert at $0.50.
+
+### 17.4 Constraint 2 — criterion 2's "known real number," named explicitly
+
+**Not** a `COSTS.md` figure — that log is Bedrock-spend-specific and already known (`PROJECT_STATE.md`
+"Running spend" line) to under-count the CloudWatch-reconciled figure by ~22% for a *different* service
+scope entirely; it is not a valid ground truth for account-wide gross usage. **Not** a console reading —
+avoided in favor of the project's usual scripted-verification pattern (`make verify-*`), auditable and
+reproducible rather than eyeballed.
+
+**It is a second, independent `ce get-cost-and-usage` call, run by hand outside the Lambda, scoped to the
+same MTD date range and `RECORD_TYPE=Usage` filter the dashboard's own Lambda uses — compared by hand against
+what the dashboard displays after that Lambda's first scheduled run.** This is the one-time $0.01 CE line in
+§17.2. **Neither this call nor the Lambda's own first pull has been made yet** — both wait for Marco's go, so
+the current MTD gross-usage figure used for threshold planning above is `CLAUDE.md`'s last-recorded one
+(2026-08-12), explicitly not re-verified this pass.
+
+### 17.5 Carried forward to Stage B, not lost
+
+**Production graph nodes (`agents/nodes/guardrails_nodes.py`) emit no guardrail-cost telemetry today** —
+confirmed directly in Stage 0 (§16.1): `.usage` is read by exactly one measurement script, never by the
+runtime path. Criterion 3's guardrail-usage panel has no live source to point at as of this entry. Per
+Marco's instruction: **either Stage B wires a real emitter into the runtime path, or that panel does not
+ship** — a heartbeat/synthetic-injection check against a metric nothing ever writes would pass by
+construction and prove nothing, the exact shape `REVIEW-CRITERIA.md` §1.6 already names as untested.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, materially: the account could have had zero pre-existing budgets (the
+   simpler case), or the `bedrock-platform-marco-demo01-monthly` budget could have turned out to be this
+   project's own untracked resource, which would have changed the whole design toward "fix it," not "leave
+   it." Tags were checked, not assumed, and the answer was the less convenient one to design around.
+2. *Asserted-but-unchecked?* The temptation here was to name the found budget "a defect to fix" on sight —
+   it matches this project's own stated failure mode almost exactly. Checked its tags before concluding
+   anything, and the check reversed the initial read.
+3. *Infra error scored as a result?* N/A — no apply, no billable call, all reads this stage.
+4. *Cost below estimate?* N/A — nothing spent yet to compare against an estimate; this section *is* the
+   estimate, not a result.
+5. *Identical markers, different paths?* Named directly in §17.1: two budgets exist in one account, one
+   default/generic, one project-tagged to a sibling — same resource type, different ownership, and treating
+   them identically would have been the mistake.
+6. *Has this check ever failed for the right reason?* The tag check could have come back "this project" and
+   changed the plan; it didn't, but the check was a real fork, not a formality.
+7. *Headline-number interpretation change?* Yes: Stage A's total cost is not "$0, same as everything else
+   this phase" — it is the first Phase 11 line item with a genuine non-zero *recurring* cost (≈$0.05/mo),
+   named as such rather than rounded into the $0 pattern the rest of this phase has had so far.
+8. `C1` a tradeable term? Not touched — no AWS call made, no scoring, this section is design and read-only
+   account inspection only.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage A — cost table presented, no apply. Stage 0 complete (prior entry).
+Open defects: none new from Stage A itself. A pre-existing, sibling-project-owned AWS Budget (`bedrock-platform-marco-demo01-monthly`, IncludeCredit:true/IncludeRefund:true) found via read-only account inspection — not this project's resource, not touched, named for the record.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this stage.
+Blocked on: Marco's explicit go for Stage A's apply (COST GATE — none given yet). Criterion 1's firing proof additionally blocked on Marco clicking the SNS subscription-confirmation email once apply runs, then waiting a Budgets evaluation cycle.
+Last apply + gate result: none — no apply, no billable resource created. Read-only AWS account inspection only (Budgets/CloudWatch/SNS describe/list calls, $0), plus two web pricing lookups. $0 spent.
+```
+
+---
+
+## 18. A live, independent instance of the `IncludeCredit:true` misconfiguration `CLAUDE.md` warns about
+
+Named as its own entry, not a footnote inside §17's design narrative, per Marco's explicit instruction —
+this is evidence the warning is real, not an internal finding about this project's own code.
+
+`CLAUDE.md`'s verified-environment-facts table states, from this account's credits behavior: *"Any AWS
+Budget must be configured `IncludeCredit: false` and `IncludeRefund: false`. A $25 budget with default
+settings on this account can never fire — not because spending is controlled, but because the number it
+watches is pinned near zero by credits."* That claim was derived from this account's credit-offset
+behavior in general, not from an observed budget actually failing to fire.
+
+**Stage A's read-only account inspection (§17.1) found exactly that failure mode, live, on a real budget,
+independent of anything this project built:** `bedrock-platform-marco-demo01-monthly` — $25/month,
+`IncludeCredit: true`, `IncludeRefund: true`, notifications at `ACTUAL` 50%/80%/100% and `FORECASTED` 100%,
+subscribed to `djmau1974@gmail.com` directly. Its `CalculatedSpend.ActualSpend` reads **$0.00** as of this
+entry — not because the tagged workload behind it (`Project=bedrock-platform`,
+`AWS-Bedrock-Agentic-FineTuning-Platform`) has spent nothing, but because net cost is what the budget
+watches and credits are offsetting it, the identical mechanism `CLAUDE.md`'s own table describes for this
+account overall. None of its four notifications can fire while that holds, regardless of real gross spend
+underneath.
+
+**This project's own new budget (§17.2, not yet applied) is configured `IncludeCredit:false`/
+`IncludeRefund:false` specifically because of this failure mode — and the sibling budget is a working,
+present-tense demonstration of the exact thing being avoided, not a hypothetical.** Confirmed **not this
+project's resource** by tag (`ManagedBy=terraform`, matched to
+`AWS-Bedrock-Agentic-FineTuning-Platform/infra/terraform/modules/budget_alerts/`) before this entry was
+written — **not modified, not imported, not flagged to that project's owner uninvited.** Whether or by when
+that project's own budget gets corrected is that project's call, not this session's to make.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage A — CE re-verification (§19) plus this standalone finding entry. Apply not yet run.
+Open defects: none new. This entry documents, does not create or fix, the sibling-project misconfiguration.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched this stage.
+Blocked on: Marco's go for the actual Terraform apply (below).
+Last apply + gate result: none. One real AWS spend this entry's sibling section: the $0.01 CE call in §19, logged in COSTS.md's new non-Bedrock section.
+```
+
+---
+
+## 19. Stage A synthetic-breach threshold — re-verified against a real CE call, not the stale figure
+
+Marco's amendment: don't design the test threshold against the ≈$2.60 figure already flagged as
+unverified — pull the real number first. One real `ce get-cost-and-usage` call, `RECORD_TYPE=Usage`,
+`2026-08-01`–`2026-08-16`, `MONTHLY` granularity, `UnblendedCost`:
+
+```
+$3.7828941608 (Estimated: true — CE's normal 24–48h settling lag on the most recent day or two, not a defect)
+```
+
+**Grown from the ≈$2.60 figure `CLAUDE.md` had on record (dated 2026-08-12)** — consistent with three more
+days of accrual, not a discrepancy.
+
+**Test threshold set at $2.00** — comfortably below $3.78 (≈47% margin), certain to already be breached at
+first Budgets evaluation, a clean round figure rather than one shaped to sit just under the real number.
+Chosen over the originally-sketched $0.50 (designed against the stale figure) because $2.00 demonstrates
+"deliberately lowered" without being so far under the real number that a future month's lower gross usage
+could ever fail to breach it before the real 80%/100%-of-$20 notifications would.
+
+**Correction, raised by Marco before apply, not caught here first:** the double-duty claim originally
+written in this section was wrong. MTD gross usage grows daily, so today's $3.7828941608 is not a valid
+comparison point once the Lambda runs later — comparing the Lambda's first pull against a stale figure
+would fail the liveness check even when the pipeline is working correctly, or pass it by coincidence.
+Equality against a growing number is the wrong test.
+
+**Corrected design (matches §17.4 as originally written, which this entry had drifted from): two separate
+one-time `$0.01` CE calls, not one reused.**
+
+1. **Today's call** — used only to set the synthetic-breach test threshold above. Spent, logged
+   (`COSTS.md`, non-Bedrock section, running total $0.01).
+2. **A second, independent call, not yet made** — taken by hand at the moment of comparison, after the
+   observability stack's Lambda has run its first scheduled pull, scoped to the same MTD range and
+   `RECORD_TYPE=Usage` filter the Lambda uses. This is compared against what the Lambda wrote, at the same
+   point in time — not against today's figure. This is the one-time CE line already present in §17.2's cost
+   table; it is not new spend, but it is now stated plainly as a *second* call rather than a reuse of the
+   first.
+
+Total one-time CE spend for Stage A across both uses: **$0.02** — $0.01 already spent (threshold), $0.01
+reserved for later (liveness comparison, unspent). §17.2's "Total, Stage A" row is corrected below to match.
+
+---
+
+## 20. Stage A apply — 12 resources created, verified live against the plan, matches exactly
+
+Before applying: real-account diagnostic Marco asked for, not assumed. Two separate facts, both checked live,
+because "resources carry the Project tag" and "that tag is activated for cost allocation" are different
+claims:
+
+1. `aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=AWS-Insurance-FNOL-Voice-Agentic-AI`
+   — 18 existing resources carry the tag correctly (DynamoDB tables, the Lex bot/alias, the Connect queue/
+   hours/contact-flow/phone-number, the Bedrock guardrail and three inference profiles, the tfstate/artifacts
+   buckets, the codehook Lambda and its log group, both CloudFormation stacks). Confirms resource-level
+   tagging.
+2. `aws ce list-cost-allocation-tags --status Active` — `Project` tag: `Status: Active`,
+   `LastUsedDate: 2026-08-01`. Confirms the *separate*, easy-to-miss step (cost allocation tags require
+   manual activation before Cost Explorer/Budgets can filter by them at all) is done, and that the tag has
+   already matched real usage records — not merely tagged resources with no usage behind them yet. Without
+   this second check, "resources carry the tag" would have read as sufficient when it is not: an unactivated
+   tag makes `cost_filter{TagKeyValue}` match nothing, silently, and a budget scoped to nothing looks
+   identical to a healthy one until it never fires.
+
+**Provenance, precise:** `terraform apply "stagea.tfplan"` was **run by Marco**, in a separate terminal
+outside this session — `terraform apply` is hard-denied in this repo's own `.claude/settings.json`, alongside
+`destroy`/`import`/`state`/`force-unlock`/`taint`/`untaint` and `git push` (§21, below). **I did not execute
+it and could not have.** Marco pasted the raw apply output back; the table below and the "12/12, no drift"
+conclusion are **my own comparison** of that pasted output against the saved plan's resource list — narration
+and verification of what Marco ran, not execution of it.
+
+**Result: `Apply complete! Resources: 12 added, 0 changed, 0 destroyed.`** (Marco's terminal output.) All 12
+IDs checked, by me, against the plan's resource list — exact match, no drift, nothing failed:
+
+| Resource | ID |
+|---|---|
+| `aws_budgets_budget.project` | `759316130780:fnol-voice-agent-monthly` |
+| `aws_cloudwatch_dashboard.cost` | `fnol-voice-agent-cost` |
+| `aws_cloudwatch_log_group.ce_pull` | `/aws/lambda/fnol-voice-agent-ce-pull` |
+| `aws_iam_role.ce_pull` | `fnol-voice-agent-ce-pull` |
+| `aws_iam_role.ce_pull_scheduler` | `fnol-voice-agent-ce-pull-scheduler` |
+| `aws_iam_role_policy.ce_pull` | `fnol-voice-agent-ce-pull:ce-pull` |
+| `aws_iam_role_policy.ce_pull_scheduler` | `fnol-voice-agent-ce-pull-scheduler:invoke-ce-pull` |
+| `aws_lambda_function.ce_pull` | `fnol-voice-agent-ce-pull` |
+| `aws_scheduler_schedule.ce_pull_weekly` | `default/fnol-voice-agent-ce-pull-weekly` |
+| `aws_sns_topic.budget_alerts` | `arn:...:fnol-voice-agent-budget-alerts` |
+| `aws_sns_topic_policy.budget_alerts` | (topic ARN) |
+| `aws_sns_topic_subscription.alert_email` | `arn:...:fnol-voice-agent-budget-alerts:7fed0648-ad3a-461f-8fe3-1b97ddbe3911` |
+
+**Two post-apply facts I checked myself, live, this session — not assumed from Marco's pasted exit code:**
+
+- `aws sns get-subscription-attributes` on the email subscription: `PendingConfirmation: true`,
+  `Endpoint: djmau1974@gmail.com`, `Protocol: email` — confirms the subscription exists in the state §17.3
+  predicted (unconfirmed, blocking all delivery) rather than some already-confirmed or misconfigured state.
+- `aws budgets describe-notifications-for-budget`: three notifications present, all `NotificationState: OK`
+  (Budgets has not yet evaluated against the breached test threshold) — `ACTUAL/GREATER_THAN/100` (implicit
+  `PERCENTAGE`), `ACTUAL/GREATER_THAN/2/ABSOLUTE_VALUE` (the test tripwire), `ACTUAL/GREATER_THAN/80`
+  (implicit `PERCENTAGE`). Matches the plan exactly — three notifications, not two or four.
+
+**Cost:** $0.00 marginal from the apply itself (Budgets/SNS/dashboard/Lambda/Scheduler resource creation is
+free at this scale, per §17.2's table). The recurring ≈$0.04–0.05/month CE-pull cost now starts, tracked in
+`PROJECT_STATE.md`'s "Pre-existing accrual" line, not just this stage's table, per Marco's instruction that
+it outlives the phase.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the tag-activation check specifically could have come back inactive or
+   never-used, which would have meant applying a budget that structurally could never see the tagged spend
+   it was built to watch. Checked before apply, not after a silent non-firing was discovered later.
+2. *Asserted-but-unchecked?* The temptation was to treat "resources carry the tag" (already known from
+   `default_tags` blocks across every stack) as sufficient. It is not the same claim as tag *activation*;
+   both were checked separately, live.
+3. *Infra error scored as a result?* N/A — clean apply, no partial failure to misclassify.
+4. *Cost below estimate?* N/A — apply cost matched the $0.00-marginal estimate exactly.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* Not yet — the tag-activation and subscription-state
+   checks passed on the first real run. Their value is in having been run before relying on the result, not
+   in having caught something this time.
+7. *Headline-number interpretation change?* Yes: Stage A now has a live, billable footprint for the first
+   time this phase — 12 real resources, one real recurring cost line. Not a $0 design exercise anymore.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage A — apply complete, 12/12 resources created, verified live against the plan, no drift, nothing failed.
+Open defects: none.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: Marco confirming the SNS subscription-confirmation email, then a Budgets evaluation cycle for the firing proof (amendment 3, next entry).
+Last apply + gate result: `terraform apply "stagea.tfplan"` (run by Marco outside this session, per this repo's own settings.json deny-list) — SUCCESS, 12 added / 0 changed / 0 destroyed, $0.00 marginal cost.
+```
+
+**Addendum, same day:** Marco clicked the confirmation link himself (~18:56 local) and provided screenshots —
+AWS's "Subscription confirmed!" page, subscription id matching the apply output's
+`7fed0648-ad3a-461f-8fe3-1b97ddbe3911` exactly. I did not rely on the screenshot alone: I ran
+`aws sns get-subscription-attributes` on that ARN myself, this session, and it reads
+`PendingConfirmation: false` (was `true` immediately post-apply, above, also checked by me). Delivery is
+unblocked; only the Budgets evaluation cycle stands between now and the firing proof.
+
+*(This paragraph corrects a stray leftover: an earlier draft of this section ended with "Not yet done: the
+Terraform apply itself" — true when §19 was written, false by the time §20 landed directly after it, and
+left uncorrected in between. Caught while doing this entry's attribution pass, named rather than quietly
+deleted, per `REVIEW-CRITERIA.md` §1.2.)*
+
+---
+
+## 21. This repo's `.claude/settings.json` deny-list is a technical control, not a convention — named as
+its own finding, precisely scoped
+
+Marco's instruction: write this up as a named finding, and keep its scope precise — it explains every
+`git push` denial this project has hit, but it is **not** the same control as the `PROJECT_ROOT`
+scope-boundary work, and the two must not collapse into one in the record.
+
+### What the deny-list actually is
+
+`/Users/marco/K21/Real-world/AWS-Insurance-FNOL-Voice-Agentic-AI/.claude/settings.json`, checked into the
+repo (not a local-only override), carries an explicit `deny` list:
+
+```json
+"deny": [
+  "Bash(terraform apply:*)",
+  "Bash(terraform destroy:*)",
+  "Bash(terraform import:*)",
+  "Bash(terraform state:*)",
+  "Bash(terraform force-unlock:*)",
+  "Bash(terraform taint:*)",
+  "Bash(terraform untaint:*)",
+  "Bash(git push:*)",
+  "Bash(aws connect associate-phone-number-contact-flow:*)",
+  "Bash(aws connect disassociate-phone-number-contact-flow:*)",
+  "Bash(aws connect release-phone-number:*)",
+  "Bash(aws connect delete-instance:*)",
+  "Bash(aws connect claim-phone-number:*)",
+  "Bash(aws lexv2-runtime recognize-text:*)",
+  "Bash(aws lexv2-runtime recognize-utterance:*)",
+  "Bash(aws bedrock-runtime invoke-model:*)",
+  "Bash(aws bedrock-runtime converse:*)"
+]
+```
+
+The matching `allow` list explicitly permits the entire Terraform read/plan surface — `fmt`, `validate`,
+`plan`, `init`, `providers`, `version`, `show -json`, `console`, `output` — so this is not a blanket
+"no Terraform" rule; it is a scalpel cut at exactly the mutating verbs. Discovered directly, this session,
+by two real denied calls (`terraform apply "stagea.tfplan"`, once plain and once with
+`dangerouslyDisableSandbox: true` — the override does not bypass a settings-level deny, which is itself
+informative: this is a policy control, not a sandbox/network restriction), not inferred from documentation.
+
+### What this means, stated precisely
+
+`CLAUDE.md`'s COST GATE — *"No billable AWS resource is created without me typing `APPROVED: <phase name>`"*
+— is enforced **two ways in this repo, not one**: the documented convention I follow, and a technical
+control that makes it structurally impossible for me to run the mutating command myself regardless of
+in-chat approval. `git push` sits in the same list for a different but related reason: this is a public
+monorepo (`MAOFILHO/Portfolio-Projects`) and a push is exactly as hard to reverse as a cloud mutation once
+other people can see it.
+
+**This explains every `git push` denial this project has logged, retroactively, as policy rather than a
+transient permission glitch:**
+
+- `PROJECT_STATE.md`, session log 2026-08-15 ("push landed outside session..."): *"`git push origin main`
+  was denied by this session's tool-permission layer."*
+- `PROJECT_STATE.md`, session log 2026-08-15 ("push attempted and denied, not forced..."): *"`git push
+  origin main` (`e4c9d55`, `2613888`) was denied by this session's Bash tool-permission layer."*
+
+Both entries described the *symptom* accurately (denied, not forced, reported rather than retried) without
+naming the *mechanism*. Nothing in either entry was wrong — but "this session's tool-permission layer" reads
+as something that could vary session to session, and it doesn't: it's one file, checked into the repo,
+applying identically regardless of which session hits it. Named now so a future session doesn't waste a
+round trip rediscovering it, or worse, read the earlier vague phrasing as evidence the denial might have
+been incidental.
+
+### What this is explicitly NOT — the boundary Marco asked to keep sharp
+
+**This control has no relationship to the `PROJECT_ROOT` scope-boundary problem `.serena/` exposed**
+(`docs/RESULTS.md`'s scope-violation entries, `PROJECT_STATE.md`'s Phase 10 session log, `9af99c3`). That is a
+**different failure mode, caught by a different mechanism, at a different layer**:
+
+| | Deny-list (`.claude/settings.json`) | Scope-boundary hook (`scripts/check_project_root_scope.py`) |
+|---|---|---|
+| **Guards against** | A mutating *command* running at all — regardless of what path or resource it targets | A *path* being staged for commit outside `PROJECT_ROOT` — regardless of which command staged it |
+| **Enforced by** | Claude Code's own permission layer, reading this repo's `settings.json` | A git `pre-commit` hook, installed per-clone via `make install-hooks` (not git-tracked itself — hooks can't be) |
+| **Scope** | `terraform apply/destroy/import/state/force-unlock/taint/untaint`, `git push`, a handful of live-mutating `aws` calls | Any staged file whose path falls outside `/Users/marco/K21/Real-world/AWS-Insurance-FNOL-Voice-Agentic-AI`, against an explicit `ALLOWLIST` |
+| **What it does NOT cover** | File paths at all — a `terraform apply` confined entirely to `PROJECT_ROOT` is denied exactly as hard as one that wasn't | Commands — a `git commit` entirely inside `PROJECT_ROOT` sails through regardless of how billable or irreversible its content is |
+| **Demonstrated** | Twice, live, this session (both denial attempts, §20 above) | Both directions, Phase 10 (`PROJECT_STATE.md`, "push attempted and denied" entry): a real staged-outside-scope commit rejected, a real in-scope commit succeeded |
+
+One control stops a dangerous *verb*; the other stops a dangerous *destination*. A command can trip either,
+both, or neither — `terraform apply` inside `PROJECT_ROOT` trips only the first; `git add
+../sibling-project/file` trips only the second. Treating them as one mechanism would understate the coverage
+gap each one leaves for the other to close.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the deny-list could have turned out to be a generic `Bash(terraform:*)`
+   blanket rule, which would have meant `plan`/`validate`/`init` should also have failed and didn't; reading
+   the actual file rather than inferring from the two failures avoided over-generalizing the finding.
+2. *Asserted-but-unchecked?* The prior two `PROJECT_STATE.md` entries' "denied by this session's
+   tool-permission layer" wording was itself close to this defect — accurate but unspecific enough to be
+   misread as transient. Corrected here by naming the file and its exact contents, not by re-asserting the
+   same vague phrase a third time.
+3. *Infra error scored as a result?* N/A.
+4. *Cost below estimate?* N/A — no spend this entry.
+5. *Identical markers, different paths?* This section's entire point — the deny-list and the scope hook are
+   two different mechanisms that could easily read as "the same guardrail" if described loosely; kept
+   separate deliberately.
+6. *Has this check ever failed for the right reason?* Both controls have real, demonstrated failures on
+   record (this session's apply denials; Phase 10's rejected out-of-scope commit) — neither is an unfired
+   alarm.
+7. *Headline-number interpretation change?* Yes: two prior "denied, Marco's to run" log lines are now
+   understood as instances of one named, permanent, repo-level policy rather than isolated events — worth
+   knowing before the next `git push` or `terraform apply` is attempted in this project, in any session.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage A — apply complete (§20); this entry is a documentation finding, no new AWS action.
+Open defects: none. Two prior PROJECT_STATE.md log lines corrected-by-reference (mechanism named, not previously wrong).
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: the Budgets evaluation cycle (Firing-proof clock, PROJECT_STATE.md).
+Last apply + gate result: none this entry — no Terraform action, $0 spent.
+```
+
+---
+
+## 22. Phase 11 Stage C — the sink-level PII log filter built and unit-tested; the formal positive-control
+proof not yet run, per instruction
+
+Stage A stays tracked OPEN (criterion 1's firing proof still pending); this entry is independent work,
+Stage C, run in parallel per Marco's instruction.
+
+**Criterion 4's wording corrected before build, not after** — see criteria table row 4,
+`PROJECT_STATE.md`. The original phrasing ("confirming redaction is wired") presupposed a mechanism that
+did not exist. Scoping found `api/lex_codehook.py` has exactly three `logger` calls in the whole codebase,
+none logging raw PII — today's clean logs are an absence of violations enforced by a module docstring's
+assertion (`guardrails/pii.py`: *"No handler in this project logs a raw event object wholesale"*), not an
+active mechanism. The deliverable is building that mechanism, not verifying one that pre-existed.
+
+### Built
+
+- **`src/fnol_voice_agent/observability/log_redaction.py`** (new package) — `PIIRedactionLogFilter`, a
+  `logging.Filter` that runs `record.msg` and every string-typed `record.args` entry through the existing
+  `redact_for_transcript` (`ADR-011` Layer 1, `guardrails/pii.py` — reused, not reimplemented). Non-string
+  args (e.g. `route`, an `int`) pass through untouched rather than being coerced to text. Never suppresses a
+  record — redacts, does not drop, so a filter failure can't silently hide that something needed redacting.
+  `install_pii_log_filter()` attaches it to every handler on a given logger (root, by default) and is
+  idempotent per handler — checked, not assumed (`test_install_is_idempotent_per_handler`).
+- **Handler-level, not logger-level, deliberately** — module docstring states why: a `Filter` on a `Logger`
+  object only runs for records *originating* at that logger; Python's logging module does not re-run an
+  ancestor's filters during propagation, only its handlers. AWS Lambda's Python runtime attaches its
+  CloudWatch-shipping handler to the **root** logger before any user code runs (documented Lambda behaviour,
+  not assumed here) — attaching to that handler is what makes this catch records from any logger name,
+  present or future, not only `lex_codehook.py`'s own.
+- **Named, not silently uncovered**: `record.exc_info`/rendered traceback text is NOT redacted by this
+  filter — a traceback's text is generated from the exception object at format time, not from
+  `record.msg`/`args`. `logger.exception` is used exactly once in this project, logging only the fixed
+  string `"codehook failed"` plus Python's own traceback, not a raw state dump — the gap is real and named,
+  not presently exercised by anything PII-shaped.
+- **Wired**: `api/lex_codehook.py` calls `install_pii_log_filter()` at module import time, alongside its
+  existing `logger = logging.getLogger(__name__)` line — before any user code runs, matching when Lambda's
+  own handler is already attached. Comment ties this to `ADR-009`'s existing SnapStart-compatibility bar:
+  this call mutates logging config, not a client connection, so nothing here is stale across a
+  snapshot/restore cycle.
+
+### Tested — internal correctness only, not yet the formal exit-evidence proof
+
+`tests/unit/test_log_redaction.py`, 7 tests, all against a fresh per-test logger (never the real root
+logger, so nothing here can leak into pytest's own log capture):
+
+| Test | Proves |
+|---|---|
+| `test_without_the_filter_pii_reaches_the_sink_unredacted` | **Pre-filter half**: synthetic marked PII (`marked-synthetic-pii@example.invalid`) reaches the sink unredacted with no filter installed — proves the absence in the next test is redaction, not an artifact of PII-shaped text never appearing |
+| `test_message_with_no_args_is_redacted` | Post-filter, direct-message form (`f"...{phone}..."`) — redacted |
+| `test_percent_style_args_are_redacted` | Post-filter, `%s`-arg form — redacted (this is the form every real log call in `lex_codehook.py` uses) |
+| `test_operational_fields_pass_through_unchanged` | **The negative case**: `contact_id`, `triggering_layer`, `route`, `escalation_reason` — the exact four fields the real escalation log lines carry — pass through byte-for-byte unchanged with the filter installed |
+| `test_non_string_arg_is_not_stringified` | An `int` arg (`route`) is not coerced to `str` by the filter |
+| `test_install_is_idempotent_per_handler` | Three installs on the same handler → one filter instance, not three |
+| `test_filter_never_suppresses_a_record` | The filter's `True` return is real, not incidental — a clean record still reaches the sink |
+
+**All 7 pass.** Full suite re-run to confirm no regression: `646/646` unit tests pass, `ruff`/`black`/`mypy`
+all clean on the new and touched files. **This is internal validation of the filter class's logic, run
+against synthetic per-test loggers — it is not yet the formal, RESULTS.md-bound positive-control
+demonstration Marco asked for**, which needs to exercise the *actual* installed wiring in `lex_codehook.py`
+(the real root-logger attachment, at real import time), not a fixture logger built for the test. Per
+instruction, that run has not been executed. Two designs for it, not yet chosen between — see the chat
+report for this entry, which proposes both and asks which Marco wants before it's built.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the pre-filter test could have found no synthetic PII reaching the sink
+   even without the filter (if `redact_for_transcript` were somehow already in the call path some other
+   way), which would have meant the whole premise was wrong. It didn't; the pre-filter test genuinely fails
+   without the filter's own logic being exercised at all, confirming the filter is doing real work.
+2. *Asserted-but-unchecked?* This entire stage exists because of one: `guardrails/pii.py`'s docstring
+   asserted logs are clean without a mechanism behind the assertion. Not repeated here — every claim above
+   is backed by a passing test or a direct code read, not restated confidence.
+3. *Infra error scored as a result?* N/A — no AWS call this entry.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent, matches.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* Yes, directly — `test_without_the_filter_pii_reaches_the_sink_unredacted`
+   is a check demonstrated to fail (i.e., PII present) in the unfiltered case, not only pass in the filtered
+   one. Both directions run, matching `REVIEW-CRITERIA.md` §1.6's "prefer a check with a demonstrated
+   failure."
+7. *Headline-number interpretation change?* Yes: criterion 4's own wording is corrected (row 4, criteria
+   table) — this was a build, not a verification, and the record now says so.
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage C — filter built, wired, unit-tested (7/7 pass, 646/646 full suite, lint/typecheck clean). Formal positive-control proof not yet run.
+Open defects: none. record.exc_info/traceback text named as an uncovered gap, not presently exercised by anything PII-shaped.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: Marco's choice between two positive-control-run designs (chat report, this entry) before it's built and recorded as criterion 4's exit evidence. Stage A separately still blocked on the Budgets evaluation cycle.
+Last apply + gate result: none this entry — no AWS call, no Terraform action, $0 spent.
+```
+
+---
+
+## 23. Phase 11 Stage C — positive-control run 1 (local) passed; run 2 (deployed-runtime installation
+proof) blocked on a redeploy; residuals recorded; a framing error in my own proposal corrected by Marco
+
+**A correction to how I framed the design choice in §22, not a correction to the choice itself.** Presenting
+the two positive-control-run options, I wrote that the live-invoke design "doesn't prove more" than the
+local simulation. Marco: it does — it proves the filter is installed in the deployed artifact, in Lambda's
+*real* runtime, with Lambda's *real* pre-attached root handler, where the local design proves installation
+in a process where **I** attached the handler myself. Different claims, not the same claim reached two
+ways. This is the same frame-shift class this project has repeatedly corrected: a demonstrated property
+under a controlled harness is not the same property in the real deployed target until something checks that
+too (`RESULTS.md`'s own `D41`/`D80`/`D81`/`CF4` line runs on exactly this distinction). **Marco's choice —
+option 1, local simulation — stands; the reasoning I gave for it was wrong, and the correct reasoning is:
+shipping a raw-PII log call to close the gap isn't worth the risk it would introduce, which is a real
+tradeoff, not an equivalence claim.** Named here rather than let the original wording stand uncorrected in
+§22.
+
+### Run 1 — local simulation, `scripts/verify_log_redaction.py` — PASSED
+
+Simulates Lambda's pre-attached root handler locally (attached before `lex_codehook` is imported, matching
+the real ordering), then imports the real module — triggering its real `install_pii_log_filter()` call —
+and uses the real `lex_codehook.logger` object, not a fixture logger, for every proof line:
+
+```
+  ok   pre-filter: synthetic PII reaches the sink unredacted
+  ok   post-filter: same line, filter re-attached, PII redacted
+  ok   negative case: operational fields pass through unchanged
+  ok   idempotent: re-installing does not stack duplicate filters
+
+verify-log-redaction: passed
+```
+
+Pre-filter/post-filter toggled the **same filter instance** on and off the **same handler**, around the
+**same log call** — the closest a local process can come to isolating the filter itself as the cause of the
+redaction, rather than some other difference between two separately-constructed states.
+
+### Run 2 — deployed-runtime installation proof — BLOCKED, not skipped
+
+Checked before attempting, rather than invoking and hoping: `aws lambda get-function --function-name
+fnol-codehook` — `LastModified: 2026-08-14T03:16:34Z`, `CodeSha256: u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/
+UDPZ3Ud1ZYE=`. This is the exact, previously-recorded pre-`D84`-era build hash (`PROJECT_STATE.md`, Phase 8
+close-out; `COSTS.md` 2026-08-14 rows) — **confirmed unchanged since before this session**, via a real read,
+not inferred from "I haven't deployed anything." **The deployed Lambda does not contain
+`observability/log_redaction.py` or the wiring change in `lex_codehook.py` at all.** Invoking it now would
+prove nothing about the filter — it isn't there to find — and would misuse a real invoke for a check that
+cannot currently pass or meaningfully fail.
+
+**What run 2 actually needs, named rather than routed around:** a `terraform apply` on `stacks/main`
+(repackages `src/`, updates the Lambda's code). This is real deployed-state change, gated exactly like
+Stage A — `terraform apply` is hard-denied to me in this repo's own `.claude/settings.json` (`RESULTS.md`
+§21), so it is Marco's to run, with its own plan review and cost table first (COST GATE), even though the
+marginal cost is expected to be $0 (code-only update to an already-existing, already-billed-$0-at-rest
+function). **Not done this entry. Tracked as a new, named blocker on criterion 4's full exit evidence**, not
+folded into "done" on the strength of run 1 alone.
+
+### Residuals recorded, per instruction — stated plainly, not left implicit
+
+1. **No proof exists that this filter redacts real PII in the deployed runtime**, because no code path in
+   this project currently logs raw PII to test against — the filter is a guard against a **future**
+   violation, not a fix for a **current** one. This is the correct, expected state given Stage C's own
+   scoping finding (§22: today's clean logs were an absence of violations, not a mechanism) — stated here so
+   it reads as the accurate description of what's proven, not as a shortfall being quietly accepted.
+2. **`record.exc_info`/traceback text remains unredacted**, and is now recorded as the **higher-risk** of
+   this filter's two gaps, not the lesser one — a stack frame's repr can carry an entire local-variable
+   payload (`turn_input`, a filled-slot dict), a bigger surface than one careless `logger.info(...)` call,
+   and Python's default traceback formatting has no redaction hook. Presently low risk: one call site
+   (`lex_codehook.py`'s top-level handler), fixed string, no raw PII in scope there. **Flagged to revisit the
+   moment exception logging expands past that one site** — `log_redaction.py`'s own module docstring now
+   carries this same escalation, not just this record.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, and partly happened: the deployed-artifact check could have found the
+   code already there (if some other channel had deployed it) — it didn't, and that's the harder-to-notice
+   outcome, checked rather than assumed from "I never ran apply."
+2. *Asserted-but-unchecked?* Two, both caught before landing as claims: my own "doesn't prove more" framing
+   (Marco caught it, recorded above, not smoothed over); and the temptation to treat run 1's PASS as
+   sufficient for criterion 4's full exit evidence without checking whether run 2 was even executable against
+   real deployed code.
+3. *Infra error scored as a result?* N/A — run 2 correctly registered as blocked, not attempted-and-ignored
+   or silently marked done.
+4. *Cost below estimate?* N/A — $0 spent this entry (one read-only `get-function` call).
+5. *Identical markers, different paths?* This entry's whole point about the two proof designs — "the filter
+   is installed" reads as one claim whether proven locally or in the deployed runtime, and it structurally
+   is not.
+6. *Has this check ever failed for the right reason?* Run 1's pre-filter check is a demonstrated failure
+   case (PII present) on the exact real wiring being tested, not only a pass.
+7. *Headline-number interpretation change?* Yes: criterion 4 does not close on run 1 alone — a second,
+   currently-blocked proof stands between here and "done."
+8. `C1` a tradeable term? Not touched.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage C — run 1 (local) PASSED. Run 2 (deployed-runtime proof) BLOCKED — needs a stacks/main terraform apply, Marco's to run.
+Open defects: none new. Residuals recorded: no deployed-runtime PII-redaction proof exists yet (expected, not a shortfall); exc_info/traceback gap re-classified as higher-risk, revisit-on-expansion.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26) — unchanged, not touched.
+Blocked on: a stacks/main terraform apply (Marco's, deny-list) for run 2; separately, Stage A's Budgets evaluation cycle; separately, Stage D/B-prep not started.
+Last apply + gate result: none this entry — one read-only `aws lambda get-function` call, $0 spent.
+```
+
+---
+
+## 24. `stacks/main` redeploy — cost table and the `C1` re-verification plan the deploy itself requires,
+before either runs
+
+Marco named the non-negotiable criterion directly: deploying Stage C's code changes `fnol-codehook`'s
+`CodeSha256` away from `u9iIy...` — the exact build `C1`'s current `VERIFIED, WARM PATH, 1.000 (26/26)`
+status is scoped to (`PROJECT_STATE.md` Phase 8 row; every report header this session). The moment that
+apply lands, `C1`'s status against the *deployed* system is no longer verified — regardless of what the new
+code does or doesn't touch — until a real re-run against the new build says so. **Re-verify. "A logging
+filter shouldn't touch classification behaviour" is exactly the kind of reasoning `D41`/`D80`/`D81` already
+showed can be locally correct and globally wrong once run for real** — not argued from here.
+
+### Real `terraform plan` run against `stacks/main`, not assumed
+
+```
+Plan: 0 to add, 2 to change, 0 to destroy.
+```
+
+| Resource | Change | Cause |
+|---|---|---|
+| `aws_lambda_function.codehook` | `source_code_hash`: `u9iIy/DRjnv0Pd4lfkrXGo19O2hXM3L/UDPZ3Ud1ZYE=` → `otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68=` | Real: Stage C's `observability/log_redaction.py` + the `lex_codehook.py` wiring change |
+| `aws_lambda_function.codehook` | `environment.FNOL_COLD_PROBE_MARKER`: `"d84-cold-probe-2026-08-14T031434Z"` → `null` | **Incidental, unrelated to Stage C** — checked, not assumed: `lambda.tf`'s own comment states this variable is "read by no code in `src/` -- a pure cache-buster"; its default reverted because the D84 probe's value was passed via a one-time `-var` override, never persisted to tfvars. Confirmed harmless by the variable's own documented purpose, not by inference |
+| `aws_s3_object.codehook_deps_layer` | `etag` only: `ce01dfbd51734440760daaf4200588f5-9` → `73deb4753ca856a7cc60270092e4be96` | **Known-cosmetic**, matches the exact pattern already on record from the `D84` apply (`PROJECT_STATE.md`, 2026-08-14 entry: "`aws_s3_object.codehook_deps_layer`'s known cosmetic etag"). The object's **key is unchanged** (`lambda-layers/codehook-deps-73deb4753ca856a7cc60270092e4be96.zip`, both before and after) — `lambda.tf`'s content-hash-in-key design means an unchanged key **proves** the deps layer's actual package contents did not change, confirming directly (not by assertion) that Stage C added no new/different third-party dependency. `aws_lambda_layer_version.codehook_deps` does not appear in the plan at all — no new layer version is published |
+
+**Precedent comparison, stated precisely, per Marco's correction — it holds for two of these three changes,
+not all three.** "Matches known-good precedent" without that qualifier is exactly the inherited-claim shape
+this project has corrected elsewhere (`D67`/`D69`'s own lesson: an artifact's coverage is not a description
+of the whole). Row by row:
+- `source_code_hash` change: **matches D84 in kind** (a real code-driven hash change, expected and
+  unremarkable), not in content — different code, different hash, same *shape* of diff.
+- `aws_s3_object.codehook_deps_layer` etag: **matches D84 exactly** — same cosmetic mechanism, same
+  unchanged-key proof of no dependency drift.
+- `FNOL_COLD_PROBE_MARKER` reversion: **does not match D84.** The D84 apply's own record says "nothing
+  beyond" the two changes above — this third change is new to this plan, not a recurrence of something D84
+  already showed was safe to expect.
+
+**Why the cold-probe-marker reversion belongs in this same entry, explicitly linked, not filed as a
+footnote:** confirmed inert for classification behaviour (`lambda.tf`'s own comment, above) — but its
+*purpose* was cache-busting on the cold-start path of the exact function whose cold-start behaviour is
+independently tracked as measured-thin evidence: cold-path coverage is a **1-of-19 existence proof**, not a
+measurement (`PROJECT_STATE.md` Phase 8 row; `RESULTS.md` cold-start entries). **If a future cold-start
+number moves, this reversion is a candidate cause that must be visible in the record from today, not
+rediscovered later** by someone re-deriving why a marker changed on the same apply a cold-start-adjacent
+number shifted. Named here for exactly that reason — not because it is expected to matter, but because
+"expected not to matter" is the same reasoning this entire re-verification exists to not rely on.
+
+### Cost table — `stacks/main` redeploy
+
+| Resource | SKU/tier | Free-tier coverage | Est. monthly cost | Cost if teardown forgotten |
+|---|---|---|---|---|
+| `aws_lambda_function.codehook` code update | Existing function, code-only change, no config/sizing change | 1M requests + 400,000 GB-s/mo always-free | **$0.00** | **$0.00** — same function, same free-tier coverage as today |
+| `aws_s3_object.codehook_deps_layer` re-upload (cosmetic etag only, same bytes) | Existing artifacts bucket | 5GB free | **$0.00** | **$0.00** |
+| `PutObject`/`UpdateFunctionCode` API calls themselves | Standard, not billed per-request | N/A | **$0.00** | **$0.00** |
+| **Total, this apply** | | | **$0.00** | **$0.00** |
+
+No new resource, no changed sizing/concurrency, no new provisioned throughput. Marginal cost is genuinely
+$0 — stated as a fact checked against the plan output above, not assumed from "it's just code."
+
+### `C1` re-verification — what it requires, named before the deploy, not after
+
+**Harness**: `scripts/measure_composed_pipeline_deployed.py` — the same script Phase 8's `C1 VERIFIED`
+result already used, run against the **live Lex alias**, real `lexv2-runtime.RecognizeText` calls, not an
+in-process graph call. Protocol (Marco's, on record): the 26 `should_escalate=True` items from the
+independent held-out set, k=3 real calls each, fresh `sessionId` per call; contingency of +4 samples
+(k=7) on any item whose 3 samples aren't unanimous, budgeted for up to 6 of the 26. `C1` requires composed
+recall 1.000.
+
+**Run cost — grounded in the last real run of this exact script, not invented:** `COSTS.md`, 2026-08-14:
+**95 real `RecognizeText` calls (78 positive-path + 17 negative), $0.097668** (`lex $0.07125` +
+`bedrock $0.026418`), **zero contingency triggered, composed recall 1.000 (26/26)**. If this run repeats
+that outcome, cost is the same, ≈$0.098. **Worst case, if contingency triggers on all 6 permitted items**:
++24 `RecognizeText` calls (≈+$0.018) plus proportional Bedrock cost on whichever of those reach the graph
+path — bounded around **≈$0.12–0.13 total**, not open-ended (the script's own `D81` item-1 abort-on-`invalid`
+rule caps worst-case spend at a known ceiling rather than a runaway loop).
+
+**This spend is real Bedrock/Lex usage outside the `CLAUDE.md` standing cap's stated Phases 3–7 window** —
+named explicitly, not folded into "already approved." It is small enough to sit under the ≈$1
+`REVIEW-CRITERIA.md` §4 approve-and-go threshold by dollar amount, but this project's own practice this
+session (the $0.01 CE calls) has been to name every real spend explicitly before it happens regardless of
+size — continued here, not relaxed because the number is even smaller.
+
+**Elapsed time**: not a previously-recorded wall-clock figure — checked, and none exists on file; only
+per-call `elapsed_ms` latencies are on record, not a run-total duration. Grounded estimate, stated as an
+estimate: the script runs its ~95–102 real calls **sequentially, not concurrently** (no `ThreadPool`/
+`asyncio` in the script), with per-call latencies on record mostly in the several-hundred-ms range and rare
+cold outliers up to ~15s (`RESULTS.md` §11.12-adjacent entries) — **on the order of 5–15 minutes wall clock**,
+not a measured figure from a prior identical run's own timer.
+
+**Before or after the deploy — only after, and why:** this script drives the **live, deployed** Lex alias
+and Lambda; it cannot verify a build that isn't deployed yet, and running it against the currently-deployed
+`u9iIy...` build again would only re-confirm what's already `VERIFIED` — it would not touch the new build at
+all. There is no "run it first" option that produces a meaningful result.
+
+### Proposed sequence, `C1`'s status updated at each step, not only at the end
+
+1. **Apply lands** (Marco's, `terraform apply "stagec_redeploy.tfplan"`) — the instant `CodeSha256` changes,
+   **`C1`'s status flips to `PENDING RE-VERIFICATION (build otOV3...)` in `PROJECT_STATE.md` (Phase status
+   table row 8, and the Progress line) and in every report header from that point until the harness passes**
+   — not left reading `VERIFIED... u9iIy...` for even one report cycle while a different artifact is live.
+2. **`make verify-lambda-execution`** (9/9 events expected, $0, CloudWatch Logs read only) — the same gate
+   the `D84` sequence ran before trusting the deployed function at all.
+3. **`scripts/measure_composed_pipeline_deployed.py`**, full protocol above, real spend logged to `COSTS.md`
+   as it happens (not after).
+4. **Only on composed recall 1.000 (26/26)** does `C1`'s status flip back to `VERIFIED, WARM PATH, 1.000
+   (26/26), build otOV3...` — a result below 1.000 is a `C1` breach, reported as `REVIEW-CRITERIA.md` §1.8
+   requires ("nothing in between counts as progress on it"), not smoothed into a partial pass.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, structurally — this proposal treats a possible re-verification failure
+   as a real, nameable outcome (step 4), not an assumed formality on the way back to `VERIFIED`.
+2. *Asserted-but-unchecked?* The temptation was to write "this apply is code-only, $0, low-risk" and stop
+   there. Checked instead: ran the real plan, found and explained BOTH secondary diffs (cold-probe-marker,
+   layer etag) rather than only the one I expected.
+3. *Infra error scored as a result?* N/A — no run yet.
+4. *Cost below estimate?* N/A — nothing spent yet to compare.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* The harness itself has, historically (`D80`/`D81`,
+   78/78 cold-start crashes scored correctly as `invalid`, not as a false pass) — cited as why this project
+   trusts this specific harness for this specific claim.
+7. *Headline-number interpretation change?* Yes, directly: `C1`'s status is about to become
+   `PENDING RE-VERIFICATION` the moment the apply lands, and every report between apply and harness-pass
+   must say so, not continue citing the old build.
+8. `C1` a tradeable term? **This entire entry exists because it is not** — Marco's framing, carried through
+   exactly: verified or not verified, nothing in between, and the deployed artifact's identity is part of
+   what "verified" means, not a footnote to it.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage C — cost table + C1 re-verification plan proposed for the stacks/main redeploy. Not applied.
+Open defects: none new.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build u9iIy... — UNCHANGED, because the apply has not run. Will become PENDING RE-VERIFICATION the instant it does.
+Blocked on: Marco's go on (a) the terraform apply itself and (b) the real Bedrock/Lex spend for re-verification (≈$0.10-0.13), both named explicitly, neither run yet.
+Last apply + gate result: none this entry — one real `terraform plan` (read-only, $0), no apply, no other AWS calls.
+```
+
+---
+
+## 25. Redeploy applied by Marco; `C1` re-verified against the new build — 1.000 (26/26), no breach; a
+gap remains open in Stage C run 2, not silently resolved
+
+### Apply — run by Marco, read back independently before anything else proceeded
+
+`terraform apply "stagec_redeploy.tfplan"`, pasted output: `Apply complete! Resources: 0 added, 2 changed,
+0 destroyed` — matches the plan exactly. **Not trusted from that report alone**: `aws lambda
+get-function-configuration --function-name fnol-codehook` read live —
+`CodeSha256: otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68=`, `LastUpdateStatus: Successful`, `State: Active`
+— exact match to the plan's declared new hash, confirmed before `C1`'s status was touched.
+
+**`C1` flipped to `PENDING RE-VERIFICATION` first, before anything else ran** — `PROJECT_STATE.md` Phase
+status table row 8, the Progress line, and the file's own "Last updated" line, all three, not just one
+pointer while the others still read the old build.
+
+### `make verify-lambda-execution` — 9/9 passed
+
+Same gate, same 9 events, ≈$0.0018 estimated (unchanged from the two prior runs of this check). Logged:
+`COSTS.md`, 2026-08-15 row.
+
+### `C1` re-verification — real result
+
+```
+DEPLOYED composed recall 1.0 (26, 26)
+contingency items used 0
+unstable items 0
+provenance breakdown: {'detection-pregraph': 22, 'detection-graph': 65, 'fail-closed': 0, 'other-default': 0}
+false escalations on the 17 negatives: 9
+Cost: lex $0.07125 + bedrock $0.027773 = $0.099023
+```
+
+**Elapsed time, real, correcting §24's estimate**: `evals/holdout_ledger.json`'s own audit entry for this run
+— `started_utc 2026-08-16T00:28:23Z`, `finished_utc 2026-08-16T00:30:04Z` — **1 minute 41 seconds**, well
+under §24's ≈5–15 minute estimate. Recorded because a real figure now exists and an unreplaced estimate next
+to a real result it was superseding by would be exactly the kind of stale number this project corrects
+elsewhere; future cost tables for this harness should cite ~2 minutes, not the wider estimate range.
+
+**Composed recall 1.000 (26/26), zero contingency, zero unstable — matches the prior build's result exactly,
+no per-item divergence.** The 9/17 false-escalation figure on the negatives matches the exact figure already
+on record from every prior run of this instrument (`RESULTS.md` §0/§2/§11.6/§11.7) — not a new finding,
+named to confirm consistency, not glossed past as unremarkable. Cost **$0.099023**, inside the ≈$0.098–0.13
+range stated in §24's proposal, real spend outside the Phases 3–7 standing cap, logged: `COSTS.md`.
+
+**`C1` restored to `VERIFIED`, build `otOV3...`, 1.000 (26/26)** — the same three `PROJECT_STATE.md` pointers
+updated again, this time forward. The prior build's baseline JSON (`evals/baselines/
+composed_pipeline_deployed_k3_lineE.json`) was archived to `...u9iIy.json` before this run overwrote it, so
+the original result is not lost to the record even though the canonical file now reflects the current build.
+
+**This was a real, live possibility, not a formality**: per `REVIEW-CRITERIA.md` §1.8, a result below 1.000
+here would have been reported as a `C1` breach, full stop, regardless of the change being "just a logging
+filter." It came back clean. That the filter turned out not to touch classification is now a measured fact
+about this specific deployed build, not an assumption carried in from the source diff.
+
+### Stage C run 2 — a real gap, not closed this pass, surfaced rather than argued away
+
+Marco's ask: confirm the filter is present in the deployed handler chain, no PII log call. Checked what
+that actually requires against the code as currently deployed, rather than assuming a proxy would do:
+
+**No code path in the currently-deployed `lex_codehook.py` reports on its own `logging.getLogger().handlers`
+state.** Two ways to get a real answer, neither of which is "free" in the way §22's design discussion
+implied:
+
+1. **Add a diagnostic introspection branch** (checked first in `handler()`, before any real dispatch logic,
+   on an event shape no real Lex/Connect payload can produce) that returns `[type(f).__name__ for f in
+   handler.filters]` directly. This is the literal thing Marco described ("inspecting the handler filter list
+   from inside the function") — but it is a **new code change**, requiring **another `stacks/main` apply**,
+   which by the rule just established this session applies to *any* code change to this Lambda, not only
+   ones that plausibly touch classification. Structurally this branch cannot affect classification (it
+   returns before any real dispatch path is reached, on a key no real event carries) — but "structurally
+   cannot" is exactly the same shape of reasoning `RESULTS.md` just spent this entire section re-verifying
+   rather than trusting.
+2. **A weaker proxy, no new code**: `install_pii_log_filter()` sits unconditionally on `lex_codehook.py`'s
+   own import path, immediately after `logger = logging.getLogger(__name__)`. Python's import system runs
+   every top-level statement in order; a module that raised there would fail to import at all, and every one
+   of the 9 real `verify-lambda-execution` invocations against build `otOV3...` (this entry, above) would
+   have failed at cold start rather than passing. Their passing is therefore real evidence the install call
+   **executed without raising** — but it is **not** evidence the call found a non-empty `handlers` list to
+   attach to. A silently-empty-handlers no-op (`scripts/verify_log_redaction.py`'s own stated local-proof
+   weakness) is indistinguishable from success under this proxy. Weaker than what was asked for, and named
+   as weaker rather than presented as equivalent.
+
+**Not resolved by picking one unilaterally.** Given this session's own repeated correction on exactly this
+question — a controlled/simulated proof is not the same claim as a proof against the deployed artifact,
+and picking the cheaper option requires saying so, not assuming it — this is surfaced to Marco rather than
+decided here. Run 2 stays **BLOCKED / OPEN**, not marked done on either proxy.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, directly — this section names it as a real possibility throughout
+   ("this was a real, live possibility, not a formality"), and the harness's own contingency/abort machinery
+   was live and could have fired.
+2. *Asserted-but-unchecked?* Caught before it became one: the temptation to call run 2 "closed" via the
+   import-succeeded proxy is named as a weaker claim, not silently accepted as equivalent to what was asked.
+3. *Infra error scored as a result?* N/A — no `invalid` classification this run; the harness's own abort
+   path was never triggered.
+4. *Cost below estimate?* No — $0.099023 against a ≈$0.098 point estimate, effectively exact, not an
+   unexplained underspend requiring a liveness check.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* The harness has (`D80`/`D81`, historical) — cited
+   already in §24 as why it's trusted for this claim.
+7. *Headline-number interpretation change?* Yes, twice: `C1` moved to `PENDING RE-VERIFICATION` and back to
+   `VERIFIED` within this entry, both changes real and both recorded at the moment they were true, not
+   retrofitted.
+8. `C1` a tradeable term? **The entire entry is the opposite of that** — a real re-run, a real possible
+   breach, reported as either outcome would have required, not assumed.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage C — redeploy applied, C1 re-VERIFIED 1.000 (26/26) against build otOV3.... Run 2 of the positive control OPEN, not closed on a proxy.
+Open defects: none new. Stage C run 2 (deployed-handler-chain filter confirmation) remains open — two paths named, neither chosen unilaterally.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68=, re-verified 2026-08-15.
+Blocked on: Marco's choice between (a) a new introspection-only code change + another apply + another C1 re-verification cycle, or (b) accepting the weaker import-succeeded proxy, named as weaker.
+Last apply + gate result: `terraform apply "stagec_redeploy.tfplan"` — SUCCESS (Marco's terminal), 0/2/0. `make verify-lambda-execution` 9/9. `measure_composed_pipeline_deployed.py`: 1.000 (26/26), $0.099023 real spend, logged.
+```
+
+---
+
+## 26. Stage C run 2, option (c) — a self-reporting install, built and locally verified, deliberately held
+undeployed rather than spent on its own `C1` cycle
+
+Neither of §25's two named options was right. Marco's option (c): make `install_pii_log_filter()` log its
+own attachment count every time it runs — `pii_log_filter_installed handlers=<N>` — readable from a real
+CloudWatch Logs stream after any ordinary invoke, no diagnostic branch in `handler()`, no unreachable-event
+trick, and permanent rather than a one-time probe.
+
+**Why this beats both prior options, stated for the record, not just accepted:**
+- **Beats (b)** (the import-succeeded proxy): that proxy could not distinguish "the filter attached" from
+  "the target logger had zero handlers and the install silently no-op'd." `handlers=0` makes that exact
+  failure mode visible in the deployed system's own logs, rather than indistinguishable from success.
+- **Beats (a)** (a diagnostic introspection branch in `handler()`): no new branch on an unreachable event
+  shape, no structural-reasoning gamble about whether it could affect classification. The signal comes from
+  the filter's own installation — it never looks at Lex/Connect traffic at all, and it re-fires on every
+  future cold start for free, not only once.
+
+### Built and verified — locally, this pass
+
+`install_pii_log_filter()` now logs one line per call, through this module's own logger (propagates to root
+independently of whatever `logger` argument was passed in for attachment). `N` counts handlers attached
+*this call* — `0` on an idempotent re-install, and (the important case) `0` on a target with no handlers to
+attach to at all, which is exactly the silent-no-op scenario `scripts/verify_log_redaction.py`'s own docstring
+already named as its weak point.
+
+- **3 new unit tests** (`tests/unit/test_log_redaction.py`, now 10 total): the report line reads
+  `handlers=1` on first install against a logger with one handler; `handlers=0` on an idempotent re-install;
+  `handlers=0` against a logger with zero handlers (the silent-no-op case, made visible rather than
+  invisible). All pass.
+- `scripts/verify_log_redaction.py` extended with two checks reading the same self-report line through the
+  real `lex_codehook` import wiring — `handlers=1` at real import time, `handlers=0` on a subsequent
+  re-install. Both pass.
+- Full suite: **649/649** unit tests pass. `ruff`/`black`/`mypy` clean on all touched files.
+
+### Deliberately NOT deployed this pass — the reasoning, stated plainly per instruction
+
+**Proving a logging filter is attached should not cost a full `C1` re-verification cycle on its own.** This
+session already established, correctly, that any `stacks/main` code change requires re-verifying `C1` against
+the newly deployed build — real spend (~$0.10), real elapsed time (~5–15 min), no shortcuts. Applying that
+rule mechanically to *every* change, including a change whose entire purpose is proving a different change's
+installation, would mean each incremental proof-of-a-proof pays the same re-verification tax as the
+substantive work it's proving. **The correct response to that tax is not to skip re-verification — it is to
+bundle deploys**, so the tax is paid once per batch of real changes, not once per change. This entry's own
+existence is the record of that reasoning, not just its outcome.
+
+**Held undeployed. Tracked as `PROJECT_STATE.md`'s `OI2`**, alongside `OI1` (Stage A's test notification),
+so it does not drift the way an untracked "we'll get to it" item would. **Bundled with the next `stacks/main`
+change that has to ship anyway** — Stage B's guardrail-usage emitter is the named candidate: it also edits
+`src/` (`agents/nodes/guardrails_nodes.py`), packaged into the identical `codehook.zip` this filter change
+already lives in, so the two changes will naturally land in the same `source_code_hash` and the same
+re-verification cycle once Stage B's code exists. **Checked, not assumed**: Stage B's own emitter work has
+not started yet this session, so this is a structural prediction (any `src/` change forces the same
+`stacks/main` diff shape as today's), not a confirmed fact about Stage B's specific diff. If Stage B turns
+out not to touch `src/` at all, that will be told to Marco explicitly before deploying this alone, per his
+instruction — not assumed silently either way.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes — the self-report tests could have found the report line missing or
+   miscounted (e.g. reporting total handler count instead of newly-attached count); written to check the
+   *count*, not just presence, so a wrong number would have failed loudly.
+2. *Asserted-but-unchecked?* The prediction that Stage B will touch `src/` is stated as a prediction, not a
+   fact — Stage B hasn't been built yet this session, and the entry says so.
+3. *Infra error scored as a result?* N/A — no AWS call this entry, code + local tests only.
+4. *Cost below estimate?* N/A — $0 estimated, $0 spent (deliberately, by holding the deploy).
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* Not yet exercised against a real absent-handler case
+   in the deployed system (that's exactly what run 2 will confirm once bundled) — the local tests exercise
+   the zero-handlers path directly, which is the closest available proxy before deployment.
+7. *Headline-number interpretation change?* Yes: Stage C's exit evidence is now explicitly two-part (run 1
+   done, run 2 open-but-mechanism-ready) rather than a single pass/fail, and `PROJECT_STATE.md`'s `OI2` makes
+   that split durable rather than something only this entry remembers.
+8. `C1` a tradeable term? Not touched — no redeploy, no re-verification run this entry, which is the entire
+   point: this entry exists to avoid spending a `C1` cycle on a change that doesn't need its own.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage C — option (c) built and locally verified (10/10 unit tests, local script, 649/649 full suite). Deliberately not deployed. Run 2 tracked as OI2, bundled with Stage B's expected stacks/main change.
+Open defects: none new. OI2 added alongside OI1 in the open-items table.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68= — unchanged this entry, no apply ran.
+Blocked on: Stage B's guardrail-emitter work existing, to confirm the bundling prediction; if it doesn't touch src/, Marco gets told explicitly before a standalone deploy.
+Last apply + gate result: none this entry — code + local tests only, $0 spent.
+```
+
+## 27. Phase 11 Stage B1 — the guardrail-usage emitter built, wired, tested; the operational dashboard's
+three native/log panels added; both plans reviewed, neither applied; a pre-existing, unrelated
+multipart-ETag phantom diff found and named
+
+**Bundling prediction (§26) confirmed, not assumed.** `agents/nodes/guardrails_nodes.py` is at
+`src/fnol_voice_agent/agents/nodes/guardrails_nodes.py` — inside `src/`, which
+`infra/terraform/stacks/main/lambda.tf`'s `data.archive_file.codehook` zips wholesale
+(`source_dir = "${local.repo_root}/src"`). A real `terraform plan` this pass shows exactly the predicted
+shape: `aws_lambda_function.codehook.source_code_hash` moves from `otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68=`
+(the currently deployed build) to `Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA=`. That new hash carries
+**two** changes in one package, not one: Stage B1's emitter (this entry) and `OI2`'s self-reporting
+`install_pii_log_filter()` line (§26, written and held undeployed last entry) — both already sit in `src/`
+today, so this is the single deploy both were bundled toward, exactly as predicted rather than assumed.
+`OI2` is reclassified below from "expected to bundle" to "bundled, pending only the apply."
+
+### Built, this entry
+
+1. **`observability/guardrail_metrics.py`** (new) — `emit_guardrail_usage(source, usage, *, blocked,
+   masked=False)`. Logs one structured JSON line (`sort_keys=True`, stable shape) per `apply_guardrail()`
+   call, through this module's own logger. Deliberately a log line, not `cloudwatch:PutMetricData`: the
+   codehook Lambda's IAM role grants only `logs:CreateLogStream`/`logs:PutLogEvents` today
+   (`lambda.tf:176-181`, checked, not assumed), and a real `ApplyGuardrail` response's `usage` dict has
+   5-7 keys — turning each into its own custom metric across two sources (INPUT/OUTPUT) would spend most
+   of the 10 always-free custom-metric slots this project already has 1/10 committed against (the cost
+   dashboard). A CloudWatch Logs Insights log widget reads the same lines out of the already-provisioned
+   log group for $0 new IAM surface and $0 new metric-quota consumption.
+2. **Emitted even when `usage == {}`** — `MockGuardrailClient` (every local/test run today) never
+   populates `.usage`, in every branch (clean/masked/blocked alike). Skipping emission on empty would
+   make "a real call happened, nothing accrued" indistinguishable from "the emitter never ran" — the
+   exact "zero errors vs. emitter dead" failure criterion 3's liveness requirement names by name. So
+   `units: {}` is a real, logged, non-silent state.
+3. **Wired into both `guardrails_nodes.py` node functions** — `guardrails_input_check` (every call) and
+   `guardrails_output_check` (every call that reaches the guardrail; the authority short-circuit above it
+   never calls `apply_guardrail` at all, per the existing
+   `test_the_authority_check_runs_before_the_guardrail_and_wins`, so zero emissions on that branch is
+   correct, confirmed by a new test rather than left implicit).
+4. **Tests**: 4 new (`test_guardrail_metrics.py`) covering real usage reported verbatim, empty usage
+   reported not skipped, `masked` defaulting False, and the exact sorted-key line shape. 3 new
+   (`test_guardrails_nodes.py`) covering the output-node wiring on a real call, zero emissions on the
+   authority short-circuit, and the input-node wiring. **Full suite: 656/656** (up from 649), `ruff`/
+   `black`/`mypy --strict` clean on every touched file.
+5. **Operational dashboard** (`aws_cloudwatch_dashboard.operational`, `dashboard.tf`) — dashboard 2 of the
+   3 free custom dashboards/month, criterion 3. Three of its four required panel categories, per Marco's
+   explicit split:
+   - **Lambda errors/duration** and **Lex recognition** — native `AWS/Lambda`/`AWS/Lex` metrics, no new
+     code, no new emitter. Verified against the current AWS docs rather than memory (`monitoring-metrics.html`
+     for Lambda: `Invocations`/`Errors`/`Duration`, dimension `FunctionName`;
+     `lexv2/latest/dg/monitoring-cloudwatch.html` for Lex: `RuntimeRequestCount`/`RuntimeSystemErrors`/
+     `RuntimeUserErrors`/`RuntimeSucessfulRequestLatency` — **that spelling, "Sucessful," is AWS's own
+     documented metric name, not a typo introduced here**; getting it wrong would have rendered the
+     widget permanently empty with no error, the exact silent-failure class this project keeps catching).
+     Dimensioned `Operation=RecognizeText`, stated explicitly in the dashboard's own text widget: no real
+     caller has ever reached this system, so the eval harness's `RecognizeText` calls are the only Lex
+     traffic these widgets can ever show today.
+   - **Guardrail usage** — a `type: "log"` widget, a plain filter+sort+limit Logs Insights query over raw
+     `@message` against the codehook Lambda's log group (deliberately not a field-parsing query — Logs
+     Insights' `parse` glob syntax against nested JSON is fragile, and the liveness proof only needs a
+     human/verifier to read the real intervention's line).
+   - **Not built**: turn-latency sub-components (criterion 3's fourth category) — Stage B2, explicitly
+     split out by Marco, scoped jointly with Stage D's `C14` signal as a follow-on proposal, since both
+     need the same not-yet-built live latency instrumentation and building them separately risks two
+     paths or an assumed-covered gap.
+6. **`data.terraform_remote_state.main`** (new, `remote_state.tf`) — reads `stacks/main`'s
+   `codehook_function_name`/`bot_id`/`bot_alias_id` outputs read-only, rather than hand-copying values
+   that can drift (a bot republish moves `bot_id`). Resolved against the real state during `terraform
+   plan` — confirmed live values (`bot_id = W9MNF86T1H`, `bot_alias_id = ZYAWLCMPQX`,
+   `codehook_function_name = fnol-codehook`), not placeholders.
+
+### Plans reviewed, neither applied
+
+- **`stacks/observability`**: `terraform plan` — **1 to add** (`aws_cloudwatch_dashboard.operational`),
+  0 to change, 0 to destroy. Clean.
+- **`stacks/main`**: `terraform plan` — **0 to add, 2 to change, 0 to destroy.** One of the two is real;
+  the other is not, and is named below rather than folded into "2 changes from this entry."
+
+### A finding, not caused by this entry, named rather than smoothed over: `codehook_deps_layer`'s `etag` is a permanent phantom diff
+
+`aws_s3_object.codehook_deps_layer`'s plan shows `etag` moving from `ce01dfbd51734440760daaf4200588f5-9`
+to `73deb4753ca856a7cc60270092e4be96`. Investigated rather than assumed benign, because a second
+resource "changing" alongside a real code change is exactly the shape of thing this project's own
+discipline says to check, not narrate past:
+
+- The deps layer zip is **43,849,548 bytes** — well past S3's multipart-upload threshold. AWS's real
+  multipart ETag is `MD5(concat(part MD5s))-<N-parts>`, structurally never a plain 32-hex MD5. The
+  `-9` suffix on the "before" value confirms it really is a 9-part multipart ETag.
+- `codehook_deps_layer.etag = data.archive_file.codehook_deps.output_md5` — a **plain whole-file MD5** of
+  the local zip. For an object this size, that value can **never** equal what S3 actually returns after
+  a multipart upload, regardless of whether the content changed at all.
+- Confirmed pre-existing, not introduced by this entry: `stagec_redeploy.tfplan` (Stage C's own **applied**
+  plan, `otOV3...`'s deploy) shows the **identical** before/after pair
+  (`ce01dfbd...-9` → `73deb4753...`) — read back via `terraform show -json`, not eyeballed. The local
+  deps-layer source directory (`.terraform-build/layer`, built by `make build-lambda-layer`) has been
+  untouched on disk since **2026-08-13**, well before either redeploy, and is disjoint from `src/`
+  entirely — nothing in this entry or Stage C's could have changed the deps zip's actual content.
+- **Conclusion**: this is a standing bug in how `codehook_deps_layer`'s `etag` argument is set, unrelated
+  to any code change, and it will show as "1 to change" on **every future `terraform plan` against this
+  stack**, forever, until the `etag` argument is fixed (dropped, or replaced with a checksum mechanism
+  S3's own multipart upload can actually reproduce). **Not fixed in this pass** — out of Stage B1's scope,
+  a Terraform-mechanics fix rather than an observability build. Named here so a future session doesn't
+  waste time re-diagnosing a "surprise" second resource change, and so an apply of this plan is understood
+  to touch 2 resources for 2 different reasons, not 2 resources both caused by this entry's code.
+
+### `OI2` status update
+
+Reclassified: "bundled, pending only the deploy" — the predicted vehicle (this entry's `src/` change) now
+exists and its plan is reviewed. `OI2` closes once Marco applies and the deployed handler chain's
+`pii_log_filter_installed handlers=N` line is read from real CloudWatch Logs.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, on the etag finding specifically — the deps zip could genuinely have
+   changed (a stale local build, a dependency drift) and the check could have found real content
+   drift instead of a format mismatch; the byte-size/multipart-suffix/untouched-mtime evidence was
+   gathered to distinguish the two, not assumed.
+2. *Asserted-but-unchecked?* The Lex metric name (`RuntimeSucessfulRequestLatency`) was checked against
+   current AWS docs specifically because a wrong name fails silently (empty widget, no error) — the
+   MCP doc search result is quoted verbatim in the build note above, not paraphrased from memory.
+3. *Infra error scored as a result?* N/A — no apply this entry, plan output only.
+4. *Cost below estimate?* Matches the accepted $0 cost table exactly; no new resource beyond the second
+   dashboard already priced in.
+5. *Identical markers, different paths?* The etag finding itself is this: two different hash schemes
+   (plain MD5 vs. multipart ETag) that will never converge, previously read as "will apply cleanly."
+6. *Has this check ever failed for the right reason?* Yes — the etag investigation is a real check with a
+   real chance of finding actual content drift, and it returned a specific, falsifiable reason (byte size
+   over the multipart threshold, confirmed via the `-9` suffix and the untouched source mtime) rather than
+   "looks fine."
+7. *Headline-number interpretation change?* Yes: `stacks/main`'s "2 to change" is not "2 changes from
+   Stage B1" — it's 1 real change (the hash) and 1 pre-existing, content-independent artifact. Reporting
+   it as "2 changes, both from this entry" would have been the overclaim this project keeps correcting.
+8. `C1` a tradeable term? Not touched — no deploy this entry, `C1` unchanged at VERIFIED,
+   `otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68=`, 1.000 (26/26).
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage B1 — emitter built and wired (656/656 suite), operational dashboard (3 of 4 panel categories) built. Both plans reviewed (observability: 1 add; main: 0 add/2 change, 1 real + 1 pre-existing phantom). Not deployed.
+Open defects: codehook_deps_layer's etag is a permanent, pre-existing, content-independent phantom diff — confirmed present identically in Stage C's own applied plan, not caused by this entry, not fixed this pass.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3s1EXv/sK7XCW+85SrWvqmSYJE/FkUC6+Gikk68= — unchanged, no apply ran.
+Blocked on: Marco's go for the stacks/main + stacks/observability applies (COST GATE), then a forced-intervention live invoke to prove both this panel's liveness and OI2's run 2 in one pass, asserted separately per Marco's instruction.
+Last apply + gate result: none — no apply, no billable resource. $0 spent (2 real terraform plan runs, both read-only).
+```
+
+## 28. Both applies confirmed, `C1` re-verified against the new build; the single live invoke — two claims
+closed, one blocked by a real, newly discovered defect (`D87`), reported as a block, not smoothed over
+
+**Applies confirmed live, not from the pasted apply output alone:**
+`aws lambda get-function-configuration --function-name fnol-codehook` reads `CodeSha256 =
+Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA=` — matches the reviewed plan exactly. `C1` flipped to PENDING
+RE-VERIFICATION first, before anything else ran, per instruction.
+
+**`make verify-lambda-execution`: 9/9 passed**, ~$0.0018.
+
+**`C1` harness, full protocol: composed recall 1.000 (26, 26), 0 contingency, 0 unstable, no per-item
+divergence from `otOV3...`'s prior result.** Cost $0.097668 (lex $0.07125 + bedrock $0.026418). `C1`
+restored to VERIFIED against `Wf84ZeuA...`. False-escalation figure on the 17 negatives: 9/17 (0.529) —
+identical to every prior run of this instrument, not a new finding.
+
+### The single live invoke — three claims, asserted independently, one blocked
+
+`scripts/verify_stage_b1_live_invoke.py` (new) — a direct `lambda:Invoke` (not a real `RecognizeText`
+call) carrying a hand-built `CheckClaimStatus` event with `claim_number` pre-filled to a real corpus
+record (`CLM-2608-00042-4`, policy `PY4821`, `RepairInProgress`), chosen because `guardrails/client.py`'s
+own module comment records this exact claim-number shape as live-verified to trigger a Bedrock mask on
+`OUTPUT` since Stage 8's v3 guardrail. Estimated cost ~$0.0007 before running, per this project's own
+discipline.
+
+**Claim (a) — CLOSED. `OI2` closed.** Queried real CloudWatch Logs on `/aws/lambda/fnol-codehook` since
+this deploy's `LastModified` (`2026-08-16T02:44:41Z`):
+
+```
+pii_log_filter_installed handlers=1   (2026-08-16T02:49:32Z)
+```
+
+One line, `handlers=1`, from the cold start that ran during `make verify-lambda-execution`'s first event
+(the live invoke itself reused a warm container and produced no new install line — expected, the install
+call only fires at import time, and this is itself part of what closes the claim: a real cold start, on
+the real deployed artifact, attached the filter to exactly one handler). `OI2` moved to CLOSED in the
+open-items table.
+
+**Claim (c), INPUT half — AGREES with Stage 8.** The same invoke's real `guardrail_usage` INPUT line,
+read from CloudWatch by `requestId` (not the invoke's own 4KB log tail, which truncated it — see below):
+
+```json
+{"blocked": false, "masked": false, "source": "INPUT", "units": {
+  "automatedReasoningPolicies": 0, "automatedReasoningPolicyUnits": 0, "contentPolicyImageUnits": 0,
+  "contentPolicyUnits": 1, "contextualGroundingPolicyUnits": 0, "sensitiveInformationPolicyFreeUnits": 0,
+  "sensitiveInformationPolicyUnits": 0, "topicPolicyUnits": 1, "wordPolicyUnits": 0}}
+```
+
+`sensitiveInformationPolicyUnits: 0` — **agrees** with Stage 8's one recorded INPUT figure. This is also
+the **first real capture of the full INPUT usage dict** (9 keys, including 3 not previously named
+anywhere on record — `automatedReasoningPolicies`, `automatedReasoningPolicyUnits`,
+`contentPolicyImageUnits`) — B1's emitter is confirmed working end-to-end in the real deployed runtime,
+independent of the defect below.
+
+**Claim (b) and claim (c)'s OUTPUT half — BLOCKED by a real, newly discovered defect, not closed, not
+worked around.** The invoke never reached `guardrails_output_check` at all. `check_claim_status.py` (the
+real deployed node) crashed inside `claims_server._load_claims()`:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: '/var/data/synthetic/claims/claims.json'
+```
+
+Caught by the top-level `logger.exception("codehook failed")` handler (graceful at the boundary — no
+`FunctionError`, a `Delegate` with no message went back), but the turn's actual fulfillment never
+happened.
+
+### `D87` — `mcp/_paths.py`'s repo-root resolution is structurally wrong in the deployed Lambda, for every domain module that uses it
+
+`_paths.py`: `REPO_ROOT = Path(__file__).resolve().parents[3]`, `DATA_DIR = REPO_ROOT / "data" /
+"synthetic"`. This is correct exactly where it was written to run — local dev, where
+`<repo_root>/src/fnol_voice_agent/mcp/_paths.py`'s `parents[3]` really is `<repo_root>`, which really
+does contain `data/synthetic/`. It is **structurally wrong** in the deployed Lambda, for two independent
+reasons, not one:
+
+1. `data.archive_file.codehook`'s `source_dir = "${local.repo_root}/src"` (`lambda.tf`) zips `src/`
+   **only** — `data/synthetic/` is never packaged into the Lambda artifact at all, at any path.
+2. Even if it were packaged, the arithmetic doesn't work: in Lambda, `src/` itself is the zip root
+   (`/var/task`), one directory level shallower than local dev's `<repo_root>/src/`. From
+   `/var/task/fnol_voice_agent/mcp/_paths.py`, `parents[3]` is `/var` — not `/var/task` — so `DATA_DIR`
+   resolves to `/var/data/synthetic`, a path that cannot exist under any packaging scheme built on
+   today's `source_dir`. The observed error (`/var/data/synthetic/claims/claims.json`) matches this
+   arithmetic exactly, confirmed by computing it independently before reading the error, not fitted to it
+   after.
+
+**Scope, checked rather than assumed**: `_paths.py` is imported by three of the four `mcp/*_server.py`
+domain modules — `claims_server.py` (confirmed crashing, this entry), `contact_server.py`,
+`policy_server.py`. That means **`CheckClaimStatus` (confirmed), `RentalTowingEntitlement` (same
+`claims_server._load_claims()` pattern), `FileAutoClaim` (policyholder/vehicle validation, same module),
+and `UpdateContactInfo` (`contact_server.py`) are all likely affected** — real fulfillment for four of the
+five ordinary intents. **Not individually re-invoked and confirmed this pass** — named as likely-affected
+by shared import, not verified live for each, so as not to overclaim a scope beyond what was actually
+exercised. `CoverageQuestion` (RAG against the DynamoDB knowledge base, no `data/synthetic/` dependency)
+is likely unaffected, also not independently confirmed this pass.
+
+**Not caused by Stage B1.** `_paths.py` predates this session; the `source_dir = "src/"` packaging
+convention predates Stage B1 too (`lambda.tf`'s deps-layer commentary, cited earlier this phase, is
+Phase 8-era). This defect has been live since at least the last full redeploy that could have exercised
+it, and nothing before this invoke ever called a `check_claim_status`/`file_new_claim`/`update_contact`
+path against the **deployed** Lambda with a filled identifier slot — `verify_lambda_execution.py`'s own
+`CheckClaimStatus` event only tests the first-turn `ElicitSlot`, never fills the slot, so it never reaches
+`_load_claims()`. `measure_composed_pipeline_deployed.py` (`C1`) is scoped to escalation recall, which
+does not call any of these three modules. **This is the first real exercise of this code path against the
+deployed artifact, and the first turn it has ever been given a chance to fail on.**
+
+**Not fixed this pass.** A real fix is a design decision, not a one-line patch applied without approval:
+package `data/` alongside `src/` in the Lambda zip (changes `source_dir`, changes `source_code_hash`,
+another `C1` re-verification cycle), or move the three JSON corpora to a runtime-configurable location
+(S3, DynamoDB, an env var), or point `_paths.py` at a Lambda-aware path when `AWS_LAMBDA_FUNCTION_NAME`
+is set. Filed as `D87`, tracked as **`OI4`** in the open-items table — the fourth entry, and the first
+one this phase that is not a scoped, deliberate temporary state but a real production defect.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, directly demonstrated: claim (a) and claim (c)'s INPUT half both
+   closed cleanly; claim (b) did not, on the same pass, from the same script. This entry is proof the
+   three-claims split was not decorative — one genuinely failed while two genuinely passed.
+2. *Asserted-but-unchecked?* `D87`'s scope claim is stated at exactly the confidence it has: `claims_
+   server.py` confirmed by a real crash, `contact_server.py`/`policy_server.py` named as likely-affected
+   by a real, checked shared import (`grep`, not assumed), explicitly not re-invoked and confirmed
+   per-module this pass.
+3. *Infra error scored as a result?* The opposite risk was live here: a genuine infra/code defect could
+   have been absorbed into "claim (b) inconclusive" language instead of filed as its own numbered defect
+   with its own root cause. Filed as `D87` instead.
+4. *Cost below estimate?* Yes — the live invoke's real cost is below its $0.0007 estimate, because the
+   crash happened before the OUTPUT-side `ApplyGuardrail` call (roughly half the estimated calls) was
+   ever made. Per this project's own recurring finding, cost-below-estimate is itself a liveness signal
+   worth checking, not just banking: here it is fully explained by where the crash landed, not a mystery.
+5. *Identical markers, different paths?* N/A this entry.
+6. *Has this check ever failed for the right reason?* Yes, twice over in one pass: the live-invoke script
+   correctly failed at claim (b)'s assertion rather than reporting a false pass, and separately, this is
+   the first time this exact code path has ever been exercised against the deployed artifact and it found
+   a real defect on the first try — the check worked precisely because nothing had run it for real before.
+7. *Headline-number interpretation change?* Yes, significantly: `C1`'s 1.000 (26/26) says escalation
+   recall is intact; it says nothing about whether the system's ordinary, non-escalation fulfillment
+   works, and this entry shows it currently does not, for most of the five ordinary intents. The two
+   headline numbers answer different questions and neither substitutes for the other.
+8. `C1` a tradeable term? No — `C1`'s scope (escalation recall) does not include the code paths `D87`
+   broke, so `D87` does not touch `C1`'s VERIFIED status. Stated explicitly so the two are not conflated.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11, Stage B1 — both applies confirmed live, C1 re-VERIFIED 1.000 (26/26) against Wf84ZeuA.... Live invoke: claim (a) CLOSED (OI2 closed), claim (c)-INPUT AGREES with Stage 8, claim (b) and claim (c)-OUTPUT BLOCKED by a new defect.
+Open defects: D87 (new) — mcp/_paths.py's repo-root resolution is structurally wrong in the deployed Lambda; data/synthetic/ is never packaged and the path arithmetic doesn't work even if it were. Confirmed breaking claims_server.py; likely also contact_server.py/policy_server.py (shared import, not individually re-verified). Tracked as OI4. Not fixed this pass.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA=, re-verified 2026-08-16. D87 is out of C1's scope (escalation recall only) and does not affect this status.
+Blocked on: Marco's direction on D87 — which fix approach, and whether B1's panel-liveness proof (claim (b)) is re-attempted via a different trigger or deferred until D87 is fixed.
+Last apply + gate result: both applies confirmed. Live-invoke cost: real, below the $0.0007 estimate (OUTPUT-side guardrail call never reached) — ≈$0.0004.
+```
+
+## 29. `D87` — the headline finding of Phase 11: real ordinary-intent fulfillment has been broken in the
+deployed system since before this phase began, and every existing gate was structurally blind to it
+
+Marco named this the headline finding of the phase, not a line item under Stage B1. Written up here as
+that, with `§28`'s raw evidence and self-review as its backing, not repeated.
+
+### The finding, stated at full size
+
+**Real fulfillment for the ordinary intents this system exists to serve has been broken in the deployed
+Lambda, and it survived Phase 9's test pyramid, Phase 10's green CI gate, and every `C1` verification run
+this project has ever recorded — because none of them ever asked the deployed artifact to actually do the
+thing a caller calls for.**
+
+`mcp/_paths.py` resolves `data/synthetic/`'s location by climbing a fixed number of parent directories
+from its own `__file__`. That arithmetic is right for exactly one layout — a full local checkout, where
+`src/` sits inside the repo root it was written to find — and wrong for the only other layout that matters,
+the deployed Lambda, where `src/` **is** the zip root and `data/` was never packaged into it at all.
+Confirmed this pass, live, against the real deployed artifact, for two of the three affected modules:
+
+| Module | Intent(s) it backs | Verdict | Evidence |
+|---|---|---|---|
+| `claims_server.py` | `CheckClaimStatus`, `RentalTowingEntitlement`, part of `FileAutoClaim` | **CONFIRMED BROKEN** | `FileNotFoundError: /var/data/synthetic/claims/claims.json`, real invoke, `§28` |
+| `contact_server.py` | `UpdateContactInfo` | **CONFIRMED BROKEN** | `FileNotFoundError: /var/data/synthetic/policyholders/policyholders.json`, real invoke, all four slots pre-filled (`policy_number`/`field`/`new_value`/`confirm_update_contact_info`), this entry |
+| `policy_server.py` | `CoverageQuestion`'s optional election-fact branch | **UNREACHABLE BY THIS TEST** | see below — not confirmed broken, not confirmed working |
+
+`policy_server.py`'s only call site (`coverage_question.py`) is gated behind `state["coverage_question_type"]
+== "election_fact_optional"`, a real router classification, not a slot this script's event can set
+directly. The one real attempt made this entry (`scripts/verify_d87_scope.py`, "what accident benefits
+elections do I have on my policy", real policy number `PY4821`) never reached that gate at all: the node's
+own `search()` call returned zero retrieval results first, so the response was the fixed abstention line
+("I don't have that in your policy...") from an earlier branch. **Not retried with a different prompt to
+force a particular classification** — selecting a path until one lands on the answer being tested for is
+the same defect shape this project has been correcting elsewhere, one level removed. `policy_server.py`
+imports the identical `POLICYHOLDERS_PATH` object `contact_server.py` just crashed on, so the structural
+argument for it being equally broken is strong — but it is an inference from a shared constant, not a live
+confirmation, and is reported at exactly that strength, no stronger. (Aside, not investigated further this
+pass: a real retrieval call returning zero results for a plausible, in-scope policy question is its own
+separate, unstudied signal about the knowledge base path — named so it isn't lost, not chased down here.)
+
+**Stated precisely, because it matters for how "unreachable" is read: `policy_server.py`'s status is
+unresolved because one failure mode masked another, not because the code path is safe.** Retrieval
+returning zero results aborted the turn before the `election_fact_optional` branch ever ran — that is why
+this attempt found no crash, not evidence there is nothing to crash into. `policy_server.py` imports the
+exact same `POLICYHOLDERS_PATH` object that just crashed `contact_server.py` under `.read_text()`. **If
+retrieval ever returns results for this question shape — a knowledge-base content gap closing, a
+different phrasing, a different embedding — the identical crash surfaces the next real turn that reaches
+it.** This is a **latent** defect, not an absent one, and the open-items table (`OI4`) should be read that
+way: "unreachable by this test" describes the test's reach this pass, not a clean bill of health for the
+module.
+
+**Scope, summarized honestly**: at least 3 of the 5 ordinary intents' real fulfillment (`CheckClaimStatus`,
+`RentalTowingEntitlement`, `UpdateContactInfo`) is confirmed broken; `FileAutoClaim`'s policy/vehicle
+validation shares `claims_server.py` and is confirmed broken by the same evidence; `CoverageQuestion`'s
+mandatory (non-optional) path does not touch `policy_server.py` and is unaffected — only its optional
+election-fact enrichment is in question, and that one module's status remains genuinely unresolved rather
+than assumed either way.
+
+### The transferable lesson — why this survived every existing gate, not just that it did
+
+This is the part meant for Phase 12 and 13, not just this phase's own record. **No test in this project's
+suite — unit, `make verify-lambda-execution`, or the `C1` composed-pipeline harness — has ever filled an
+identifier slot deep enough to reach a real data-backed fulfillment call against the *deployed* artifact.**
+Three independent reasons converged on the same blind spot, not one:
+
+1. **Unit tests mock the boundary they'd need to catch this at.** `claims_server.py`/`contact_server.py`/
+   `policy_server.py`'s own test suite (wherever it exists) exercises the pure Python functions directly,
+   in-process, where `_paths.py`'s arithmetic is correct (local dev). A mock or an in-process call can
+   never see a packaging-path mismatch that only exists in a different deployment topology.
+2. **`make verify-lambda-execution`'s own event matrix tests first-turn `ElicitSlot` only** — by design,
+   per its own docstring, to "minimise live-router classification variance." Every one of its 9 events
+   either never fills the identifier slot (the 5 ordinary intents) or bypasses the graph entirely
+   (pre-graph L1/L3/`D79`). None of the 9 was ever going to reach `_load_claims()`.
+3. **`C1` (`measure_composed_pipeline_deployed.py`) is scoped to escalation recall on purpose** — 26
+   must-escalate items, 17 must-not-escalate items, none of which is a real claim-number lookup, a
+   real contact update, or a real coverage answer. A perfect `C1` score has never been evidence that
+   ordinary fulfillment works, and this entry is the first time that gap was cashed out as a real,
+   concrete broken thing rather than a theoretical scope note.
+
+**The generalisable finding is not "there was a path bug."** It is: **a test suite can be green at every
+layer — unit, deploy-gate, and the one safety-critical recall metric this project treats as
+non-negotiable — while the feature the whole system exists to deliver has never once been exercised
+end-to-end against the artifact that actually runs.** `C1`'s own non-negotiability (`REVIEW-CRITERIA.md`
+§1.8) is correct and should not change — but its scope was never "the system works," only "escalation
+recall holds," and nothing else in this project's gates ever closed that remaining gap. Phase 12/13
+should read this as the argument for at least one deployed-artifact, slot-filled, happy-path invoke per
+ordinary intent as a standing gate — not a one-off proof, the way this pass's two scripts were.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, and it is exactly what happened for `policy_server.py` — the same
+   method that confirmed `contact_server.py` broken returned a genuinely inconclusive result for the
+   third module, reported as such rather than rounded up to match the other two.
+2. *Asserted-but-unchecked?* The `policy_server.py` "likely broken" claim is now explicitly qualified as
+   an inference from a shared constant, downgraded from last entry's "likely-affected by shared import"
+   only in that it is now paired with direct evidence that the *identical* constant crashes a different
+   caller — a stronger inference, still labeled as an inference, not a live result.
+3. *Infra error scored as a result?* This whole section is the opposite case: a real defect, kept as its
+   own named finding rather than absorbed into "claim (b) blocked."
+4. *Cost below estimate?* Combined ~$0.0009 for both scope-resolution invokes, in line with the ~$0.001
+   estimate — no surprise this entry.
+5. *Identical markers, different paths?* `claims_server.py` and `contact_server.py` crash via different
+   call chains (`check_claim_status`/`get_claim_status`/`_load_claims` vs.
+   `update_contact_info_node`/`update_contact_info`/`_get_store`) but the same root cause and the same
+   exception type — named as the same defect, not two.
+6. *Has this check ever failed for the right reason?* Yes, twice more this entry — the `contact_server.py`
+   invoke found a real crash, and the `policy_server.py` invoke correctly reported "did not reach the
+   gate" rather than a false confirmation either way.
+7. *Headline-number interpretation change?* This section exists because the answer is yes, project-wide,
+   not just for one metric.
+8. `C1` a tradeable term? No, and stated for the third time across this phase's entries so it does not
+   drift: `C1`'s scope is escalation recall, `D87` is outside it, and neither status is read as covering
+   the other.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — D87 scope resolved. contact_server.py CONFIRMED BROKEN (matches claims_server.py). policy_server.py UNREACHABLE BY THIS TEST (retrieval abstention, gate never reached; not retried to force an answer). Written up as the phase's headline finding, not a Stage B1 line item.
+Open defects: D87 (OI4) — scope now: 2 of 3 modules confirmed broken by live evidence, 1 module's status genuinely unresolved. Not fixed this pass, per instruction.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA=. Stated precisely: C1 measures escalation recall, not system function — it is 1.000 on a build where most ordinary intents' real fulfillment is confirmed broken. Both true, neither substitutes for the other.
+Blocked on: Marco's review of the fix-options proposal (separate, not yet written) for D87. Claim (b) stays OPEN, not retried via a different trigger, per instruction.
+Last apply + gate result: no apply this entry. 2 real lambda:Invoke calls for scope resolution, ≈$0.0009 combined.
+```
+
+## 30. `D87` fix-options proposal — not applied, decision Marco's
+
+### Why "package `data/` into the zip" is not as simple as it sounds — worked out precisely, not assumed
+
+Last entry's third named option was "package `data/` into the zip." Worked through the actual path
+arithmetic before writing this proposal, because getting it wrong here would be exactly the kind of
+untested "should work" reasoning this project exists to catch:
+
+- Local dev: `_paths.py` sits at `<repo_root>/src/fnol_voice_agent/mcp/_paths.py`. `parents[3]` climbs
+  `mcp` → `fnol_voice_agent` → `src` → `<repo_root>`. Correct, because `data/synthetic/` sits at
+  `<repo_root>/data/synthetic`.
+- Deployed Lambda, today's packaging: `data.archive_file.codehook`'s `source_dir = src/` strips the
+  `src/` prefix, so `_paths.py` sits at `/var/task/fnol_voice_agent/mcp/_paths.py` — **one directory
+  level shallower** than local dev. `parents[3]` from there lands at `/var`, not `/var/task`.
+- **`/var` is Lambda's own runtime filesystem root, not writable or extendable by a deployment
+  package.** There is no way to place a file at `/var/data/synthetic/...` by zipping anything —
+  confirmed, not assumed, by what the runtime actually is, not by trial and error against a live
+  function. So "just add `data/` to the zip" **cannot work while `_paths.py`'s current formula and
+  today's `source_dir = src/` both stay as they are** — at least one of the two has to change, not
+  neither.
+
+This changes the shape of the option set below: there is no zero-code, packaging-only fix. Every real
+option either changes `_paths.py`'s resolution logic, or changes what gets zipped and how (which,
+worked through the same way, turns out to have its own real risk — see Option B).
+
+### The options
+
+| | **A. Move `data/` under `src/`, resolve relative to `_paths.py`'s own location** (recommended) | **B. Restructure the zip to preserve the `src/` prefix, keep `_paths.py` unchanged** | **C. Move the three corpora to S3 or DynamoDB** | **D. `_paths.py` reads an env var, Lambda sets it via Terraform** |
+|---|---|---|---|---|
+| **What changes** | `git mv data/synthetic src/fnol_voice_agent/data/synthetic` (or a sibling location under `src/`); `_paths.py` rewritten to `DATA_DIR = Path(__file__).parent.parent / "data"` — two fixed levels from `_paths.py` to the package root, never climbing to an assumed "repo root." No Terraform change: `source_dir = src/` already captures everything under `src/`, so the moved data is packaged automatically | `source_dir` changed (or a staging step added, mirroring the existing `deps_root`/`deps_dir` pattern in `lambda.tf`) so the zip preserves one more directory level — `/var/task/src/fnol_voice_agent/...` instead of today's `/var/task/fnol_voice_agent/...` — and `data/` ships as a sibling of `src/` inside the same zip. `_paths.py`'s `parents[3]` then lands on `/var/task` correctly, unchanged code | New S3 bucket or a new/extended DynamoDB table (mirrors `DynamoVectorStore`'s existing pattern for the knowledge base); the three JSON corpora uploaded once; `claims_server.py`/`contact_server.py`/`policy_server.py` rewritten to read from the store instead of a local file, each needing a mockable client (same `Protocol`-based shape `GuardrailClient`/`DynamoVectorStore` already use in this codebase) | `_paths.py`'s `DATA_DIR` reads `os.environ.get("FNOL_DATA_DIR")`, falling back to today's (or Option A's) computed default when unset; Lambda's `environment.variables` sets it explicitly, matching this project's own established `settings.py` pattern (`us.*` literal, env-var override) |
+| **Build effort** | Small and contained: one code file, one directory move, a sweep of the handful of places that reference `data/synthetic`'s old path (tests, `scripts/validate_synthetic_records.py`, docs) | Similar-to-larger: touches `lambda.tf`'s packaging logic, and **risks cascading changes** — the Lambda `handler` setting, anything that assumes `fnol_voice_agent` is importable as a top-level package (test imports, the deps layer's own `sys.path` assumptions), potentially breaking things this proposal has not fully enumerated | Largest: new resource, new IAM policy, a data-migration step, a rewrite across three modules each needing a real client **and** a local/offline fallback (`CLAUDE.md`'s "everything runs locally without AWS" constraint doesn't go away just because the deployed path changed) | Small: one code change (env-var read + fallback), one Terraform env var — but **not a standalone fix**, see below |
+| **Needs a `stacks/main` redeploy → `C1` cycle?** | Yes — `src/` content changes, new `source_code_hash`. Now a known cost, not an estimate: **~1m41s, ~$0.10** (this session's own measured figures) | Yes, same cost — plus the redeploy itself is riskier here (see build effort) | Yes for the code change, **plus** a separately cost-gated `terraform apply` for the new resource (real $ is ~$0, but it's still a new provisioned resource requiring the standard cost-table-before-apply ritual, `APPROVED: <phase name>`) | Only if paired with a real data location (it doesn't ship any data itself) — see below |
+| **What it does NOT fix** | Bundling static JSON into the deployed code package doesn't scale to real production data volumes — a deliberate, named limitation for a small synthetic demo corpus, not a defect at this project's stated scale. Does not touch the separate, already-labeled Phase 5/8 limitation that writes (`file_new_claim`'s `_filed_claims`, `contact_server`'s in-memory store) don't persist across invocations — that gap predates `D87` and this fix doesn't claim to close it | Achieves the same "no environment branching" property as A, for materially higher execution risk and a wider, less-enumerated blast radius. **Not recommended over A for that reason, not because the underlying idea is wrong** | Most "production-shaped," but **worked through honestly rather than assumed complete**: to keep local/offline dev working without AWS, the real client still needs a local-file fallback, so the finished code likely ends up with two paths (real store + local mock) regardless — the same environment-branching shape Option D has on its own, just wrapped around a heavier backing store. Does not eliminate branching, it relocates it | **Incomplete alone** — the data still has to physically exist somewhere the env var can point to. This is a configuration layer, not a location; it wraps A, B, or C, it does not replace any of them |
+| **Fixes the symptom or the class?** | **The class.** The resolution logic never depends on being told which environment it's in — same code, same fixed relative offset, correct anywhere the package ships intact | The class, in principle — but the higher-risk execution path makes it a worse way to buy the same property A already buys more cheaply | The class, for *where data lives* — but reintroduces environment-conditional code at the client-selection layer, so it does not fully escape the shape `D87` is an instance of | **Neither, by itself.** An explicit env var that must be set correctly per-environment is exactly the "hardcode a different constant for a second environment" pattern this proposal is checking against — legitimate as a configuration mechanism, not as a fix for where the data actually is |
+
+### Recommendation: **A**, optionally with **D** layered on top as a future override, not required now
+
+Option A is the only one on this list that removes the environment-dependence entirely rather than
+relocating or configuring around it, at the lowest build cost and the smallest blast radius. It also
+matches ordinary Python packaging convention (data shipped inside the package it belongs to) rather than
+inventing a project-specific mechanism. **D adds real value later** — if this project ever needs to point
+at a different data source without a redeploy (e.g., a staging vs. demo corpus) — but it is not required
+to close `D87`, and building it now without a second real location to point at would be speculative
+generality this project's own discipline argues against. **C is the right call only if this system ever
+needs real persistence** (a live write that survives a cold start) — that need already exists independently
+of `D87` (`file_new_claim`'s in-memory store) and deserves its own scoped decision, not a ride-along on this
+fix. **B is not recommended**: it buys nothing A doesn't already buy, for a real increase in risk.
+
+### The test that stops the next one — and where it belongs
+
+**The fix is worth less than the test that stops the next one**, per Marco's framing, taken at face value:
+a code fix without a regression test recreates the exact blind spot for the next environment-dependent path,
+just with different file names. Split in two, deliberately, not bundled as one item:
+
+1. **Ships WITH the `D87` fix, scoped to what the fix touches**: extend `verify_lambda_execution.py`'s
+   existing `CheckClaimStatus` and `UpdateContactInfo` events (today: `ElicitSlot`-only) with two more
+   events per intent — an identifier slot pre-filled, asserting real fulfillment succeeds against the
+   deployed artifact rather than crashing. Small, targeted, proves the specific fix works, the same
+   discipline `verify_log_redaction.py`'s positive control already established this phase (prove the
+   fix against real input, not just that it compiles).
+2. **Does NOT belong bundled with the fix — filed as `CF8`, carried forward**: the generalized version —
+   a permanent, named `make verify-*` gate that exercises **every** ordinary intent's real, deployed,
+   slot-filled happy path (not just the two `D87` touched), run at minimum on every `stacks/main` deploy.
+   This is standing test infrastructure, not a `D87`-sized patch, and this project has no phase in its
+   current roadmap whose charter is "expand testing infra" — Phase 12 is final assembly (README, demo
+   script, model/data cards), Phase 13's scope is not yet fully named. Filed as `CF8` rather than forced
+   into either, per this project's own established pattern (`CF1`→Phase 12, `Q13`→Phase 13) for exactly
+   this situation: a real, findable, un-scheduled item, not a promise attached to a phase that doesn't fit
+   it.
+
+**The transferable version of this split, stated once more because it is the actual lesson**: a scoped
+regression test proves a fix; only a standing, generalized gate prevents the *next* instance of the same
+blind spot. `D87`'s own fix should ship with the former. This project should not consider the underlying
+risk closed until the latter exists too.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, directly: "package `data/` into the zip" was the working assumption
+   entering this proposal and the path arithmetic, worked through explicitly, showed it doesn't work
+   as stated — this section exists because the check found the opposite of what was expected going in.
+2. *Asserted-but-unchecked?* Option B's risk list ("cascading changes... this proposal has not fully
+   enumerated") is stated as incomplete, not padded out to look more rigorous than it is.
+3. *Infra error scored as a result?* N/A — no apply, no invoke this entry, analysis and a written
+   proposal only.
+4. *Cost below estimate?* N/A — nothing spent this entry.
+5. *Identical markers, different paths?* Named directly: Options B and C both claim to "fix the class" and
+   both, on inspection, reintroduce environment-conditional code somewhere else in the system — a real
+   distinction from Option A that a shallower pass could have missed.
+6. *Has this check ever failed for the right reason?* The path-arithmetic check on "package data/ into
+   the zip" is exactly this: a real chance the naive option would have worked, and it didn't, for a
+   specific, stated, checkable reason (Lambda's `/var` is not writable via a deployment package).
+7. *Headline-number interpretation change?* No new number this entry.
+8. `C1` a tradeable term? Not touched — no redeploy, no re-verification this entry. Every option above
+   states plainly that it will need one when built.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — D87 fix-options proposal written (RESULTS.md §30). Not applied. Recommendation: Option A (move data/ under src/, resolve relative to _paths.py), CF8 filed for the generalized standing-gate test.
+Open defects: D87 (OI4) unchanged — proposal only, no fix applied this entry.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA= — unchanged, no apply this entry.
+Blocked on: Marco's decision among the four options (or a different one), and separately, approval to build the scoped regression test alongside whichever fix is chosen.
+Last apply + gate result: none this entry — analysis and a written proposal, $0.
+```
+
+## 31. Option A approved — red-green, in that order: the scoped regression test built and run RED first,
+Option A applied, both re-verified locally, `terraform plan` reviewed, not applied — Marco's go pending
+
+Marco approved Option A and set the sequence explicitly: build the scoped test first, confirm it fails
+against the current build (not a test that has only ever passed), then apply the fix, then re-confirm the
+same test green — never collapsed into one step. Followed in that order below.
+
+### 1. The scoped regression test, built and run RED
+
+Extended `verify_lambda_execution.py` — the permanent deploy-time gate, not a one-off script — with two new
+events (10-11 of what is now 11), per the module docstring's new section: `CheckClaimStatus` with
+`claim_number` pre-filled (the real corpus claim `CLM-2608-00042-4`), and `UpdateContactInfo` with all four
+slots (`policy_number`/`field`/`new_value`/`confirm_update_contact_info`) pre-filled — both skip every
+`ElicitSlot` turn and reach real fulfillment on turn one, which is exactly the code path none of the
+original nine events ever touched. Two new check functions assert the POST-FIX shape precisely: `Close`,
+`intent.state=Fulfilled`, the real template text, and — for `CheckClaimStatus` — the real claim number
+ABSENT from the spoken message (masked by the OUTPUT guardrail, live-verified since Stage 8), not merely
+"some non-empty string."
+
+Also corrected in the same pass, found while touching this file: `_ESTIMATED_COST_USD` was a **hardcoded
+module constant** (`_ESTIMATED_GUARDRAIL_CALLS = 6`) computed once and never revisited — adding two more
+Bedrock-reaching events would have made it silently under-report cost with no signal that it had gone
+stale. Replaced with a value `main()` derives from the real matrix every run. Named here rather than folded
+in silently, same discipline as every other "found while touching this" correction this project records.
+
+Ran against the **currently deployed, pre-fix** build (`make verify-lambda-execution`):
+
+```
+=== verify-lambda-execution: fnol-codehook, 11 events ===
+    estimated cost: 8 events reach Bedrock (guardrail+router) at roughly $0.000300/event -> ~$0.0024 total
+  ok   FileAutoClaim first turn
+  ok   CheckClaimStatus first turn
+  ok   CoverageQuestion first turn
+  ok   RentalTowingEntitlement first turn
+  ok   UpdateContactInfo first turn
+  ok   FallbackIntent (unclassifiable turn)
+  ok   Raw-text L1 trigger (pre-graph, injury)
+  ok   Raw-text L3 trigger (pre-graph, agent override, D74)
+  ok   injuries_present confirmed True, no injury vocabulary (D79)
+  FAIL CheckClaimStatus fulfilled, identifier slot pre-filled (D87 regression): expected Close (real fulfillment), got dialogAction={'type': 'Delegate'}
+  FAIL UpdateContactInfo fulfilled, all four slots pre-filled (D87 regression): expected Close (real fulfillment), got dialogAction={'type': 'Delegate'}
+
+=== verify-lambda-execution FAILED: 2/11 event(s) ===
+```
+
+**RED, exactly as predicted, exactly the `D87` signature** (fail-open `Delegate`, no message — `handler()`'s
+own swallow of the `FileNotFoundError`), and the nine pre-existing events all still `ok` — the new events
+did not perturb anything they don't touch. This is the "has only ever been observed passing proves nothing"
+bar Marco named, cleared: this test is now known to fail for the right reason before it is ever trusted to
+pass for the right one.
+
+### 2. Option A applied, locally
+
+`git mv data/synthetic/{policyholders,claims,vehicles} src/fnol_voice_agent/data/synthetic/` — **not** the
+whole `data/synthetic/` tree. `data/synthetic/policy/` (the RAG corpus) and `.ingest-manifest.json` stayed
+at the repo root: grep-verified before moving anything, `mcp/_paths.py` never defines a `POLICY_PATH` at
+all, and the RAG corpus is read only by local, CWD-relative tooling (`knowledge/ingest.py`,
+`scripts/measure_*.py`, `redteam/run.py`) that never runs inside the deployed Lambda — moving it would
+have widened the blast radius for zero benefit to `D87`. **This deviates from §30's own build-effort
+description**, which characterized Option A as "one directory move" without distinguishing the three
+JSON-bearing subdirectories from the corpus — stated plainly rather than left to stand, per this project's
+own rule about not letting an earlier characterization go uncorrected once the actual arithmetic is in hand.
+
+`mcp/_paths.py` rewritten: `PACKAGE_ROOT = Path(__file__).resolve().parent.parent` (two fixed levels —
+`mcp/` → `fnol_voice_agent/`, this package's own root), `DATA_DIR = PACKAGE_ROOT / "data" / "synthetic"`.
+Identical arithmetic locally (`<repo_root>/src/fnol_voice_agent/`) and in the deployed Lambda
+(`/var/task/fnol_voice_agent/`) by construction — both environments agree on where `_paths.py` sits
+relative to its OWN package, even though they disagree on where the package sits relative to anything
+above it. No environment branching anywhere in the fix.
+
+Swept for every other place that constructed `data/synthetic`'s OLD, repo-root-relative location for the
+three moved files specifically (grep-verified, not assumed complete): four unit test files
+(`test_identifiers.py`, `test_coverage.py`, `test_pii_redaction.py`, `test_models.py`) and
+`scripts/validate_synthetic_records.py`, all updated to
+`.../src/fnol_voice_agent/data/synthetic`. Every other `data/synthetic/policy`-referencing site (10+ files:
+`knowledge/ingest.py`, `scripts/measure_cf5_redundancy.py`, `scripts/measure_bias_pairs.py`,
+`scripts/measure_authority_check.py`, `tests/unit/test_graph_integration.py`,
+`tests/unit/test_retrieve.py`, several docs) needed **no change** — none of them ever pointed at the three
+files that moved.
+
+### 3. Both re-verified locally, real reads, zero mocks
+
+`make test`: **656/656 passing** (up from 656 before this entry — no test count regression, the four edited
+files still exercise the same assertions against the new path). `ruff check` and `mypy --strict` on every
+touched file: clean. `scripts/validate_synthetic_records.py`, standalone: `All checks passed: 8 claims, 7
+vehicles, 6 policyholders`.
+
+None of that alone proves the FIX works, though — `tests/unit/test_mcp_claims_server.py` (grep-checked)
+monkeypatches `_load_claims` directly, never exercising `_paths.py`'s real resolution at all. That mocking
+pattern is exactly the reason `D87` existed undetected through Phase 9's pyramid in the first place, so
+relying on it again here to certify the fix would be the same defect shape one level down. Instead, ran the
+three real domain functions **directly, in-process, zero mocks**, the same real corpus identifiers used
+throughout this investigation:
+
+```
+POLICYHOLDERS_PATH exists: .../src/fnol_voice_agent/data/synthetic/policyholders/policyholders.json True
+CLAIMS_PATH exists:        .../src/fnol_voice_agent/data/synthetic/claims/claims.json True
+VEHICLES_PATH exists:      .../src/fnol_voice_agent/data/synthetic/vehicles/vehicles.json True
+
+claims_server.get_claim_status('CLM-2608-00042-4', None)  -> CLM-2608-00042-4 RepairInProgress
+contact_server.update_contact_info('PY4821', phone, '555-0199') -> phone 555-0199
+policy_server.get_policyholder_elections('PY4821')        -> PY4821
+```
+
+The third line directly answers Marco's "confirm rather than assume" instruction on `policy_server.py`:
+`RESULTS.md` §29's "latent, not absent" finding held that `policy_server.py`'s crash was masked, not fixed,
+by the router never reaching its gated branch during scope resolution — it imports the identical
+`POLICYHOLDERS_PATH` object `contact_server.py` crashed on. **Confirmed, not assumed: the same real function
+call that was never reachable in the scope-resolution attempt now succeeds directly, with zero mocking,
+against the fixed path.** The latent defect is moot as of this fix — verified, not inferred from the shared
+import.
+
+Re-ran the extended `verify_lambda_execution.py` matrix — **this only re-exercises the wire-shape/response
+logic, not the real deployed Lambda** (that requires the redeploy Marco has not yet approved), so its two
+new events still show pre-fix `Delegate` results when pointed at the still-live `Wf84ZeuA...` build. Real
+GREEN on events 10-11 is a post-apply claim, not claimed here — see step 5 of Marco's sequence, pending his
+go.
+
+### 4. Zip size delta, and the deps-layer collision check
+
+Real, Terraform-computed (Go `archive/zip`, not a Python approximation) — confirmed by SHA256 against the
+plan's own predicted `source_code_hash`:
+
+| | Bytes | Notes |
+|---|---|---|
+| **New `codehook` zip, on disk, hash-confirmed** | **149,825 bytes (~146.3 KB)**, 69 files | SHA256 `8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=` — matches `terraform plan`'s predicted `source_code_hash` for `aws_lambda_function.codehook` exactly; this is the real artifact, not an estimate |
+| **Self-consistent delta** (same tool, Python `zipfile`, both sides, `__pycache__`/`.pyc` excluded to match `lambda.tf`'s own `excludes`) | **+7,539 bytes (~7.4 KB)** | Cross-tool (Go vs. Python) absolute byte counts differ by compression-implementation noise (~0.7%, confirmed by comparing the same post-fix tree both ways) — this delta compares Python-built BEFORE and AFTER trees to each other, not to the Go-built absolute number, so that noise cancels out |
+| Raw (uncompressed) bytes added | 21,625 bytes (three JSON files) + `_paths.py`'s docstring growth | JSON compresses well under DEFLATE, which is why the compressed delta (~7.4 KB) is well under half the raw addition |
+
+**Well under any Lambda packaging limit** — 149,825 bytes is 0.3% of the 50 MB direct-upload cap this
+function already uses via `filename` (not S3), and the delta itself is 0.015% of that cap.
+
+**No collision with the deps-layer artifact, confirmed not assumed**: `data.archive_file.codehook_deps`
+(the 43.8 MB, S3-uploaded dependency layer, `D80`/`D81`'s own artifact) has a completely separate
+`source_dir` (`local.deps_root`, vendored wheels — nothing under `src/`) and a separate `output_path`. The
+`terraform plan` below shows zero changes to `aws_lambda_layer_version.codehook_deps` or its own archive —
+this fix touches only `data.archive_file.codehook`, the small, directly-uploaded code zip, never the layer.
+
+### 5. Cost table (`CLAUDE.md`'s COST GATE format)
+
+No NEW resource, no new SKU — this is a code update to an EXISTING, already-provisioned, already-approved
+Lambda function (`aws_lambda_function.codehook`, in scope since Phase 8). Table covers the redeploy itself
+plus the real verification spend Marco's sequence requires immediately after it:
+
+| Action | SKU/tier | Free-tier coverage | Estimated cost this run | Cost if never cleaned up |
+|---|---|---|---|---|
+| `stacks/main` apply (code update only, 0 add/2 change) | Existing Lambda, existing S3 object — `PutFunctionCode`/`PutObject` API calls | Always-free at this call volume | **$0.00** (control-plane calls, not usage-billed) | $0.00 — nothing new to leave running; the function already exists and is already billed only per-invocation |
+| `make verify-lambda-execution` (11 events, 8 reach Bedrock) | `ApplyGuardrail` (regex+content filters) + Nova Micro router, on-demand | Within the $5 Phase 3-7 standing approval's spirit; flagged (unchanged from this script's own docstring) as a phase-range question not re-litigated here | **~$0.0024** | N/A — one-shot verification calls, nothing left running |
+| Full `C1` harness re-run (26×k3 must-escalate + 17 negatives) | Lex `RecognizeText` + Bedrock guardrail/router, on-demand | Same standing approval | **~$0.0977** (measured exactly, last real cycle this session) | N/A — one-shot |
+| **Total, this redeploy + full re-verification cycle** | | | **~$0.10** | **$0.00** |
+
+Matches the ~1m41s/~$0.10 figure Marco already had in hand from the prior cycle — no surprise, no new
+resource class, nothing that changes the monthly ceiling math.
+
+### 6. `terraform plan`, reviewed, not applied
+
+Ran (read-only; `terraform apply`/`import`/`state` remain hard-denied to me) against `stacks/main`:
+
+```
+# aws_lambda_function.codehook will be updated in-place
+  ~ source_code_hash = "Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA=" -> "8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4="
+  ~ last_modified    = "2026-08-16T02:44:41.000+0000" -> (known after apply)
+
+# aws_s3_object.codehook_deps_layer will be updated in-place
+  ~ etag = "ce01dfbd51734440760daaf4200588f5-9" -> "73deb4753ca856a7cc60270092e4be96"
+
+Plan: 0 to add, 2 to change, 0 to destroy.
+```
+
+**One real change** (the code hash — the fix itself), **one pre-existing, already-filed phantom** (`OI3`,
+the multipart-ETag/plain-MD5 structural mismatch on the deps layer, unchanged from every prior plan this
+session, confirmed again by diffing against `stagec_redeploy.tfplan`'s own before/after pair). No new,
+unexplained diff. Saved to
+`/private/tmp/.../scratchpad/d87_option_a.tfplan` for Marco's `terraform apply "<path>"` when he gives the
+go — same pattern as every prior apply this session.
+
+### `CF8`'s disposition — strengthened, per Marco's instruction
+
+**Proposed: a Phase 12 entry condition, not filed-and-unscheduled a third time.** Reasoning: `CF7` sitting
+unscheduled since Phase 10's close, still unscheduled now, is itself the evidence that "findable" alone
+does not reliably get built — Marco's own framing. `CF8` is qualitatively different from `CF7` in a way
+that argues against repeating the same disposition: it is the generalized version of the exact test class
+whose absence let a defect through that broke real fulfillment for 4 of 5 ordinary intents, undetected
+through an entire green CI gate. Phase 12 is this project's "final assembly" phase (README, demo script,
+model/data cards) — work whose whole premise is that the system underneath is done and correct. Entering
+Phase 12 without `CF8` built and green would mean assembling final deliverables on top of exactly the kind
+of unverified foundation `D87` just demonstrated is possible **twice** (once for the two intents this
+entry's scoped test now covers, and silently for `FileAutoClaim`/`RentalTowingEntitlement`, which share
+`claims_server.py` and are therefore equally exposed to any FUTURE regression in this same class, not just
+this one already-found one). Making it an entry condition rather than an exit criterion of Phase 12 itself
+means Phase 12 cannot silently inherit the gap the way Phase 10's green gate silently inherited `D87`.
+
+Not proposing Phase 13 or a named deferral: Phase 13 is not yet scoped at all, so filing there is
+indistinguishable from unscheduled; and a deferral needs a reason stronger than "not yet phased," which
+this finding does not support — the whole point of `D87` is that the risk is live now, in the currently
+deployed artifact, not a future-phase concern.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, twice over: the red run could have shown 0 failures (meaning the new
+   events were constructed wrong, not that `D87` was real) — it showed exactly 2, exactly the predicted
+   signature. And the zip-delta measurement could have shown a collision with the 50 MB cap or the deps
+   layer — it showed neither, confirmed by real numbers, not assumed from the small raw byte count alone.
+2. *Asserted-but-unchecked?* Corrected one directly: §30's "one directory move" characterization is stated
+   here as narrower in practice than it read — three subdirectories moved, not all of `data/synthetic/`.
+3. *Infra error scored as a result?* N/A this entry — no apply; the red run's 2/11 failures are the real,
+   predicted `D87` signature, not an infra fluke (matches the exact `dialogAction={'type': 'Delegate'}`
+   shape `RESULTS.md` §28/§29 already established, not a new or different failure mode).
+4. *Cost below estimate?* The verify-lambda-execution run against the pre-fix build cost the same ~$0.0024
+   as estimated (8 Bedrock-reaching events, unchanged by the fix itself, which lives entirely below the
+   Bedrock calls in the dispatch chain).
+5. *Identical markers, different paths?* Explicitly checked: `policy_server.py`'s real success (`PY4821`,
+   no exception) and `contact_server.py`/`claims_server.py`'s real success are three SEPARATE direct calls,
+   not one shared marker standing in for all three — matches this project's own repeated rule about not
+   collapsing distinct claims into one pass/fail.
+6. *Has this check ever failed for the right reason?* Yes — this section's whole point: the new test failed
+   red, for the exact `D87` reason, before it was ever asked to pass.
+7. *Headline-number interpretation change?* None new this entry — `D87`'s scope (4 of 5 intents) is
+   unchanged; this entry is the fix and its local verification, not a rescoping.
+8. `C1` a tradeable term? Not touched — no redeploy applied this entry, `C1` remains VERIFIED at
+   `Wf84ZeuA...`, unrelated to this fix until Marco applies it.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — D87 Option A built and locally verified. Scoped regression test (verify_lambda_execution.py events 10-11) run RED against the current build first, confirmed the exact D87 signature. Fix applied on disk, re-verified locally with zero mocks (claims_server/contact_server/policy_server all real calls succeed against the new path) and against the full 656-test suite. terraform plan reviewed (0 add/2 change: 1 real hash change + the pre-existing OI3 phantom, unchanged). CF8 proposed as a Phase 12 entry condition, not a third unscheduled CF.
+Open defects: D87 (OI4) — fix built, not yet deployed. Local verification passing; deployed-artifact GREEN is a post-apply claim, not made here.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build Wf84ZeuAj2ZGGxhiSIHm/NF7qfF97hhwb3mT+Bo5+RA= — unchanged, no apply this entry.
+Blocked on: Marco's go to apply the saved plan. Then, per his own sequence: C1 to PENDING RE-VERIFICATION with live CodeSha256 confirmed, verify-lambda-execution, full C1 harness, then re-run events 10-11 and report red vs. green side by side.
+Last apply + gate result: none this entry — local build, local verification, and a reviewed (not applied) terraform plan. Real spend this entry: $0.0024 (the pre-fix verify-lambda-execution red run) + $0.00 (everything else, local).
+```
+
+## 32. Apply confirmed, `D87` fixed and verified from the DEPLOYED runtime — `C1` restored VERIFIED,
+`D87`/`OI4` CLOSED, and a new, separate finding (`D88`) surfaced by the same run — claim (b) unaffected,
+still OPEN
+
+Marco applied the saved plan and gave an explicit, ordered sequence. Followed in order; failures reported
+as failures, per instruction.
+
+### 1. Live `CodeSha256` confirmed from AWS, `C1` flipped to PENDING RE-VERIFICATION
+
+```
+$ aws lambda get-function-configuration --function-name fnol-codehook --region us-west-2
+CodeSha256:       8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=
+LastModified:     2026-08-16T12:22:14.000+0000
+LastUpdateStatus: Successful
+State:            Active
+```
+
+Matches `terraform plan`'s predicted hash exactly, read from AWS directly, not from the plan's own claim.
+`PROJECT_STATE.md`'s status callout and Phase status table row 8 flipped to **PENDING RE-VERIFICATION**
+before any harness ran — same discipline as every prior `C1` cycle this session.
+
+### 2. `make verify-lambda-execution`, all 11 events, against the real deployed (fixed) Lambda
+
+```
+  ok   FileAutoClaim first turn
+  ok   CheckClaimStatus first turn
+  ok   CoverageQuestion first turn
+  ok   RentalTowingEntitlement first turn
+  ok   UpdateContactInfo first turn
+  ok   FallbackIntent (unclassifiable turn)
+  ok   Raw-text L1 trigger (pre-graph, injury)
+  ok   Raw-text L3 trigger (pre-graph, agent override, D74)
+  ok   injuries_present confirmed True, no injury vocabulary (D79)
+  FAIL CheckClaimStatus fulfilled, identifier slot pre-filled (D87 regression): expected the real claim number masked by the OUTPUT guardrail, found it verbatim in message='Your claim CLM-2608-00042-4 is currently RepairInProgress.'
+  ok   UpdateContactInfo fulfilled, all four slots pre-filled (D87 regression)
+
+=== verify-lambda-execution FAILED: 1/11 event(s) ===
+```
+
+**Red vs. green, side by side, as agreed:**
+
+| Event | Pre-fix (§31) | Post-fix (this entry) |
+|---|---|---|
+| `CheckClaimStatus` fulfilled, identifier pre-filled | `FAIL` — `dialogAction={'type': 'Delegate'}`, empty message (the `D87` crash) | **`Close`/`Fulfilled` reached, real data returned** (`'Your claim CLM-2608-00042-4 is currently RepairInProgress.'`) — `D87` itself is fixed. **Ok on 3 of 4 assertions; fails the 4th** (masking — see below) |
+| `UpdateContactInfo` fulfilled, all four slots | `FAIL` — same `Delegate` signature | **`ok` — fully GREEN**, all assertions pass |
+
+**Not the clean two-for-two GREEN result expected going in — reported exactly as it ran, not rounded up.**
+`UpdateContactInfo` is fully green. `CheckClaimStatus` reached real fulfillment — `D87`'s actual defect
+(the crash, the `Delegate`, the empty message) is gone — but a SEPARATE assertion this test also checked
+(the real claim number must be masked out of the spoken message, per the OUTPUT guardrail's historical,
+live-verified behavior since Stage 8) did not hold on this real call. **This is not a `D87` regression. It
+is a new, distinct, real finding**, investigated below rather than assumed to be either a fluke or a test
+bug.
+
+### The new finding, investigated with real evidence, not guessed at — filed as `D88`
+
+Pulled the real `guardrail_usage` log lines for this exact call from CloudWatch (not inferred from the
+response alone):
+
+```json
+INPUT:  {"blocked": false, "masked": false, ..., "sensitiveInformationPolicyUnits": 0, ...}
+OUTPUT: {"blocked": false, "masked": false, ..., "sensitiveInformationPolicyUnits": 1, ...}
+```
+
+`sensitiveInformationPolicyUnits: 1` on OUTPUT confirms the sensitive-information policy WAS evaluated and
+DID match something (consistent with the project's own on-record fact that this policy is never evaluated
+on `INPUT` — confirmed again here, `0` on INPUT, `1` on OUTPUT, same pattern). But `masked: false` and
+`blocked: false` — no intervention fired. `guardrails/client.py::_parse_response` requires
+`action == "GUARDRAIL_INTERVENED"` for `masked` to ever be `True`; that top-level `action` was not
+`GUARDRAIL_INTERVENED` on this call, so the guardrail's own overall action was **`NONE`** despite a
+sensitive-information match being charged. Two live possibilities, not adjudicated here: (a) the custom
+`CLM-####-#####-#` regex entity is configured with an action other than `ANONYMIZE`/`BLOCK` (Bedrock
+guardrails support a `NONE` per-entity action — detect and charge a unit, take no action), or (b) something
+about this call's exact context differed from whatever Stage 8 actually tested. **Not resolved by
+re-trying with a different phrasing** — per the same standing instruction that kept claim (b) from being
+force-closed, a different probe that happens to trigger a mask would not explain why THIS one, matching
+Stage 8's own documented trigger shape, did not.
+
+**Filed as `D88`, not folded into `D87` or silently absorbed into a loosened test assertion.** The test's
+assertion is left exactly as written — it failed for a real, external reason (the guardrail's live
+behavior), not because the assertion itself is wrong to hold; loosening it now, on one observed call, would
+be exactly the "adjust the check to make it pass" shape this project has repeatedly corrected. `D88` is
+Marco's to scope and decide, same as `D87` was.
+
+**Directly relevant to claim (b), stated plainly, not acted on**: claim (b) (Stage B1's panel-liveness
+proof — a real, forced guardrail OUTPUT intervention) has been OPEN since §28, blocked first by `D87`'s
+crash and now unblocked by this entry's fix — but this fresh evidence shows the specific trigger Stage 8
+recorded (`CLM-####-#####-#` in OUTPUT text) does not reliably produce a real intervention on the
+CURRENTLY deployed guardrail. Per Marco's own instruction (§29): **not retried via a different trigger to
+close it.** Claim (b) stays OPEN, and this finding is the reason a retry would not be a legitimate close
+even if one happened to fire.
+
+### 3. Full `C1` harness — real 1.000 (26/26), `C1` restored VERIFIED
+
+```
+DEPLOYED composed recall 1.0 (26, 26)
+contingency items used 0
+unstable items 0
+provenance breakdown: {'detection-pregraph': 22, 'detection-graph': 65, 'fail-closed': 0, 'other-default': 0}
+false escalations on the 17 negatives: 9
+path attribution (CloudWatch, exact): L1=21 graph-path=61 matched=82
+No per-item divergence from D52's local verdicts.
+Cost: lex $0.07125 + bedrock $0.026418 = $0.097668
+```
+
+Real 1.000, 0 contingency, 0 unstable — **`C1` restored VERIFIED** against build `8Ch4kDuL...`. `9/17`
+false-escalation figure unchanged from every prior run on record — not a new finding, the same known,
+already-characterized behavior. **`C1`'s scope stated precisely, again**: this harness measures escalation
+recall only. It says nothing about `D87` (which it was never scoped to catch, and didn't) or about `D88`
+(guardrail masking on an ordinary, non-escalating turn — outside the 26-item must-escalate/17-item
+must-not-escalate population entirely).
+
+### 4. Confirmed from the DEPLOYED runtime, not in-process
+
+Step 2 above already IS the deployed-runtime confirmation — both new events ran as real `lambda:Invoke`
+calls against the live, applied Lambda, not the in-process call from §31. Additionally, queried the real
+CloudWatch log group directly for the entire window covering both the `verify-lambda-execution` run and
+the full `C1` harness (11 + 95 = 106 real invocations):
+
+```
+$ aws logs filter-log-events --log-group-name /aws/lambda/fnol-codehook --filter-pattern '"codehook failed"' \
+  --start-time <15 minutes ago>
+(zero events)
+```
+
+**Zero `codehook failed` lines across 106 real invocations of the fixed build.** The in-process verification
+in §31 was zero-mock and convincing on its own terms; this is the frame that actually mattered for `D87`
+in the first place, and it now says the same thing independently.
+
+### Record updated
+
+- **`D87`/`OI4`: CLOSED.** Real fulfillment for `CheckClaimStatus` and `UpdateContactInfo` confirmed from
+  the deployed runtime (this entry) on top of the in-process confirmation (§31). `claims_server.py`'s
+  crash shared with `FileAutoClaim`/`RentalTowingEntitlement` and `contact_server.py`'s crash are the same
+  root cause, same fix, same `_paths.py` — not independently re-tested per-intent this entry (the two
+  events built for the regression test are the two `D87` most directly needed to prove; `FileAutoClaim`/
+  `RentalTowingEntitlement` remain covered only by `CF8`'s still-pending generalized version, not by a
+  dedicated regression event of their own).
+- **The four intents are no longer confirmed broken.** `CheckClaimStatus`, `UpdateContactInfo` — directly
+  confirmed, this entry. `FileAutoClaim`, `RentalTowingEntitlement` — no longer broken (same shared root
+  cause, same fix), but not independently re-tested by a dedicated event; `CF8` is the standing gate that
+  would cover them going forward.
+- **`policy_server.py`'s latent status: RESOLVED**, per §31's direct, zero-mock, in-process confirmation
+  (`get_policyholder_elections('PY4821')` succeeded against real data) — the shared `POLICYHOLDERS_PATH`
+  object it imports is the same one `contact_server.py` now reads successfully from the deployed runtime.
+- **Claim (b): still OPEN.** Unblocked by this fix, not yet run for real, and — per this entry's `D88`
+  finding — not something a retried, different trigger should be used to force closed.
+- **New: `D88` OPEN**, filed this entry, Marco's to scope.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, and partly happened: the expectation going in was a clean two-for-two
+   GREEN. One event was fully green; the other reached real fulfillment (the actual `D87` question) but
+   failed a second, different assertion — reported exactly as that mixed result, not rounded to either
+   "still broken" or "fully green."
+2. *Asserted-but-unchecked?* The claim-number-masking assertion in the regression test was inherited from
+   `verify_stage_b1_live_invoke.py`'s docstring, itself citing `guardrails/client.py`'s own comment
+   ("live-verified... since Stage 8"). That inherited claim is exactly what this entry's `D88` finding
+   checked, live, and found does not currently hold — the comment was asserted-but-unchecked on THIS
+   build, and the check found it.
+3. *Infra error scored as a result?* No — `D88` is a real guardrail-behavior finding (confirmed via the
+   actual `guardrail_usage` log line, `sensitiveInformationPolicyUnits: 1`, `masked: false`), not a script
+   or infra fluke.
+4. *Cost below estimate?* `C1` harness: $0.097668 against the ~$0.10 estimate — matches. `verify-lambda-
+   execution`: consistent with the ~$0.0024 estimate.
+5. *Identical markers, different paths?* Kept `D87` (the crash/fulfillment question) and `D88` (the
+   masking question) as two separate, separately-filed findings from one test run, rather than one failure
+   report standing for both — the same discipline `REVIEW-CRITERIA.md` has required all session.
+6. *Has this check ever failed for the right reason?* Twice in this entry: the pre-fix red run (§31) failed
+   for the `D87` reason; this run's one remaining failure failed for the real `D88` reason, not a copy of
+   `D87`'s signature (checked explicitly — no `Delegate`, no empty message, no `FileNotFoundError`
+   anywhere in the logs for this call).
+7. *Headline-number interpretation change?* Yes, stated plainly: `C1` is restored VERIFIED at 1.000, but
+   this entry also adds a new open defect (`D88`) discovered by the very same verification pass that
+   closed `D87` — the headline is "fixed and re-verified, with one new finding," not an unqualified "fixed."
+8. `C1` a tradeable term? No — flipped to PENDING before the harness ran, restored to VERIFIED only on a
+   real 1.000 (26/26), exactly as required; `D88`, discovered on a DIFFERENT script's run, is not folded
+   into or against `C1`'s own scope.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — D87 fix confirmed from the deployed runtime (not just in-process): live CodeSha256 8Ch4kDuL... confirmed, verify-lambda-execution 10/11 (UpdateContactInfo fully green, CheckClaimStatus reaches real fulfillment but fails a separate masking assertion), full C1 harness 1.000 (26/26) real, zero codehook-failed log lines across 106 real invocations. D87/OI4 CLOSED. New finding D88 filed (guardrail did not mask a real claim number in OUTPUT text, contra Stage 8's on-record behavior) — claim (b) stays OPEN, not retried to force it closed.
+Open defects: D87 (OI4) CLOSED, this entry. D88 (new) OPEN — guardrail masking behavior diverges from Stage 8's recorded trigger. Claim (b) (B1 panel-liveness proof) still OPEN, unaffected by this entry.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4= — re-verified for real this entry, restored from PENDING.
+Blocked on: Marco's scoping decision on D88. Claim (b) blocked on a real forced intervention completing (not to be manufactured via a different trigger).
+Last apply + gate result: apply confirmed live (CodeSha256 matches plan exactly). Real spend this entry: ~$0.0024 (verify-lambda-execution) + $0.097668 (C1 harness) = ~$0.10.
+```
+
+## 33. `D88` scoped from the live deployed config (not config drift, not a stale entity — the test's own
+assertion was stale); `D87`'s closure tightened with two more gate events, both of which FAIL for real,
+new reasons (`D89`, `D90`); the "106 invocations" claim narrowed to its real denominator; claim (b) now
+blocked on `D88` too
+
+Four-part instruction, followed in order. Per §7 (added this entry, see `REVIEW-CRITERIA.md`): every
+"verified"/"healthy" reading below is checked against an effect, not an activity, before being trusted.
+
+### 1. `D88` written up as its own named finding, with the pattern generalized as a standing rule
+
+Done directly in `docs/REVIEW-CRITERIA.md` §7, not only here — Marco's own instruction was that this
+belongs in the standing document, not just this narrative. Summary of what §7 says: a non-zero usage
+counter, a `StatusCode: 200`, or a legal `dialogAction.type`/`Fulfilled` state each prove the control or
+node *ran*, never that it produced the *effect* it exists to produce. `D87` and `D88` are the same shape
+one layer apart (deploy-verification vs. safety-control); this entry's own `D89`/`D90` (below) turned out
+to be a third instance found while doing the very next thing on Marco's list, which is why §7 also names
+the "identical markers, different paths" risk explicitly rather than leaving it as a `D88`-only footnote.
+
+### 2. `D88` scoped — config read live from AWS, not from Terraform or docs
+
+```
+$ aws bedrock get-guardrail --guardrail-identifier zl5ppnyorwd2 --guardrail-version 3 --region us-west-2
+sensitiveInformationPolicy:
+  piiEntities: [CA_SOCIAL_INSURANCE_NUMBER, CREDIT_DEBIT_CARD_NUMBER, DRIVER_ID, EMAIL, PASSWORD, PHONE,
+                US_SOCIAL_SECURITY_NUMBER] — all action: ANONYMIZE
+  regexes: []
+status: READY
+version: "3"
+```
+
+**What the live config says:** zero regexes. Seven PII entity types, none of which a claim number
+(`CLM-####-#####-#`) can ever match — it isn't an email, phone, SSN, SIN, driver ID, password, or credit
+card number. This is a bit-for-bit match with `infra/terraform/stacks/guardrails/main.tf`'s declared
+`sensitive_information_policy_config` — **zero drift between deployed and declared.**
+
+**What Stage 8's record claims:** `guardrails/client.py`'s own docstring (lines 55-71) states, accurately
+for its own scope: *"Verified live against `zl5ppnyorwd2` v2... masked a `CLM-####-#####-#`-shaped
+string via ANONYMIZE."* That verification is real and was true — of v2. The same file, two paragraphs
+later, already documents what happened next: **the four `D16` regexes (`policy_number`, `claim_number`,
+`licence_plate`, `vin`) were removed at v2->v3, 2026-08-12, Marco-approved**, specifically because "the
+guardrail masking a caller's own claim number, policy number and plate back to the caller who owns them
+is a defect with no upside" (`docs/phase7/NOT-FIXED.md` #8, `RESULTS.md` §5.3, and confirmed again in
+`infra/terraform/stacks/guardrails/main.tf`'s own inline comment at the removed block). The live guardrail
+(`createdAt`/`updatedAt`: 2026-08-13T01:54) postdates that change; my regression test's assertion
+(`_expect_claim_status_fulfilled` in `scripts/verify_lambda_execution.py`, written 2026-08-16) was built
+citing the v2 behavior and never cross-checked against the v3 config it was about to run against.
+
+**Determination: neither of the two options Marco named.** Not config drift — the deployed guardrail
+matches its Terraform declaration exactly. Not a per-entity action that was never `ANONYMIZE` — every
+configured entity IS `ANONYMIZE`; there is simply no entity configured that would ever match a claim
+number, by deliberate, dated, approved design. **The actual root cause is a third thing: my own test's
+assertion encoded a requirement that had already been explicitly reversed four days before the test was
+written**, and the reversal was documented in the very file the assertion's docstring cites. The
+`sensitiveInformationPolicyUnits: 1` charge on the real call is simply the policy being evaluated against
+the response text and finding no match among the seven configured entities — correct, expected behavior
+under v3, not a guardrail defect.
+
+**Options, no fix applied (Marco's call):**
+
+1. **Close `D88` as "not a defect," fix the test's assertion** to expect the claim number PRESENT verbatim
+   (matching v3's actual, approved behavior), the same way the freshly-added event 12 (below) already
+   asserts for `FileAutoClaim`'s claim number. Restores a real 13/13 without touching the guardrail.
+2. **Re-litigate the v3 decision itself** given it's now surfaced by a live gate failure rather than a
+   design conversation — nothing new emerged that argues against the original reasoning ("masking a
+   caller's own identifier back to them is a defect with no upside" still holds), so this isn't recommended
+   without a stated reason to revisit it.
+3. Leave `D88` open and the test failing as a standing reminder until Marco decides — not recommended past
+   this session; an assertion known to encode a superseded requirement, left failing indefinitely, erodes
+   the gate's own signal the same way a check that's "always red for a known-fine reason" does anywhere
+   else in this project.
+
+**Not fixed. Reported, per instruction.**
+
+### 3. `D87`'s closure tightened — two more gate events added (12-13), and both FAIL for real, new reasons
+
+`scripts/verify_lambda_execution.py` extended 11 -> 13 events (`_MINIMUM_EVENTS` raised, module docstring's
+"EVENTS 12-13" section added, ruff/black/mypy clean). Real identifiers reused from the corpus (`PY4821`,
+VIN `9SYAB1239G1000101`), same discipline as events 10-11. `file_new_claim`'s write confirmed safe to run
+repeatedly (in-memory `_filed_claims` dict, never persisted back to `CLAIMS_PATH` on disk — verified by
+reading `claims_server.py` before running this against the live deployed artifact).
+
+```
+=== verify-lambda-execution: fnol-codehook, 13 events ===
+  ok   FileAutoClaim first turn
+  ok   CheckClaimStatus first turn
+  ok   CoverageQuestion first turn
+  ok   RentalTowingEntitlement first turn
+  ok   UpdateContactInfo first turn
+  ok   FallbackIntent (unclassifiable turn)
+  ok   Raw-text L1 trigger (pre-graph, injury)
+  ok   Raw-text L3 trigger (pre-graph, agent override, D74)
+  ok   injuries_present confirmed True, no injury vocabulary (D79)
+  FAIL CheckClaimStatus fulfilled, identifier slot pre-filled (D87 regression): D88, see above
+  ok   UpdateContactInfo fulfilled, all four slots pre-filled (D87 regression)
+  FAIL FileAutoClaim filed, all slots pre-filled (D87 closure, tightened): expected the fixed file-claim
+       template ('Your claim number is ...'), got message="I'm not able to help with that -- let me
+       connect you with someone who can."
+  FAIL RentalTowingEntitlement fulfilled, entitlement+policy pre-filled (D87 closure, tightened): expected
+       Close (real fulfillment), got dialogAction={'type': 'ElicitSlot', 'slotToElicit': 'coverage_topic'}
+
+=== verify-lambda-execution FAILED: 3/13 event(s) ===
+```
+
+Neither new failure is `D87`'s crash signature (no `Delegate`, no empty message, no `FileNotFoundError` in
+either) — `_paths.py`'s fix itself is not implicated by either. Both are real, and both were investigated
+rather than dismissed or routed around:
+
+**`D89` (new) — the INPUT guardrail false-blocks a benign, in-domain claim-filing confirmation.** The
+`FileAutoClaim` event's `Close`/`Fulfilled` never happened because `guardrails_input_check` (the INPUT
+`ApplyGuardrail` call, zero conversational context by design — `guardrails_nodes.py`'s own code, not an
+assumption) blocked the turn before the graph ever reached `file_auto_claim`. Confirmed directly, three
+real `ApplyGuardrail` calls:
+
+```
+INPUT "yes, go ahead and file it"        -> BLOCKED, topic=legal_and_medical_advice, detected=true
+INPUT "yes, please submit that"          -> action: NONE
+INPUT "yes that's correct, go ahead"     -> action: NONE
+```
+
+Narrowed to the word **"file"**, evaluated with no surrounding context: "go ahead and file it," read in
+total isolation, apparently scans as filing-a-legal-matter language to the topic classifier, not
+filing-an-insurance-claim language. This is the domain's own core verb ("file a claim" is this project's
+sixth in-scope-adjacent intent's literal name) triggering a deny-topic built for a different meaning of
+the same word. A real caller who confirms "yes, file it" (a completely natural, arguably the *most*
+natural, way to confirm `FileAutoClaim`'s own confirmation prompt, `"...Should I go ahead and file this
+claim?"`) risks having that exact turn blocked, mid-conversation, on a fully-slotted claim about to
+complete. Filed as `D89`/`OI6`, OPEN, Marco's to scope (denied-topic examples/definition tuning is the
+likely fix shape, not attempted here).
+
+**`D90` (new) — `route_and_classify` has zero conversational context, and the wire contract cannot reveal
+a silent misroute.** `RentalTowingEntitlement`'s event (`"am I still covered for a rental car"`) was
+classified as `CoverageQuestion` instead — `agents/nodes/routing.py`'s own code confirms `classify_turn`
+is called with only `state.get("turn_input", "")`, no prior turns, no slot context, every turn, so an
+utterance genuinely ambiguous out of context reads however the classifier's turn-only view reads it. A
+second, ad-hoc, real probe (`"how many rental car days do I have left on my claim"`, same slots) reached
+`Close`/`Fulfilled` — but the response text, `"Your claim CLM-2608-00055-6 is currently UnderReview."`, is
+`check_claim_status.py`'s own fixed template verbatim, not `rental_towing_entitlement`'s RAG+generation
+shape: **that turn was silently routed to `CheckClaimStatus`, not `RentalTowingEntitlement`, and the
+codehook's own response gave no sign of it.** Traced to why: `_close()` (`api/lex_codehook.py`) builds the
+returned `intent` object from `_intent_from(event)` — the ORIGINAL Lex-supplied intent name — always,
+regardless of which internally-classified intent's node actually produced the message. Lex (and the
+caller) would see `RentalTowingEntitlement`/`Fulfilled` while the spoken content is a bare claim-status
+readback with no rental figures in it at all.
+
+This is exactly why the committed event 13 asserts only structural markers (`Close`/`Fulfilled`/non-empty/
+non-abstention) and NOT — deliberately — a looser "reached some plausible-looking fulfillment," and why
+this section states plainly that the check, as currently failing (`ElicitSlot`/`coverage_topic`, a clean,
+legible non-`Close` failure), is not exposed to the false-green risk the ad-hoc probe surfaced. It would
+have been, on a different phrasing. **No transcript was substituted to make this event pass** — doing so
+either (a) would dodge `D89`'s real trigger word for event 12, or (b) for event 13, would risk shipping a
+"green" that cannot currently distinguish the right node having run from a different one coincidentally
+producing a well-formed `Close`. Filed as `D90`/`OI7`, OPEN, covering both the misrouting and the
+invisible-reroute contract gap as one finding since they share a root cause (turn-only classification) and
+were found together; Marco's to scope apart if warranted.
+
+**Consequence for the gate itself, stated plainly: `verify-lambda-execution` now reports 10/13, not 13/13,
+and this is the correct, honest state to leave it in.** Both new failures are real defects surfaced by
+exactly the work Marco asked for ("cheap, and turns inference into evidence") — forcing either to green by
+picking a different transcript would have hidden the finding behind the fix for the wrong problem. The
+script is not chained into `make deploy` (its own docstring, unchanged from Phase 8), so this does not
+silently block anything; it sits red, visibly, until Marco decides how `D89`/`D90` get handled.
+
+**The "106 invocations" claim, narrowed to its real denominator.** §32 stated "zero `codehook failed` log
+lines across 106 real invocations" as evidence for `D87`'s fix. That count is accurate but the wrong
+denominator for what it was cited to support: 95 of those 106 were `C1` harness calls, and `C1` is scoped
+to escalation recall — none of those 95 calls fill enough slots to reach `_paths.py`'s read sites at all
+(the same reason events 1-9 never caught `D87` in the first place, restated in the module docstring's
+"EVENTS 10-11" section). **The real denominator for "`D87`'s crash site did not recur" is the 11-event
+gate run (now 13), not 106.** Restated here because §32's phrasing read as stronger evidence than the
+number actually supports — the conclusion (`D87` is fixed) still holds, on the 11/13-event evidence, but
+the 106 figure should not be read as 106 independent confirmations of that specific fix.
+
+### 4. Claim (b) — now blocked on `D88` too, recorded explicitly
+
+Stage B1's forced-guardrail-OUTPUT-intervention proof (`masked=True`/`blocked=True` on a real call) was
+blocked by `D87`, then unblocked by `D87`'s close, then not yet run. It is not simply "not yet run" anymore:
+`D88`'s scoping (§2 above) establishes that, as of v3, this project's OUTPUT guardrail has **no PII entity
+left configured that would ever fire `ANONYMIZE` on domain data spoken back to its own owner** — the four
+identifier regexes that used to be the reliable trigger were deliberately removed. `EMAIL`/`PHONE`/
+`CREDIT_DEBIT_CARD_NUMBER`/`US_SOCIAL_SECURITY_NUMBER`/`CA_SOCIAL_INSURANCE_NUMBER`/`DRIVER_ID`/`PASSWORD`
+remain live triggers, but none of this bot's own graph nodes currently generates output containing any of
+those in the ordinary course of a fulfillment (confirmed by inspection of every node's templates and the
+one real generation call in `rental_towing.py`). **Until `D88` is resolved one way or another, a fired
+intervention and a non-fired one are not just hard to distinguish — there may currently be no ordinary
+in-scope conversational path left that would ever fire one at all**, which would mean claim (b) cannot be
+closed by ANY real call along the six intents' ordinary flows without either (a) `D88` restoring a live
+trigger, or (b) a deliberately constructed off-nominal turn built to say something PII-shaped outside the
+domain's own data (e.g. an email address), which is a different, and differently-defensible, kind of
+"real" than the claim/policy/plate readback this project has used as its live trigger all along. Recorded
+as an explicit dependency, not left implicit: **claim (b) is blocked on `D88`, not only on "hasn't been
+run yet."**
+
+### Self-review (`REVIEW-CRITERIA.md` §1, plus §7 added this entry)
+
+1. *Opposite result possible?* Yes throughout: the AWS guardrail read could have shown drift (it didn't);
+   the two new gate events could have passed cleanly (neither did, for two different real reasons); the
+   alternate-phrasing guardrail probes could have also blocked (two of three didn't, isolating "file").
+2. *Asserted-but-unchecked?* This whole entry is built from checking, not re-asserting: the guardrail
+   config was read live from AWS rather than trusted from Terraform source or `client.py`'s comment; the
+   claimed-vs-real denominator for "106 invocations" was checked and found overstated for its citation.
+3. *Infra error scored as a result?* No — all three new findings (`D88`'s determination, `D89`, `D90`) are
+   real application/config-level behavior, confirmed via direct, real API calls, not script or invoke
+   plumbing failures.
+4. *Cost below estimate?* All real spend this entry was at or under its own printed/expected estimate;
+   see the report header below for the total. No unexplained underspend.
+5. *Identical markers, different paths?* `D90`'s entire finding IS this checklist item, found live: a
+   `Close`/`Fulfilled` from `CheckClaimStatus` and one from `RentalTowingEntitlement` are indistinguishable
+   at the wire layer. Documented as its own standing risk in `REVIEW-CRITERIA.md` §7 rather than left as a
+   one-off observation.
+6. *Has this check ever failed for the right reason?* Both new gate events failed on their first real run,
+   for reasons independently confirmed by direct diagnostic calls (not inferred from the gate's output
+   alone) — the opposite of a check whose green would have been unearned.
+7. *Headline-number interpretation change?* Yes, three ways: `verify-lambda-execution` is 10/13, not
+   13/13; `D87`'s "106 invocations" evidence is narrowed to its real 11/13-event denominator; `D88`'s
+   headline flips from "guardrail didn't mask" to "test asserted a superseded requirement."
+8. `C1` a tradeable term? Not touched this entry — none of this session's work ran the `C1` harness.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 — D88 scoped (live AWS guardrail config read: zero drift, zero regexes on v3 by deliberate Marco-approved design; the regression test's own assertion was stale, not the guardrail). D87's closure tightened with 2 more gate events (11->13); both FAIL for real, new reasons: D89 (INPUT guardrail false-blocks a "file"-containing FileAutoClaim confirmation, zero conversational context) and D90 (router has zero conversational context, causing real misrouting, AND the wire contract cannot reveal a silent misroute). "106 invocations" claim narrowed to its real 11/13-event denominator. Claim (b) now recorded as blocked on D88, not only on "not yet run" -- v3's config may have removed every ordinary-flow OUTPUT trigger.
+Open defects: D87 (OI4) CLOSED (unchanged). D88 OPEN, scoped -- not config drift, test assertion stale, options given, not fixed. D89 (new)/OI6 OPEN. D90 (new)/OI7 OPEN. Claim (b) OPEN, now explicitly blocked on D88.
+C1 status: unchanged this entry -- still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=. Not re-run this entry.
+Blocked on: Marco's disposition on D88 (3 options given), D89, D90. Claim (b) blocked on D88.
+Last apply + gate result: no apply this entry (code changes to scripts/verify_lambda_execution.py and docs only, not yet deployed -- nothing in it touches the Lambda's own deployed artifact). Real spend this entry: ~$0.0032 (13-event gate run) + ~$0.0009 (3 diagnostic ApplyGuardrail calls) + ~$0.0004 (1 diagnostic Lambda invoke) = ~$0.0045.
+```
+
+## 34. `D90` part 2 root-caused with a $0 local repro; recorded-verification sweep; Marco's fix ordering
+(option B, then option A) recorded; option B plan + cost table proposed, **not implemented**
+
+Two-part instruction from Marco: diagnose part 2 first (an instrument defect — a green result cannot
+currently prove the right node ran), report which recorded verifications inherit the resulting doubt, and
+scope a wire-contract fix without applying it. This entry records that diagnosis and Marco's subsequent
+disposition together, since the diagnosis itself was never written to this file — it was reported directly
+and is recorded here for the first time, one session later than the finding itself, per `CLAUDE.md`'s own
+stop condition that `PROJECT_STATE.md` (and, by the project's standing practice, `RESULTS.md`) carry the
+session's findings before it ends.
+
+### 1. Part 2, root-caused
+
+`_close()` (`api/lex_codehook.py:303`) builds the returned `intent` object from `_intent_from(event)` —
+Lex's original echoed intent — unconditionally, at all 3 of its call sites (confirmed by grep, not
+assumed): the two escalation paths (`_escalate()`, and `_respond_from_graph_result`'s graph-detected-
+escalation branch) and, critically, `_respond_from_graph_result`'s final, ordinary fulfillment line —
+`return _close(event, response_text)` — where `response_text` came from whichever node the graph actually
+routed to, but the returned `intent.name` never reads `result["intent"]` at all.
+
+**Not a new defect class — the same one `D84` (Phase 9) already fixed at a different call site.** `D84`
+fixed `_elicit_slot()`'s identical echo-Lex's-intent defect by building the intent object from
+`result["intent"]` instead, guarded by a loud `_UnroutableIntentError` rather than falling back silently.
+`_close()` was never given the equivalent treatment; the module's own `D84` docstring entry never mentions
+it. **Why it survived two phases untouched, confirmed by reading both code paths, not guessed at:** `Lex`'s
+dialog manager rejects an `ElicitSlot` whose named intent doesn't own the elicited slot — a live
+`ValidationException` — which is what forced `D84`'s discovery and its verification. `Close` has no
+equivalent check; the sibling site produced no loud failure and nothing forced a second look. Recorded as
+its own standing rule, not left as narrative only: `REVIEW-CRITERIA.md` §8.
+
+**Reproduced $0, local, deterministic** — a single in-process call to `_respond_from_graph_result`, no
+AWS, isolating the wire-contract defect from part 1's routing question entirely:
+
+```
+event.sessionState.intent.name = "RentalTowingEntitlement" (Lex's echoed intent)
+result = {"intent": "CheckClaimStatus", "response_text": "Your claim CLM-2608-00055-6 is currently UnderReview.",
+          "active_slot": None, "escalation": None}
+-> dialogAction.type = Close, intent.name = "RentalTowingEntitlement", intent.state = Fulfilled
+   (result["intent"] = "CheckClaimStatus" -- the node that actually ran -- never surfaces)
+```
+
+Reproduces the exact shape the live ad-hoc probe found, without AWS. The live 13-event gate was not
+re-run to reconfirm — the local repro already isolates the mechanism deterministically and for free, and a
+live re-run would only reconfirm a state already on record under a named build hash. Real spend this
+diagnosis: **$0.00**.
+
+### 2. Recorded-verification sweep — three tiers, not one undifferentiated risk
+
+Per `REVIEW-CRITERIA.md` §6: term list searched — `Close/Fulfilled`, `reaches real fulfillment`, `reaches
+Close`, `reached fulfillment`, `real fulfillment`, `Close (real fulfillment)`, `Fulfilled)`, `reaches the
+fulfilled`, `correctly routed`, `correctly classified`, `routed to` — across this file and
+`PROJECT_STATE.md`. ~30 raw hits, all individually read, not pattern-classified. This is a claim about
+these eleven terms, not about the corpus; no recall check with different wording has been run yet.
+
+**Not affected — structurally immune, confirmed by reading the actual check:**
+
+- `C1` (`measure_composed_pipeline_deployed.py`, `measure_composed_pipeline.py`) — reads
+  `sessionAttributes["escalate"]`/`["escalation_reason"]`, never `intent.name`. `D81` item 4's four-value
+  `escalation_reason` split already gives `C1` an intent-name-independent provenance signal.
+- `D84`'s own regression tests — already build the asserted intent from `result["intent"]`, correctly.
+- `D47`'s bias-routing finding (§7, `reg-rental`) — `measure_bias_pairs.py` calls `classify_turn` directly,
+  never `_close()`, never the codehook at all.
+
+**Affected — true on the evidence given, but inferred, not structurally asserted:** `verify_lambda_
+execution.py` events 10-12 (`_expect_claim_status_fulfilled`/`_expect_contact_info_updated`/`_expect_file_
+auto_claim_filed`) and the `D87` "reaches real fulfillment" narrative built on them (§29-32,
+`PROJECT_STATE.md` `OI4`/`CF8`) — each checks `Close`/`Fulfilled` plus a literal template substring,
+confirmed distinct per node by reading the three source templates directly (`check_claim_status.py`,
+`update_contact_info.py`, `file_auto_claim.py`). None of the three assertions read `intent.name`; "the
+intended node ran" is true by template-specificity accident, not by anything the check structurally
+verifies. Same caveat on `test_file_auto_claim_reaches_fulfilment_and_closes`
+(`tests/unit/test_lex_codehook.py`), which additionally pins its fake router to one constant intent every
+turn, so it never exercises a genuine classification disagreement at all.
+
+**Actually exposed — no distinguishing check, would have silently passed:** `verify_lambda_execution.py`
+event 13 (`_expect_rental_towing_fulfilled`) — checks only non-empty and not-the-fixed-abstention-string,
+because `rental_towing_entitlement`'s answer is genuinely generated and can't be pinned to a literal
+template. §33 already named this precisely; the repro above confirms the reasoning was correct, not just
+asserted.
+
+**Provenance note:** `_close()`'s behavior here is unchanged since its introduction at Phase 8 Stage 4 —
+`D84` (Phase 9) fixed the sibling call site, not this one. The gap has been latent in every full-pipeline
+`Close` this codehook has produced since Stage 4; it hasn't corrupted a headline number until now only
+because `C1`'s provenance signal doesn't depend on `intent.name`, and events 10-12's template specificity
+happened to be strict enough — neither of which was designed to catch this.
+
+### 3. `C1`'s immunity claim — narrowed to its actual scope, per Marco's correction
+
+The prior report's phrasing — "structurally immune to D90" — is correct but was stated too broadly. **It is
+immunity to this one mechanism** (the wire-contract's intent-name echo), established because `C1`'s
+recall/precision computation reads `escalation_reason` provenance, never `intent.name`. **It is not a
+general clean bill on `C1`'s 26/26.** `C1` remains exposed to whatever `D90` part 1 (below) or any other
+open defect (`D88`, `D89`) can do to it through channels this entry did not examine — nothing here re-checks
+those. Stated narrowly rather than left to read as a blanket reassurance.
+
+### 4. `D90` part 1 remains OPEN and user-facing — option B does not close `D90`
+
+`route_and_classify` (`agents/nodes/routing.py:16`) still classifies every turn from `state.get
+("turn_input", "")` alone, no session/slot/prior-turn context, on every turn including ones Lex already
+considers deep into a slot-filled intent. **Whichever option ships from §6/§8 below, a caller who gets
+silently misrouted still hears the wrong node's answer** — option B makes the misroute machine-legible to a
+harness or dashboard reading `executed_node_intent`; it does not stop the misroute from happening or
+change what the caller heard. `D90`/`OI7` stays OPEN on both halves until part 1 has its own fix, not only
+part 2's instrument gap. This entry's work is scoped to part 2 exclusively, per Marco's own framing of the
+diagnosis request, and should not be read as progress on part 1.
+
+### 5. Marco's disposition — fix order B then A, not either/or; neither implemented yet
+
+Recorded verbatim in substance: ship option B first (minimal, no open question about Lex's acceptance
+behavior), then tighten `verify_lambda_execution.py` events 10-13 to assert `executed_node_intent` directly
+— closing event 13's real gap and removing 10-12's true-by-accident status. Option A follows afterward,
+**with the live verification it needs — `D84` was forced by a real Lex `ValidationException` on `ElicitSlot`;
+`Close` has no known equivalent, so whether Lex accepts an intent name that disagrees with the turn's own
+NLU intent on a `Close` response is unconfirmed and must be checked live, not assumed.** Neither option is
+implemented this entry — plan and cost table only, per instruction.
+
+### 6. Option B — plan (not implemented)
+
+Add `sessionAttributes["executed_node_intent"]`, set from `result["intent"]` whenever the graph actually
+ran (both the `Close` and `ElicitSlot` response shapes — `ElicitSlot` already agrees with `intent.name`
+post-`D84`, so the new field there is corroborating, not corrective), always present when a `result` exists,
+absent on `_delegate()` and the pre-graph escalation paths where no graph ever ran (nothing to name). No
+change to `intent.name`'s existing value anywhere — this is additive, not a replacement of `D84`'s or the
+original Stage 4 wire shape.
+
+1. Code change in `api/lex_codehook.py` (`_close()`, `_elicit_slot()`, or a shared helper both call) —
+   thread `result.get("intent")` through to the new field.
+2. New/updated unit tests in `tests/unit/test_lex_codehook.py`: a direct regression test for the exact
+   scenario this entry's §1 repro used (event intent disagrees with result intent, non-escalation `Close`)
+   — the seam the repro found and this project doesn't yet have a permanent test at — plus an extension of
+   the existing `D84` tests to check the new field agrees with `intent.name` there.
+3. `terraform plan` against `stacks/main`, reviewed, not applied — expect a real `source_code_hash` change
+   and the known-cosmetic `aws_s3_object.codehook_deps_layer` etag diff (`D84`'s own precedent, already on
+   record), no new resource, no new SKU.
+4. `terraform apply` — **not run this entry; requires Marco's sign-off first**, redeploy = FULL REVIEW per
+   `REVIEW-CRITERIA.md` §4.
+5. Live smoke-test invokes post-deploy confirming the new field appears and Lex/Connect accept the extra
+   `sessionAttributes` key without error (low risk — it's a free-form string map — but unconfirmed until
+   checked live, same discipline as option A's own open question).
+6. Tighten `verify_lambda_execution.py` events 10-13's `_expect_*` functions to assert `executed_node_
+   intent` equals the expected intent, alongside (not replacing, initially) the existing content checks.
+7. Re-run the full 13-event live gate against the redeployed build.
+
+### 7. Option B — cost table (estimate; nothing run this entry)
+
+No new AWS resource, no new SKU, no change to monthly recurring spend, nothing added to `make destroy`'s
+scope — this is a code change to the existing, already-deployed Lambda, not a provisioning step, stated
+plainly since `CLAUDE.md`'s cost-gate table format assumes a new resource and this isn't one.
+
+| Step | Action | Real AWS call? | Est. cost | Approval needed |
+|---|---|---|---|---|
+| 1 | Code change (`lex_codehook.py`) | No | $0.00 | No — reversible, undeployed |
+| 2 | New/updated unit tests (moto-mocked) | No | $0.00 | No |
+| 3 | `terraform plan` (review only) | No | $0.00 | No |
+| 4 | `terraform apply` (redeploy) | Yes — `UpdateFunctionCode`/S3 `PutObject`, existing bucket | ~$0.00 (sub-cent) | **Yes — FULL REVIEW, redeploy** |
+| 5 | Live smoke-test invokes (2-3 calls) | Yes — `lambda:Invoke`/`RecognizeText`, 1-2 graph-touching | ~$0.001–0.002 | Bundled with step 4 |
+| 6 | Tighten events 10-13 assertions | No | $0.00 | No |
+| 7 | Re-run full 13-event live gate | Yes — same profile as §33's own $0.0032 run | ~$0.003–0.004 | Bundled with step 4 |
+| **Total, one-time** | | | **≈$0.004–0.006** | |
+
+Recurring/monthly cost: **$0.00** — no new resource, existing Lambda's cost profile unchanged. Cost if
+teardown is forgotten: **unchanged from today** — nothing new left running. All real-AWS line items above
+fall inside the existing $5.00 Bedrock standing cap and comfortably inside `REVIEW-CRITERIA.md` §4's
+"measurements under ≈$1" approve-and-go tier; only step 4 itself (the redeploy, not its dollar cost) needs
+sign-off, per the standing rule that a redeploy is always FULL REVIEW regardless of price.
+
+### 8. Option A — deferred, live-verification requirement stated, not scheduled
+
+Build the intent object in `_respond_from_graph_result`'s non-escalation `_close()` call from `result
+["intent"]` directly (mirroring `D84` exactly), guarded by the same `_UnroutableIntentError`-style raise
+`_elicit_slot()` already uses. **Not planned in detail this entry** — Marco's instruction is to verify
+live, the way `D84` itself was verified, whether Lex accepts a `Close` response whose intent name disagrees
+with the turn's own NLU intent, before scoping the fix around an assumption either way. That verification
+is unscheduled, not attempted here, and stated as the blocking open question rather than assumed resolved
+in either direction.
+
+### Self-review (`REVIEW-CRITERIA.md` §1, §6, §8)
+
+1. *Opposite result possible?* Yes throughout — the repro could have agreed (didn't); the sweep could have
+   found nothing affected (found three tiers); `C1` could have depended on `intent.name` (checked the
+   actual script — it doesn't).
+2. *Asserted-but-unchecked?* This entry's own subject: events 10-12's "reaches real fulfillment" is now on
+   record as content-inferred, not structurally asserted, per Marco's own instruction not to let it read as
+   a general clean bill.
+3. *Infra error scored as a result?* No infra calls made this entry.
+4. *Cost below estimate?* $0.00 spent, $0.00 expected for the diagnosis; the cost table above is an
+   estimate for unrun work, labelled as such throughout, not a result.
+5. *Identical markers, different paths?* This entry's whole subject — swept by tier rather than treated as
+   one undifferentiated risk.
+6. *Has this check ever failed for the right reason?* The local repro was built to go red on this exact
+   symptom and did, first run.
+7. *Headline-number interpretation change?* Yes: `C1`'s immunity claim narrowed to the one mechanism it
+   was actually checked against, not a general statement about `C1`; `D90` stated explicitly as still open
+   on both halves, not partially closed by an unimplemented plan.
+8. `C1` a tradeable term? Not touched — narrowed in scope, not modified, not re-run.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- D90 part 2 root-caused (D84's sibling-call-site gap, $0 local repro), recorded-verification sweep run (3 tiers: C1/D84-tests/D47 immune, events 10-12 + D87 narrative inferred-not-asserted, event 13 actually exposed). REVIEW-CRITERIA.md SS8 added (enumerate every call site of a fixed defect class). Marco's disposition: ship option B (new executed_node_intent field) first, tighten events 10-13 to assert it, then option A (mirror D84 in _close()) with its own live Lex-acceptance verification -- neither implemented, plan + cost table only.
+Open defects: D87 (OI4) CLOSED (unchanged). D88/OI5 OPEN (unchanged). D89/OI6 OPEN (unchanged). D90/OI7 OPEN -- both halves, explicitly: part 1 (routing has zero context) untouched by this entry, part 2 (wire contract) has a scoped, not-yet-implemented fix plan.
+C1 status: unchanged -- still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL7pjJ4YWeunXSZRJP/Wc+ZuxZ5ubfC8w/Th4=. Not re-run. Immunity to D90's mechanism confirmed; NOT a general clean bill on the 26/26 (Marco's correction, SS3 above).
+Blocked on: Marco's approval to implement option B's code change and, separately, to run its redeploy (step 4, FULL REVIEW). Option A additionally blocked on its own live-verification question.
+Last apply + gate result: no apply, no deploy, no live gate run this entry. Real spend: $0.00 (local repro only). Cost table for option B's unrun work: ~$0.004-0.006 one-time, $0.00/month recurring, $0.00 if teardown forgotten (see SS7).
+```

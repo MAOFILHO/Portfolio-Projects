@@ -154,3 +154,58 @@ confirms what it already looked for is not evidence about what it didn't.
 
 A sweep that has only ever been run with one term list is the same defect class as §1.6's check that has
 only ever passed — not wrong, just unproven at the scope its conclusion is being read at.
+
+## 7. Activity signals are not effect signals
+
+Added 2026-08-16, Marco, after `D88`: the deployed OUTPUT guardrail's `ApplyGuardrail` call on a real
+`CheckClaimStatus` fulfillment returned `sensitiveInformationPolicyUnits: 1` — the policy ran, a unit was
+billed, the call succeeded, `FunctionError` was absent — and `masked: false`, `blocked: false`. Every
+signal that looks like "this ran and something happened" was green. Whether the thing it exists to do
+(intervene) actually happened required a separate, deliberate check of `action`/`masked`/`blocked`, not
+the unit count. Scoping `D88` then found the guardrail was doing exactly what a Marco-approved v2->v3
+config change (`docs/phase7/NOT-FIXED.md` #8) had deliberately made it do — but the finding that matters
+here survives that outcome regardless: **a non-zero usage counter or a successful call proves the control
+ran, never that it did what it exists to do.**
+
+Same family as `D87`: fulfillment was broken for four of five ordinary intents while `LastUpdateStatus:
+Successful`, a matching `CodeSha256`, and a bare `StatusCode: 200` all read healthy (`§1.2`'s own
+precedent). `D87` was an activity signal standing in for an effect signal at the deploy-verification
+layer; `D88` is the identical shape one layer up, at the safety-control layer. Two instances in one
+session is enough to name the pattern rather than wait for a third.
+
+**A control is unverified until something asserts its effect, not merely its activity.** Before treating
+any of the following as evidence the control worked, name what effect-level signal was actually checked:
+
+- A non-zero usage/cost counter (`guardrail_usage`'s `*PolicyUnits`, a billed-call count) — proves the
+  policy was evaluated, not that it intervened. Check `action`/`masked`/`blocked` (or the equivalent
+  outcome field), not the unit count.
+- A `StatusCode: 200` / absent `FunctionError` / successful `Invoke` — proves the call returned cleanly,
+  not that the intended code path ran (`D80`) or that the response means what it appears to (`D87`'s own
+  `Delegate`-vs-`Close` distinction).
+- A legal `dialogAction.type` (`Close`/`ElicitSlot`/`Delegate`) with `intent.state=Fulfilled` — proves
+  *some* node reached a terminal state, not that it was the *intended* node (`RESULTS.md` §33's own finding:
+  `_close()` echoes the event's original Lex-supplied intent name regardless of which internally-routed
+  node actually produced the message, so a silent misroute to a different intent's node can still return
+  a well-formed `Close`/`Fulfilled` for the intent Lex thinks is still in progress).
+
+## 8. A defect fixed at one call site is not fixed until every site of that class is enumerated
+
+Added 2026-08-16, Marco, after `D90` part 2 (`RESULTS.md` §34): `D84` (Phase 9) fixed `_elicit_slot()`'s
+echoed-Lex-intent defect — building the returned intent from the graph's own `result["intent"]` instead of
+`_intent_from(event)` — but left `_close()`, the sibling call site of the identical defect class, carrying
+it for two more phases. The reason it survived that long: `ElicitSlot` raised a live Lex `ValidationException`
+when the echoed intent and the elicited slot disagreed, which is what forced the fix to be found and forced
+it to be verified; `Close` has no equivalent check, produces no loud failure either way, and was never
+revisited once the noisy sibling went quiet.
+
+**Absence of a loud failure is not evidence of correctness.** Same family as §1.6's never-failed check and
+§7's activity-vs-effect distinction, one level further back: the risk here is not a signal being misread,
+it is that the signal never fires at all for one member of a defect class while it does for another — and
+that asymmetry alone, not anything about the underlying correctness, is what decided where the fix stopped.
+
+**Before closing a defect described as "fixed," enumerate every call site of the same defect class, not
+only the one whose failure was loud enough to be noticed.** Grep for the defect's shape (here,
+`_intent_from(event)`), name every site found, and give each one an explicit disposition — fixed,
+deliberately left as-is with a stated reason (`D90`'s escalation call sites, where echoing Lex's intent is
+a different claim, not the same defect), or filed open — the same three-way disposition §5 already requires
+for carry-forward items, applied here to call sites of one defect instead of phases of one project.
