@@ -7609,3 +7609,165 @@ C1 status: unchanged -- still VERIFIED, WARM PATH, 1.000 (26/26), build 8Ch4kDuL
 Blocked on: Marco's apply sign-off for step 4 and the post-apply sequence (steps 5-10) it unblocks.
 Last apply + gate result: no apply this entry -- code, tests, and a real reviewed terraform plan only. Real spend: $0.00 (terraform plan carries no charge). Corrected cost table for the gated post-apply work: ~$0.104-0.107 one-time, ~1m45-50s, $0.00/month recurring, $0.00 if teardown forgotten.
 ```
+
+## 36. `OI3`'s "no re-upload" premise corrected before apply (checked against live S3 + provider docs, not
+assumed); apply run clean; steps 5-10 executed for real; `C1` restored to VERIFIED; `D90` part 2 CLOSED,
+part 1 remains OPEN — events 10-13's per-event before/after comparison, as asked
+
+### 1. Pre-apply: `OI3` checked against live S3 metadata and the provider's own docs, not the plan
+
+Marco's ask, exactly: confirm the etag-diff direction is consistent with `OI3`, and confirm applying it
+does not re-upload or alter content — **read from S3, not reasoned from the plan.**
+
+```
+$ aws s3api head-object --bucket fnol-artifacts-759316130780-us-west-2 \
+    --key "lambda-layers/codehook-deps-73deb4753ca856a7cc60270092e4be96.zip"
+ETag: "ce01dfbd51734440760daaf4200588f5-9"
+ContentLength: 43849548
+```
+
+Exact match to the plan's "current" value; `-9` suffix confirms a real multipart upload; `43849548` bytes
+= 43.8MB, matching `OI3`'s own figure. `list-object-versions` on the same key: `VersionId: "null"` (the
+literal value S3 returns for an unversioned bucket) — `storage.tf:109-113` confirms versioning is off,
+"deliberately, and this is the one place in the project where versioning is declined." **Direction
+consistent with `OI3` — confirmed, not assumed.**
+
+**The "does not re-upload" half of the premise needed correcting.** Fetched the provider's own `s3_object`
+docs directly rather than from memory (`CLAUDE.md`'s own standing instruction): *"`etag`... Triggers updates
+when the value changes"* and *"If an object is larger than 16 MB... will be uploaded... as a Multipart
+Upload, and therefore the ETag will not be an MD5 digest."* A changing `etag` is the provider's only
+documented way to satisfy this diff, and the only way to change an S3 object's real ETag is to re-upload it
+— so **applying this plan does trigger a real `PutObject`**, not a state-only correction. What does NOT
+change, confirmed by the facts above rather than assumed from "it's just an etag diff": same local zip
+(`output_path`), same key (embeds the content hash, unchanged in the plan), versioning off — so the
+re-upload puts byte-identical bytes at the existing key, creates no new version, and will very likely
+reproduce the identical real multipart ETag afterward, reproducing `OI3`'s phantom diff on the next plan
+too. **Consistent with `OI3`, safe, but "harmless re-upload" is the accurate description, not "no-op."**
+`PROJECT_STATE.md`'s `OI3` row corrected to state this before, not after, Marco applied on the corrected
+understanding.
+
+### 2. Apply — run by Marco, clean; `CodeSha256` confirmed live
+
+```
+aws_s3_object.codehook_deps_layer: Modifications complete after 16s
+aws_lambda_function.codehook: Modifications complete after 7s
+Apply complete! Resources: 0 added, 2 changed, 0 destroyed.
+```
+
+`aws lambda get-function --function-name fnol-codehook`, read directly, not from the apply's own printed
+output: `"CodeSha256": "51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc="`, `"State": "Active"`,
+`"LastUpdateStatus": "Successful"` — exact match to the plan's declared target. `C1` flipped to `PENDING
+RE-VERIFICATION` first, before anything else in the sequence ran, per the standing convention.
+
+### 3. Step 6 — pre-tightening sanity: 10/13, zero deviation from the predicted set
+
+```
+ok   FileAutoClaim first turn / CheckClaimStatus first turn / CoverageQuestion first turn /
+     RentalTowingEntitlement first turn / UpdateContactInfo first turn / FallbackIntent /
+     Raw-text L1 / Raw-text L3 / injuries_present confirmed True
+FAIL CheckClaimStatus fulfilled: real claim number found verbatim (D88)
+ok   UpdateContactInfo fulfilled
+FAIL FileAutoClaim filed: guardrail block message instead of the file-claim template (D89)
+FAIL RentalTowingEntitlement fulfilled: ElicitSlot/coverage_topic instead of Close (D90 part 1)
+```
+
+Exactly the three failures Marco named in advance, for exactly the reasons named in advance. Nothing to
+report as a deviation.
+
+### 4. Step 7 — full `C1` harness, real: composed recall 1.000 (26/26), restores VERIFIED
+
+```
+DEPLOYED composed recall 1.0 (26, 26)
+contingency items used 0 / unstable items 0
+provenance: {'detection-pregraph': 22, 'detection-graph': 65, 'fail-closed': 0, 'other-default': 0}
+false escalations on the 17 negatives: 9
+Cost: lex $0.07125 + bedrock $0.026418 = $0.097668
+```
+
+`evals/holdout_ledger.json`'s own audit entry: started `15:14:31Z`, finished `15:16:02Z` — **1m31s real**,
+essentially exact against Marco's ≈$0.0977/≈1m41s estimate. 9/17 false-escalated negatives matches the
+figure on record from every prior run of this instrument (§0/§2/§11.6/§11.7/§25/§28/§32) — not a new
+finding. **`C1` restored to VERIFIED.**
+
+**Process note, surfaced rather than passed over.** This run overwrote `evals/baselines/composed_pipeline_
+deployed_k3_lineE.json` (the `otOV3...`-build result) without first archiving it under a build-tagged name
+— deviating from this project's own established convention (§21's `u9iIy` archive, kept precisely so a
+superseded build's result isn't lost to the record). **No information was actually lost** — the `otOV3`
+result is fully preserved in this file's own prose (§25) — but the standalone JSON for that specific build
+no longer exists on disk. Repaired after the fact: this run's result archived to `composed_pipeline_
+deployed_k3_lineE.51JN903e.json`, restoring the convention going forward. Named here rather than silently
+corrected, per this project's own self-review discipline.
+
+### 5. Step 8 — 3 real smoke-test invokes, all three matching the field's designed shape exactly
+
+```
+1. ElicitSlot (fresh FileAutoClaim):        executed_node_intent = "FileAutoClaim"   (agrees with intent.name)
+2. Close (CheckClaimStatus, slot pre-filled): executed_node_intent = "CheckClaimStatus" (agrees)
+3. Escalation Close (raw-text L1):          executed_node_intent = <ABSENT>  (sessionAttributes: escalate, escalation_reason only)
+```
+
+**Lex/Connect acceptance of the extra `sessionAttributes` key** — already confirmed more strongly by step
+7's own 95 real `RecognizeText` calls completing with zero invalid/unstable runs (every one of those calls
+went through Lex's own dialog manager, which would have rejected a malformed response the same way it did
+for `D84`'s pre-fix `ElicitSlot` case) — not re-tested with a dedicated `RecognizeText` call, reusing that
+evidence rather than spending twice on the same question.
+
+### 6. Step 9 — events 10-13 tightened to assert `executed_node_intent` directly
+
+`scripts/verify_lambda_execution.py`: new `_expect_executed_node_intent()` helper, called from all four
+`_expect_*` functions immediately after the `Close`/`Fulfilled` checks, before any message-content check.
+Event 12's own docstring now states explicitly why the field is correctly ABSENT on that event's current
+(`D89`) failure path — `guardrails_input_check` short-circuits to `graph.py::_guardrail_blocked_response`
+before `route_and_classify` ever runs, so `result["intent"]` is never set; absence is the honest value
+here too, not a defect in the field. Ruff/black/mypy `--strict` clean.
+
+### 7. Step 10 — re-run: 10/13, same count; per-event comparison, exactly as asked
+
+| Event | Before | After | Structurally different? |
+|---|---|---|---|
+| 10 `CheckClaimStatus` | FAIL — `D88` masking assertion | **FAIL — same assertion, same message.** `executed_node_intent="CheckClaimStatus"` confirmed live via a direct re-invoke, passes silently before the unrelated content check fails | **Yes, invisibly** — node identity now structurally proven before failing for an unrelated, pre-existing reason |
+| 11 `UpdateContactInfo` | PASS — `"Done --"`/`"updated"` substring | **PASS — `executed_node_intent="UpdateContactInfo"`**, confirmed live; substring kept only as a secondary check | **Yes** — this is the case Marco asked about directly: it now passes because the field asserts node identity, not because of template wording |
+| 12 `FileAutoClaim` (`D89`) | FAIL — `"expected the fixed file-claim template..."` | **FAIL — `"expected executed_node_intent='FileAutoClaim'... got None"`** | **Yes** — the new message names the actual mechanism (no node ran) rather than the symptom (wrong text) |
+| 13 `RentalTowingEntitlement` | FAIL — `ElicitSlot`/`coverage_topic` | **FAIL — identical, same dialogAction, same message** | **No — unchanged, and correctly so.** `D90` part 1's misroute fails the `Close` check before the node-identity check is ever reached this event. Proven instead at the unit level (`tests/unit/test_lex_codehook.py::test_close_carries_executed_node_intent_on_an_ordinary_fulfillment`) that the field would catch this event's *other* possible failure shape — a misroute landing on a real `Close` — which this live event has never yet reproduced |
+
+**This is the direct, live evidence for `D90`'s split disposition.** Part 2 (the wire-contract gap) is
+closed: shipped, deployed, and verified against the real system at every layer this session touched — unit
+tests, a real `terraform plan`/`apply`, the full `C1` harness, direct smoke-test invokes, and the tightened
+gate. Part 1 (the routing defect itself) is provably untouched: event 13's result did not move, at all,
+because the fix was never intended to reach it — `route_and_classify` still classifies this turn from raw
+text alone, and that is `D90` part 1's own open, unscoped question, not something this entry's work claims
+to have addressed.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes throughout — the S3 read could have shown drift (didn't); the docs
+   could have said `etag` changes are metadata-only (they say the opposite, checked directly); step 6
+   could have deviated from the predicted set (didn't, checked event by event); events 10/11 could have
+   still passed by template accident with the field disagreeing underneath (checked live, both agree);
+   event 13 could have flipped (didn't — checked, not assumed, and that's the correct outcome).
+2. *Asserted-but-unchecked?* The event-10/11 "passes silently/structurally" claims are backed by two direct
+   re-invokes reading the real field value, not inferred from the gate's summary line alone.
+3. *Infra error scored as a result?* No — the apply was clean, all real calls returned real, parseable
+   payloads; nothing here is an infra failure standing in for a result.
+4. *Cost below estimate?* Real total ≈$0.1049 against the corrected ≈$0.104-0.107 estimate — matches,
+   nothing to explain.
+5. *Identical markers, different paths?* Directly this entry's §7 table — `10/13` before and after tightening
+   is an identical top-line marker covering two different qualitative states underneath, named explicitly
+   rather than left to read as "nothing changed."
+6. *Has this check ever failed for the right reason?* Yes, repeatedly this entry — event 12's new message,
+   confirmed live to be the field's real absence, not a guess about what it would say.
+7. *Headline-number interpretation change?* Yes: `C1` moves from PENDING RE-VERIFICATION back to VERIFIED,
+   real; `D90` is no longer one undifferentiated open item — it is explicitly part-2-closed/part-1-open;
+   `OI3`'s disposition changes from "phantom, presumed inert" to "phantom, confirmed to re-upload harmlessly."
+8. `C1` a tradeable term? No — restored only by a real 1.000 (26/26), exactly as the standing rule requires;
+   no partial-credit path was used or suggested anywhere in this sequence.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- OI3's "no re-upload" premise corrected before apply (checked live + against provider docs). Apply run by Marco: 0 added, 2 changed, 0 destroyed, clean. Steps 5-10 executed for real: CodeSha256 confirmed 51JN903e... live, verify-lambda-execution pre-tightening 10/13 with zero deviation from the predicted set, full C1 harness 1.000 (26/26) real ($0.097668, 1m31s) restoring VERIFIED, 3 smoke-test invokes confirmed executed_node_intent's exact design live, events 10-13 tightened, post-tightening re-run 10/13 with events 11/12 now structurally different (real field, not template accident) and event 13 provably unchanged (D90 part 1 untouched).
+Open defects: D87 (OI4) CLOSED. D88/OI5 OPEN (event 10's sole cause, confirmed unrelated to this fix). D89/OI6 OPEN (event 12, now a more precise failure message). D90/OI7: part 2 CLOSED, part 1 OPEN and unscoped -- D90 stays open overall. D91/OI8 OPEN, guard proposed not built. OI3 corrected (still open -- real, harmless re-upload on every future plan/apply until source_hash replaces etag).
+C1 status: RESTORED TO VERIFIED, WARM PATH, 1.000 (26/26), build 51JN903edLEVaSjP5zoEWQir4VLC+lQEVHA56b/5CUc=, real, $0.097668, 1m31s.
+Blocked on: option A (mirror D84 inside _close()) -- unbuilt, needs its own live Lex-acceptance verification first. D90 part 1 (zero-context routing) -- unscoped, Marco's to take up next. D88/D89 dispositions still pending.
+Last apply + gate result: terraform apply "d90.tfplan" -- 0/2/0, clean, real. Gate: verify-lambda-execution 10/13 both before and after tightening. Real spend this entry: ~$0.00 (apply) + ~$0.0030 (step 6) + $0.097668 (step 7) + ~$0.0006 (step 8) + ~$0.0006 (step 10 confirm) + ~$0.0030 (step 10 gate) ~= $0.1049, matching the corrected estimate closely.
+```

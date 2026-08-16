@@ -451,5 +451,221 @@
       "Deployed re-verification (criterion 9, Line E, post-D81 fix) \u2014 real RecognizeText calls against the live alias, three-state classification, provenance-gated recall, all 17 negatives.",
       "9/17 negatives falsely escalated -- not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed system, worth its own line before criterion 10 if it recurs."
     ]
+  },
+  {
+    "started_utc": "2026-08-16T00:28:23+00:00",
+    "finished_utc": "2026-08-16T00:30:04+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 4 exit criterion 9 (Line E) \u2014 C1 re-verified against the DEPLOYED Lex alias and Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason and required for an item to count toward recall, and all 17 independent-set negatives sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's 1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 (DID routing).",
+    "fingerprint": "21234c3c701ab13c",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 3,
+    "git_commit": "428899f872db",
+    "metrics": {
+      "composed_recall_deployed": 1.0,
+      "composed_recall_deployed_counts": [
+        26,
+        26
+      ],
+      "contingency_items_used": 0,
+      "unstable_item_count": 0,
+      "divergences_from_d52": [],
+      "provenance_breakdown": {
+        "detection-pregraph": 22,
+        "detection-graph": 65,
+        "fail-closed": 0,
+        "other-default": 0
+      },
+      "false_escalation_count": 9,
+      "total_recognize_text_calls": 95,
+      "path_attribution": {
+        "read_ok": true,
+        "log_events_matched": 87,
+        "l1_count": 22,
+        "graph_path_count": 65,
+        "other_layer_count": 0
+      },
+      "cost_usd": 0.099023,
+      "bot_id": "W9MNF86T1H",
+      "bot_alias_id": "ZYAWLCMPQX"
+    },
+    "notes": [
+      "Deployed re-verification (criterion 9, Line E, post-D81 fix) \u2014 real RecognizeText calls against the live alias, three-state classification, provenance-gated recall, all 17 negatives.",
+      "9/17 negatives falsely escalated -- not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed system, worth its own line before criterion 10 if it recurs."
+    ]
+  },
+  {
+    "started_utc": "2026-08-16T02:49:58+00:00",
+    "finished_utc": "2026-08-16T02:51:28+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 4 exit criterion 9 (Line E) \u2014 C1 re-verified against the DEPLOYED Lex alias and Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason and required for an item to count toward recall, and all 17 independent-set negatives sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's 1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 (DID routing).",
+    "fingerprint": "2027f202a26e5cc0",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 3,
+    "git_commit": "428899f872db",
+    "metrics": {
+      "composed_recall_deployed": 1.0,
+      "composed_recall_deployed_counts": [
+        26,
+        26
+      ],
+      "contingency_items_used": 0,
+      "unstable_item_count": 0,
+      "divergences_from_d52": [],
+      "provenance_breakdown": {
+        "detection-pregraph": 22,
+        "detection-graph": 65,
+        "fail-closed": 0,
+        "other-default": 0
+      },
+      "false_escalation_count": 9,
+      "total_recognize_text_calls": 95,
+      "path_attribution": {
+        "read_ok": true,
+        "log_events_matched": 82,
+        "l1_count": 21,
+        "graph_path_count": 61,
+        "other_layer_count": 0
+      },
+      "cost_usd": 0.097668,
+      "bot_id": "W9MNF86T1H",
+      "bot_alias_id": "ZYAWLCMPQX"
+    },
+    "notes": [
+      "Deployed re-verification (criterion 9, Line E, post-D81 fix) \u2014 real RecognizeText calls against the live alias, three-state classification, provenance-gated recall, all 17 negatives.",
+      "9/17 negatives falsely escalated -- not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed system, worth its own line before criterion 10 if it recurs."
+    ]
+  },
+  {
+    "started_utc": "2026-08-16T12:28:22+00:00",
+    "finished_utc": "2026-08-16T12:29:52+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 4 exit criterion 9 (Line E) \u2014 C1 re-verified against the DEPLOYED Lex alias and Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason and required for an item to count toward recall, and all 17 independent-set negatives sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's 1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 (DID routing).",
+    "fingerprint": "2027f202a26e5cc0",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 3,
+    "git_commit": "428899f872db",
+    "metrics": {
+      "composed_recall_deployed": 1.0,
+      "composed_recall_deployed_counts": [
+        26,
+        26
+      ],
+      "contingency_items_used": 0,
+      "unstable_item_count": 0,
+      "divergences_from_d52": [],
+      "provenance_breakdown": {
+        "detection-pregraph": 22,
+        "detection-graph": 65,
+        "fail-closed": 0,
+        "other-default": 0
+      },
+      "false_escalation_count": 9,
+      "total_recognize_text_calls": 95,
+      "path_attribution": {
+        "read_ok": true,
+        "log_events_matched": 82,
+        "l1_count": 21,
+        "graph_path_count": 61,
+        "other_layer_count": 0
+      },
+      "cost_usd": 0.097668,
+      "bot_id": "W9MNF86T1H",
+      "bot_alias_id": "ZYAWLCMPQX"
+    },
+    "notes": [
+      "Deployed re-verification (criterion 9, Line E, post-D81 fix) \u2014 real RecognizeText calls against the live alias, three-state classification, provenance-gated recall, all 17 negatives.",
+      "9/17 negatives falsely escalated -- not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed system, worth its own line before criterion 10 if it recurs."
+    ]
+  },
+  {
+    "started_utc": "2026-08-16T15:14:31+00:00",
+    "finished_utc": "2026-08-16T15:16:02+00:00",
+    "status": "ok",
+    "error": null,
+    "reason": "Stage 4 exit criterion 9 (Line E) \u2014 C1 re-verified against the DEPLOYED Lex alias and Lambda, post-D81 fix: three-state escalated/not-escalated/invalid classification with abort-on-invalid, escalation provenance read from sessionAttributes.escalation_reason and required for an item to count toward recall, and all 17 independent-set negatives sampled at k=1 rather than a 5-item subset. Composed recall must not fall below D52's 1.000 (26/26) or the candidate is rejected regardless of what it buys. Gates criterion 10 (DID routing).",
+    "fingerprint": "eb52a59a03700ae1",
+    "fingerprint_sources": [
+      "src/fnol_voice_agent/agents/lexicon.py",
+      "src/fnol_voice_agent/aws/bedrock_router.py",
+      "src/fnol_voice_agent/config/settings.py",
+      "infra/terraform/stacks/guardrails/main.tf",
+      "src/fnol_voice_agent/guardrails/client.py",
+      "src/fnol_voice_agent/agents/nodes/guardrails_nodes.py",
+      "src/fnol_voice_agent/agents/graph.py",
+      "src/fnol_voice_agent/api/lex_codehook.py",
+      "src/fnol_voice_agent/agents/l3_lexicon.py",
+      "src/fnol_voice_agent/aws/checkpointer.py"
+    ],
+    "samples_per_item": 3,
+    "git_commit": "0ff61ce9e849",
+    "metrics": {
+      "composed_recall_deployed": 1.0,
+      "composed_recall_deployed_counts": [
+        26,
+        26
+      ],
+      "contingency_items_used": 0,
+      "unstable_item_count": 0,
+      "divergences_from_d52": [],
+      "provenance_breakdown": {
+        "detection-pregraph": 22,
+        "detection-graph": 65,
+        "fail-closed": 0,
+        "other-default": 0
+      },
+      "false_escalation_count": 9,
+      "total_recognize_text_calls": 95,
+      "path_attribution": {
+        "read_ok": true,
+        "log_events_matched": 82,
+        "l1_count": 21,
+        "graph_path_count": 61,
+        "other_layer_count": 0
+      },
+      "cost_usd": 0.097668,
+      "bot_id": "W9MNF86T1H",
+      "bot_alias_id": "ZYAWLCMPQX"
+    },
+    "notes": [
+      "Deployed re-verification (criterion 9, Line E, post-D81 fix) \u2014 real RecognizeText calls against the live alias, three-state classification, provenance-gated recall, all 17 negatives.",
+      "9/17 negatives falsely escalated -- not a C1 breach (C1 is a recall constraint) but a real precision defect on the deployed system, worth its own line before criterion 10 if it recurs."
+    ]
   }
 ]
