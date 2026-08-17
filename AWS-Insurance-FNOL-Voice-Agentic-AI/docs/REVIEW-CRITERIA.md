@@ -210,6 +210,29 @@ deliberately left as-is with a stated reason (`D90`'s escalation call sites, whe
 a different claim, not the same defect), or filed open — the same three-way disposition §5 already requires
 for carry-forward items, applied here to call sites of one defect instead of phases of one project.
 
+**Extended 2026-08-16, Marco, after `D121` (`RESULTS.md` §76, `PROJECT_STATE.md` `OI39`) — enumerate
+mechanisms, not just call sites.** `D16`'s four custom identifier regexes were removed at the guardrail's
+v2->v3 change, Marco-approved, for a stated reason: "the guardrail masking a caller's own claim number,
+policy number and plate back to the caller who owns them is a defect with no upside"
+(`docs/phase7/NOT-FIXED.md` #8). That fix closed every call site of the regex mechanism. It did not ask
+whether the identical *outcome* — a caller's own data masked back to them — was reachable through a
+*different* mechanism, and it was: `sensitive_information_policy_config`'s `EMAIL`/`PHONE` PII entities,
+untouched by the v2->v3 change, reach the same outcome on `UpdateContactInfo`'s confirmation readback.
+Nobody checked, because the enumeration that closed `D16` was scoped to "every site using this regex," and
+a PII entity type is not a call site of a regex — it is a structurally different mechanism configured in a
+different block of the same guardrail resource, aimed at the same class of harm.
+
+**The defect class here is not "this regex fires here too" — it is "the caller's own data gets masked
+back to them," and that class has more than one mechanism in this codebase** (custom regex, PII entity
+`ANONYMIZE`, and potentially others not yet audited — content filters, word filters). **§8's rule, restated
+one level up: when a fix removes one mechanism that produces an unwanted outcome, enumerate every other
+mechanism capable of producing the *same outcome*, not only every other call site of the *same mechanism*.**
+A call-site sweep answers "did I fix this everywhere this code runs"; a mechanism sweep answers "did I fix
+this everywhere this *effect* can happen" — the second question is the one a defect's own stated reason
+(here, "masking a caller's own identifier is a defect with no upside") actually poses, and the first
+question does not automatically answer it. The v2->v3 fix was **incomplete, not wrong in kind** — its
+target outcome was correctly identified, its enumeration stopped one layer too shallow.
+
 ## 9. A summary carrying a scoped claim must cite its source line, and the scope must be verified against it
 
 Added 2026-08-16, Marco, after a handoff document (`docs/handoffs/2026-08-16-phase11-midflight.md`, `RESULTS.md`
@@ -248,3 +271,31 @@ risk is flagged inline, e.g. `` `u9iIy...` [historical hash as written — see c
 accompanied by the current value stated directly alongside it.** Do not "fix" a quote by editing the number
 inside it — that defeats the reason to quote (a reader seeing the record's own words) and reintroduces the
 exact risk this section exists to close, just via a new paraphrase instead of an old one.
+
+## 10. A guardrail (or classifier) `examples` entry is a config input, not a verified behavior
+
+Added 2026-08-16, Marco, after `D89`'s fix work (`RESULTS.md` §§41-47): `legal_and_medical_advice`'s own
+listed example, `"Do I need to see a doctor for this or will it heal on its own?"`, has been present since
+the topic was written and was treated throughout two fix attempts (Option A, Option D) as a settled fact that
+it blocks its own topic — cited as "the topic's own canonical example" and as evidence a rewrite had
+introduced a regression against it. A direct `ApplyGuardrail` probe of that exact string, run for the first
+time this session, returns `NONE`. It never triggered its own topic; nobody had checked before assuming it
+did.
+
+**Listing a phrase under a denied topic's `examples` (or any classifier's few-shot/training examples) is an
+instruction to the classifier about what to catch. It is not a test, and it does not verify that the
+classifier actually catches it.** The two are easy to conflate because they use the same string in the same
+config object, but they are different claims: "this phrase is declared as belonging to the topic" versus
+"`ApplyGuardrail` run against this exact phrase returns `BLOCKED`." Only the second is a checked fact; the
+first is unchecked by construction until someone runs it.
+
+**Before citing a denied-topic (or classifier) example as evidence of current behavior — a working case a
+rewrite might have regressed, a "canonical" case establishing what the topic covers, a control in a
+regression set — run it through the real check (`ApplyGuardrail`, or the equivalent for the classifier in
+question) first.** Same family as §1.6 (a check that has only ever passed is untested) and §7 (activity
+signals are not effect signals) one level further back: here the risk is not a signal being misread or an
+untested check, it is a **configuration value mistaken for a verification result** because both are spelled
+the same way in the same file. When a fix changes a definition and a listed example stops matching, do not
+assume the fix caused it — probe the *unchanged* baseline (a prior version, or a byte-identical revert) for
+the same phrase before attributing the change to the edit under test; §47's correction of §43/§44's
+"regression" finding is the worked example of doing this the right way, one round late.

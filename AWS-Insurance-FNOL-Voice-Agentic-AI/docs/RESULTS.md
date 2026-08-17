@@ -10198,3 +10198,44 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducibl
 Blocked on: Marco's decision on D121/OI39 -- fix now or triage into ACCEPT/DEFER, same bucketing discipline as this phase's earlier triage.
 Last apply + gate result: none this entry. ~$0.0007 real spend, one live Lambda invoke with real guardrail+router calls, well inside the $5 Bedrock cap.
 ```
+
+## 77. `D121`/`OI39` triaged FIX NOW, deliberately not scoped or fixed tonight; `REVIEW-CRITERIA.md` §8
+extended -- enumerate mechanisms, not just call sites; reviewer briefing written as this session's close
+
+`§77`, `session-auditfold` block, no new `D`/`OI` -- a triage decision and a standing-rule extension, not a
+fresh finding.
+
+**Triage decision, Marco, verbatim in substance**: `D121`/`OI39` goes in the **FIX NOW** bucket, not ACCEPT
+or DEFER -- but explicitly not scoped or fixed this entry. "It needs a design decision, a guardrail version
+bump, a redeploy, and a `C1` cycle -- that is a fresh session's work, not the end of a long one." Recorded
+in `PROJECT_STATE.md`'s `OI39` row as both FIX NOW (not accepted risk) and NOT DONE (nothing touched this
+entry) at once, deliberately, so neither state reads as the other.
+
+**Severity recorded precisely, per Marco's instruction, so the next session sees it first**: `UpdateContactInfo`
+cannot be completed by voice for `field=email` or `field=phone` -- two of three field values, a dead intent
+on most of its surface, live since the guardrail's `EMAIL`/`PHONE` entities were configured (the exposure
+predates this session; only the discovery is new). Higher severity than every other item currently open in
+this ledger -- the rest degrade a path, misroute a turn, or leave a gap unmeasured; this one makes an
+entire in-scope intent structurally uncompletable on 2 of 3 designed branches, silently.
+
+**`REVIEW-CRITERIA.md` §8 extended** with `D121` as a worked example: the v2->v3 fix (`D16`) enumerated
+every *call site* of the regex mechanism it removed, correctly, and closed all of them -- but never asked
+whether the same *outcome* (a caller's own data masked back to them) was reachable through a *different*
+mechanism (the PII entity `ANONYMIZE` policy, untouched by that change). It was. **§8's rule restated one
+level up**: enumerate every mechanism capable of producing the same outcome, not only every other call site
+of the same mechanism. The fix was incomplete, not wrong in kind -- full text at §8's own extension, not
+duplicated here.
+
+**Runbooks (criterion 5) deliberately NOT written this entry** -- Marco's explicit instruction, criterion 5
+stays open. The reviewer briefing (`docs/handoffs/2026-08-16-phase11-reviewer-briefing.md`) is this
+session's closing act instead, `D121` listed as its top open item.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 -- D121/OI39 triaged FIX NOW, deliberately unscoped (design decision + guardrail version bump + redeploy + C1 cycle, a fresh session's work). Severity recorded: UpdateContactInfo dead on 2 of 3 field values by voice, highest severity currently open. REVIEW-CRITERIA.md §8 extended with D121 as the worked example: enumerate mechanisms producing the same outcome, not only call sites of the same mechanism -- v2->v3's D16 fix was incomplete, not wrong in kind. Criterion 5 (runbooks) deliberately left open this entry. Reviewer briefing written as this session's close, D121 as its top item.
+Open defects: D121/OI39 unchanged, FIX NOW/unscoped. All other open items unchanged.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducible from main as of 8f140bc. Not touched this entry.
+Blocked on: nothing for this entry. D121/OI39 itself blocks on a fresh session's design decision.
+Last apply + gate result: none this entry. $0.00 real spend -- documentation and a standing-rule extension only.
+```
