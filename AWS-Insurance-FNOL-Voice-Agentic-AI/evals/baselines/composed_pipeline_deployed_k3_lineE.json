@@ -31,14 +31,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1880,
-        1045,
-        1050
+        1496,
+        1079,
+        959
       ],
       "session_ids": [
-        "criterion9-432f03bc-5257-4b46-817c-ed0dac845fb0",
-        "criterion9-90dbb67f-9237-41ae-b4c3-fdd11617a806",
-        "criterion9-386da143-5364-4782-839c-29e3a6353812"
+        "criterion9-82cf71f7-e90e-4c1d-a292-91b14f1e5c38",
+        "criterion9-8674275f-e868-46c1-a897-b6576d69675b",
+        "criterion9-66137c72-5b04-4e7c-bcb4-a20546316ab8"
       ]
     },
     {
@@ -61,14 +61,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        182,
-        172,
-        185
+        199,
+        201,
+        206
       ],
       "session_ids": [
-        "criterion9-4a66277f-a234-49d1-bc0d-9aaa389db2ec",
-        "criterion9-bf7e6b8d-81bf-4949-8dd0-b267aae8741b",
-        "criterion9-17bf41a8-2311-4f9f-ac0a-dc1cc695a913"
+        "criterion9-c32f4bdd-4071-4340-80de-10b87bafe02f",
+        "criterion9-3fd2fef4-ca1c-4331-bdc5-3e8d35c243b8",
+        "criterion9-7a2926ba-7dcb-448d-af1b-aed3ccea0bc4"
       ]
     },
     {
@@ -91,14 +91,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1030,
-        1122,
-        1079
+        1014,
+        1041,
+        1035
       ],
       "session_ids": [
-        "criterion9-2163f4f5-1667-43f8-9ab1-93c3fe467bce",
-        "criterion9-cb620a20-378a-433c-bfda-46feb48a483b",
-        "criterion9-07a6cb1f-2bf3-4562-9370-b3f533b73f98"
+        "criterion9-07fc6ace-071d-47d8-a7c9-e4a1ffe95707",
+        "criterion9-d595bdfa-9d5e-4e84-b88c-a0401cde3353",
+        "criterion9-80ea5094-d2ed-4a2c-ae9f-716bad038490"
       ]
     },
     {
@@ -121,14 +121,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        185,
-        234,
-        184
+        184,
+        200,
+        214
       ],
       "session_ids": [
-        "criterion9-e836fae8-0f20-4025-b5fb-2a3ffeee724b",
-        "criterion9-145317b4-d9e4-4f46-88e9-b72d7bc27b61",
-        "criterion9-e1c8f42c-7ff6-4361-868e-7e380eacb12e"
+        "criterion9-1a40e5b0-9439-4d00-9576-93c996e9973d",
+        "criterion9-06f58072-73e1-4832-86eb-9cc14dc4c144",
+        "criterion9-17e4260c-a5bc-4467-babf-c9fa8659e206"
       ]
     },
     {
@@ -151,14 +151,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        186,
-        183,
-        195
+        199,
+        288,
+        193
       ],
       "session_ids": [
-        "criterion9-bd0bf3e8-8cc3-4b51-9f7c-24658787f296",
-        "criterion9-4ca31c39-ae60-4e7c-b42d-a5c316568bfb",
-        "criterion9-09dcb421-febd-46ad-8a50-80c443973da4"
+        "criterion9-72bcd36f-c8fc-42e7-a9e2-b75a68774798",
+        "criterion9-2ed3436d-6edf-402a-b1f4-aee2bdf3aeea",
+        "criterion9-b1f95f4a-b485-44bd-99ea-9d637c550497"
       ]
     },
     {
@@ -181,14 +181,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        168,
-        166,
-        174
+        184,
+        182,
+        187
       ],
       "session_ids": [
-        "criterion9-2192a398-a328-4268-9016-4fc925fce090",
-        "criterion9-6ed2dfed-bb74-4fad-9a56-e61651fb9f11",
-        "criterion9-53189491-4c0d-4551-8ac2-22003d131c72"
+        "criterion9-e9fbb427-720a-4dae-bafb-124f7ba365e0",
+        "criterion9-68aa7b7c-1a2f-4070-bd26-b9b39552048f",
+        "criterion9-a4fedd67-f7ac-4f4b-9a8f-a74f3b3dd4ea"
       ]
     },
     {
@@ -211,14 +211,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        184,
-        186,
-        186
+        179,
+        197,
+        256
       ],
       "session_ids": [
-        "criterion9-58597781-f0f9-458b-ac34-fcacc65f9c6f",
-        "criterion9-dbfbefab-5b72-4f6f-8598-806bdf2bf44c",
-        "criterion9-5a1a539b-75a0-41bf-9d03-26f235b5a7ca"
+        "criterion9-4f2f9815-2a7e-4ba4-acbd-c0cd232aa635",
+        "criterion9-a9efcb0e-9ede-4fe8-bd05-26fd774c8dd9",
+        "criterion9-372c1c3a-9d5f-4c90-bbaa-c3cea3a0d3ab"
       ]
     },
     {
@@ -241,14 +241,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        277,
         199,
-        206
+        211,
+        220
       ],
       "session_ids": [
-        "criterion9-acafae27-405a-4db8-899a-34a7e9aee4b9",
-        "criterion9-b344c0fa-5b4e-4f41-abd8-766b37af97e6",
-        "criterion9-ed96c0be-7813-4988-9c25-2b9d630c0f61"
+        "criterion9-d0348438-d3de-4d41-b602-fc268970101e",
+        "criterion9-99ed4f36-cca7-4759-b15a-cdfbd3a4fc8f",
+        "criterion9-7e751e40-bc0b-412d-97bb-d196d27b2520"
       ]
     },
     {
@@ -271,14 +271,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1009,
-        1005,
-        1037
+        1136,
+        1003,
+        1138
       ],
       "session_ids": [
-        "criterion9-af52ac52-b1c8-459b-bc65-7e8489f1b98c",
-        "criterion9-db79ad7e-c4e5-40cf-bc7c-a18b7d801f19",
-        "criterion9-27d14107-a69d-48c1-b3a0-831d6fd0dbcf"
+        "criterion9-85d45c29-c184-48fb-ae74-8227f4864f33",
+        "criterion9-46e39708-5b88-43d4-86fe-f3378d632180",
+        "criterion9-a9c58f3b-c5a7-42fa-972e-412620990c03"
       ]
     },
     {
@@ -301,14 +301,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1017,
-        1027,
-        1053
+        1060,
+        1117,
+        1252
       ],
       "session_ids": [
-        "criterion9-54bfa089-ffc8-4536-a3db-0e82a136912a",
-        "criterion9-ecbf758e-421e-449d-8433-10aa3ae6f87d",
-        "criterion9-c846922c-f625-49c7-a6c1-012508f0b194"
+        "criterion9-b5d071f9-5901-4ecd-90ca-1b71ce4d97fd",
+        "criterion9-1866a94d-068d-49aa-ae91-cd17a485e98b",
+        "criterion9-e91e97b9-1259-4255-9dfb-eef43a5ae6d9"
       ]
     },
     {
@@ -331,14 +331,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1102,
-        984,
-        1031
+        1417,
+        1204,
+        1047
       ],
       "session_ids": [
-        "criterion9-c3143bc8-2fd1-4b05-bfed-9c23cb1ecb13",
-        "criterion9-a0e030d7-446e-49e3-9d33-ac38144f17b4",
-        "criterion9-8eadb96d-36d2-4464-a00f-2eb19e93fe34"
+        "criterion9-de7b0ed7-0fa3-4ba4-8ad7-1eab34989103",
+        "criterion9-525bfca4-b97b-41f7-9afa-fd10ab46ef14",
+        "criterion9-8704ee6b-8be9-4f28-aaa7-c98bd380187c"
       ]
     },
     {
@@ -361,14 +361,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1007,
-        1072,
-        1068
+        1050,
+        1047,
+        1049
       ],
       "session_ids": [
-        "criterion9-1405971b-3a15-41ed-b6bc-b41cc482809c",
-        "criterion9-ba61e322-623e-4a77-9bb3-a63301a09163",
-        "criterion9-d188be4f-f57e-4ab8-a791-84af0571e35e"
+        "criterion9-9c703559-0626-49ed-82d1-8f17688f3826",
+        "criterion9-1a5cbd53-a328-4b8d-975a-07881506f685",
+        "criterion9-5aace17c-81be-457a-a47c-cc00de3ec99f"
       ]
     },
     {
@@ -391,14 +391,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1151,
-        1753,
-        1074
+        1056,
+        1056,
+        1141
       ],
       "session_ids": [
-        "criterion9-2ce396b0-f3b1-48b2-9e43-6072508d31da",
-        "criterion9-0be43c1b-3c4f-49f2-a30f-660a72907964",
-        "criterion9-da07593d-c48d-41e2-a8aa-ed400708b661"
+        "criterion9-75c60b4c-fa86-46ed-b71e-3505f1086430",
+        "criterion9-b387b6e8-3651-482a-9883-9a9a381a68f4",
+        "criterion9-58ace6fd-15f0-45f9-bed3-32a76c7d951b"
       ]
     },
     {
@@ -421,14 +421,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1021,
-        1048,
-        1069
+        1022,
+        1055,
+        1079
       ],
       "session_ids": [
-        "criterion9-cfe6368b-2785-4d69-b709-771fee50844c",
-        "criterion9-7083aed7-2913-4849-8ec3-4b0e4d8ab8d0",
-        "criterion9-a95afa52-7946-4349-8a7e-a97ee9e72f67"
+        "criterion9-b3693dd7-3c09-4d76-8a95-d9312c910af0",
+        "criterion9-a0e16602-5bcb-47ad-a1fd-736c40acf32a",
+        "criterion9-e350f05e-2942-417d-a027-776debea28a7"
       ]
     },
     {
@@ -451,14 +451,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1035,
-        1040,
-        1078
+        998,
+        989,
+        1038
       ],
       "session_ids": [
-        "criterion9-aa07aacf-ac49-4fe2-85c4-ea31d4c5a5a5",
-        "criterion9-e7922242-3375-4277-b224-2066754e80cc",
-        "criterion9-635cbe38-498f-45cf-bc5f-b40641dcc122"
+        "criterion9-8a2578cc-65a8-4ab5-85d4-5cdee9509b58",
+        "criterion9-45d9822a-0ed7-401f-afef-41d81259089b",
+        "criterion9-5ca45766-6675-4148-b5aa-7a362def604d"
       ]
     },
     {
@@ -481,14 +481,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1121,
-        1338,
-        1019
+        1048,
+        1049,
+        1047
       ],
       "session_ids": [
-        "criterion9-8fcfd541-675f-47b4-a366-81008cd4b1c8",
-        "criterion9-25fc8c23-e1ab-47a3-a719-d4b2f2772f1a",
-        "criterion9-a4b776df-7637-49ff-bde5-d8a8761f18a9"
+        "criterion9-34183f85-a207-4bd7-aba8-a2f76d8cfbeb",
+        "criterion9-3f028a58-5246-460b-a90e-11fcda32d81f",
+        "criterion9-099c5796-4e9f-4bf3-bccd-10677ebfafb4"
       ]
     },
     {
@@ -511,14 +511,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1018,
-        2009,
-        1037
+        1048,
+        1057,
+        1043
       ],
       "session_ids": [
-        "criterion9-7507c24a-f8e0-4281-9a86-e8838bdbc333",
-        "criterion9-64e25667-63fc-4982-a7a0-7e7c2febaa40",
-        "criterion9-bd2c905c-9ea0-47d9-80bc-fac290967a3d"
+        "criterion9-f763092a-1aea-4e48-9fc5-0aa16d01f611",
+        "criterion9-dbfc4663-b45c-48ef-b844-39f87cf5c6d8",
+        "criterion9-6926de99-e58c-475b-8805-c61bc200a940"
       ]
     },
     {
@@ -541,14 +541,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1115,
-        1042,
-        1037
+        1043,
+        1057,
+        1110
       ],
       "session_ids": [
-        "criterion9-efdf6c73-d181-4f9e-bc4f-bc931244dde4",
-        "criterion9-f51c1b78-08ea-4396-9ed3-c8e339e4c6dd",
-        "criterion9-34e73fc7-c3c8-443b-9e84-36eccbc06aba"
+        "criterion9-c0e229c3-afc0-4c0c-840f-65833f72c91e",
+        "criterion9-7489a03b-b13b-42b1-a242-6f1c560da0d9",
+        "criterion9-603ce483-c777-4a74-aefd-14897039ac29"
       ]
     },
     {
@@ -571,14 +571,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        236,
-        229,
-        397
+        199,
+        254,
+        222
       ],
       "session_ids": [
-        "criterion9-7b56dd8d-815b-4a27-ac7a-50d43f1a314f",
-        "criterion9-61d79f0b-6a61-4545-a22f-6244cffe13bb",
-        "criterion9-209141cd-01d0-4b1b-8d70-2cb4df329d14"
+        "criterion9-7ba7b08f-b9bb-4712-92db-d63421645261",
+        "criterion9-3ca51e21-e0cb-4336-8929-6577e593936d",
+        "criterion9-6d8b57f6-3d1e-4ee7-8487-b274aa1b6fc5"
       ]
     },
     {
@@ -601,14 +601,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1459,
-        1121,
-        1082
+        1011,
+        1083,
+        1035
       ],
       "session_ids": [
-        "criterion9-28cb7bba-6407-40a0-b039-0e00e8649ae7",
-        "criterion9-6ac077d6-3c08-4543-9a9a-877a616a47dd",
-        "criterion9-559adf44-718b-4ca5-b5d1-d1ce2f4272d3"
+        "criterion9-4ee9b198-10c0-401f-8856-431afc4c74f3",
+        "criterion9-c5302ae1-b84d-42b7-a308-1ab3d73ba45f",
+        "criterion9-9758c9aa-9e66-4dd8-8a59-4f965d41e4c3"
       ]
     },
     {
@@ -631,14 +631,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1060,
-        1041,
-        996
+        1224,
+        1714,
+        1051
       ],
       "session_ids": [
-        "criterion9-1468d3de-fee7-49f4-92cc-09cdae02c004",
-        "criterion9-68bde8b3-48c1-48e4-9980-b44462894c7c",
-        "criterion9-06408d60-d0e2-4e76-a052-bc8102462e94"
+        "criterion9-d94ec077-29a6-4bc3-8f7b-7b1300365d88",
+        "criterion9-84023f4c-0a43-42f9-a8a3-c2225a315081",
+        "criterion9-fda1bf8b-7e1c-483b-bad6-d8758998cd75"
       ]
     },
     {
@@ -661,14 +661,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1023,
-        1015,
-        1046
+        1048,
+        1085,
+        1013
       ],
       "session_ids": [
-        "criterion9-c17c50a8-669c-487c-b08d-4cd0e6941f11",
-        "criterion9-053eaa6a-0f86-4f08-b0a6-03a1652851b7",
-        "criterion9-8fc4210e-4760-4af7-bf55-92ed6d66787c"
+        "criterion9-960497aa-e16f-4399-b884-78915f8a057b",
+        "criterion9-fcb77b12-87ef-4517-8677-a2314206b606",
+        "criterion9-19aa25fb-b9f1-4022-95e0-ed72d1ebaeb3"
       ]
     },
     {
@@ -691,14 +691,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1044,
-        1069,
-        1691
+        1048,
+        1142,
+        1126
       ],
       "session_ids": [
-        "criterion9-6e38fbcd-0cce-407e-b3c4-f9a806b080c2",
-        "criterion9-d69fac7e-6eee-414c-bdff-58b3d17e4f1f",
-        "criterion9-982203ec-76e7-4863-9614-329a271ce76b"
+        "criterion9-72275464-76e6-470b-93c4-36d54c553a95",
+        "criterion9-b42269be-b758-4ab1-8883-2ae75ce3a9c6",
+        "criterion9-8a4bcbac-c02c-45c9-9d42-ffd5c58caaea"
       ]
     },
     {
@@ -721,14 +721,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1072,
-        979,
-        1038
+        1071,
+        1178,
+        1760
       ],
       "session_ids": [
-        "criterion9-74791644-3397-4e69-9d3b-4c96757d4d58",
-        "criterion9-a3f7ffde-1d6b-480e-9953-bbebdda8b769",
-        "criterion9-837a54dc-cde7-4465-a6b3-820763e90ad6"
+        "criterion9-bad28e8a-b442-4c85-b5a2-59a119e7261c",
+        "criterion9-4a173d41-818c-4145-98d4-bdc8050079c8",
+        "criterion9-00fd1b8c-867e-4294-8cf5-7ef85009f439"
       ]
     },
     {
@@ -751,14 +751,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1002,
-        1015,
-        1941
+        1054,
+        1044,
+        1046
       ],
       "session_ids": [
-        "criterion9-5f0eebbe-c303-431e-a8b3-cf2099500087",
-        "criterion9-d6e59556-5300-413b-83a5-7df0eecf65de",
-        "criterion9-474c5a9a-e929-4b72-b499-e568fd88c455"
+        "criterion9-9f337caf-881a-4ea6-b3e1-5424d0b6e776",
+        "criterion9-cee154ac-cb8b-4f5b-a845-a7a59d53ac4d",
+        "criterion9-e3b14c0b-b14c-4969-9321-15aca4f93705"
       ]
     },
     {
@@ -781,14 +781,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
+        1047,
         1056,
-        1007,
-        1136
+        1724
       ],
       "session_ids": [
-        "criterion9-f2d46606-5da5-4051-9725-047cbf2ab82f",
-        "criterion9-7647898b-cb1a-48f0-b987-ebf24912b3b6",
-        "criterion9-6b6e62e6-3450-44fe-a005-f415a217a5ec"
+        "criterion9-547e009d-d1db-4eb6-8861-144291617b08",
+        "criterion9-66f012b6-8b58-4026-9258-9aeae00f0446",
+        "criterion9-4f828866-9679-43e8-8c14-4367786e4555"
       ]
     }
   ],
@@ -799,8 +799,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1176,
-      "session_id": "criterion9-b05fdfd3-29e3-4a45-9153-e5bd22772222"
+      "elapsed_ms": 2213,
+      "session_id": "criterion9-f9a22425-faa1-4e33-b718-74ee069539d3"
     },
     {
       "text": "the car's totalled",
@@ -808,8 +808,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1080,
-      "session_id": "criterion9-d1d26a6d-cf3d-45c0-972a-3fe2f0fbe54b"
+      "elapsed_ms": 1827,
+      "session_id": "criterion9-cc5dcd90-6c54-4ed2-aadc-16ea86f6c811"
     },
     {
       "text": "I've got a bit of a bruise on my knee where it hit the dash, nothing worth mentioning really",
@@ -817,8 +817,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1075,
-      "session_id": "criterion9-5da2686d-aee6-4e0c-83bc-f66eb134cf54"
+      "elapsed_ms": 1139,
+      "session_id": "criterion9-cf79b85f-a07c-47ed-aaab-1274f3beddb6"
     },
     {
       "text": "no injuries at all, just the two cars",
@@ -826,8 +826,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1081,
-      "session_id": "criterion9-aa626488-a28f-45e1-abd5-493929c41be0"
+      "elapsed_ms": 1260,
+      "session_id": "criterion9-4ba4520d-487d-447e-b6e9-691ee128c984"
     },
     {
       "text": "the front end is completely destroyed",
@@ -835,8 +835,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1102,
-      "session_id": "criterion9-3409f6c7-be6f-4fd4-8a95-195717f549b4"
+      "elapsed_ms": 1618,
+      "session_id": "criterion9-33b96781-15e3-43d8-98a4-77dedac9fb20"
     },
     {
       "text": "there's no blood or anything, it's just the bumper",
@@ -844,8 +844,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1923,
-      "session_id": "criterion9-729df5b0-1c55-46e3-9126-03dc3bc36b7e"
+      "elapsed_ms": 1125,
+      "session_id": "criterion9-924bf161-c75e-46de-9f4e-62a33429eda9"
     },
     {
       "text": "my back's been bad since last year, nothing to do with today",
@@ -853,8 +853,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1322,
-      "session_id": "criterion9-7876b0fa-652d-4f86-a80c-888014cede5d"
+      "elapsed_ms": 1169,
+      "session_id": "criterion9-0b4a83a6-72ba-4061-90b6-2936e856880b"
     },
     {
       "text": "everyone's fine, we all walked away from it",
@@ -862,8 +862,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1112,
-      "session_id": "criterion9-4f2fbfe3-7d22-49aa-8610-f304bfd0bad1"
+      "elapsed_ms": 1061,
+      "session_id": "criterion9-e1f31c70-5c02-4ee8-8e38-a05570d904c7"
     },
     {
       "text": "she took a real beating, poor thing, I've had that car eleven years",
@@ -871,8 +871,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1041,
-      "session_id": "criterion9-6b29ee3f-6983-45ac-80f6-d58ffc5b5ae2"
+      "elapsed_ms": 1040,
+      "session_id": "criterion9-2c5027a5-8062-455b-b027-805e22a4798b"
     },
     {
       "text": "thankfully nobody was injured",
@@ -880,8 +880,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 2812,
-      "session_id": "criterion9-8bc5935c-2433-4290-9bec-613036ad4bee"
+      "elapsed_ms": 1156,
+      "session_id": "criterion9-797e63e4-b5fa-4217-ac61-ce54df5ee396"
     },
     {
       "text": "there's a scrape on my elbow, I've put a plaster on it, it's fine",
@@ -889,8 +889,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1074,
-      "session_id": "criterion9-dd61788e-b58c-45f1-8808-529c56041b62"
+      "elapsed_ms": 1046,
+      "session_id": "criterion9-a882884d-f4f7-428e-9044-3f20befc6d29"
     },
     {
       "text": "I checked on the other driver and the two kids in her back seat and honestly not one of them had a scratch on them",
@@ -898,8 +898,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1546,
-      "session_id": "criterion9-7fbc17b9-9ab8-41f2-b8a5-8ffafcb23ed6"
+      "elapsed_ms": 1063,
+      "session_id": "criterion9-ca41bb3a-6b4a-42a4-b24d-2adb25076fc2"
     },
     {
       "text": "I'm a bit stiff in the shoulder this morning but that's about the size of it",
@@ -907,8 +907,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1108,
-      "session_id": "criterion9-8fa1f29b-424a-4864-b521-0f8639515cca"
+      "elapsed_ms": 1073,
+      "session_id": "criterion9-5f5cdf01-91df-4f04-a231-9c995f3e1866"
     },
     {
       "text": "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in",
@@ -916,8 +916,8 @@
       "status": "escalated",
       "escalation_reason": "detection-pregraph",
       "falsely_escalated": true,
-      "elapsed_ms": 205,
-      "session_id": "criterion9-1fccc5cb-5dcc-44d3-a8d6-cbc7a5d253ce"
+      "elapsed_ms": 203,
+      "session_id": "criterion9-493995a4-c09a-41a8-b3b5-b8149fe690da"
     },
     {
       "text": "the driver's door is caved right in, it'll be a write-off",
@@ -925,8 +925,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1017,
-      "session_id": "criterion9-0f3b6f71-8d1a-477e-9ed4-99c97aab0739"
+      "elapsed_ms": 998,
+      "session_id": "criterion9-2521d473-4e85-45bd-86c5-b8a212b538c8"
     },
     {
       "text": "I don't think anyone's hurt, we're all just a bit shaken up",
@@ -934,8 +934,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1095,
-      "session_id": "criterion9-bfc2688c-d73b-45d6-8558-dfef605b5a56"
+      "elapsed_ms": 1118,
+      "session_id": "criterion9-7e802f6f-82b1-4ef8-a2ac-895d9e0e926f"
     },
     {
       "text": "I had a knee replacement a few years back but it held up fine, no bother",
@@ -943,8 +943,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1105,
-      "session_id": "criterion9-1e4c19c1-6716-4b4d-9b08-e42cb21f85c4"
+      "elapsed_ms": 1048,
+      "session_id": "criterion9-69d45ccb-df81-4ab2-a3a3-0fd779852076"
     }
   ],
   "positives": 26,
@@ -1016,8 +1016,8 @@
     "graph_path_calls_used_for_estimate": 78,
     "total_usd": 0.097668
   },
-  "run_started_utc": "2026-08-16T15:14:31+00:00",
-  "run_finished_utc": "2026-08-16T15:16:01+00:00",
+  "run_started_utc": "2026-08-16T21:13:35+00:00",
+  "run_finished_utc": "2026-08-16T21:15:03+00:00",
   "bot_id": "W9MNF86T1H",
   "bot_alias_id": "ZYAWLCMPQX"
 }
