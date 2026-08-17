@@ -10343,3 +10343,101 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducibl
 Blocked on: D121/OI39 itself still blocks on a fresh session's design decision (per §77) -- Block 2's design work depends on this entry's clean-input conclusion and inherits the missing-"before" gap as something its own fix verification must capture.
 Last apply + gate result: none this entry. $0.0008 real spend, two live ApplyGuardrail OUTPUT calls, well inside the $5 Bedrock cap.
 ```
+
+## 79. `D121` Block 2 -- §8 mechanism sweep artifact, and Marco's working preference (spelled/grouped
+readback) empirically falsified before the design decision closes
+
+`§79`, `session-auditfold` block. `D121`/`OI39` still FIX NOW, unscoped, per `§77`. This entry does not
+close the design decision -- that step is `/grill-with-docs`, reserved for Marco's own invocation and not
+run this entry -- but it produces the two artifacts that decision depends on: the `§8` mechanism sweep, and
+a live empirical test of the specific readback shape Marco named as a working preference.
+
+**§8 mechanism sweep, written artifact**:
+`docs/audits/2026-08-16-d121-guardrail-mechanism-sweep.md`. Every policy block in the live
+`infra/terraform/stacks/guardrails/main.tf` (298 lines, read in full for this entry) enumerated against the
+outcome "caller's own data masked back to them" -- content filters and denied topics excluded by action
+type (BLOCK only, no ANONYMIZE exists for either), word filters and custom regexes excluded as absent from
+the file entirely (grepped, not assumed), five of the seven configured PII entities
+(`CREDIT_DEBIT_CARD_NUMBER`, `US_SOCIAL_SECURITY_NUMBER`, `CA_SOCIAL_INSURANCE_NUMBER`, `DRIVER_ID`,
+`PASSWORD`) excluded as configured-but-not-structurally-reachable -- no node in this codebase ever
+constructs a `response_text` containing a card, SSN, SIN, driver-ID, or password value, checked by reading
+all 27 `response_text` call sites across `agents/nodes/*.py` directly. **Verdict: `EMAIL`/`PHONE` via
+`UpdateContactInfo`'s confirmation readback (`D121`) is the only live, structurally reachable instance of
+this outcome in the six in-scope intents' designed paths.** One residual gap named, not swept as closed:
+free-text slots (`coverage_topic`, `entitlement_type`) could in principle carry caller-volunteered PII into
+an LLM-generated answer -- a different mechanism shape from `D121`'s structured-slot-echo, not audited,
+not probed.
+
+**Empirical test of Marco's working preference.** Stated preference: keep the `EMAIL`/`PHONE` entities
+configured, change `update_contact_info_node`'s readback to a spelled/phonetic or digit-grouped form
+(spelled email, grouped phone digits) rather than the raw value -- reasoning that email/phone are exactly
+where voice transcription fails, so a confirmation that never exposes the value is theatre. Marco named the
+open question explicitly: whether a spelled or grouped form still trips the PII detector is empirical, not
+an assumption to design on. Eight real `ApplyGuardrail` OUTPUT calls, `BedrockGuardrailClient` (`ADR-013`,
+no raw `boto3`), guardrail id/version read live immediately before the run (`terraform -chdir=infra/
+terraform/stacks/guardrails output`: `zl5ppnyorwd2` / `"5"`, unchanged from `§78`):
+
+| Probe | Text | `masked` | `raw_action` | `output_text` |
+|---|---|---|---|---|
+| `email_spelled_letters` | `"That's m, a, r, c, o, s, at gmail dot com -- is that right?"` | **True** | `GUARDRAIL_INTERVENED` | `"That's {EMAIL} -- is that right?"` |
+| `email_nato_style` | `"That's Mike Alpha Romeo Charlie Oscar Sierra, at Gmail, dot com -- is that right?"` | **True** | `GUARDRAIL_INTERVENED` | `"That's {EMAIL} -- is that right?"` |
+| `email_raw_control` | `"That's marcos@gmail.com -- is that right?"` | True | `GUARDRAIL_INTERVENED` | `"That's {EMAIL} -- is that right?"` |
+| `phone_grouped_digits` | `"That's area code four one six, then nine eight seven, then one five four seven -- is that right?"` | **True** | `GUARDRAIL_INTERVENED` | `"That's area code four one six, then nine eight seven, then one {PHONE} seven -- is that right?"` |
+| `phone_digit_by_digit` | `"That's four, one, six, nine, eight, seven, one, five, four, seven -- is that right?"` | **True** | `GUARDRAIL_INTERVENED` | `"That's {PHONE} -- is that right?"` |
+| `phone_raw_control` | `"That's 416-987-1547 -- is that right?"` | True | `GUARDRAIL_INTERVENED` | `"That's {PHONE} -- is that right?"` |
+| `phone_last4_only` | `"That's the number ending in one, five, four, seven -- is that right?"` | **True** | `GUARDRAIL_INTERVENED` | `"That's the number ending in one,{PHONE} -- is that right?"` |
+| `email_prefix_only` | `"That's the address starting with m, a, r, c, o, s -- is that right?"` | **False** | `NONE` | `''` (no intervention -- caller would hear the original text unchanged) |
+
+Script: `d121_direction2_probe.py` + `d121_partial_probe.py`, session scratchpad, one-off, not the permanent
+gate.
+
+**Result, stated plainly: the working preference as specified does not survive contact with the live
+guardrail.** Spelling an email out letter-by-letter, or NATO-phonetic, still classifies as `EMAIL` and gets
+masked identically to the raw address -- `sensitiveInformationPolicyUnits: 1` fires on all three email
+variants with no difference in outcome. Reading phone digits individually or in groups still classifies as
+`PHONE` and masks -- including a genuinely unexpected shape, `phone_grouped_digits`: the mask did not
+replace the whole number, it replaced one mid-sequence token (`"...then one {PHONE} seven..."`), leaving
+digit fragments on both sides of the placeholder. That is not a masked confirmation a caller could use
+either -- it is a masked confirmation that also reads as malformed, a strictly worse shape than the
+single-token replacement `D121` already documented. **A spelled or grouped full-value readback trades one
+unconfirmable placeholder for another, sometimes a more broken one; it does not solve `D121`.**
+
+The one probe that did not intervene, `email_prefix_only`, is a different shape from what Marco described:
+a **partial** disclosure (the first few characters only, no domain) rather than a full value spelled out.
+`phone_last4_only`, the equivalent partial attempt on the phone side, still masked -- Bedrock's `PHONE`
+detector fired on four comma-separated digits with no area code and no surrounding number, a lower bar to
+trigger than `EMAIL`'s detector, which needed a complete `local@domain.tld`-shaped string in every variant
+tested. **The two entities do not behave symmetrically under partial disclosure, and only one partial
+probe was run per entity -- this is a signal, not a boundary measurement.** Exactly where between "four
+digits" and "ten digits, ungrouped" the `PHONE` detector stops firing is unmeasured; exactly how short an
+email prefix stays clear of the `EMAIL` detector is equally unmeasured beyond this one six-character case.
+
+**What this changes for the decision, stated explicitly:**
+
+- Marco's named preference -- spelled/phonetic or grouped-digit readback of the **full** value -- is
+  **falsified by direct measurement**, not merely untested. It should not go into an ADR as a viable
+  variant of direction 2 without being re-scoped to a partial form, because the full-value form was
+  measured and does not survive.
+- A **partial-disclosure** readback (e.g., "ending in ...1547" is still masked for phone; a short prefix is
+  not masked for email) is a real, distinct third candidate this entry surfaces empirically -- not proposed
+  by Marco, not evaluated for whether a caller could actually confirm identity from a 4-6 character partial
+  value, and not measured for where each entity's detection boundary actually sits. Named as a candidate to
+  grill, not adopted.
+- Direction 1 (remove `EMAIL`/`PHONE` from the OUTPUT PII entity list) is unaffected by this entry --
+  neither strengthened nor weakened by the partial-disclosure finding, since direction 1 does not depend on
+  what shape of value survives masking.
+
+**Cost**: 8 real `ApplyGuardrail` OUTPUT calls, same per-call composition as `§78`
+(`topicPolicyUnits:1 + contentPolicyUnits:1` @ $0.15/1000, `sensitiveInformationPolicyUnits:1` @
+$0.10/1000, 0 free units) = $0.0004/call × 8 = **$0.0032**. `COSTS.md` updated. Not separately metered
+against the $5 Bedrock standing cap; no apply, no version bump, no `C1` cycle.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 Block 2 -- D121 design decision, pre-decision artifacts. §8 mechanism sweep written (docs/audits/2026-08-16-d121-guardrail-mechanism-sweep.md): every policy block in guardrails/main.tf enumerated against the "caller's own data masked back to them" outcome; verdict is EMAIL/PHONE via UpdateContactInfo's readback (D121) is the only live, structurally reachable instance among the six in-scope intents, one residual free-text-slot gap named but not audited. Separately, ran 8 real ApplyGuardrail OUTPUT probes testing Marco's stated working preference (spelled/NATO-phonetic email, grouped/digit-by-digit phone) against live guardrail zl5ppnyorwd2 v5: all six full-value variants still masked (action GUARDRAIL_INTERVENED, EMAIL or PHONE), including a malformed partial-mask on grouped phone digits. One of two partial-disclosure probes (short email prefix) passed with no intervention; the phone equivalent (last-4-digits) still masked. Preference as specified is falsified by measurement, not merely untested; a partial-disclosure variant is a new candidate this entry surfaces, not evaluated, not adopted.
+Open defects: D121/OI39 unchanged, FIX NOW/unscoped -- this entry narrows candidate directions, does not close the decision (reserved for /grill-with-docs, not run this entry). No new D/OI filed.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26). Not touched this entry.
+Blocked on: the actual design decision between direction 1 (remove entities) and a re-scoped direction 2 (partial-disclosure readback, boundary unmeasured) still needs Marco's own /grill-with-docs session; this entry supplies the sweep and the falsification data that session grills against, per explicit priority (sweep artifact over spec).
+Last apply + gate result: none this entry. $0.0032 real spend, eight live ApplyGuardrail OUTPUT calls, well inside the $5 Bedrock cap.
+```
