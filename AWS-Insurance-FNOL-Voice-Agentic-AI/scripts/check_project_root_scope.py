@@ -56,6 +56,19 @@ ALLOWLIST: frozenset[str] = frozenset(
         # Phase 10, Marco-approved by absolute path (/Users/marco/K21/Real-world/.github/workflows/...),
         # verified byte-identical to the PROJECT_ROOT source. RESULTS.md §12.1/§12.6.
         ".github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml",
+        # setup-matt-pocock-skills scaffold, Marco-approved 2026-08-16 by absolute path via
+        # AskUserQuestion ("Yes, approve and record it") in the Claude Code session that authored
+        # them, naming each of the four paths below explicitly:
+        #   /Users/marco/K21/Real-world/CLAUDE.md
+        #   /Users/marco/K21/Real-world/docs/agents/domain.md
+        #   /Users/marco/K21/Real-world/docs/agents/issue-tracker.md
+        #   /Users/marco/K21/Real-world/docs/agents/triage-labels.md
+        # No RESULTS.md entry exists for this approval (it predates this project's own session log
+        # for that date) — this comment is the citation.
+        "CLAUDE.md",
+        "docs/agents/domain.md",
+        "docs/agents/issue-tracker.md",
+        "docs/agents/triage-labels.md",
     }
 )
 
