@@ -10239,3 +10239,107 @@ C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducibl
 Blocked on: nothing for this entry. D121/OI39 itself blocks on a fresh session's design decision.
 Last apply + gate result: none this entry. $0.00 real spend -- documentation and a standing-rule extension only.
 ```
+
+## 78. `D121`'s input-side question -- `§76` does not capture the pre-guardrail string; an OUTPUT negative
+control run in its place, corroboration only, not live verification of the input side
+
+`§78`, `session-auditfold` block. No new `D`/`OI` -- corroborating evidence gathered on `D121`/`OI39`, status
+unchanged (FIX NOW, unscoped, per `§77`).
+
+**Step 1 -- does `§76`'s transcript record the PRE-guardrail readback string itself?** Re-read in full before
+running anything. It does not. `§76` records two things about the OUTPUT side: the `guardrail_usage` log
+line (policy-unit counts, `masked=true`/`blocked=false`) and the final `dialogAction` message the caller
+actually receives -- `"That's {EMAIL} -- is that right?"`, already masked. The write-up states, descriptively,
+that this is "not the email address the caller just gave," but the raw string `update_contact_info_node`
+built and handed to the OUTPUT `ApplyGuardrail` call -- the actual pre-mask text -- is never quoted verbatim
+anywhere in `§76`. It was not captured to disk by the live check that produced that entry (a one-off script,
+`/private/tmp/.../scratchpad/live_check_update_contact_email.py`, outside `PROJECT_ROOT` and not read this
+session per the scope rule). **So the input-side question is not already answered by evidence on record --
+proceeding to Step 2, per Marco's instruction.**
+
+**Step 2 -- OUTPUT negative control.** Two real `ApplyGuardrail` calls, `source="OUTPUT"`, via
+`BedrockGuardrailClient` (`src/fnol_voice_agent/guardrails/client.py`, `ADR-013`'s real-AWS guard intact --
+no raw `boto3`). `guardrail_id`/`guardrail_version` read live immediately before the run, per
+`docs/runbooks/GUARDRAIL-OPERATIONS.md` §1:
+
+```
+$ terraform -chdir=infra/terraform/stacks/guardrails output guardrail_id
+"zl5ppnyorwd2"
+$ terraform -chdir=infra/terraform/stacks/guardrails output guardrail_version
+"5"
+```
+
+Text is the literal Bedrock anonymization placeholder, containing no real PII -- exactly the string a
+caller would actually hear, per `§76`'s captured `dialogAction` message:
+
+| Probe | Text | `raw_action` | `blocked` | `masked` | `usage` |
+|---|---|---|---|---|---|
+| EMAIL | `"That's {EMAIL} -- is that right?"` | `NONE` | `False` | `False` | `topicPolicyUnits:1, contentPolicyUnits:1, sensitiveInformationPolicyUnits:1, freeUnits:0` |
+| PHONE | `"That's {PHONE} -- is that right?"` | `NONE` | `False` | `False` | `topicPolicyUnits:1, contentPolicyUnits:1, sensitiveInformationPolicyUnits:1, freeUnits:0` |
+
+Both probes returned `action: NONE` -- no intervention of any kind. Script:
+`live_check_d121_output_negative_control.py`, session scratchpad, one-off, not the permanent gate (same
+status as `§76`'s own check script).
+
+**What this does and does not show.** This is a negative control on placeholder text via the OUTPUT
+direction, nothing more. It shows that Bedrock's sensitive-information policy does not fire on the literal
+`{EMAIL}`/`{PHONE}` tokens themselves -- consistent with (not proof of) the reading that the masking `§76`
+observed was caused by real PII in the pre-mask string, since an already-anonymized token is not itself
+PII-shaped and correctly evaluates clean. **It does NOT constitute live verification of the input side, and
+must not be read as such by a future reader.** The primary evidence for what the pre-guardrail string
+actually contained, and for why it contains real PII at all, is the code trace, not this probe:
+
+- `src/fnol_voice_agent/api/lex_codehook.py:454-469` (`_lex_interpreted_slots`) -- reads Lex's own
+  `interpretedValue` for each slot straight off the raw event; this is where the caller's real spoken
+  email/phone value enters application code, unmasked, before anything guardrail-shaped runs.
+- `src/fnol_voice_agent/agents/nodes/guardrails_nodes.py:35-53` (`guardrails_input_check`) -- the standing,
+  independently-verified finding (Stage 8, against `zl5ppnyorwd2` v2) that Bedrock does not evaluate the
+  sensitive-information policy on `source="INPUT"` at all: a real email, phone number and `PY####` policy
+  number all returned `sensitiveInformationPolicyUnits: 0` / `action: NONE` on INPUT while masking correctly
+  on OUTPUT for the same values. This is the actual input-side answer on record -- INPUT never masks PII,
+  regardless of content -- and it predates and is independent of this entry's probe.
+
+This entry's probe corroborates the OUTPUT mechanism's behavior on non-PII text; it does not, and was not
+designed to, re-run the real pre-guardrail string. No new probe of the real value was made this entry, by
+design -- Marco's instruction was the negative control specifically, not a repeat of `§76`'s live check.
+
+**Design consequence, stated explicitly, not left as evidence for a future reader to derive.** The input side
+is clean: `update_contact_info.py:54/69` builds the pre-guardrail readback string as
+`f"That's {filled['new_value']} -- is that right?"`, and `filled['new_value']` traces directly back through
+`_merged_filled_slots` to `_lex_interpreted_slots` (`lex_codehook.py:454-469`) -- Lex's own
+`interpretedValue`, i.e. the caller's real spoken value, unmasked, with nothing guardrail-shaped between slot
+fill and string construction. Combined with `guardrails_input_check`'s standing finding that INPUT never
+evaluates the sensitive-information policy at all, there is no live mechanism anywhere upstream of the
+OUTPUT call that could be silently substituting or corrupting the value before it reaches
+`ApplyGuardrail`. **Therefore: a readback-format fix (direction 2 -- change what `update_contact_info_node`
+says or how it confirms, without touching the guardrail's PII policy) is viable on the evidence gathered so
+far, and direction 1 (loosening or bypassing the guardrail's `EMAIL`/`PHONE` entity masking on OUTPUT) is not
+forced by anything found this entry.** This is the load-bearing conclusion Block 2's design work depends on --
+not just "input is clean," but that the clean-input finding removes one candidate direction from
+consideration rather than merely adding corroboration.
+
+**Open item, logged rather than fixed tonight: no artifact anywhere records the actual pre-guardrail readback
+string in flight.** `§76` captured only the post-mask `dialogAction` output; the one-off script that held the
+raw string (`/private/tmp/.../scratchpad/live_check_update_contact_email.py`) was outside `PROJECT_ROOT` and
+is gone -- not read this session, and by the nature of a session scratchpad, not expected to still exist.
+`D121`'s eventual fix will need a real before/after pair (raw readback text pre-guardrail, alongside the
+masked text post-guardrail) to confirm a readback-format change actually stops the masking rather than just
+changing its shape -- and there is currently no "before" half of that pair on record anywhere in this
+project. **Not reconstructed this entry, per Marco's explicit instruction.** Whoever scopes direction 2's fix
+needs to capture that pair as part of the fix's own verification, not assume it already exists.
+
+**Cost**: 2 real `ApplyGuardrail` OUTPUT calls, `topicPolicyUnits:1 + contentPolicyUnits:1` each (denied-topic
++ content filter, $0.15/1000) plus `sensitiveInformationPolicyUnits:1` each ($0.10/1000, 0 free units) = per
+call `2 * $0.15/1000 + 1 * $0.10/1000 = $0.0004`; two calls = **$0.0008**, matching the pre-approved estimate.
+Not separately metered against the `$5` Bedrock standing cap; no apply, no `C1` cycle, no new resource.
+`COSTS.md` updated.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 Block 1 -- D121's input-side question. Step 1: RESULTS.md §76 does not record the pre-guardrail readback string verbatim, only the guardrail_usage counts and the final masked dialogAction message -- so the question was not already answered on record. Step 2: ran the two scoped OUTPUT negative-control ApplyGuardrail calls (placeholder "{EMAIL}"/"{PHONE}" text) via BedrockGuardrailClient against live guardrail zl5ppnyorwd2 v5. Both returned action: NONE -- no intervention on non-PII placeholder text. Recorded explicitly as corroboration only, NOT live verification of the input side; primary evidence remains the code trace (lex_codehook.py:454-469, guardrails_nodes.py:35-53, update_contact_info.py:54/69), the latter already showing INPUT never evaluates the sensitive-information policy at all, independent of this probe. Design consequence stated explicitly: input is clean (filled_slots["new_value"] carries the caller's real value straight from Lex's interpretedValue, nothing guardrail-shaped upstream of the OUTPUT call) -- therefore a readback-format fix (direction 2) is viable on the evidence gathered so far, and direction 1 (loosening the guardrail's PII masking) is not forced.
+Open defects: D121/OI39 unchanged, FIX NOW/unscoped. No new defect filed this entry. New open item logged (not a D/OI): no artifact records the actual pre-guardrail readback string -- §76 captured only the post-mask output, the script that held the raw string was outside PROJECT_ROOT and is gone. D121's fix will need a real before/after pair and currently has no "before." Not reconstructed this entry, per instruction.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build /4FFnR9Q7..., reproducible from main as of 8f140bc. Not touched this entry.
+Blocked on: D121/OI39 itself still blocks on a fresh session's design decision (per §77) -- Block 2's design work depends on this entry's clean-input conclusion and inherits the missing-"before" gap as something its own fix verification must capture.
+Last apply + gate result: none this entry. $0.0008 real spend, two live ApplyGuardrail OUTPUT calls, well inside the $5 Bedrock cap.
+```
