@@ -86,9 +86,12 @@ any live-caught case.
 masks identically to the raw address. Reading phone digits individually or grouped still classifies as
 `PHONE` and masks — one variant (`phone_grouped_digits`) produced a *malformed partial mask*, replacing one
 mid-sequence token and leaving digit fragments on both sides, a strictly worse shape than the clean
-single-token replacement `D121` already documented. **A spelled or grouped full-value readback trades one
-unconfirmable placeholder for another, sometimes a more broken one. This variant of direction 2 should not
-be built.**
+single-token replacement `D121` already documented. **Filed as its own defect, `D122`/`OI44`
+(`PROJECT_STATE.md`), not folded into this ADR's evidence for direction 2's falsification** — a
+confidentiality failure (most of the real digits leak in plain text while the guardrail reports a
+successful intervention), distinct in kind from `D121`'s clean-but-unconfirmable over-masking. **A spelled
+or grouped full-value readback trades one unconfirmable placeholder for another, sometimes a more broken
+one. This variant of direction 2 should not be built.**
 
 ### Direction 2′ — partial-disclosure readback (new candidate, surfaced by this session's probes, not proposed by Marco, not evaluated for viability)
 

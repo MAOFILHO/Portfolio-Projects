@@ -10402,6 +10402,16 @@ either -- it is a masked confirmation that also reads as malformed, a strictly w
 single-token replacement `D121` already documented. **A spelled or grouped full-value readback trades one
 unconfirmable placeholder for another, sometimes a more broken one; it does not solve `D121`.**
 
+**`phone_grouped_digits`'s malformed mask is filed as its own defect, `D122`/`OI44` (`PROJECT_STATE.md`),
+not folded into `D121`'s evidence.** `D121` is clean, complete over-masking -- the whole value replaced by
+one placeholder, unconfirmable but not a confidentiality failure. This probe's result is a different
+failure shape: six of the ten spoken digit-words survive in plain text either side of the single
+placeholder token, while the guardrail reports a successful intervention (`masked=true`) -- inconsistent,
+partial masking that leaks most of the real PII in plain text and corrupts the utterance's grammar, worse
+than `D121` on the confidentiality axis specifically. Scoped precisely in `OI44`: this exact grouped-digit
+phrasing is not what `update_contact_info_node` speaks today, so this is a hazard found while testing a
+candidate fix, not a live production defect as the system currently ships.
+
 The one probe that did not intervene, `email_prefix_only`, is a different shape from what Marco described:
 a **partial** disclosure (the first few characters only, no domain) rather than a full value spelled out.
 `phone_last4_only`, the equivalent partial attempt on the phone side, still masked -- Bedrock's `PHONE`
