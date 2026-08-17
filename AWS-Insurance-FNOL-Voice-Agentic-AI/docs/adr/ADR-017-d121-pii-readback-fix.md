@@ -378,11 +378,167 @@ fallback instruction.** The decision collapses back to **direction 1 (global) ve
 with `coverage_topic`'s path now priced as a **known, measured cost of direction 1-global** — a real path
 with a real, currently-low, small-sample-measured rate, not a hypothetical one.
 
+## Round 4 — **RECOVERED FROM SESSION RECORD, 2026-08-18. Reconstructed, not re-derived.**
+
+**Read this heading literally.** Round 4 *ran*, on 2026-08-17, in the session that ended without
+committing (see `PROJECT_STATE.md`'s 2026-08-17 session log for that failure's own account). Its reasoning
+never reached the repository: `aaef84b` carries Rounds 1–3 only. The three findings below are recovered
+from Marco's own record of that session and written down here by an agent that did not witness them —
+**with one exception, noted inline, that was independently re-derived and converged.** A future reader must
+not treat the two provenance classes as one: a reconstructed finding is testimony, a re-derived one is
+evidence, and only the first item below is both.
+
+**1. The telemetry argument — reconstructed AND independently re-derived; they converged.** Round 4 held
+that a guardrail signal which no longer fires is not a preserved guardrail. Round 5's `action = "NONE"`
+reachability check (below) reached the identical conclusion from the code, without knowledge of Round 4's
+having reached it: `emit_guardrail_usage`'s payload is `{metric, source, blocked, masked, units}`, both
+booleans derive from `action == "GUARDRAIL_INTERVENED"`, and `units` counts evaluations rather than
+detections. **The convergence is recorded because two independent derivations of the same conclusion is a
+stronger warrant than either alone — not because the second one was needed to license the first.**
+
+**2. THE INSISTENT-CALLER GAP — reconstructed, NOT independently found, and the single most consequential
+item in this recovery.** All 12 `coverage_topic` probes (Round 3 and Round 3 Q1) were **single brief
+mentions** of a PII-shaped value. **None tested a caller repeating or spelling out a value because they do
+not trust the system to have heard it** — ordinary anxious-caller behaviour on a voice channel, and closer
+in shape to `update_contact_info`'s own confirmation pattern than anything that was actually probed.
+
+Consequently **`0/12` characterizes the light-disclosure case only.** It is not a rate over the space of
+caller behaviours; it is a rate over the easy half of it. This is a live limit on the evidence supporting
+*any* reduction in `coverage_topic` enforcement, and it is stated here as a limit on the evidence, not as a
+prediction that the untested half behaves differently — that would be inventing a result, which is the
+opposite of what this entry is for. **What can be said without inventing anything**: the untested region is
+not a random slice. A caller's own insistent repetition is precisely the context in which
+`_COVERAGE_SYSTEM_PROMPT`'s soft instruction ("Do not restate the caller's question") is hardest for a model
+to obey, so the unmeasured region is the region where the risk plausibly concentrates. Unmeasured, and
+non-randomly so.
+
+**3. The `make redteam` proposal — reconstructed.** Fold a periodic `coverage_topic`-echo probe into the
+existing standing red-team target, so that a property currently *silent if wrong* becomes *checked
+regularly*. Raised in Round 4 as relevant to direction 1-global specifically. Round 5 (below) finds this
+proposal's **mirror image** is what direction 3-coarse needs, which neither Round 4 nor Marco's Round 5
+framing had reached — see "the constructive half" there.
+
+## Round 2 Q2 — **CONCEDED by Marco, 2026-08-18. The original objection rested on a baseline that does not exist.**
+
+Round 2 Q2 recorded direction 3's need for a dominance test as "the strongest structural argument against
+direction 3 on its own terms," on the reasoning that the invariant it would add ("dominates, except these
+named exceptions") is **weaker than the one it replaces**.
+
+**It replaces nothing.** `grep` over `src/` finds exactly one dominance assertion in this codebase —
+`assert_dominates(builder, "l1_safety_check")` (`graph.py:221`), plus `assert_detector_dominates()` for the
+split router. **There is no `assert_dominates(builder, "guardrails_output_check")` and there never has
+been.** Direction 3-coarse therefore trades a **never-asserted** property for an
+**asserted-with-exceptions** one, which is strictly stronger than the status quo, not weaker.
+
+Recorded as a concession with its reason, per this project's standing practice: the original objection was
+**an argument from a baseline that does not exist** — the same error shape as `§6`'s argument-from-absence,
+one level up. It compared a proposed invariant against an imagined incumbent rather than against what the
+code actually asserts. Round 2 Q2's conclusion is withdrawn; its *other* half (that direction 3 needs a
+dominance test shipped as part of the same change, not as a follow-up) stands unaffected and is not
+withdrawn.
+
+## Direction 1-detect (`action`/`output_action` = `"NONE"`) — **RAISED AND KILLED, Round 5, 2026-08-18**
+
+A candidate no prior round had named: Bedrock's `GuardrailPiiEntityConfig` accepts `action = "NONE"` —
+*"Take no action but return detection information in the trace response"* (API reference and user guide,
+both checked directly; the console calls it detect mode). It appeared to keep `EMAIL`/`PHONE` detection
+while removing the masking that breaks the readback — i.e. to close the exact gap between 1-global and
+3-coarse.
+
+**Reachability check 1 — the telemetry does not survive, as built.** Three independent breaks, all
+confirmed in code: (a) `apply_guardrail()` never sets `outputScope` (`client.py:153-158`; grep across
+`src/`, `tests/`, `scripts/` returns nothing), so it defaults to `INTERVENTIONS` — and whether a
+*detected-but-`NONE`* entity survives that scope is **not settled by the documentation**, whose wording
+distinguishes detected from non-detected rather than intervened from non-intervened; named as unresolved,
+not read either way. (b) Even if the entry arrives, `_parse_response` derives everything from the top-level
+`action`, whose only values are `NONE | GUARDRAIL_INTERVENED`, so `NONE` yields `masked=False,
+blocked=False`. (c) `_extract_reasons` filters PII entries on `action in ("BLOCKED", "ANONYMIZED")`, and
+`intervention_reasons` is never passed to the emitter regardless. **Net: the emitted line under `NONE` with
+a caller's email present is byte-identical to a clean turn containing no PII** — `units` cannot
+discriminate either, being charged per evaluation rather than per detection.
+
+**Reachability check 2 — per-direction control is real but buys nothing, and D97 exposure is identical, not
+reduced.** Provider 6.59.0's schema (dumped via `terraform providers schema -json`, not read from docs)
+carries `input_action`/`output_action`/`input_enabled`/`output_enabled` on `pii_entities_config`, so
+`output_action = "NONE"` is expressible. But per this project's own verified-facts table Bedrock does not
+evaluate the sensitive-information policy on `source="INPUT"`, so there is no input-side behaviour to
+preserve. *(Caveat, `§7` applied to our own record: "that counter is always 0" is evidence about
+**charging**; "does not evaluate" is the **interpretation** of it. Unmeasured either way.)* And
+`main.tf:281-297`'s `replace_triggered_by = [aws_bedrock_guardrail.fnol]` fires on **any** change to that
+resource — so a `NONE` edit needs the same version bump, `stacks/main` redeploy and `C1` cycle as
+1-global. **The same `D97` exposure. Not less.**
+
+**Killed on a third ground, which Marco called disqualifying on its own.** The user guide, verbatim: the
+`match` field in `GuardrailPiiEntityFilter` *"contains the original PII value, not the masked output. This
+behavior is by design so that your application can use the detection result for its own logic."* So the
+telemetry this candidate would require rebuilding carries the caller's **raw** email and phone into
+`emit_guardrail_usage` — a `logger.info` into CloudWatch Logs, through `PIIRedactionLogFilter`, whose
+`PHONE_RE` is **`D124`** and matches no real phone number. **This candidate's own telemetry would be the
+first live producer of precisely the data class `D124` proves the redaction filter cannot catch.**
+
+**Verdict: dead.** Not "reachable but heavy" like 1-narrowed — actively disqualified. It is 1-global's
+prevention profile plus a build plus a raw-PII-into-logs hazard, in exchange for observing a leak it does
+not prevent. **It is not a third option between 1-global and 3-coarse**; on prevention it *is* 1-global.
+
+## Round 5 — direction 3-coarse's open class: what would catch a future node? **Nothing. Confirmed four ways.**
+
+**Marco's grill, stated at full strength before it is answered**: 3-coarse fixes the instance; 1-global
+fixes the class. `EMAIL`/`PHONE` `ANONYMIZE` stays live under 3-coarse, so any future node echoing caller
+data back hits the identical `D121` failure and gets found by a caller rather than a test. `§8`'s own rule
+is that a defect is not fixed until the class is enumerated, and a node-scoped bypass is site-scoped by
+construction.
+
+**The premise is conceded in full. Under 3-coarse, nothing in this repository would catch it.** Not
+argued around — checked, and the answer is worse than "no coverage," it is "coverage that structurally
+cannot see it," four independent ways:
+
+1. **Unit tests cannot.** They run `MockGuardrailClient`. `client.py`'s own docstring records that this
+   exact substitution is why a live mask defect went uncaught through Phase 7: *"a fake is a fixture, and a
+   fixture encodes its author's model of the thing it stands in for."* Self-recorded precedent, same file.
+2. **Golden evals cannot.** `grep GuardrailClient evals/*.py` returns **nothing** — the eval suite never
+   instantiates a guardrail at all. It exercises `update_contact_info`'s readback (`uci-001`, `uci-002`)
+   with no guardrail in the path.
+3. **And `uci-001`'s fixture is `phone: "555-0199"`** — the synthetic 555 convention again. **This is
+   `D124`'s closed-loop root cause reproduced in a second, independent suite**, found while answering this
+   question and not previously known. Even had the evals run the real guardrail, that fixture is the one
+   shape whose behaviour generalises least.
+4. **`make redteam` is the only target wired to the real `BedrockGuardrailClient`** (`redteam/run.py:123`),
+   and its corpus is prompt-injection shaped — nothing in it asks whether the agent's *own* speech comes
+   back masked. No static check covers this either: `verify-flows` inspects Connect flow JSON, not nodes.
+
+**Pricing the two residuals against each other.** Both are arguments from absence (`§6`); neither is
+measured. The tiebreaker is not likelihood — it is **failure shape**, and the two are not comparable in
+kind:
+
+- **3-coarse's residual** (a future node speaks `{EMAIL}`): a **functional** failure. The caller cannot
+  confirm, the retry ladder escalates to a human, and **no data is exposed**. It is loud — the intent
+  visibly fails to complete. `D121` is its own existence proof: this class *does* get caught, at the cost
+  of one unusable intent, with zero confidentiality consequence.
+- **1-global's residual** (the model speaks a caller's real email or phone aloud on `coverage_topic`): a
+  **confidentiality** failure. Nothing fails, nothing escalates, no metric moves, and the log that would
+  record it cannot redact phone numbers (`D124`). It is **silent by construction** — and the
+  insistent-caller gap means its rate is unmeasured over exactly the region where it plausibly concentrates.
+
+**Direction 3-coarse leaves a class open that fails loudly and safely. Direction 1-global closes that class
+by removing a mechanism, and in exchange opens one that fails silently and unsafely, on unmeasured
+ground.**
+
+**The constructive half — and the condition.** The gap Marco names is real and it is closable cheaply, by
+the **mirror image** of Round 4's own `make redteam` proposal: for every node returning a `response_text`
+that interpolates a caller-supplied slot value, assert the **real** guardrail returns `action: NONE`. It
+belongs in `make redteam` because that is already the only target holding a real `BedrockGuardrailClient`,
+and it converts "nothing would catch it" into "checked on every red-team run" — which is what `§8` actually
+demands, rather than the one-time enumeration a sweep provides. **Direction 3-coarse should not be adopted
+without this probe shipping in the same change**, alongside the dominance test Round 2 Q2's surviving half
+already requires. Adopted without it, Marco's objection stands and the choice is closer than the lean
+suggests.
+
 ## Decision
 
 **Not made. Still PROPOSED, nothing accepted.** Direction 2 (empirically falsified), direction 2′ (closed
-on requirements), and direction 1-narrowed (reachable but too heavy, collapses to the two below) are all
-off the table, each on its own distinct ground, none to be conflated with the others. The live question is
+on requirements), direction 1-narrowed (reachable but too heavy, collapses to the two below), and
+direction 1-detect (**actively disqualified** — raw PII into a log path whose phone redaction is `D124`,
+Round 5) are all off the table, each on its own distinct ground, none to be conflated with the others. The live question is
 **direction 1-global versus direction 3-coarse**, now with the free-text-PII cost measured on both
 flaggable models (0/12) rather than merely named, and with the regex-reuse mitigation (Round 3 Q2)
 established as **real but partial** — it narrows direction 1-global's residual cost for `EMAIL`, leaves it
