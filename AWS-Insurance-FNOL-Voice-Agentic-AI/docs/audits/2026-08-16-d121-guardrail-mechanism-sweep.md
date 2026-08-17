@@ -87,3 +87,44 @@ designed confirmation step that *always* speaks a PII-entity-shaped value for tw
 this hypothetical is an *edge case* dependent on what a caller chooses to say inside an open-ended slot.
 Named as a residual gap, not scoped, not probed — a live multi-turn check through this specific path has
 never been run.
+
+---
+
+## Erratum, 2026-08-17 (`/grill-with-docs` Round 2) — this section's own claim was wrong on one of its two
+named slots, and the sweep's site enumeration missed a real `D121`-class hit inside the node it did audit
+
+Both corrections found while scoping the free-text-PII audit `ADR-017`'s Round 2 makes conditional on —
+recorded here rather than silently edited into the paragraph above, per this project's own standing rule
+that a sweep's enumeration is its claim, and an incomplete enumeration is a defect in the artifact, not a
+detail to quietly fix forward.
+
+**1. `entitlement_type` is not a free-text slot. It was never one.** `infra/terraform/stacks/main/bot.yaml.tftpl:669`
+declares it `SlotTypeName: "EntitlementTypeValues"`, a closed two-value custom slot type (`rental` /
+`towing`, `bot.yaml.tftpl:161-176`) with `ResolutionStrategy: TOP_RESOLUTION` — Lex resolves it to one of
+exactly two canonical values or leaves it unfilled; there is no path for arbitrary caller speech to reach
+it. `rental_towing.py:83` confirms this at the call site: it interpolates the *resolved enum value* into a
+synthetic templated question (`f"Is {entitlement_type} covered..."`), and never quotes the caller's literal
+words the way `coverage_question.py:88` does for `coverage_topic`
+(`f'Caller\'s question: "{coverage_topic}"'`). Only `coverage_topic` — declared
+`SlotTypeName: "AMAZON.FreeFormInput"` at `bot.yaml.tftpl:627`, deliberately unconstrained, per the
+comment at `bot.yaml.tftpl:612-616` explaining why it carries no sample-utterance-matched slot type — is a
+real free-text vector. The paragraph above should read "`coverage_question.py`'s `coverage_topic`" only;
+naming `entitlement_type` alongside it overstated this gap's surface by one slot that structurally cannot
+carry it.
+
+**2. The `response_text` call-site enumeration (`update_contact_info.py:54,69,84`) missed a fourth,
+real site: `update_contact_info.py:79`.** `f"I ran into a problem making that update. ({exc})"`, the
+`InvalidUpdateContactInfoError` branch. Traced: that exception wraps a Pydantic `ValidationError` from
+`UpdateContactInfoArgs` construction (`mcp/contact_server.py:112-115`, `raise
+InvalidUpdateContactInfoError(str(exc)) from exc`), and Pydantic v2's `ValidationError.__str__` includes
+the rejected `input_value` in its message by default — so `str(exc)` can carry the caller's spoken
+`new_value` back, in whatever mangled form triggered the validation failure, through the same shared
+`guardrails_output_check` node as lines 54/69. Same echo mechanism as `D121`, same node this sweep already
+audited, same table row (`4a`/`4b`) — missed because the enumeration only walked the file's non-exceptional
+`return` sites, not its `except` branches. Filed as `D123`/`OI45` (`PROJECT_STATE.md`), not folded into
+`D121`'s own evidence — this table's verdict line ("exactly one mechanism... `EMAIL`/`PHONE` via
+`UpdateContactInfo`'s own confirmation readback") stands on the mechanism question (still true: no new
+entity, no new policy block), but its **site count** for that mechanism was undercounted by one. Whether
+this specific site actually triggers `EMAIL`/`PHONE` masking in practice is unverified — a validation
+failure implies `new_value` did *not* parse as the field's expected shape, which may or may not still read
+as PII-shaped to Bedrock's detector — named as untested, not assumed either way.
