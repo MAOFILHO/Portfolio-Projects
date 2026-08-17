@@ -1,13 +1,27 @@
 # ADR-017: `D121`'s fix — `EMAIL`/`PHONE` PII masking on `UpdateContactInfo`'s readback
 
-**Status: PROPOSED, NOT DECIDED.** Every other ADR in this project is written once accepted
-(`docs/adr/*.md`, grepped: all five existing ADRs read `Status: Accepted`). This one is committed in
-draft form, deliberately deviating from that convention, because Marco's own instruction reserved the
-decision step (`/grill-with-docs`) for his explicit invocation and it has not run this session — writing
-this as "Accepted" would mean adopting a decision nobody has actually made. Flagged here rather than left
-silent, per this project's own standing practice of surfacing convention deviations rather than letting
-them pass. **Do not treat this document as settled until its Status line changes.**
-**Date:** 2026-08-16 (Phase 12, Block 2)
+**Status: ACCEPTED 2026-08-17 — direction 3-coarse, adopted subject to the three-part condition stated in
+the Decision section. Not yet implemented.**
+
+**Convention deviation, retained in this line deliberately rather than deleted on acceptance.** Every other
+ADR in this project was *written* once accepted (`docs/adr/*.md`, grepped: all prior ADRs read
+`Status: Accepted`). This one was committed in draft form and flipped in place, across five rounds of
+`/grill-with-docs` spanning two sessions. It is therefore the only ADR here whose body records the
+reasoning that was *rejected* as well as the reasoning that won — four candidates closed on four
+**materially different grounds**, which is the document's main value and the reason it was flipped rather
+than superseded by a clean successor:
+
+| Candidate | Closure kind | Not to be conflated with |
+|---|---|---|
+| Direction 2 (full-value spelled/grouped readback) | **Empirically falsified** — 6 live probes, `§79` | anything below; this one was *tested to failure* |
+| Direction 2′ (partial-disclosure readback) | **Closed on requirements** — Round 1 Q1, never probed | "falsified"; it was disqualified before reaching the empirical question |
+| Direction 1-narrowed (second guardrail resource) | **Reachable but too heavy** — a real, ordinary AWS pattern, priced and rejected | "impossible"; it works, it just costs more than both alternatives |
+| Direction 1-detect (`action = "NONE"`) | **Dead on telemetry + a disqualifying hazard** — Round 5 | "too heavy"; this one was actively disqualified, not merely outweighed |
+
+**A future reader must preserve these four distinctions when citing this ADR.** Collapsing them into "we
+considered and rejected four alternatives" destroys the only thing that makes the rejections reusable.
+
+**Date:** 2026-08-16 (Phase 12, Block 2), decided 2026-08-17
 **Supersedes:** nothing yet — no prior ADR addressed `D121`'s outcome.
 
 ---
@@ -378,7 +392,7 @@ fallback instruction.** The decision collapses back to **direction 1 (global) ve
 with `coverage_topic`'s path now priced as a **known, measured cost of direction 1-global** — a real path
 with a real, currently-low, small-sample-measured rate, not a hypothetical one.
 
-## Round 4 — **RECOVERED FROM SESSION RECORD, 2026-08-18. Reconstructed, not re-derived.**
+## Round 4 — **RECOVERED FROM SESSION RECORD, 2026-08-17 (later session, same day). Reconstructed, not re-derived.**
 
 **Read this heading literally.** Round 4 *ran*, on 2026-08-17, in the session that ended without
 committing (see `PROJECT_STATE.md`'s 2026-08-17 session log for that failure's own account). Its reasoning
@@ -418,7 +432,7 @@ regularly*. Raised in Round 4 as relevant to direction 1-global specifically. Ro
 proposal's **mirror image** is what direction 3-coarse needs, which neither Round 4 nor Marco's Round 5
 framing had reached — see "the constructive half" there.
 
-## Round 2 Q2 — **CONCEDED by Marco, 2026-08-18. The original objection rested on a baseline that does not exist.**
+## Round 2 Q2 — **CONCEDED by Marco, 2026-08-17 (later session, same day). The original objection rested on a baseline that does not exist.**
 
 Round 2 Q2 recorded direction 3's need for a dominance test as "the strongest structural argument against
 direction 3 on its own terms," on the reasoning that the invariant it would add ("dominates, except these
@@ -437,7 +451,7 @@ code actually asserts. Round 2 Q2's conclusion is withdrawn; its *other* half (t
 dominance test shipped as part of the same change, not as a follow-up) stands unaffected and is not
 withdrawn.
 
-## Direction 1-detect (`action`/`output_action` = `"NONE"`) — **RAISED AND KILLED, Round 5, 2026-08-18**
+## Direction 1-detect (`action`/`output_action` = `"NONE"`) — **RAISED AND KILLED, Round 5, 2026-08-17 (later session, same day)**
 
 A candidate no prior round had named: Bedrock's `GuardrailPiiEntityConfig` accepts `action = "NONE"` —
 *"Take no action but return detection information in the trace response"* (API reference and user guide,
@@ -535,19 +549,107 @@ suggests.
 
 ## Decision
 
-**Not made. Still PROPOSED, nothing accepted.** Direction 2 (empirically falsified), direction 2′ (closed
-on requirements), direction 1-narrowed (reachable but too heavy, collapses to the two below), and
-direction 1-detect (**actively disqualified** — raw PII into a log path whose phone redaction is `D124`,
-Round 5) are all off the table, each on its own distinct ground, none to be conflated with the others. The live question is
-**direction 1-global versus direction 3-coarse**, now with the free-text-PII cost measured on both
-flaggable models (0/12) rather than merely named, and with the regex-reuse mitigation (Round 3 Q2)
-established as **real but partial** — it narrows direction 1-global's residual cost for `EMAIL`, leaves it
-essentially unchanged for `PHONE`, and carries its own new, un-scoped failure mode if adopted. It changes
-what direction 1-global's cost *is*, not whether that cost is acceptable — that judgment is still open.
+**DIRECTION 3-COARSE. Accepted by Marco, 2026-08-17.** Skip the OUTPUT `ApplyGuardrail` call for the whole
+`update_contact_info` node — all five `response_text` branches — leaving the guardrail's `EMAIL`/`PHONE`
+`ANONYMIZE` configuration untouched and in force for every other node.
 
-## Consequences (of whichever direction is eventually chosen)
+The four rejected candidates are off the table on four distinct grounds; see the Status table above, and do
+not conflate them.
 
-**Directions 1 and 2′ both require**, at minimum: a guardrail-stack edit (`main.tf`), a version bump
+### The basis: failure shape, explicitly NOT the structural argument
+
+**Recorded precisely, because the reasoning that was *not* used matters here.** Round 2 Q2's structural
+argument was conceded and withdrawn earlier this session (its own section above), and the concession is
+*not* what carries this decision — a withdrawn objection removes a reason against 3-coarse, it does not
+supply a reason for it. The decision rests on one comparison and one only:
+
+**The two directions' residual risks are both arguments from absence (`§6`), both unmeasured. They are not
+comparable in likelihood, and were not compared on it. They were compared on failure shape:**
+
+- **3-coarse's residual** — a future node echoes caller data and hits the identical `D121` mask. A
+  **functional** failure: the caller cannot confirm, the retry ladder escalates to a human, and **zero data
+  is exposed**. It is loud, because the intent visibly fails to complete. **`D121` is its own existence
+  proof that this class gets caught** — the price was one unusable intent, not a leak.
+- **1-global's residual** — the generation model speaks a caller's real email or phone aloud on the
+  `coverage_topic` path. A **confidentiality** failure. Nothing fails, nothing escalates, no metric moves,
+  and the log that would record it **cannot redact phone numbers** (`D124`). It is **silent by
+  construction**, and the insistent-caller gap (Round 4, recovered) leaves its rate unmeasured over
+  precisely the region where the risk plausibly concentrates — a caller's own insistent repetition being
+  the context in which `_COVERAGE_SYSTEM_PROMPT`'s soft "do not restate" instruction is hardest to obey.
+
+**A loud functional failure with no data exposure, whose class is demonstrably caught, is preferred over a
+silent confidentiality failure on unmeasured ground with no detector at all.** That is the whole basis.
+
+**What this decision explicitly does NOT claim.** It does not claim 3-coarse fixes the class — it does not;
+see the condition below. It does not claim the `coverage_topic` echo rate is low in general — `0/12`
+characterizes light disclosure only. It does not claim direction 1-global is wrong; it claims its residual
+is the worse-shaped of two unmeasured residuals.
+
+### Condition of adoption — three parts, all in the same change, NOT follow-ups
+
+**This is a condition, not a consequence.** Adopted without part 3, Marco's Round 5 objection stands and the
+adoption is void on its own terms — the objection was answered by a commitment to build the detector, not
+by an argument that no detector is needed.
+
+1. **The routing edit** — one destination change in the existing routing map, so `update_contact_info_node`
+   bypasses `guardrails_output_check`. Coarse (whole-node, all five branches), per Round 2 Q1, on the
+   strength of the node never calling an LLM.
+2. **`assert_dominates`-with-named-exceptions** — the surviving, un-withdrawn half of Round 2 Q2. This is
+   the first deliberate bypass of `guardrails_output_check`, and the graph must assert the resulting
+   invariant rather than leave it to a reader. Note it makes the property **asserted for the first time**;
+   there is no incumbent `assert_dominates(builder, "guardrails_output_check")` and never was.
+3. **A `make redteam` readback probe** — for every node returning a `response_text` that interpolates a
+   **caller-supplied slot value**, assert the **real** guardrail returns `action: NONE`. It belongs in
+   `make redteam` because `redteam/run.py:123` holds the only real `BedrockGuardrailClient` in the
+   repository; unit tests run `MockGuardrailClient`, and `evals/` instantiates no guardrail at all. **This
+   part is what converts 3-coarse's open class from "nothing would catch it" into "checked on every
+   red-team run"** — the mirror image of Round 4's own recovered `make redteam` proposal, which had been
+   aimed at direction 1-global.
+
+## Consequences of the decision (direction 3-coarse)
+
+**No `main.tf` edit, no guardrail version bump, no guardrail-stack redeploy, no `C1` recall cycle, and no
+`APPROVED: <phase name>` cost gate** — the change is `stacks/main`-side code plus its own eval cycle. It
+therefore carries **none of `D97`/`OI14`'s coupling exposure**, which Round 2 Q3 established is a prior real
+outage in this project rather than a theoretical caution. This is a genuine consequence of the decision, but
+it is **not** part of its basis: the basis is failure shape, stated above, and Round 2 Q3 already recorded
+that the deploy-machinery difference is not load-bearing.
+
+### `OI43` — **CLOSED AS MOOT, not satisfied. The distinction is the point.**
+
+`OI43` recorded that no artifact captures the *pre*-guardrail readback string, and required whoever scoped
+`D121`'s fix to capture one as verification's "before" half. Under direction 3-coarse the readback never
+reaches `ApplyGuardrail` at all, so the string a caller hears **is** the pre-guardrail string — the
+before/after pair collapses into a single post-fix observation, and there is no longer a second artifact for
+the verification to compare against.
+
+**This closes the item by removing its subject, not by doing what it asked.** Recorded as MOOT rather than
+DONE deliberately: a future reader must not infer that a pre-guardrail readback string was ever captured in
+this project, because none ever was. Had direction 2′ or any partial-disclosure design been chosen, `OI43`
+would still bind in full — its success criterion ("the new readback is not masked, and a caller can actually
+confirm from it") genuinely cannot be checked against `§76`'s post-mask-only record. The item was well-founded;
+the chosen direction simply does not have the question it was asking.
+
+### `D123`/`OI45` (`update_contact_info.py:79`) — **IN SCOPE for this fix's verification, stated explicitly**
+
+Per this ADR's own no-silent-inclusion rule. `:79` is inside the node a coarse whole-node skip already
+bypasses, so it is **covered** by the routing edit automatically — but coverage is not verification, and
+"covered automatically" is exactly the kind of inclusion that gets rediscovered later as a surprise. It was
+never part of what "the confirmation turn" originally named.
+
+**What verification must actually establish**, and it is not the same claim as for `:54`/`:69`: those two
+sites are confirmed live-masked (`§76`), so their fix is observable as a change. `:79`'s masking behaviour
+was **never tested** — a validation failure means `new_value` did not parse as the field's expected shape,
+which may or may not still read as PII-shaped to Bedrock's detector. So the assertion for `:79` is not "it
+stopped being masked" (unknown whether it ever was) but **"it no longer reaches `guardrails_output_check` at
+all"** — a routing claim, checkable structurally, and the honest one given the evidence. Do not let it be
+written up as though it shared `:54`/`:69`'s before-state.
+
+---
+
+### Superseded by the decision — retained for the record, not live guidance
+
+**Directions 1 and 2′ both would have required**, at minimum: a guardrail-stack edit (`main.tf`), a version bump
 (`aws_bedrock_guardrail_version`'s `replace_triggered_by` — editing the guardrail alone updates `DRAFT`
 only, `main.tf:280-297`'s own documented hazard), a `stacks/main` redeploy to pick up the new
 `FNOL_GUARDRAIL_VERSION`, and a full `C1` recall cycle to confirm no regression — the same sequence `D89`
@@ -556,19 +658,13 @@ out of order. **Whichever of the two is chosen, apply both stacks together, batc
 `D97`'s own closure is the standing precedent for why, and per Round 2 Q3, that precedent is a prior real
 outage in this project, not a theoretical caution.
 
-**Direction 3 needs none of that** — no `main.tf` edit, no version bump, no guardrail-stack redeploy; a
-`stacks/main`-only code change (the graph routing edit named above) plus its own eval cycle, and, per Round
-2 Q2, a new `assert_dominates`-style test as part of the same change, not a follow-up.
+Had direction 2′ been chosen (closed on requirements, Round 1 Q1), `D121`'s fix verification would
+additionally have needed the missing "before" artifact `OI43` names — see the `OI43` closure above for why
+the chosen direction moots that requirement rather than meeting it.
 
-If direction 2′ is chosen (currently closed on requirements, not expected to be revived without a change to
-Round 1 Q1's answer), `D121`'s fix verification additionally needs the missing "before" artifact `OI43`
-names — a captured pre-guardrail readback string — since a partial-disclosure fix's success criterion ("the
-new readback is not masked, and a caller can actually confirm from it") cannot be checked against `§76`'s
-post-mask-only record alone.
-
-Whichever of direction 1 or direction 3 is eventually chosen, `D123`/`OI45`
-(`update_contact_info.py:79`'s missed site, filed this session) needs its own scope decision as part of
-that fix, not silent inclusion — direction 1 closes it for free (same as `:54,69`); direction 3 chosen at
-coarse scope (Round 2 Q1) also covers it, since `:79` is inside the same node a whole-node skip already
-bypasses, but this was never part of what "the confirmation turn" originally named and should be said
-explicitly when the fix is written up, not discovered again later.
+**One item from this superseded block survives the decision and is NOT superseded**: `D122`/`OI44`
+(Bedrock's `PHONE` `ANONYMIZE` producing a malformed partial mask on spoken-digit-group phrasing) was found
+while probing direction 2 and disqualified that direction — but it is a finding about **Bedrock's own
+behaviour**, not about any candidate here. It remains OPEN and untriaged regardless of this decision, and
+direction 3-coarse neither fixes nor touches it. Its scope note stands: the shape that triggered it is not
+what the deployed system speaks today.
