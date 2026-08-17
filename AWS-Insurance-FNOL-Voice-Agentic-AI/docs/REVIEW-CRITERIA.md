@@ -233,6 +233,28 @@ this everywhere this *effect* can happen" — the second question is the one a d
 question does not automatically answer it. The v2->v3 fix was **incomplete, not wrong in kind** — its
 target outcome was correctly identified, its enumeration stopped one layer too shallow.
 
+**Extended again 2026-08-17, Marco, after `D123` (`docs/adr/ADR-017-d121-pii-readback-fix.md`,
+`docs/audits/2026-08-16-d121-guardrail-mechanism-sweep.md`, `PROJECT_STATE.md` `OI45`) — a third,
+narrower way an enumeration undercounts: it can be complete about *which functions* it walked and still
+be incomplete about *which control-flow branches inside them* it walked.** `D121`'s own `§8` mechanism
+sweep enumerated every `response_text` call site across `agents/nodes/*.py` — 27 sites, all real
+`return` statements, cross-checked by grep. `update_contact_info.py:79` is a 28th: a `response_text`
+constructed inside an `except (InvalidUpdateContactInfoError, PolicyNotFoundError) as exc:` block,
+interpolating `exc`, whose message wraps a Pydantic `ValidationError` and can carry the caller's own
+`new_value` back — the same echo mechanism, the same node, the same policy-config entities, missed
+purely because the site sits in an exception handler rather than the function's normal control flow.
+
+**The finding worth carrying forward is not "one site was missed" — every enumeration under-counts by
+one occasionally, and that alone would not earn a second entry here. It is that the enumeration method
+itself had a shape: it walked `return` statements and not `except` branches, so any sweep performed the
+same way — grep for a call shape, list where it appears in the normal-path code — inherits the identical
+blind spot.** A function's error-handling branches are not a marginal or unusual place for a value to
+reach a caller; in this codebase specifically, at least one of them does. **Restated once more, one level
+narrower than the mechanism-sweep rule above: a call-site or mechanism enumeration must state, and check,
+whether it walked exceptional control flow (`except`/`finally` blocks, error-response branches, fallback
+paths) as well as the normal path — silently scoping to one and not saying so is indistinguishable, to a
+later reader, from having checked both.**
+
 ## 9. A summary carrying a scoped claim must cite its source line, and the scope must be verified against it
 
 Added 2026-08-16, Marco, after a handoff document (`docs/handoffs/2026-08-16-phase11-midflight.md`, `RESULTS.md`
