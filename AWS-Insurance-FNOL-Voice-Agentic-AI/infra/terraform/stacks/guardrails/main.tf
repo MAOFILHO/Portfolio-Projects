@@ -163,6 +163,42 @@ resource "aws_bedrock_guardrail" "fnol" {
         "How much is the premium on my travel insurance?",
       ]
     }
+    /*
+     * `D89` investigation, 2026-08-16 -- REVERTED (v3 -> v4 -> v5), both fix attempts failed. History kept
+     * in full rather than trimmed, because both failures are the finding, not just the current state.
+     *
+     * Root problem: this topic's own worked example, "Should I sue the other driver?", is a
+     * permission-seeking "Should I [verb]...?" question about a legally-loaded action. FileAutoClaim's own
+     * confirmation prompt, "...Should I go ahead and file this claim?", is structurally isomorphic --
+     * same interrogative frame, "file" standing in for "sue" -- and the natural affirmative reply, "yes, go
+     * ahead and file it," reproduces the same collision from the caller's side. 33 real `ApplyGuardrail`
+     * probes (`RESULTS.md` §41) minimized the trigger to the CONJUNCTION of an affirmation/interrogative
+     * frame ("yes, ..." / "should I ...?"), "go ahead", and "file [it / this claim]" -- not the bare word
+     * "file" alone (8 independent bare-"file" probes, all `NONE`).
+     *
+     * ATTEMPT 1 (v3 -> v4, exclusion-clause carve-out, "...is NOT this topic."): FAILED AT APPLY --
+     * `ValidationException`, exceeded Bedrock's documented 200-character cap on denied-topic definitions
+     * (`API_GuardrailTopicConfig.html`, `guardrails-denied-topics.html`); the original 188-char definition
+     * had only 12 characters of headroom, previously unmeasured. `RESULTS.md` §42.
+     *
+     * ATTEMPT 2 (v4, positive re-scoping instead of an exclusion clause, per Bedrock's own stated guidance
+     * to avoid negative/exception definitions): APPLIED, then FALSIFIED by a live 3-set probe --
+     * `RESULTS.md` §43. Two independent failures, not one: (a) ZERO of the 4 `D89` triggers moved to
+     * `NONE` -- identical to v3's behavior in every case, meaning the trigger is NOT attached to the
+     * definition's positive noun list the way this attempt assumed; (b) a real regression -- "diagnosing
+     * or treating an injury" is narrower than the original "injuries or treatment" and dropped the topic's
+     * own unchanged canonical example, "Do I need to see a doctor for this or will it heal on its own?",
+     * which stopped classifying as belonging to its own topic. **Both the "don't touch proven wording"
+     * argument for keeping the original text (this session's own initial position) and the "narrow it
+     * positively instead" argument for rewriting it (Marco's counter-proposal) reasoned entirely about the
+     * DEFINITION text. Neither examined the `examples` field, which v4's own falsification now implicates
+     * as the more likely actual anchor of the "Should I [verb]...?" shape** -- untested as of this revert.
+     *
+     * REVERTED (v4 -> v5): definition restored verbatim to the original, pre-`D89` text below. `examples`
+     * unchanged throughout all three versions. Next step, if any, is a probe designed to isolate whether
+     * the retained example is the actual anchor before any further definition or example edit is proposed
+     * -- not attempted in this file yet; `RESULTS.md` §44 has the live status.
+     */
     topics_config {
       name       = "legal_and_medical_advice"
       type       = "DENY"
