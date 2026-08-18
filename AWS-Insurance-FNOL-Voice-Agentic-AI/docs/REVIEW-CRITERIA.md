@@ -321,3 +321,35 @@ the same way in the same file. When a fix changes a definition and a listed exam
 assume the fix caused it — probe the *unchanged* baseline (a prior version, or a byte-identical revert) for
 the same phrase before attributing the change to the edit under test; §47's correction of §43/§44's
 "regression" finding is the worked example of doing this the right way, one round late.
+
+## 11. A mechanism's own name or comment is a claim about itself, not a traced fact
+
+Added 2026-08-18, Marco, after `D140`/`OI58` (`docs/RESULTS.md` §94, `PROJECT_STATE.md` `OI58`):
+`update_contact_info.py`'s `_CONFIRM_CEILING`-exhausted branch returns a constant named
+`_ESCALATION_SCRIPT` and speaks a sentence promising a human transfer. It does not set
+`EscalationRecord`/`escalate`, so `D43`'s real Connect-level transfer never fires there. That gap sat
+underneath the exact claim "the retry ladder escalates to a human" — stated in `docs/adr/ADR-017-*.md` at
+`:36`, carried through four `/grill-with-docs` rounds, and used as one arm of Round 5's accepted
+failure-shape comparison — for two full sessions, without anyone tracing whether the `escalation` key the
+name promises actually reaches `lex_codehook.py`'s `_close(..., escalated=True, ...)`.
+
+**This is the same error `/grill-with-docs` Round 1 Q1 caught once already, one level lower.** Round 1 Q1
+rejected inferring the readback's *requirement* from `update_contact_info.py`'s current wording — Marco's
+correction there, recorded verbatim in the ADR: "that is inferring a requirement from an implementation,
+which tells you what the previous author did, not what the system must do." Round 5's escalation claim
+made the identical substitution one layer down: not inferring a *requirement* from an implementation, but
+inferring a *behavior* from an implementation's name for itself. A constant called `_ESCALATION_SCRIPT`, a
+comment describing what a branch is *for*, a function named `handle_no_match_or_barge_in` — these are the
+author's stated intent, not a traced fact about what the code does when it runs. The first time, the
+substitution was caught before it closed anything. The second time, it wasn't — it passed through Round 1,
+Round 2, Round 4, Round 5, an accepted ADR, and Marco's own Round 5 argument for `ADR-017`, all without
+being named as the same class of error, because nobody asked the question in a form that would have caught
+it a second time.
+
+**A claim about what a mechanism *does* requires tracing the mechanism — reading the return value, the
+state key, the call site that consumes it — not reading the code that names, comments, or scripts it.**
+Same family as §7 (activity signals are not effect signals) and §10 (an `examples` entry is a config input,
+not a verified behavior): a self-description sitting next to the thing it describes is not evidence about
+the thing, however confidently named. Before citing what a function, branch, or constant *does* in a
+decision document, a grill round, or a report — trace it to its consumer, the way `D140`/`OI58` traced
+`_ESCALATION_SCRIPT` forward to `lex_codehook.py` and found the key it promises was never set.
