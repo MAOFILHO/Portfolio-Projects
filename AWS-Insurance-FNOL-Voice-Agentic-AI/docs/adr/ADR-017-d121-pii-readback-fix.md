@@ -37,6 +37,11 @@ allowed retry (`_CONFIRM_CEILING = 1`) re-asks the identical masked string and e
 `UpdateContactInfo` cannot reach fulfillment by voice for two of its three field values. `field=mailing_
 address` is unaffected — `ADDRESS` is not a configured entity.
 
+**Correction, added 2026-08-18, `D140`/`OI58`: "escalates every time" is not true today** — this branch
+speaks `_ESCALATION_SCRIPT` but sets no `EscalationRecord`/`escalate` attribute, so no real transfer
+happens. See the Decision section's correction note for the full account and why it does not change this
+document's decision.
+
 `§77` triaged this **FIX NOW**, explicitly not scoped that session: "it needs a design decision, a
 guardrail version bump, a redeploy, and a `C1` cycle — that is a fresh session's work." This document is
 that fresh session's design output, not its execution — **no Terraform edit, no version bump, no redeploy,
@@ -527,7 +532,8 @@ kind:
 - **3-coarse's residual** (a future node speaks `{EMAIL}`): a **functional** failure. The caller cannot
   confirm, the retry ladder escalates to a human, and **no data is exposed**. It is loud — the intent
   visibly fails to complete. `D121` is its own existence proof: this class *does* get caught, at the cost
-  of one unusable intent, with zero confidentiality consequence.
+  of one unusable intent, with zero confidentiality consequence. **[Corrected 2026-08-18, `D140`/`OI58` —
+  "escalates to a human" does not currently fire; see the Decision section's correction note below.]**
 - **1-global's residual** (the model speaks a caller's real email or phone aloud on `coverage_topic`): a
   **confidentiality** failure. Nothing fails, nothing escalates, no metric moves, and the log that would
   record it cannot redact phone numbers (`D124`). It is **silent by construction** — and the
@@ -576,6 +582,19 @@ comparable in likelihood, and were not compared on it. They were compared on fai
   construction**, and the insistent-caller gap (Round 4, recovered) leaves its rate unmeasured over
   precisely the region where the risk plausibly concentrates — a caller's own insistent repetition being
   the context in which `_COVERAGE_SYSTEM_PROMPT`'s soft "do not restate" instruction is hardest to obey.
+
+**Correction, added 2026-08-18, `D140`/`OI58` (`docs/RESULTS.md` §94, `PROJECT_STATE.md` `OI58`) — not a
+reopening of this decision.** "The retry ladder escalates to a human," stated above and at `:36`/`:528`,
+is not true today: `update_contact_info.py`'s `_CONFIRM_CEILING`-exhausted branch speaks
+`_ESCALATION_SCRIPT` but sets no `EscalationRecord`/`escalate` session attribute, so the real Connect-level
+transfer built for `D43` never fires there — the caller is told a human is coming and the call ends
+instead, found while writing `docs/runbooks/GUARDRAIL-FALSE-POSITIVE-SPIKE.md` §4 and checked against this
+site directly at Marco's instruction. **This decision stands on the failure-shape argument, not on the
+escalation mechanism working, and this correction does not revisit it.** 3-coarse's residual is still a
+functional failure with zero data exposed — the caller still cannot confirm and the intent still visibly
+fails, with or without a live transfer — which is the half of the comparison this decision actually turned
+on. Whether the corrected fact changes anything about the 3-coarse-vs-1-global comparison is a live,
+undecided question, not settled by this note.
 
 **A loud functional failure with no data exposure, whose class is demonstrably caught, is preferred over a
 silent confidentiality failure on unmeasured ground with no detector at all.** That is the whole basis.
