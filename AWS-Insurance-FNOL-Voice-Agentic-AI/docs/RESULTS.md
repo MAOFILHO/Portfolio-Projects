@@ -10706,3 +10706,62 @@ C1 status: unchanged, not touched.
 Blocked on: Marco's triage of D140 (fix/defer/accept), and Marco's call on whether ADR-017 needs a recorded note about Round 5's correction -- not drafted here, per explicit instruction not to edit the ADR yet.
 Last apply + gate result: none -- no code changed, no Terraform touched. Real spend: $0.00.
 ```
+
+### 5. Follow-up, same session -- the ADR-017 note, and `D140` recorded as a class with an assessed fix shape
+
+Three further instructions, all "assess/write, do not fix":
+
+**The ADR-017 note is done, not deferred.** `docs/adr/ADR-017-d121-pii-readback-fix.md` now carries three
+inline correction notes -- Context (`:36`), the Round 5 grill log (`:528`), and the full note at the
+Decision section's basis (`:570-582`) -- stating plainly that "the retry ladder escalates to a human" is
+not true today and that the decision stands on the failure-shape argument (loud, zero data exposed), not
+on the escalation mechanism working. Not a reopening: whether the corrected fact changes the
+3-coarse-vs-1-global comparison is left explicitly undecided, Marco's call. Committed separately, `5d0a2b3`.
+
+**`D140` is one class, not three unrelated bugs.** Every bespoke branch that hand-writes a
+transfer-promising `response_text` instead of routing through `initiate_escalation()` has this gap;
+`repair.py`'s shared `handle_no_match_or_barge_in` doesn't, because it's the only branch of this shape that
+calls it. The class extends inside a single function, found rechecking `guardrails_nodes.py` for this
+write-up: `guardrails_output_check`'s `check_authority`/`violation` branch (`:64-96`, correct) sits a few
+lines above the broken `result_gr.blocked` branch (`:106-107`) in the *same function* -- and the correct
+branch's own comment (`:66-69`) names `D43` by number as precisely the mistake it is avoiding ("`docs/phase7/
+NOT-FIXED.md`'s `D43` is this project's own instance of a blocked turn promising a transfer that never
+happens -- reproducing that here would be making the same mistake with the fix for a different one"). The
+next branch down makes it anyway. The comment proves the author knew the shape of this defect while
+writing the file it recurs in.
+
+**Fix-shape assessment, not a fix.** "Call `initiate_escalation()` and attach `escalation:
+EscalationRecord` at each of the three sites" -- **not** "route these three through `repair.py`'s shared
+node." Checked, not assumed: all three sites already receive the full `AgentState`
+(`agents/graph.py:101`'s `_guardrail_blocked_response(_state: AgentState)`, `guardrails_nodes.py`'s
+`guardrails_output_check(state: AgentState)`, `update_contact_info.py`'s
+`update_contact_info_node(state: AgentState)`), so `contact_id` and `filled_slots` are available at each
+the same way they are in the two correct sites -- nothing structural blocks calling `initiate_escalation()`
+directly. Routing through `repair.py`'s node instead does not fit: that node is keyed specifically to
+no-match/barge-in retry counting (`BARGE_IN_OPEN_REPROMPT`/`GENERIC_REPROMPT`, its own `_UNKEYED_TURN`
+key), and `update_contact_info.py`'s deliberately tighter `_CONFIRM_CEILING = 1` (`DIALOGUE-POLICIES.md`
+§4, one retry not the shared ladder's two, by design -- "a silent partial write is a critical defect, not a
+missed target") would collapse into the shared ladder's ceiling if rerouted there. That is a real
+regression against a documented design choice, not a refactor.
+
+`DIALOGUE-POLICIES.md` §8's escalation-trigger table already has the right row to cite for site 3
+(`UpdateContactInfo confirmation failed twice | 3 -- Capability (tighter ladder, one retry not two)`) and,
+via the `ADR-015` row, for site 2's sibling branch in the same function. It has **no row** naming an
+INPUT-guardrail-block trigger for site 1 specifically -- whoever fixes `D140` should check whether §8
+needs a row added, not only whether the code needs a call added. Not filed as a separate defect; noted here
+so it isn't rediscovered from zero.
+
+`PROJECT_STATE.md`'s `OI58` row updated in place with this framing and assessment (append-and-correct, same
+convention as `RESULTS.md` itself).
+
+**Cost**: $0.00 -- code reading and doc edits only, no AWS calls.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 -- ADR-017 correction note written (D140/OI58, done not deferred); D140/OI58 reframed as one class (every hand-rolled transfer-promising response_text lacking initiate_escalation(), not three unrelated sites) with an assessed fix shape (call initiate_escalation() at each site; routing through repair.py's shared node does not fit, would collapse update_contact_info's deliberately tighter ceiling into the shared ladder's). New sub-finding: guardrails_output_check's own check_authority branch names D43 by number as the mistake its neighboring branch then makes. REVIEW-CRITERIA.md §11 added: a mechanism's own name/comment is a claim about itself, not a traced fact -- same class of error /grill-with-docs Round 1 Q1 caught once already, one level up.
+Open defects: D140/OI58 unchanged (OPEN, filed, now assessed, still not fixed). No new defect filed for the DIALOGUE-POLICIES.md §8 coverage gap -- noted, not filed.
+C1 status: unchanged, not touched.
+Blocked on: Marco's triage of D140 (fix/defer/accept) and the fix-shape choice between the two options assessed above.
+Last apply + gate result: none -- no code changed, no Terraform touched. Real spend: $0.00.
+```
