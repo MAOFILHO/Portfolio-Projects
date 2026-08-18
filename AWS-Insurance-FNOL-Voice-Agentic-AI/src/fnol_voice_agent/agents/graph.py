@@ -18,8 +18,19 @@ route_and_classify -[safety_flag]-------------------------> injury_escalation ->
                     -[CheckClaimStatus]--------------------> check_claim_status -+
                     -[CoverageQuestion]--------------------> coverage_question -+-[response_text]--> guardrails_output_check -> END
                     -[RentalTowingEntitlement]--------------> rental_towing_entitlement -+           -[no response_text]--> handle_no_match_or_barge_in -> END
-                    -[UpdateContactInfo]--------------------> update_contact_info -+
+                    -[UpdateContactInfo]--------------------> update_contact_info -+-[response_text]--> END (ADR-017 3-coarse)
+                                                                                     -[no response_text]--> handle_no_match_or_barge_in -> END
 ```
+
+**`ADR-017` (direction 3-coarse, ACCEPTED).** `update_contact_info` is the one named exception to
+`guardrails_output_check`'s dominance over the five intent nodes above: its `response_text` goes straight
+to `END`, never through the OUTPUT `ApplyGuardrail` call the other four still get. This is deliberate, not
+a gap -- see the ADR for why (the node never calls an LLM, so the added exposure is bounded to
+template-plus-slot-value text; `EMAIL`/`PHONE` `ANONYMIZE` was making its own confirmation readback
+unconfirmable, `D121`). `assert_dominates_except`, called below alongside `assert_dominates`, asserts both
+halves of this at construction time: the other four nodes still dominate through `guardrails_output_check`,
+and `update_contact_info` still bypasses it -- a regression in either direction fails the build, not a test
+that happens to run.
 """
 
 from __future__ import annotations
@@ -30,7 +41,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
-from fnol_voice_agent.agents.graph_structure import assert_dominates
+from fnol_voice_agent.agents.graph_structure import assert_dominates, assert_dominates_except
 from fnol_voice_agent.aws.split_router import assert_detector_dominates
 from fnol_voice_agent.agents.nodes.check_claim_status import check_claim_status
 from fnol_voice_agent.agents.nodes.coverage_question import make_coverage_question_node
@@ -65,6 +76,22 @@ _INTENT_TO_NODE = {
     "UpdateContactInfo": "update_contact_info",
     "InjuryEscalation": "injury_escalation",
 }
+
+# `ADR-017`. The five nodes that feed `guardrails_output_check` -- previously all wired through one shared
+# `_after_intent_node` conditional-edge registration below; `update_contact_info` now gets its own
+# (`_after_update_contact_info`) so it can bypass the OUTPUT guardrail specifically. Exported (not
+# module-private) because `redteam/readback_probe.py`'s site-coverage check (ADR-017 condition part 3)
+# reads these two constants directly rather than re-deriving or re-typing the node list a second place --
+# a node added here without updating that probe's coverage set fails `make redteam` loudly instead of
+# silently going unchecked, per the same instruction that produced `assert_dominates_except`.
+OUTPUT_GUARDRAIL_SOURCES: tuple[str, ...] = (
+    "file_auto_claim",
+    "check_claim_status",
+    "coverage_question",
+    "rental_towing_entitlement",
+    "update_contact_info",
+)
+OUTPUT_GUARDRAIL_EXCEPTIONS: frozenset[str] = frozenset({"update_contact_info"})
 
 _GUARDRAIL_INPUT_BLOCKED_RESPONSE = (
     "I'm not able to help with that -- let me connect you with someone who can."
@@ -105,6 +132,17 @@ def _after_intent_node(state: AgentState) -> str:
     return (
         "guardrails_output_check" if state.get("response_text") else "handle_no_match_or_barge_in"
     )
+
+
+def _after_update_contact_info(state: AgentState) -> str:
+    """`ADR-017` direction 3-coarse's routing edit. Same "no response_text yet" fallback every other
+    intent node gets (mid multi-turn slot collection still needs `handle_no_match_or_barge_in`, same as
+    `_after_intent_node`) -- the only difference is the destination for a real response_text: straight to
+    `END`, never `guardrails_output_check`. `update_contact_info_node` never calls an LLM (every branch is
+    a fixed string or an f-string over a slot value/enum/exception string), which is the fact the ADR's
+    Round 2 Q1 leans on to bound this bypass's exposure.
+    """
+    return "end" if state.get("response_text") else "handle_no_match_or_barge_in"
 
 
 def build_graph(
@@ -201,13 +239,13 @@ def build_graph(
     )
     builder.add_edge("injury_escalation", END)
     builder.add_edge("handle_no_match_or_barge_in", END)
-    for intent_node in (
-        "file_auto_claim",
-        "check_claim_status",
-        "coverage_question",
-        "rental_towing_entitlement",
-        "update_contact_info",
-    ):
+    # `ADR-017`: `update_contact_info` is excluded from this loop -- OUTPUT_GUARDRAIL_SOURCES minus
+    # OUTPUT_GUARDRAIL_EXCEPTIONS -- and wired separately below with its own conditional-edge function,
+    # so its bypass of `guardrails_output_check` is a distinct routing registration, not a branch inside
+    # a shared one. That distinctness is what makes `assert_dominates_except`'s one-hop check meaningful.
+    for intent_node in OUTPUT_GUARDRAIL_SOURCES:
+        if intent_node in OUTPUT_GUARDRAIL_EXCEPTIONS:
+            continue
         builder.add_conditional_edges(
             intent_node,
             _after_intent_node,
@@ -216,6 +254,14 @@ def build_graph(
                 "handle_no_match_or_barge_in": "handle_no_match_or_barge_in",
             },
         )
+    builder.add_conditional_edges(
+        "update_contact_info",
+        _after_update_contact_info,
+        {
+            "end": END,
+            "handle_no_match_or_barge_in": "handle_no_match_or_barge_in",
+        },
+    )
     builder.add_edge("guardrails_output_check", END)
 
     assert_dominates(builder, "l1_safety_check")
@@ -226,5 +272,16 @@ def build_graph(
     # signal looks confident -- and a check that only runs in a test does not stop that edit
     # reaching a caller. Cheap: four enumerated combinations, no model call, no I/O.
     assert_detector_dominates()
+    # `ADR-017` condition part 2 -- Round 2 Q2's surviving half: the graph must assert the invariant
+    # direction 3-coarse creates (guardrails_output_check dominates every intent node's response_text
+    # EXCEPT update_contact_info's, which must NOT reach it) rather than leave it to a reader. There was
+    # no `assert_dominates(builder, "guardrails_output_check")` before this ADR and never had been --
+    # this is the property's first assertion, not a loosening of one that previously existed.
+    assert_dominates_except(
+        builder,
+        "guardrails_output_check",
+        OUTPUT_GUARDRAIL_SOURCES,
+        exceptions=OUTPUT_GUARDRAIL_EXCEPTIONS,
+    )
 
     return builder.compile(checkpointer=checkpointer)
