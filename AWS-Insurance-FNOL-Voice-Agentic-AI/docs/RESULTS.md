@@ -10620,3 +10620,89 @@ C1 status: unchanged -- not touched, no guardrail version bump, no redeploy (ADR
 Blocked on: nothing. Not yet committed -- Marco asked to see the live per-site results first.
 Last apply + gate result: none -- no Terraform touched. Real spend: ≈$0.00312 this entry (Converse exact, guardrail formula-estimated per the gap noted above), well inside the $5 Bedrock cap.
 ```
+
+## 94. `D140`/`OI58` filed -- three "let me connect you with someone" response_texts set no escalation state, so the real Connect-level transfer never fires; `update_contact_info`'s own instance directly touches `ADR-017` Round 5's argument
+
+Found while writing `docs/runbooks/GUARDRAIL-FALSE-POSITIVE-SPIKE.md` §4 (the guardrail-false-positive
+runbook's account of what a caller experiences when `D89` fires) and, per Marco's explicit instruction,
+extended to check one adjacent site directly relevant to `ADR-017`. **Report only -- not fixed, `ADR-017`
+not edited.**
+
+### 1. The pattern, and where it's confirmed broken
+
+A `response_text` promising a human transfer, with **no** `escalation` key in the returned state, means
+`api/lex_codehook.py`'s `_close()` never gets called with `escalated=True` (the check is at `:557-559`, the
+real call at `:573`) -- the turn falls through to the plain `_close(event, response_text,
+executed_node_intent=...)` at `:583`, `escalated` defaulting to `False`. No `escalate="true"` session
+attribute, no `EscalationRecord`, no `initiate_escalation()` call -- so Phase 8's real Connect-level transfer
+(`$.Attributes.escalate` -> `TransferContactToQueue`, built for `D43`, `PROJECT_STATE.md`:3324) never fires.
+The caller hears a transfer promised and gets a dead END instead.
+
+Three confirmed sites, read directly, not assumed from `D43`'s general closure:
+
+1. **`agents/graph.py:96-102`**, `_guardrail_blocked_response` -- the INPUT-guardrail-block path (`D89`'s
+   own consequence, `GUARDRAIL-FALSE-POSITIVE-SPIKE.md` §4's finding).
+2. **`agents/nodes/guardrails_nodes.py:106-107`**, `guardrails_output_check`'s `result_gr.blocked` branch --
+   `return {"guardrail_output_blocked": True, "response_text": _OUTPUT_BLOCKED_FALLBACK}`, same shape, no
+   `escalation` key.
+3. **`agents/nodes/update_contact_info.py:59-63`**, the `_CONFIRM_CEILING`-exhausted branch -- `return
+   {"retry_counts": retry_counts, "response_text": _ESCALATION_SCRIPT}`, same shape, no `escalation` key.
+   **This is the site Marco asked to be checked directly, because `ADR-017` Round 5 cites it by name (§2
+   below).**
+
+### 2. Contrast, confirmed correct -- this is not a missing capability
+
+`agents/nodes/repair.py:43-69`, the shared `handle_no_match_or_barge_in` retry-ceiling branch, **does** call
+`initiate_escalation()` and returns a real `escalation: EscalationRecord` (`:47-69`) when its own ceiling is
+reached. The mechanism exists, is correctly wired at at least one site, and is not expensive or novel to
+call -- the three sites above are places it was never added, not evidence the codebase lacks the capability.
+`file_auto_claim.py`'s own confirm-step no-match path was checked too: it has no local ceiling logic of its
+own (unlike `update_contact_info.py`) and falls through to the shared, correctly-wired `repair.py` path
+instead -- so `FileAutoClaim`'s confirmation retry is unaffected by this finding.
+
+### 3. `ADR-017` relevance -- Round 5's "escalates to a human" is not literally true today
+
+`docs/adr/ADR-017-d121-pii-readback-fix.md` builds its accepted decision on a failure-shape comparison.
+Quoted directly, twice: *"The one allowed retry (`_CONFIRM_CEILING = 1`) re-asks the identical masked
+string and escalates every time"* (`:36`), and 3-coarse's residual is characterized as *"a **functional**
+failure. The caller cannot confirm, **the retry ladder escalates to a human**, and zero data is exposed...
+It is loud, because the intent visibly fails to complete"* (Round 5, `:527-530`, restated in the Decision
+section `:569-572`).
+
+Site 3 above is exactly the ladder that sentence describes, and it does not escalate to a human -- it speaks
+`_ESCALATION_SCRIPT` (`"I want to make sure I get this exactly right -- let me connect you with someone who
+can update that for you."`) and the call ends, same dead-end shape as `D89`'s own INPUT-block path
+(`GUARDRAIL-FALSE-POSITIVE-SPIKE.md` §4).
+
+**What still holds, and what doesn't, stated separately rather than as one verdict:**
+
+- **Still holds**: the failure is functional and loud from the caller's own perspective -- they cannot
+  confirm, the intent visibly fails to complete, and *zero PII is exposed*. Nothing about this finding
+  changes `D121`'s own masking behavior or reopens the confidentiality comparison Round 5 actually decided
+  on (3-coarse's residual vs. 1-global's silent, unmeasured `coverage_topic` leak risk).
+- **Does not hold as written**: "escalates to a human" is a claim about mechanism, and the mechanism does
+  not fire. A caller hitting this today is not connected to anyone -- they are told they will be and the
+  call ends, which is a different (and arguably worse) caller experience than the ADR's own text describes.
+- **Not assessed here**: whether this changes the DECISION Round 5 reached (3-coarse over 1-global) --
+  that comparison was between two *unmeasured* residuals compared on shape, and "loud, no data exposed"
+  is still the accurate half of 3-coarse's shape even without a real transfer. Whether "loud but not
+  actually escalated" changes the comparison enough to revisit is Marco's call, not pre-empted here, per
+  instruction to report only.
+
+### 4. Filed
+
+`PROJECT_STATE.md` `OI58`/`D140`, new session block `D140`-`D159`/`OI58`-`OI77`/`§94`-`§113` claimed in the
+reservation table. Cross-referenced from `docs/runbooks/GUARDRAIL-FALSE-POSITIVE-SPIKE.md` §4 rather than
+only described there.
+
+**Cost**: $0.00 -- code reading only, no AWS calls.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 -- D140/OI58 filed, found writing GUARDRAIL-FALSE-POSITIVE-SPIKE.md §4, extended per Marco's instruction to check update_contact_info_node's own _CONFIRM_CEILING-exhausted branch. Three sites confirmed to return a transfer-promising response_text with no escalation key (graph.py's guardrail_blocked_response, guardrails_nodes.py's OUTPUT-blocked branch, update_contact_info.py's confirm-ceiling branch) -- none reaches lex_codehook.py's escalated=True _close() call, so D43's real Connect-level transfer never fires at any of the three. Contrast confirmed correct: repair.py's shared handle_no_match_or_barge_in DOES set a real EscalationRecord -- the mechanism exists, these three sites just never call it. ADR-017 relevance reported, not acted on: Round 5's "the retry ladder escalates to a human" (lines 36, 528) is not literally true for site 3 -- functional-failure/no-data-exposed half still holds, "escalates to a human" does not. Whether this changes the 3-coarse-vs-1-global comparison is Marco's call.
+Open defects: D140/OI58 NEW, OPEN, filed not fixed. All prior open items unchanged, not touched this entry.
+C1 status: unchanged, not touched.
+Blocked on: Marco's triage of D140 (fix/defer/accept), and Marco's call on whether ADR-017 needs a recorded note about Round 5's correction -- not drafted here, per explicit instruction not to edit the ADR yet.
+Last apply + gate result: none -- no code changed, no Terraform touched. Real spend: $0.00.
+```
