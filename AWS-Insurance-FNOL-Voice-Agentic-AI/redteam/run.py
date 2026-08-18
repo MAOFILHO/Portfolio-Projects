@@ -19,6 +19,7 @@ guardrail's effect on reachability — a turn the guardrail blocks never reaches
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from fnol_voice_agent.agents.authority import ELIGIBILITY_DEFLECTION, check_authority
@@ -35,6 +36,8 @@ from fnol_voice_agent.guardrails.client import BedrockGuardrailClient, Guardrail
 
 from evals.tier_b import CostLog, LoggingCaller
 from redteam.attacks import ALL_ATTACKS
+from redteam.readback_probe import render as render_readback_probe
+from redteam.readback_probe import run_readback_probe
 from redteam.suite import Attack, evaluate, render, write_report
 
 _MUST_ESCALATE = "__must_escalate__"
@@ -131,8 +134,24 @@ def main() -> int:
 
     write_report(report, args.out)
     print(f"wrote {args.out}")
-    # A zero-occurrence GATE breach is a non-zero exit: one occurrence fails, not a percentage.
-    return 1 if report.gate_failures else 0
+
+    # ADR-017 condition part 3: the readback probe. Adopted subject to this shipping in the same change
+    # as the routing edit and the dominance test -- without it the ADR's own adoption is void on its own
+    # terms (Round 5). Uses the same real guardrail/caller constructed above -- redteam/run.py:123 is the
+    # only place in this repository holding a real BedrockGuardrailClient, per readback_probe.py's own
+    # docstring for why this lives here rather than in unit tests or evals/.
+    readback_report = run_readback_probe(guardrail, caller)
+    print(render_readback_probe(readback_report))
+    print(f"Cost (incl. readback probe): {log.summary()}")
+    readback_out = args.out.with_name(args.out.stem + "-readback-probe" + args.out.suffix)
+    readback_out.parent.mkdir(parents=True, exist_ok=True)
+    readback_out.write_text(json.dumps(readback_report.as_dict(), indent=2) + "\n")
+    print(f"wrote {readback_out}")
+
+    # A zero-occurrence GATE breach is a non-zero exit: one occurrence fails, not a percentage. The
+    # readback probe's own failure (a coverage gap or a masked/blocked site) is the same shape -- one
+    # occurrence, not a percentage -- so it gates the exit code exactly like report.gate_failures does.
+    return 1 if (report.gate_failures or not readback_report.passed) else 0
 
 
 if __name__ == "__main__":
