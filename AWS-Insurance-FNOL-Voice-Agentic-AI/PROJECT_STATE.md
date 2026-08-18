@@ -7976,3 +7976,131 @@ C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26). Not touched. Directi
 Blocked on: nothing. Decision settled; implementation is a fresh session's work by Marco's own instruction.
 Last apply + gate result: none -- no Terraform touched, no AWS calls made. Real spend: $0.00 this session.
 ```
+
+## Session log — 2026-08-17 (continued; fresh session after a machine reboot; `ADR-017` direction 3-coarse
+built in full -- all three condition parts; `D126`/`OI49` filed and fixed -- `make redteam` never existed;
+Part 3 verified live, 7/7 sites `action: NONE`; `D127`/`OI50` filed, not fixed -- a correct guardrail
+result surfaced an undecided design question; NOT yet committed, Marco reviewing the live results first)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+Session started with no memory of the prior one (machine reboot) -- reconstructed entirely from the
+committed record (`git log`, `PROJECT_STATE.md`, `docs/adr/ADR-017-d121-pii-readback-fix.md`) per Marco's
+own instruction not to ask him to reconstruct it. Built exactly what `ADR-017`'s Decision section
+specifies, in the order Marco laid out mid-session; decision itself not reopened.
+
+**Part 1 -- routing.** `src/fnol_voice_agent/agents/graph.py:104-145,246-264`. `update_contact_info` pulled
+out of the shared `_after_intent_node` loop into its own `_after_update_contact_info`: a real
+`response_text` routes straight to `END`, the "nothing yet" fallback still routes to
+`handle_no_match_or_barge_in`. New public `OUTPUT_GUARDRAIL_SOURCES`/`OUTPUT_GUARDRAIL_EXCEPTIONS`
+(`graph.py:87-94`) are the one place this is stated -- the routing loop and Part 3's site discovery both
+read them, not a second copy.
+
+**Part 2 -- `assert_dominates_except`.** `src/fnol_voice_agent/agents/graph_structure.py:82-155`, new,
+one-hop rather than transitive (a transitive search from a non-initial dominator would false-flag the
+shared no-response fallback every source has). Checked both directions per source -- a plain source must
+reach the dominator and not `END`; a named exception must reach `END` and not the dominator, so a
+regression that silently restores the exception's old routing is caught, not just a regression that drops
+protection. Wired at construction time (`graph.py:280-285`) beside the L1 check -- confirmed via `grep` to
+be this invariant's first assertion, exactly as Round 2 Q2's concession said. Also satisfies `D123`/`OI45`'s
+verification the way the ADR specified: a routing claim, not a masking claim.
+
+**Part 2 tests**: `tests/unit/test_graph_structure.py` (5 new, synthetic fan-in graph, all four failure
+directions plus the pass case). `tests/unit/test_graph_integration.py`: a construction-time corroboration
+mirroring the existing L1 one, plus a *behavioral* test -- a `MockGuardrailRule` proven to mask a
+real-looking phone number in isolation, then shown to leave `update_contact_info`'s actual turn output
+unmasked. `D121`'s literal symptom, reproduced and shown gone.
+
+**Part 3 -- the readback probe.** New `redteam/response_text_sites.py` (AST walker, finds every
+`"response_text"` dict-literal site by walking `ast.Dict` directly rather than by statement shape -- the
+exact distinction the manual 27-site sweep got wrong, missing `update_contact_info.py:79`; verified against
+that exact regression by a dedicated test) and new `redteam/readback_probe.py` (discovers 7 dynamic sites
+across the four non-exception nodes, runs one concrete probe per node -- real function calls for the two
+deterministic nodes, real `generate_response` calls with the real imported prompts for the two LLM nodes,
+reusing `§79`'s real-shaped PII fixtures, not new ones -- asserts the real guardrail returns `action: NONE`
+for each; a discovered site with no probe is its own failure mode, a **coverage gap**, tested via an
+injected phantom site). Wired into `redteam/run.py:main()`.
+
+### `D126`/`OI49` filed and fixed -- `make redteam` never existed by that name
+
+Found while wiring Part 3, per Marco's instruction to file it as its own item: `CLAUDE.md` has documented
+`make redteam` as canonical since before Phase 7; `git log -p -- Makefile` confirms `redteam` only ever
+appeared in a comment and in the `CHECKED`/`TYPED` lint/typecheck variable lists, never as a target.
+`docs/RESULTS.md:1242,1245,1549` and `COSTS.md`'s 2026-08-12 row all say "`make redteam`" describing a
+direct `redteam/run.py` invocation -- the documented name has never once been typeable. **Fixed in the same
+change**: `Makefile` `redteam:` target added, `GUARDRAIL_ID`/`GUARDRAIL_VERSION` required with no default
+(a hardcoded version would go stale exactly the way `FNOL_GUARDRAIL_VERSION` did in `D97`/`OI14`,
+`GUARDRAIL-OPERATIONS.md` §1's own warning), `DRAFT` explicitly refused. Both guard clauses verified to fire
+before the real run.
+
+### The real run, per Marco's explicit approval (~2 `generate_response` + ~7 `ApplyGuardrail`, no new AWS
+resources, no deploy)
+
+Guardrail id/version read live immediately before running, not assumed:
+`aws bedrock list-guardrails --guardrail-identifier zl5ppnyorwd2 --region us-west-2` → published version
+`5` (unchanged since `§79`'s own record), `DRAFT` also present and correctly not used.
+
+`make redteam GUARDRAIL_ID=zl5ppnyorwd2 GUARDRAIL_VERSION=5`:
+
+**Attack corpus (pre-existing, unchanged): 11/11 defended**, $0.0001176, matches the 2026-08-12 `COSTS.md`
+row to the digit.
+
+**Readback probe: PASS. Zero coverage gaps. All 7 sites `action: NONE`** -- the full per-site table (real
+`response_text`, real guardrail action, per site) is in `docs/RESULTS.md` §80, not just this summary.
+Neither LLM-generated site (`coverage_question`, `rental_towing`) echoed the seeded
+`marcos@gmail.com`/`416-987-1547` -- consistent with `§79`'s `0/12`, n=2 more at the same epistemic level,
+not a stronger claim. **No masked site was found; nothing was adjusted to accommodate one.**
+
+**`D127`/`OI50` filed, NOT fixed** -- `file_auto_claim#5`'s except branch (`file_auto_claim.py:130-134`)
+speaks a VIN and a policy number to the caller (`"...VIN='9SYCD4568G1000102' is not on policy 'PY4821'"`,
+via `str(exc)` on a `VehicleNotOnPolicyError`). `action: NONE` is the *correct* guardrail behaviour --
+neither a VIN nor a policy number is a configured PII entity, per the `§8` sweep -- so this is not a probe
+defect. It is the same shape as `D123`/`OI45`: an except branch interpolating identifiers into caller-facing
+speech via an exception string never authored with a caller as its audience. `D123`/`OI45` is covered by
+`ADR-017`'s routing bypass without that coverage ever being a decision about the content; here the node
+*is* checked, the guardrail has nothing configured to catch a VIN/policy-number readback, and the words
+reach the caller regardless. Whether that's intended has never been decided -- inherited from a passing
+probe, not chosen. Cross-referenced to `D123`/`OI45`, not merged -- full account `docs/RESULTS.md` §80.
+
+**A reporting gap found and fixed, not retroactive**: `guardrail_usage` was captured per site but never
+written into the report JSON -- fixed in `readback_probe.py` for future runs; this run's own guardrail cost
+is priced by the established $0.0004/clean-call formula (all 7 came back clean), not re-measured, because
+re-running to capture the exact figure would have spent again without a second approval.
+
+**Cost, this session**: (a) attack corpus $0.0001176 exact. (b) readback probe: $0.00010272 Converse exact
++ $0.0028 guardrail (formula estimate, gap above) ≈ **$0.00312 total this session**. `COSTS.md` updated
+(new row, Phase 12 Block 2). Nowhere near the $5 standing cap.
+
+### Verification run (all before the real `make redteam` call, and again after)
+
+`.venv/bin/python -m pytest tests/unit -q` → **700 passed**. `ruff check` / `black --check` / `mypy
+--strict` on every file touched or created → clean. `python -m evals.report --check-regression` → all
+Tier A gates pass, no regression against the committed baseline.
+
+**Left alone, per Marco's instruction**: `black --check` on the full `CHECKED` set still fails on 7
+pre-existing files this session never touched (`scripts/check_project_root_scope.py`,
+`scripts/verify_inference_profiles.py`, `scripts/verify_layer_contents.py`,
+`scripts/measure_router_schema_latency.py`, `scripts/measure_composed_pipeline_deployed.py`,
+`tests/unit/test_measure_composed_pipeline_deployed.py`, `tests/unit/test_verify_lambda_execution.py`);
+`mypy` on the full `TYPED` set still fails on 3 pre-existing errors in the untracked
+`scripts/verify_d87_scope.py`/`verify_stage_b1_live_invoke.py` (from the prior session that ended
+uncommitted, per the previous entry's own account) and `scripts/measure_router_schema_latency.py`. Correct
+call, per Marco -- not this change's to fix.
+
+**NOT yet committed.** Marco asked to see the live per-site results before anything lands -- this entry and
+the accompanying report are that.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 Block 2 -- ADR-017 direction 3-coarse built in full (Parts 1-3, graph.py/graph_structure.py/redteam/response_text_sites.py/redteam/readback_probe.py/redteam/run.py), D126/OI49 filed and fixed (make redteam Makefile target never existed despite CLAUDE.md documenting it canonically), Part 3 run live against the real guardrail (zl5ppnyorwd2 v5, read live) per Marco's approval: attack corpus 11/11 unchanged, readback probe PASS 7/7 sites action:NONE, zero coverage gaps -- full per-site table in RESULTS.md §80. No masked site found; nothing adjusted to accommodate a defect. A guardrail_usage reporting gap found and fixed for future runs, not retroactively re-measured (would have cost a second, unapproved spend). Real spend this session ≈$0.00312, well inside the $5 cap. All new/changed code passes ruff/black/mypy --strict and the full 700-test unit suite; make eval --check-regression clean. Pre-existing, unrelated lint/mypy failures on 7+3 files this session never touched left alone per Marco's explicit instruction.
+Open defects: D122/OI44, D124/OI46, OI47 unchanged. D123/OI45 CLOSED (Part 2's routing-claim verification). D125/OI48 unchanged (OPEN). D126/OI49 CLOSED, fixed this session. D127/OI50 NEW, OPEN, filed not fixed: file_auto_claim.py's except branch speaks a VIN + policy number via str(exc); action:NONE correct (not a configured PII entity) but whether the readback is intended was never decided, same except-branch shape as D123/OI45, cross-referenced not merged.
+C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26). Not touched -- ADR-017's own stated consequence, no guardrail version bump, no redeploy, no C1 cycle needed.
+Blocked on: Marco's review of the live per-site results (this entry) before committing.
+Last apply + gate result: none -- no Terraform touched. Real spend: ≈$0.00312 this session, logged in COSTS.md.
+```
