@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
-from fnol_voice_agent.guardrails.pii import redact_for_transcript
+from fnol_voice_agent.guardrails.pii import PHONE_RE, redact_for_transcript
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "fnol_voice_agent" / "data" / "synthetic"
 
@@ -39,6 +40,142 @@ def test_phone_redacted() -> None:
     redacted = redact_for_transcript(text)
     assert phone not in redacted
     assert "[REDACTED:PHONE]" in redacted
+
+
+def test_real_shaped_non_555_phone_redacted() -> None:
+    """`D124`/`OI46`: the fixture above (`holder['phone']`) is this project's own synthetic `555`-exchange
+    convention (`docs/phase0`), which `PHONE_RE` was scoped to for its entire history until this test was
+    written -- a real caller's real phone number was never redacted, in any layer, ever. This is the
+    executable proof, not the grep-derived argument for it. Reuses `redteam/readback_probe.py`'s own
+    real-shaped fixture (`_PII_PHONE`, line 80) rather than minting a fourth phone constant."""
+    real_shaped_phone = "416-987-1547"  # readback_probe.py's _PII_PHONE, reused
+    text = f"You can reach me at {real_shaped_phone} if you need anything."
+    redacted = redact_for_transcript(text)
+    assert real_shaped_phone not in redacted
+    assert "[REDACTED:PHONE]" in redacted
+
+
+def test_phone_re_fix_is_a_strict_superset_of_the_old_555_only_pattern() -> None:
+    """`D124`'s fix (gating both digit groups' first digit to `2-9`, not the old literal `555`) must not
+    silently stop redacting anything the old pattern caught. Verified explicitly against every 555-shaped
+    phone value this repo's own fixtures actually use -- not reasoned from "555 is in \\d{3} so it falls out
+    for free." The old pattern is kept here, inert, as the comparison baseline; it is not imported from
+    anywhere else in the codebase."""
+    old_555_only_pattern = re.compile(r"\b(?:\d{3}[-.\s])?555[-.\s]?\d{4}\b")
+
+    # Every 555-shaped value this repo's own fixtures use, swept from data/synthetic, tests/, and pii.py's
+    # own docstring example -- not invented for this test.
+    fixture_values = (
+        "555-0142",  # policyholders.json (PY4821)
+        "555-0187",
+        "555-0219",
+        "555-0334",
+        "555-0456",
+        "555-0578",  # policyholders.json, remaining five records
+        "555-0199",  # evals/golden/claim_status_and_contact.yaml
+        "555-0177",
+        "555-0143",
+        "555-0188",
+        "555-0189",  # evals/golden/claim_status_and_contact.yaml, remaining turns
+        "555-4242",  # tests/unit/test_mcp_wire_protocol.py
+        "555-7777",  # tests/unit/test_mcp_contact_server.py
+        "555-1234",  # tests/unit/test_mcp_contact_server.py
+        "5550142",  # evals/golden/file_auto_claim.yaml -- no separator at all
+        "416-555-0142",  # pii.py's own docstring worked example -- area-code-prefixed form
+    )
+
+    for value in fixture_values:
+        assert old_555_only_pattern.search(
+            value
+        ), f"{value!r} is not actually 555-shaped -- fixture list is wrong, not the regex"
+        assert PHONE_RE.search(
+            value
+        ), f"{value!r} matched the old pattern but not the fixed one -- regression"
+
+
+def test_phone_re_does_not_match_dates_ids_and_claim_numbers() -> None:
+    """`D124`'s fix reason, recorded as false-positive bounding, not NANP fidelity: a loose `\\d{3}` exchange
+    with an optional area code and optional separators would match digit runs inside claim numbers,
+    timestamps, and IDs -- and `REDACTION_PASSES` ordering only protects patterns that run *before* PHONE
+    (`POLICY_NUMBER`/`CLAIM_NUMBER`/`VIN`/`PLATE`/`DRIVERS_LICENCE`/`POLICE_REPORT_NUMBER`). `DATE_TIME`,
+    `LOCATION`, and free-text amounts run *after* PHONE and get no such protection -- a false positive there
+    is not cosmetic: `redact_for_transcript` feeds caller-facing paths, and a spoken `[REDACTED:PHONE]`
+    stitched into the middle of a date or an address is exactly the failure the guardrail runbook already
+    flagged for OUTPUT-side masking. Every value below is a real shape this project's own code or fixtures
+    actually produce -- not a hypothetical."""
+    non_phone_values = (
+        "2026-08-11T09:00:00-04:00",  # loss_datetime slot value (redteam/readback_probe.py)
+        "2026-07-27",  # ISO date, DATE_TIME_RE's own worked example
+        "2026-0727-014",  # claims.json's police_report_number shape
+        "CLM-2608-00042-4",  # claim_number shape
+        "PY4821",  # policy_number shape
+        "9SYAB1239G1000101",  # VIN shape
+        "8f14e45f-ceea-4b57-9b5e-3c6c6c6c6c6c",  # contact_id UUID, verify_log_redaction.py's negative case
+        "Highway 403 near Oakville, ON",  # claims.json's own loss_location
+        "48 Birchwood Crescent, Mississauga, ON",  # ADDRESS_RE's own worked example
+        "amount_remaining_cad=400",
+    )
+    for value in non_phone_values:
+        assert not PHONE_RE.search(value), f"{value!r} false-positive matched as a phone number: {PHONE_RE.search(value).group()!r}"  # type: ignore[union-attr]
+
+
+# --- `/code-review` follow-up: common real written forms `D124`'s own fix left uncovered --------------------
+#
+# Four tests, one per shape, per this project's "one seam, one test" TDD discipline -- each independently
+# reports RED/GREEN rather than one loop stopping at its first failure. Two of these were genuinely broken
+# by D124's fix (no separator at all; a parenthesized area code); two already worked but had never been
+# exercised by any test in this file until now.
+
+
+def test_phone_re_matches_ten_digits_with_no_separator_at_all() -> None:
+    """Was a total miss before this fix: `PHONE_RE`'s area-code group required a mandatory separator
+    character, so a fully contiguous 10-digit number (area code run straight into the rest -- a plausible
+    ASR/transcript rendering) matched NOTHING, not even partially. Directly contradicted the pattern's own
+    comment, which claimed "no separator at all between groups" was supported -- true for the 7-digit
+    no-area-code case, false for this one."""
+    text = "You can reach me at 4169871547 if you need anything."
+    redacted = redact_for_transcript(text)
+    assert "416" not in redacted, f"area code leaked into {redacted!r}"
+    assert "987" not in redacted, f"exchange leaked into {redacted!r}"
+    assert "1547" not in redacted, f"subscriber number leaked into {redacted!r}"
+    assert "[REDACTED:PHONE]" in redacted, f"never redacted at all: {redacted!r}"
+
+
+def test_phone_re_matches_parenthesized_area_code() -> None:
+    """Was a partial leak before this fix: `"(416) 987-1547"` only redacted `"987-1547"` -- the mandatory
+    separator after the area code meant the `(416)` branch never matched at that starting position, and the
+    regex engine fell back to matching starting at `"987"` instead, leaving the real area code `"416"` in
+    plaintext. Parenthesized area codes are a common written form; decided to fix rather than accept as a
+    documented gap (`docs/RESULTS.md` §95)."""
+    text = "You can reach me at (416) 987-1547 if you need anything."
+    redacted = redact_for_transcript(text)
+    assert "416" not in redacted, f"area code leaked into {redacted!r}"
+    assert "987" not in redacted, f"exchange leaked into {redacted!r}"
+    assert "1547" not in redacted, f"subscriber number leaked into {redacted!r}"
+    assert "[REDACTED:PHONE]" in redacted, f"never redacted at all: {redacted!r}"
+
+
+def test_phone_re_matches_dot_separated() -> None:
+    """Already worked before this fix -- `PHONE_RE`'s own comment claimed dot separators were supported,
+    but nothing in this file ever exercised `"416.987.1547"` to confirm it. Added for coverage, not because
+    it was broken."""
+    text = "You can reach me at 416.987.1547 if you need anything."
+    redacted = redact_for_transcript(text)
+    assert "416" not in redacted, f"area code leaked into {redacted!r}"
+    assert "987" not in redacted, f"exchange leaked into {redacted!r}"
+    assert "1547" not in redacted, f"subscriber number leaked into {redacted!r}"
+    assert "[REDACTED:PHONE]" in redacted, f"never redacted at all: {redacted!r}"
+
+
+def test_phone_re_matches_space_separated() -> None:
+    """Already worked before this fix -- same reasoning as the dot-separated case above, for
+    `"416 987 1547"`."""
+    text = "You can reach me at 416 987 1547 if you need anything."
+    redacted = redact_for_transcript(text)
+    assert "416" not in redacted, f"area code leaked into {redacted!r}"
+    assert "987" not in redacted, f"exchange leaked into {redacted!r}"
+    assert "1547" not in redacted, f"subscriber number leaked into {redacted!r}"
+    assert "[REDACTED:PHONE]" in redacted, f"never redacted at all: {redacted!r}"
 
 
 def test_email_redacted() -> None:

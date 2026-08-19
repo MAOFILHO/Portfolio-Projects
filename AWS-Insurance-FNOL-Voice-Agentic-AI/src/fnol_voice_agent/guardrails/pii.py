@@ -35,13 +35,24 @@ invented metrics or capabilities" discipline (`CLAUDE.md`):**
   this project's own generated formats. `ADR-011` names the residual gap explicitly: "a policy number read
   with extra pauses or a homophone substitution... may not be caught by Layer 1's deterministic pass" --
   that's a real, accepted limitation, not something this module claims to solve.
-- **Phone (this project's synthetic `555-####` exchange convention), email, and street-address-shaped
-  strings** are matched by deterministic regex, as a defense-in-depth complement to Bedrock Guardrails' own
-  PII entity filters (`ADR-011` assigns the general "name, phone, email, address, and similar" taxonomy to
-  Guardrails, Layer 1's other half) -- **not a substitute for them.** These patterns are reasonably general
-  (the phone pattern also matches an optional 3-digit area-code prefix; the address pattern matches common
-  English street suffixes and the French `Rue <name>` construction used in this project's own synthetic
-  data) but not exhaustive -- a non-555 phone number, a PO box, or an unusual email TLD may not match.
+- **Phone, email, and street-address-shaped strings** are matched by deterministic regex, as a
+  defense-in-depth complement to Bedrock Guardrails' own PII entity filters (`ADR-011` assigns the general
+  "name, phone, email, address, and similar" taxonomy to Guardrails, Layer 1's other half) -- **not a
+  substitute for them.** These patterns are reasonably general (the phone pattern matches real NANP-shaped
+  numbers -- optional area code, `[2-9]`-gated exchange, four-digit subscriber -- not just this project's
+  own `555`-exchange synthetic convention; the address pattern matches common English street suffixes and
+  the French `Rue <name>` construction used in this project's own synthetic data) but not exhaustive -- a
+  PO box or an unusual email TLD may not match. **Corrected 2026-08-19 (`D124`/`OI46`):** until this date,
+  `PHONE_RE` matched only a literal `555` exchange -- this project's own synthetic-data convention, not real
+  phone-number shape -- so a real caller's real phone number was never redacted by this filter, in any
+  deployed layer, ever. Fixed by gating both digit groups' first digit to `2-9` (real NANP shape, and the
+  same restriction that bounds false-positive collision with timestamps/IDs -- see the pattern's own
+  comment) rather than the `555` literal it replaces. `555` numbers still match, because `5` is itself in
+  `2-9` -- this is a strict superset of the old pattern, verified explicitly in
+  `tests/unit/test_pii_redaction.py`, not assumed. **`/code-review` follow-up, same day:** the first cut of
+  this fix still under-matched two common real written forms (a fully contiguous 10-digit number, a
+  parenthesized area code) while its own comment claimed both were covered -- fixed in the same pass; see
+  the pattern's own comment for the specifics.
 - **`DATE_TIME` and `LOCATION` are redacted from free text**, reversing the Phase 0 guidance that treated
   `DATE_TIME` as exempt (`ADR-011`'s named reversal of `docs/phase0/DOMAIN-ARTIFACTS.md`) -- because date +
   time + location together are a quasi-identifier. **This is the hardest category this module attempts, and
@@ -106,10 +117,45 @@ VIN_SHAPE_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
 
 # --- Standard PII: phone / email / address ----------------------------------------------------------------
 
-# This project's synthetic data uses the reserved 555 exchange for every phone number (docs/phase0
-# convention, e.g. "555-0142"). Matches a bare "555-####" and, more generally, an optional 3-digit prefix
-# (an area code with no parentheses) ahead of it -- "416-555-0142" -- with "-", ".", or a space as separator.
-PHONE_RE = re.compile(r"\b(?:\d{3}[-.\s])?555[-.\s]?\d{4}\b")
+# D124/OI46, fixed 2026-08-19: until this fix, this pattern required a literal "555" exchange -- this
+# project's own synthetic-data convention (docs/phase0, e.g. "555-0142"), not real phone-number shape. A
+# real caller's real phone number was never redacted by this filter, in any deployed layer, ever --
+# confirmed live and by a failing test (tests/unit/test_pii_redaction.py, RESULTS.md's D124 proof entry)
+# before this line changed.
+#
+# The exchange group's first digit is gated to [2-9] -- NOT a loose \d{3}, and the reason is
+# false-positive bounding, not NANP fidelity. REDACTION_PASSES runs PHONE after the six structured
+# identifiers (POLICY_NUMBER/CLAIM_NUMBER/VIN/PLATE/DRIVERS_LICENCE/POLICE_REPORT_NUMBER), so those are
+# already consumed by the time this pattern runs -- but DATE_TIME, LOCATION, and free-text amounts run
+# AFTER phone and get no such protection from pass ordering. A loose \d{3} exchange with an optional
+# area code and optional separators would reach into a "2026-0727-014"-shaped police report number, an
+# ISO timestamp, or a dollar figure and redact a fragment of it as PHONE. That is not cosmetic:
+# redact_for_transcript feeds caller-facing paths, and a spoken "[REDACTED:PHONE]" stitched into the
+# middle of a date or an address is the same failure class the guardrail runbook already flagged for
+# OUTPUT-side masking. [2-9] is bounding, real NANP numbers happen to share it (an area code or exchange
+# never starts 0 or 1) -- that is a side effect, not the reason for the choice.
+#
+# `/code-review` caught 2026-08-19 (docs/RESULTS.md §95): the comment above this line previously claimed
+# the pattern matched "with '-', '.', a space, or no separator at all between groups" for BOTH the bare
+# and area-code-prefixed forms. True for the bare 7-digit case; false for the area-code-prefixed one -- the
+# area-code group's separator was mandatory, so a fully contiguous 10-digit number ("4169871547", a
+# plausible ASR/transcript rendering) matched NOTHING, and a parenthesized area code ("(416) 987-1547", a
+# common written form) only partially matched, leaking the real area code in plaintext
+# ("(416) [REDACTED:PHONE]"). Same defect class as D124 itself: documentation asserting coverage the
+# pattern didn't have. Both proven RED first (tests/unit/test_pii_redaction.py), then fixed here --
+# the area-code separator is now optional, and an optional pair of parens wraps the area-code digits.
+#
+# Matches a bare "###-####" exchange+subscriber (no area code), a "###-###-####" area-code-prefixed form,
+# and a "(###) ###-####" parenthesized-area-code form, with "-", ".", a space, or no separator at all
+# between ANY of these groups, including the area code and the rest. The leading anchor is `(?<!\w)`
+# rather than `\b`: `\b` requires the character immediately at the match start to be a word character,
+# which blocks the "(" in "(416)..." from ever being included (a space followed by "(" is a
+# non-word-to-non-word transition, not a `\b`) -- `(?<!\w)` only requires the preceding character not be a
+# word character, which a leading "(" preceded by whitespace or start-of-string satisfies. "555" still
+# matches -- 5 is itself in [2-9] -- so this remains a strict superset of the original 555-only pattern,
+# and the widened area-code separator/parens were re-verified not to reopen the false-positive bound
+# (both checked explicitly, not assumed, in tests/unit/test_pii_redaction.py).
+PHONE_RE = re.compile(r"(?<!\w)(?:\(?[2-9]\d{2}\)?[-.\s]?)?[2-9]\d{2}[-.\s]?\d{4}\b")
 
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[A-Za-z]{2,}\b")
 
@@ -178,7 +224,13 @@ LOCATION_RE = re.compile(
 # consumed by a broader heuristic pattern applied first), heuristic DATE_TIME/LOCATION passes last. Once a
 # span is replaced with a "[REDACTED:<TYPE>]" placeholder, later passes in this list operate on that
 # placeholder text, which by construction doesn't match any earlier or later category's pattern.
-_REDACTION_PASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
+#
+# Public (not `_`-prefixed), deliberately: `tests/unit/test_pii_redaction_generality.py`'s D124/OI47
+# generality-coverage check walks this tuple as its structural source of truth for "every category this
+# module claims to redact" -- the same reason `redteam/readback_probe.py` needs `agents/graph.py`'s
+# `OUTPUT_GUARDRAIL_SOURCES` public rather than reaching into a private name. A category added here is
+# automatically in that check's scope; nothing external has to be told about it by hand.
+REDACTION_PASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("POLICY_NUMBER", POLICY_NUMBER_EMBEDDED_RE),
     ("CLAIM_NUMBER", CLAIM_NUMBER_EMBEDDED_RE),
     ("VIN", VIN_SHAPE_RE),
@@ -194,7 +246,7 @@ _REDACTION_PASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 def redact_for_transcript(text: str) -> str:
-    """Applies every detector in `_REDACTION_PASSES`, in order, replacing each matched span with
+    """Applies every detector in `REDACTION_PASSES`, in order, replacing each matched span with
     `[REDACTED:<TYPE>]`. This is the one function Stage 6/7 should call before a transcript line or log
     string is durably written -- see the module docstring's boundary table for exactly which stores that
     means (never the structured claim record).
@@ -202,7 +254,7 @@ def redact_for_transcript(text: str) -> str:
     Text with none of the above categories present passes through byte-for-byte unchanged.
     """
     redacted = text
-    for label, pattern in _REDACTION_PASSES:
+    for label, pattern in REDACTION_PASSES:
         redacted = pattern.sub(f"[REDACTED:{label}]", redacted)
     return redacted
 
@@ -219,5 +271,6 @@ __all__ = [
     "ADDRESS_RE",
     "DATE_TIME_RE",
     "LOCATION_RE",
+    "REDACTION_PASSES",
     "redact_for_transcript",
 ]
