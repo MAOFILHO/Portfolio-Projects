@@ -10765,3 +10765,256 @@ C1 status: unchanged, not touched.
 Blocked on: Marco's triage of D140 (fix/defer/accept) and the fix-shape choice between the two options assessed above.
 Last apply + gate result: none -- no code changed, no Terraform touched. Real spend: $0.00.
 ```
+
+## 95. `D124`/`OI46`/`OI47` -- RED-first, then fixed: `PHONE_RE` generalized off the `555` convention, superset and false-positive claims verified explicitly, then a `REDACTION_PASSES`-anchored generality check built so a future narrow pattern fails loudly instead of passing by luck
+
+**The gap had been argued from a grep result since 2026-08-17 (`OI46`'s filing) and had never once been
+demonstrated by a failing test.** This entry closes that specific hole first, per this project's test-first
+discipline (`CLAUDE.md`: "TDD on the agent core and tool layer -- test first, watch it fail, implement,
+refactor") -- and only then fixes the pattern.
+
+### RED -- both proofs run against the unmodified `PHONE_RE`, captured before any regex line changed
+
+**Script-level** (`scripts/verify_log_redaction.py`, extended to cover phone -- reused
+`redteam/readback_probe.py`'s own `_PII_PHONE` fixture, `"416-987-1547"`, rather than minting a fourth phone
+constant; mirrored the existing pre-filter/post-filter structure exactly):
+
+```
+verify-log-redaction: local simulation of the real lex_codehook.py wiring
+
+  ok   self-report: install logged 'handlers=1' at import time
+  ok   pre-filter: synthetic PII reaches the sink unredacted
+  ok   pre-filter: real-shaped phone reaches the sink unredacted
+  ok   post-filter: same line, filter re-attached, PII redacted
+  FAIL post-filter: real-shaped phone, filter re-attached, PII redacted
+  ok   negative case: operational fields pass through unchanged
+  ok   idempotent: re-installing does not stack duplicate filters
+  ok   self-report: re-install logged 'handlers=0', not silent
+
+verify-log-redaction: FAILED
+  - post-filter phone line was not redacted: 'diagnostic proof line, phone 416-987-1547'
+```
+Exit code 1.
+
+**Unit-level** (`tests/unit/test_pii_redaction.py::test_real_shaped_non_555_phone_redacted`, same
+`"416-987-1547"` value, direct call to `redact_for_transcript`, no filter/logging machinery in the way):
+
+```
+AssertionError: assert '416-987-1547' not in 'You can rea...ed anything.'
+
+  '416-987-1547' is contained here:
+    You can reach me at 416-987-1547 if you need anything.
+  ?                     ++++++++++++
+```
+
+Two independent proofs, the real deployed-wiring path and the bare function, both fail on the identical
+input for the identical reason. **This is `D124`'s executable proof** -- the synthetic-555-only scope
+`OI46` found by reading the regex is now something that fails loudly when run, not only something that can
+be argued from source.
+
+### GREEN -- `PHONE_RE` fixed (`guardrails/pii.py:120`, was line 112 before this entry's docstring edits)
+
+```python
+PHONE_RE = re.compile(r"\b(?:[2-9]\d{2}[-.\s])?[2-9]\d{2}[-.\s]?\d{4}\b")
+```
+
+**The `[2-9]` gate on both digit groups is a false-positive-bounding choice, not a NANP-fidelity one --
+recorded as such because the two justifications point to different regexes if the goal is ever revisited.**
+`_REDACTION_PASSES` runs `PHONE` after the six structured identifiers
+(`POLICY_NUMBER`/`CLAIM_NUMBER`/`VIN`/`PLATE`/`DRIVERS_LICENCE`/`POLICE_REPORT_NUMBER`), so those are
+already consumed by the time `PHONE_RE` runs and pass ordering protects them -- but `DATE_TIME`, `LOCATION`,
+and free-text dollar amounts run *after* `PHONE` and get no such protection. A loose `\d{3}` exchange with
+an optional area code and optional-or-absent separators would reach into a `"2026-0727-014"`-shaped police
+report number, an ISO timestamp, or a dollar figure and redact a fragment of it as `PHONE` -- not a
+theoretical risk, checked empirically below against real shapes this project's own code produces. This is
+not cosmetic: `redact_for_transcript` feeds caller-facing paths (`ADR-017`'s OUTPUT-guardrail-checked node
+responses), and a spoken `"[REDACTED:PHONE]"` stitched into the middle of a date or an address mid-sentence
+is the same failure class the guardrail runbook already flagged for OUTPUT-side masking. Real NANP numbers
+happen to also never start an area code or exchange with 0 or 1, so `[2-9]` is NANP-consistent -- but that
+consistency is a side effect of the false-positive bound, not the reason for the choice.
+
+**Superset claim verified explicitly, not reasoned from "555 is in `\d{3}` so it falls out for
+free"** (`tests/unit/test_pii_redaction.py::test_phone_re_fix_is_a_strict_superset_of_the_old_555_only_pattern`):
+the old `555`-only pattern is kept inert in the test as a comparison baseline, and every 555-shaped phone
+value this repo's own fixtures actually use -- swept from `data/synthetic/policyholders/policyholders.json`
+(6 records), `evals/golden/claim_status_and_contact.yaml` and `file_auto_claim.yaml`, `test_mcp_wire_protocol.py`,
+`test_mcp_contact_server.py`, and `pii.py`'s own docstring example -- is asserted to match both the old
+pattern (sanity: confirms the fixture is actually 555-shaped) and the new one (the regression check). 16
+values, all pass.
+
+**False-positive bound verified against real shapes this project's own code produces**
+(`test_phone_re_does_not_match_dates_ids_and_claim_numbers`): an ISO timestamp
+(`"2026-08-11T09:00:00-04:00"`, the `loss_datetime` slot shape), a bare ISO date, the `police_report_number`
+shape (`"2026-0727-014"`), a claim number, a policy number, a VIN, the `contact_id` UUID
+`verify_log_redaction.py`'s own negative case already uses, the flagship claim's `Highway 403 near
+Oakville, ON` location, `ADDRESS_RE`'s own worked example, and a `amount_remaining_cad=400`-shaped string --
+none of the ten match `PHONE_RE` in isolation.
+
+### Full verification, all green
+
+```
+tests/unit/test_pii_redaction.py -- 21/21 passed (4 new: real-shaped-phone redaction, superset, false-positive bound, plus the pre-existing test_phone_redacted unchanged)
+scripts/verify_log_redaction.py -- passed, exit 0
+tests/unit/ full suite -- 703/703 passed
+ruff check -- clean
+black --check -- clean (post-format)
+mypy -- clean
+```
+
+`guardrails/pii.py`'s module docstring (the "what this module catches" section) and the `PHONE_RE`
+definition's own comment block both corrected in place to describe the fixed pattern and cite this entry's
+proof, replacing the now-false "this project's synthetic `555-####` exchange convention" and "a non-555
+phone number... may not match" claims the docstring carried until this pass.
+
+### Part 3 -- the `REDACTION_PASSES`-anchored generality check, the honest version scoped earlier this session
+
+`OI47`'s own finding (2026-08-17, report-only): `test_pii_redaction.py`'s methodology could not tell a
+general pattern from a narrow one that got lucky against its own fixture -- `EMAIL_RE`'s generality was real
+but unproven by the test suite; `PHONE_RE`'s narrowness would have passed an identically-shaped test just as
+cleanly. `D124` is what that gap in the test suite let through undetected for two years of this project's
+own timeline. This part converts `OI47` from a report into a live check.
+
+**`_REDACTION_PASSES` promoted to `REDACTION_PASSES`, public (`guardrails/pii.py`)** -- the structural
+registry this check walks, the same reason `redteam/readback_probe.py` needs `agents/graph.py`'s
+`OUTPUT_GUARDRAIL_SOURCES` public rather than reaching into a private name. Confirmed no other call site
+depended on the old private name before renaming (grep, one hit, in a comment, updated).
+
+**Built**: `tests/unit/test_pii_redaction_generality.py`, 5 tests. `_SYNTHETIC_MARKER` classifies each of
+the eleven `REDACTION_PASSES` labels as either a real synthetic-only-convention detector (`PHONE`: contains
+`"555"`; `EMAIL`: ends `@example.com`/`@email.com`) or an explicit `None` -- per `OI47`'s own category
+analysis, the six structured identifiers and `VIN` have no real-world format to generalize against at all,
+and `ADDRESS`/`DATE_TIME`/`LOCATION` are general-purpose language patterns with no synthetic-only anchor
+comparable to `555`. Only `PHONE` and `EMAIL` get a `_NON_SYNTHETIC_PROBE` requirement. One test asserts
+every marked category has a registered probe (coverage gap, fails loudly if a future category is marked but
+never given a probe); one asserts every `REDACTION_PASSES` label is classified one way or the other at all
+(fails loudly if a future category is added and nobody classifies it, rather than silently reading as
+not-applicable); two assert the registered probes are neither the marker themselves nor unmatched by their
+own pattern; one asserts end-to-end redaction through the real `redact_for_transcript` seam.
+
+**Deliberately NOT built: the glob-based corpus sweep** the scoping report considered earlier this
+session (grepping `evals/`, `data/synthetic/`, `redteam/` for "any phone number that isn't 555-shaped
+anywhere"). Recorded in the new file's own module docstring so it isn't proposed again: that check has no
+self-discovering file list (a new fixture file has to be added to the glob by hand -- the opposite of a
+registry-anchored check), and it would have to keep reinventing "what counts as real-shaped" by regex over
+free text in arbitrary files -- a differently-shaped synthetic marker (`999-9999` instead of `555-`) would
+silently pass it. Corpus-wide breadth traded for exactly the hand-maintained brittleness this file exists to
+avoid.
+
+**Not vacuous -- checked, not assumed.** Four sabotage runs against a scratch copy of the check's logic,
+each confirmed to fail for the stated reason before trusting the real file: an unregistered probe (coverage
+check fails, names `PHONE`), an incomplete marker classification (the not-silently-skipped check fails,
+names all nine unclassified labels), a probe set to a marker-shaped value (`"555-0142"`, the
+is-not-the-marker check fails), and a probe that doesn't match its own pattern (the matched-by-its-own-
+pattern check fails). All four fired for the intended reason, none passed by accident.
+
+**Verification**: `tests/unit/test_pii_redaction_generality.py` 5/5 pass. Full suite **708/708** -- Part 1/2
+added 3 tests to `test_pii_redaction.py` (18 -> 21, confirmed by that run's own "collected 21 items" and a
+full-suite run of 703 immediately after), Part 3 added this 5-test file (703 -> 708, both counts real runs,
+not inferred). No pre-session full-suite baseline was captured this entry to compare against; the 703/708
+counts are what was actually run, not backed into from an assumed prior total. `ruff`/`black`/`mypy` clean
+across all four touched files.
+
+### Part 4 -- `/code-review` follow-up: two real findings, two refuted, both worth recording as evidence for using it again
+
+Ran `/code-review` against this entry's own uncommitted diff (Standards + Spec sub-agents in parallel,
+against `docs/REVIEW-CRITERIA.md`/`CLAUDE.md` and this session's own instructions as the spec). Result,
+stated plainly because the review's value here is as much in what it got wrong as what it caught:
+
+**Standards axis: two claimed "hard violations" did not survive a direct check.** The sub-agent asserted
+this entry never shows the `REVIEW-CRITERIA.md` §1 checklist as run and never uses the §3 header. Both are
+present (the "Self-review" section below, the "Report" block that follows it) -- the sub-agent's own
+grep/read evidently didn't reach that far into a long entry. Not corrected quietly: both findings were
+checked against the actual file before being relayed, refuted, and reported to Marco as refuted rather than
+passed through. **This is the finding worth keeping**: a sub-agent's claim about what a document says is
+itself an unverified claim until read against the document -- the same class `REVIEW-CRITERIA.md` §1.2
+already names for any "verified" claim, one level up, now demonstrated on the review tool itself.
+
+**Spec axis: one real finding, confirmed and then extended past what the sub-agent itself found.** The
+sub-agent flagged `"(416) 987-1547"` and `"+1 416 987-1547"` as partial-match risks under the Part 1/2 fix.
+Checking both directly surfaced a third, more severe case neither sub-agent's own pass caught:
+`"4169871547"` (a fully contiguous 10-digit number, zero separators) matched **nothing at all** --
+worse than a partial leak, a total miss, and it directly contradicted the fix's own comment, which claimed
+"no separator at all between groups" was supported for both the bare and area-code-prefixed forms. That
+comment was true for the bare 7-digit case and false for the 10-digit one -- the identical defect class as
+`D124` itself (documentation asserting coverage the pattern doesn't have), caught by the review, not by
+either of this entry's own two authoring passes.
+
+**Fixed, RED-first, this same session:**
+
+Four new tests, one per shape, added before the pattern changed:
+
+```
+test_phone_re_matches_ten_digits_with_no_separator_at_all   FAILED (416/987/1547 all leaked, unredacted)
+test_phone_re_matches_parenthesized_area_code                FAILED ("(416) [REDACTED:PHONE]" -- area code leaked)
+test_phone_re_matches_dot_separated                           PASSED (already worked, was never tested)
+test_phone_re_matches_space_separated                         PASSED (already worked, was never tested)
+```
+
+Exactly 2 of 4 RED, matching what the direct check predicted -- not "all four fail," which would have been
+the wrong claim.
+
+**Decision, made and recorded rather than left silent**: parenthesized area codes are a common written
+form and the fix is low-risk (parentheses appear nowhere else in this project's own fixtures, so no new
+collision surface against the existing false-positive battery) -- **fixed, not accepted as a gap.**
+`PHONE_RE`'s area-code separator changed from mandatory to optional, an optional `\(`/`\)` pair now wraps
+the area-code digits, and the leading anchor changed from `\b` to `(?<!\w)` (`\b` cannot hold at a
+space-then-`"("` position -- both sides non-word -- so it structurally blocked the parenthesized form from
+ever being matched from its start; `(?<!\w)` only checks the left side, which a leading `"("` preceded by
+whitespace or string-start satisfies).
+
+**Superset and false-positive battery both re-verified against the widened pattern, not assumed to still
+hold** (per the explicit instruction that an optional separator widens the pattern and re-verification is
+required): `test_phone_re_fix_is_a_strict_superset_of_the_old_555_only_pattern` (17 values, including the
+`D124` primary target) and `test_phone_re_does_not_match_dates_ids_and_claim_numbers` (the same 10 non-phone
+shapes) both re-ran GREEN in the same pytest invocation as the four new tests -- 25/25
+`test_pii_redaction.py`, 712/712 full suite, `verify_log_redaction.py` passed, ruff/black/mypy clean.
+
+Both the pattern's own comment and the module docstring corrected in place to state what the pattern
+actually matches now, and to name this follow-up rather than silently absorb the fix into the original
+entry's wording.
+
+### What this does NOT close
+
+**Criterion 4 stays OPEN.** This entry is the local half only -- Run 1 (`scripts/verify_log_redaction.py`)
+now covers phone, and the unit suite proves the fixed pattern's generality and its false-positive bound. The
+deployed-runtime half (`RESULTS.md` §23's blocked Run 2 / `OI2`'s own scope note: attachment proof only,
+never content) needs a real invoke against the deployed Lambda exercising a real-shaped phone value and
+reading the redaction back from CloudWatch Logs -- explicitly out of scope for this session, not attempted,
+not simulated. Tracked as the same open item criterion 4's row already names.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes for the superset test specifically -- it could have found a 555-shaped
+   value the new pattern stopped matching (e.g. if the `[2-9]` gate had been misapplied to the *subscriber*
+   group instead of the exchange/area-code groups); it didn't, checked against all 16 real fixture values,
+   not a sample.
+2. *Asserted-but-unchecked?* The claim "`_REDACTION_PASSES` ordering protects the six structured identifiers
+   from `PHONE`" is stated in the fix's own comment as a reason `[2-9]` still matters for `DATE_TIME`/
+   `LOCATION` -- verified directly (the false-positive test exercises `PHONE_RE` in isolation against
+   `DATE_TIME`/`LOCATION`-shaped values), not left as an assumed side effect of pass order.
+3. *Infra error scored as a result?* N/A -- no AWS calls this entry, code + local tests only.
+4. *Cost below estimate?* N/A -- $0 estimated, $0 spent.
+5. *Identical markers, different paths?* The script-level and unit-level RED proofs are two independent
+   paths to the identical failure -- named explicitly above as two proofs, not one claim restated.
+6. *Has this check ever failed for the right reason?* Yes, three times over -- the RED run above is a real,
+   captured failure on the exact real wiring, not a hypothetical; Part 3's generality check was
+   sabotage-tested against four broken variants, each confirmed to fail for the stated reason before
+   trusting the real file; and Part 4's four new tests split 2 RED / 2 already-GREEN exactly as the direct
+   check predicted, not reported as "all four failed" for a cleaner-sounding claim.
+7. *Headline-number interpretation change?* Yes, twice: criterion 4's phone-redaction gap now has a fix, a
+   passing local proof, and a standing check against the same class of gap recurring under a different
+   category -- but is explicitly still open pending the deployed-runtime half; and separately, `/code-review`
+   itself produced a headline-number-relevant result -- two of its own findings refuted, one real finding
+   confirmed and extended -- reported here rather than only as a pass/fail on the review.
+8. `C1` a tradeable term? Not touched -- no deployed code changed, no redeploy, no re-verification cycle
+   needed.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 criterion 4 -- D124/OI46 RED-first (script-level and unit-level failures captured, both against the unmodified PHONE_RE, before any fix), then fixed: PHONE_RE generalized off the 555 literal to a [2-9]-gated NANP-shaped pattern (false-positive bounding, not NANP fidelity, per the fix's own comment). Superset claim verified explicitly. False-positive bound verified against 10 real non-phone shapes. OI47 converted from report to a live check: _REDACTION_PASSES promoted to public REDACTION_PASSES; tests/unit/test_pii_redaction_generality.py walks it, sabotage-tested against 4 broken variants. Glob-based corpus sweep deliberately not built, reasoning recorded. `/code-review` run against this entry's own diff: 2 Standards findings refuted on direct check (both cited missing content that was actually present), 1 Spec finding confirmed and extended (PHONE_RE's fix comment overclaimed separator coverage -- a contiguous 10-digit number matched nothing, a parenthesized area code partially leaked). Fixed RED-first: 4 new tests (2 genuinely RED, 2 already-green), area-code separator made optional, parens support added, leading anchor widened \b -> (?<!\w). Superset (17 values) and false-positive battery (10 values) re-verified against the widened pattern, not assumed. 25/25 test_pii_redaction.py, 5/5 test_pii_redaction_generality.py, 712/712 full suite, verify_log_redaction.py passed, ruff/black/mypy clean.
+Open defects: D124/OI46 -- local half CLOSED this entry (fix built, verified, then extended after /code-review). OI47 -- converted to a standing check this entry, closed on that scope. Criterion 4 stays OPEN -- deployed-runtime half (Run 3) not attempted this session, per explicit instruction.
+C1 status: unchanged, not touched -- no deployed code changed.
+Blocked on: the deployed-runtime proof (Run 3) or an explicit accept-risk decision, per criterion 4's row -- Marco's, not attempted here.
+Last apply + gate result: none -- no AWS calls, no Terraform touched. Real spend: $0.00.
+```
