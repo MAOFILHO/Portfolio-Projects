@@ -10,7 +10,34 @@
 
 ---
 
-**Last updated:** 2026-08-18 (status pass — phase-label correction, criterion 5 closure, `OI39` refresh).
+**Last updated:** 2026-08-18 (staleness pattern named — evidence for the file-split work, not four
+separate corrections).
+
+**A structural finding, not a fourth correction, 2026-08-18.** Today's status pass found four rows gone
+stale in the same way, independently, across a single working session:
+
+1. Criterion 5's own row and the Phase status table row 11 both still read the ops-runbooks gap as open
+   for a full session after both runbooks were written and committed (`19f912b`, `66aee22`) — corrected
+   below, same-day.
+2. `OI39`'s row still read `ADR-017` as PROPOSED and its decision as not closed, a full day after
+   `ADR-017` was ACCEPTED and built in full (`a5441b9` through `82dfdb6`) — corrected below.
+3. `OI2`'s closure (2026-08-16) never propagated into criterion 4's row, which kept reading "Run 2 ...
+   still OPEN" for two days after the item it names had closed — corrected below, and corrected a second
+   time same-day when the first correction (closing criterion 4 to match `OI2`) turned out to be wrong on
+   its own terms: `OI2` proved a narrower claim than the criterion makes, so the honest fix was restating
+   criterion 4's *actual* gap, not just re-syncing the two rows.
+4. `D126`/`D127`, filed 2026-08-17 with full narrative detail in this file's own session log and in
+   `RESULTS.md` §80, had no `OI49`/`OI50` table rows at all until 2026-08-18 — `D127`/`OI50`, still open,
+   was genuinely invisible to anyone scanning the Open Items table for a day.
+
+**All four are the same shape**: an item's status changed, and a row elsewhere that depends on it did
+not change with it — not because anyone was careless in the moment, but because this file is 858KB+ and
+the dependent claim lives hundreds or thousands of lines from the fact it depends on, with no mechanism
+that links them. `check_duplicate_identifiers.py` catches a collision; nothing catches a claim going out
+of sync with the fact it restates. **Recorded here as evidence for the file-split work — a structural
+property of one large file with far-apart dependent claims, not a pattern of four independent mistakes to
+individually guard against.** The split itself is not designed here, per instruction — this paragraph is
+the evidence file for when it is.
 
 **Phase-label correction, Marco's own, 2026-08-18.** Every commit message from `93bed8e` onward — 21
 commits, this session's and the immediately prior one's, spanning the `D121`/`ADR-017` build, `D122`
