@@ -11,12 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 from fnol_voice_agent.agents.retry_ladder import record_attempt
-from fnol_voice_agent.agents.state import AgentState
+from fnol_voice_agent.agents.state import AgentState, EscalationRecord
 from fnol_voice_agent.mcp.contact_server import (
     InvalidUpdateContactInfoError,
     PolicyNotFoundError,
     update_contact_info,
 )
+from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 from fnol_voice_agent.models.enums import ContactField
 
 _CONFIRM_CEILING = 1  # DIALOGUE-POLICIES.md §4: one retry, not the shared ladder's two.
@@ -57,9 +58,33 @@ def update_contact_info_node(state: AgentState) -> dict[str, Any]:
     if filled[_CONFIRM_KEY] is not True:
         retry_counts = record_attempt(state.get("retry_counts", {}), _CONFIRM_KEY)
         if retry_counts[_CONFIRM_KEY] > _CONFIRM_CEILING:
+            # `D140`/`OI58`: this branch used to speak `_ESCALATION_SCRIPT`'s transfer promise with no
+            # `EscalationRecord` -- so D43's real Connect-level transfer never fired here. Called
+            # directly, per the fix-shape assessment (`RESULTS.md` §94): NOT routed through
+            # `repair.py`'s shared `handle_no_match_or_barge_in`, which is keyed to a different retry
+            # ladder and would collapse this node's deliberately tighter `_CONFIRM_CEILING = 1`
+            # (`DIALOGUE-POLICIES.md` §4) into the shared ladder's ceiling of two.
+            escalation_result = initiate_escalation(
+                contact_id=state.get("contact_id", "unknown"),
+                triggering_layer="capability",
+                context={
+                    "filled_slots": filled,
+                    "active_slot": _CONFIRM_KEY,
+                    "reason": "confirm_ceiling_reached",
+                    "attempts": retry_counts[_CONFIRM_KEY],
+                },
+            )
+            escalation: EscalationRecord = {
+                "contact_id": escalation_result.contact_id,
+                "triggering_layer": escalation_result.triggering_layer,
+                "route": 3,
+                "reason": "confirm_ceiling_reached",
+                "context": escalation_result.context,
+            }
             return {
                 "retry_counts": retry_counts,
                 "response_text": _ESCALATION_SCRIPT,
+                "escalation": escalation,
             }
         filled.pop(_CONFIRM_KEY, None)
         return {

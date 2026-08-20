@@ -67,6 +67,25 @@ def test_a_genuinely_blocked_answer_is_still_replaced_by_the_fallback() -> None:
     assert result["response_text"].startswith("I'm sorry, I'm not able to share that")
 
 
+def test_a_genuinely_blocked_answer_also_sets_a_real_escalation_record() -> None:
+    """`D140`/`OI58`, site 2 (this function's OUTPUT-guardrail-block branch, `:106-107`). Before the fix,
+    this branch spoke `_OUTPUT_BLOCKED_FALLBACK`'s "let me connect you with someone" with no
+    `EscalationRecord` -- so `D43`'s real Connect-level transfer never fired here. The contrast is a few
+    lines up in this same function: `check_authority`'s `violation` branch (`:64-96`) already does this
+    correctly, and its own comment names `D43` by number as precisely the mistake this branch was making.
+    """
+    node = make_guardrails_output_node(client=MockGuardrailClient(output_rules=(_VIOLENCE_BLOCK,)))
+    result = node(_state(response_text="I will beat him with a hammer."))
+
+    assert result["guardrail_output_blocked"] is True
+    assert result.get("escalation") is not None, (
+        "D140/OI58: the OUTPUT-guardrail-block branch promises a transfer but sets no EscalationRecord, "
+        "so the real Connect-level transfer built for D43 never fires"
+    )
+    assert result["escalation"]["route"] == 3
+    assert result["escalation"]["triggering_layer"] == "capability"
+
+
 def test_a_clean_answer_is_left_exactly_as_generated() -> None:
     """No `response_text` key in the returned delta: the node must not rewrite a line it did not
     change. Returning the text unchanged would work today and would quietly become a rewrite the
