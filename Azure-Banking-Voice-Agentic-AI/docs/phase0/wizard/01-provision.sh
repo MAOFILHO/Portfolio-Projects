@@ -602,14 +602,23 @@ if [[ "$CURRENT_REG_STATE" != "Registered" ]]; then
 fi
 ok "Microsoft.Communication is Registered — safe to purchase"
 
+say "\$0.0085/min inbound, single national Canada rate — confirmed unaffected by area code (Microsoft's"
+say "PSTN pricing doc has no regional breakdown; docs/phase0/findings.md, 'R-05 supplemental')."
 say "\$1.00/mo, ongoing — this is the one resource that survives today's teardown, by design."
-ask AREA_CODE "Which area code from the list above do you want (e.g. 416, 647, 437, 905, 289)?"
+# Default is 705 (North Bay/Sault Ste Marie, ON) per decision 13's 2026-08-20 revision -- Toronto
+# (416/647/437/905/289) is confirmed absent from ACS's Canadian geographic inventory (R-05), and
+# Guelph (226), the first-considered fallback, evaporated from that same inventory mid-session. Still
+# a free-text prompt, not hardcoded -- inventory has proven volatile enough this session (a locality
+# vanishing in ~20min) that it must be re-confirmed live, not trusted from an earlier plan.
+ask AREA_CODE "Which area code do you want to search+purchase? [decision 13: 705]"
+AREA_CODE="${AREA_CODE:-705}"
 
 warn "About to search + reserve + purchase a real number in area code $AREA_CODE. This starts billing."
 confirm "Confirm: search and purchase a $AREA_CODE number now?" || { err "stopped — re-run this stage when ready."; exit 1; }
 
+# api-version corrected 2026-08-20, same fix as Stages 7/8 -- 2022-01-11-preview2 is stale and 400s.
 SEARCH_RESULT=$(curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" -H "Content-Type: application/json" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2022-01-11-preview2" \
+  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2025-06-01" \
   -d "{\"phoneNumberType\":\"geographic\",\"assignmentType\":\"application\",\"capabilities\":{\"calling\":\"inbound\",\"sms\":\"none\"},\"areaCode\":\"$AREA_CODE\",\"quantity\":1}")
 SEARCH_ID=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("searchId",""))' 2>/dev/null || true)
 
@@ -619,9 +628,11 @@ if [[ -z "$SEARCH_ID" ]]; then
   exit 1
 fi
 say "Search reserved a number under searchId $SEARCH_ID. Purchasing it now."
+say "Reserved number and rate — CONFIRM before this goes further:"
+printf '%s\n' "$SEARCH_RESULT" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$SEARCH_RESULT"
 
 curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2022-01-11-preview2" \
+  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2025-06-01" \
   -d "{\"searchId\":\"$SEARCH_ID\"}" -H "Content-Type: application/json" >/dev/null
 
 say "Purchase submitted (this is an async operation). Polling the search result for the purchased number..."
