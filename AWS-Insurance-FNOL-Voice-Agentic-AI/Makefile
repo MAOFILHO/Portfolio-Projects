@@ -146,14 +146,21 @@ verify-project-root-scope:
 verify-duplicate-identifiers:
 	@$(VENV)/python scripts/check_duplicate_identifiers.py
 
-# `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook itself
-# (scripts/git-hooks/pre-commit) is tracked and reviewable inside PROJECT_ROOT; this target is the only
-# place a write lands outside it, and only because a git hook cannot live anywhere else.
+# `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
+# installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not the local copy
+# this target used to install -- as of 2026-08-19 (Marco-approved, AskUserQuestion "Multi-project
+# dispatcher") git allows only one `.git/hooks/pre-commit`, and this project now shares that slot with
+# Azure-Banking-Voice-Agentic-AI (and any future project that registers itself in the dispatcher) instead
+# of each project's install-hooks silently overwriting the other's. The old local
+# scripts/git-hooks/pre-commit is removed; the dispatcher still calls this project's own
+# check_project_root_scope.py and check_duplicate_identifiers.py exactly as before, it just routes to
+# them from outside PROJECT_ROOT rather than duplicating them there. See the dispatcher's own header
+# comment for the full rationale.
 install-hooks:
 	@git_root=$$(git rev-parse --show-toplevel); \
-	cp scripts/git-hooks/pre-commit "$$git_root/.git/hooks/pre-commit"; \
+	cp "$$git_root/scripts/git-hooks/pre-commit" "$$git_root/.git/hooks/pre-commit"; \
 	chmod +x "$$git_root/.git/hooks/pre-commit"; \
-	echo "install-hooks: installed to $$git_root/.git/hooks/pre-commit"
+	echo "install-hooks: installed shared dispatcher to $$git_root/.git/hooks/pre-commit"
 
 # Read the deployed Lex release back from the service and compare it against what Terraform declared.
 #

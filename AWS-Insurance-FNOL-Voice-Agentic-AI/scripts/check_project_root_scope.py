@@ -25,9 +25,13 @@ WHAT IT CHECKS
 
 RUNS AS
 
-    A git pre-commit hook (`scripts/git-hooks/pre-commit` execs this via `make install-hooks` —
-    `.git/hooks/` is not tracked by git itself, so the hook must be (re)installed per clone) and as
-    `make verify-project-root-scope` for a standalone check against whatever is currently staged.
+    Invoked by the shared dispatcher `scripts/git-hooks/pre-commit` at the monorepo root (installed to
+    `.git/hooks/pre-commit` via this project's `make install-hooks` — `.git/hooks/` is not tracked by git
+    itself, so the hook must be (re)installed per clone), and as `make verify-project-root-scope` for a
+    standalone check against whatever is currently staged. The dispatcher is shared with
+    Azure-Banking-Voice-Agentic-AI's own check (and any future project's) as of 2026-08-19, because git
+    allows only one `.git/hooks/pre-commit` per repo — see that dispatcher's own header for why a single
+    shared shim beats two independent ones silently overwriting each other.
 
 LIMITATION, STATED RATHER THAN LEFT IMPLICIT
 
