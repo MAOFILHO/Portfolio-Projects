@@ -113,3 +113,32 @@ streaming + model tokens). Applies only during the 3 test calls in script 2, not
 (Container App active-state ceiling) + ~$0.00137/hr (number) ≈ **$0.021/hr, ~$0.50/day** — this is the
 number that matters for "how much does leaving this running overnight cost," not the per-minute call
 rate.
+
+## First billable resource purchased — 2026-08-20, Stage 9
+
+**The phone number — measured, not estimated. Per R-09 (`docs/PLAN.md`), this number is never
+released by any script, at any phase, for any reason.**
+
+| Field | Value |
+|---|---|
+| Number | `+17059100383` (705 — North Bay/Sault Ste Marie, ON numbering plan area) |
+| `purchaseDate` (live API, `GET /phoneNumbers`) | `2026-08-20T21:46:17.2076119+00:00` |
+| Monthly lease | **$1.00 USD/mo**, confirmed on the live owned-numbers record, matches the pre-spend
+  estimate above exactly — no revision needed |
+| Inbound rate | **$0.0085/min**, single national Canada rate (confirmed via Microsoft's PSTN pricing
+  doc, not area-code-specific — see `docs/phase0/findings.md`, "R-05 supplemental") |
+| Capabilities | `calling: inbound`, `sms: none` — matches decision 17's scope exactly (no outbound, no
+  SMS needed) |
+| `billingFrequency` | `monthly` (from `GET /phoneNumbers`'s `cost` object) |
+
+**First billing date: not confirmed.** `GET /phoneNumbers` and `GET /phoneNumbers/{number}` both
+expose `purchaseDate` and `cost.billingFrequency` but **no explicit next-bill-date or cycle-anchor
+field**. Microsoft's own docs describe monthly leasing fees as recurring "on a month-to-month basis"
+without stating whether the first month is prorated from `purchaseDate` or billed in full, or which
+day of the month the cycle anchors to. **Not asserted here as a specific date** — this will be settled
+empirically once Cost Analysis actually shows a charge for this number (Phase 0 script 3, ~24h check,
+same free-tier-suppression caveat as the rest of this document applies).
+
+This is the first billable-capable resource this project has actually purchased. Everything before it
+(AOAI resource + deployment, ACS resource) is consumption-only at $0 fixed cost; the Container App
+(Stage 12, not yet run) is the next one that will bill just for existing.

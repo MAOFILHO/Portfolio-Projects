@@ -576,3 +576,32 @@ documented anywhere Microsoft publishes, and it drove a hard rule (R-09, `docs/P
 This is the kind of platform behavior that only surfaces from actually operating against live ACS
 inventory across a working session, not from reading Microsoft's docs or pricing pages — worth keeping
 in the Phase 8 write-up as evidence of hands-on platform experience, not just planning.
+
+## Stage 9 — number purchased, 2026-08-20
+
+`+17059100383` purchased (705, North Bay/Sault Ste Marie, ON numbering plan area), per decision 13's
+revision. Full purchase sequence:
+
+1. Fresh `Search Available Phone Numbers` (the earlier session's hold had expired): `searchId
+   22028db4-cd04-4ed5-96d5-b1cf4ff1c862`, candidate `+17059100383`, `cost: {amount: 1.0,
+   currencyCode: USD, billingFrequency: monthly}`, `searchExpiresBy: 2026-08-20T21:59:56Z`.
+2. Toronto re-checked once more immediately before purchase (per Marco's standing instruction) — still
+   `404 NotFound`, no change.
+3. `POST /availablePhoneNumbers/:purchase` with that `searchId` → `202 Accepted`, `operation-id
+   purchase_22028db4-cd04-4ed5-96d5-b1cf4ff1c862`.
+4. Polled `GET /phoneNumbers/operations/{operationId}` — `notStarted` x3, then `status: succeeded`
+   (~20s total).
+5. **Confirmed from the live owned-numbers list, not the purchase response** (per Marco's explicit
+   instruction — an operation reporting `succeeded` is not itself proof, per the same discipline this
+   session already applied to Stage 7's `NoAutoUpgrade`): `GET /phoneNumbers` returned the number with
+   `purchaseDate: 2026-08-20T21:46:17.2076119+00:00`, `cost: {amount: 1.0, currencyCode: USD,
+   billingFrequency: monthly}`, `capabilities: {calling: inbound, sms: none}` — matches the search
+   result exactly, matches decision 17's scope exactly.
+6. Checked `GET /phoneNumbers/{number}` (Get By Number) for any additional billing-cycle field —
+   returns the same fields as the list endpoint, no next-bill-date or cycle-anchor field exposed by
+   either. First actual billing date is therefore **not confirmed by the API**; will be settled by
+   Cost Analysis in script 3 (~24h check). Recorded honestly as unconfirmed in `COSTS.md` rather than
+   inferred.
+
+`docs/phase0/wizard/.env.phase0` updated: `PHONE_NUMBER=+17059100383`. Full detail and the R-09 policy
+this purchase falls under: `COSTS.md`, "First billable resource purchased."
