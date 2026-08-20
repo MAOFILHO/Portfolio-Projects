@@ -12,6 +12,12 @@ has no other way to find it — added 2026-08-20 after exactly that happened.
 - **Never auto-accept a diff that provisions a billable resource, or that touches `dispatch/gate.py`
   (B1) or anything on the DTMF/PIN path (B2).** These always get a human look before they land, no
   matter how mechanical the change appears.
+- **The phone number is never released, by any script, at any phase, for any reason.** No teardown
+  path may include a number-release/delete call. Added 2026-08-20 (R-09, `docs/PLAN.md`): ACS's
+  Canadian geographic-number inventory has been observed to lose entire localities within ~20 minutes
+  — unlike every other resource in this project, an equivalent replacement may not be purchasable if
+  this number is ever lost. Qualitatively different from the general "no billable resource without
+  approval" rule above: this isn't about cost, it's about irreplaceability.
 - `PROJECT_STATE.md` is updated before any session ends, and never exceeds its size ceiling (below).
 - Restate these conditions verbatim at the top of every session summary and after every `/compact`.
 
