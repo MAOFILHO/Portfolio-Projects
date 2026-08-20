@@ -703,9 +703,20 @@ stage "Write ADR-001 (data residency) and ADR-002 (geography knobs)"
 say "docs/PLAN.md step 9: write these now, using R-05/R-06 findings just measured, not deferred."
 mkdir -p "$ADR_DIR"
 
+R06_ERROR_BLOCK='ERROR: (InvalidResourceProperties) The specified SKU '"'"'DataZoneStandard'"'"' of account deployment is not supported by the model '"'"'gpt-realtime-mini'"'"' version: '"'"'2025-10-06'"'"'.
+Code: InvalidResourceProperties
+Message: The specified SKU '"'"'DataZoneStandard'"'"' of account deployment is not supported by the model '"'"'gpt-realtime-mini'"'"' version: '"'"'2025-10-06'"'"'.'
+
 R06_LINE=$([[ "${R06_ANSWER_SHORT:-}" == "OFFERED" ]] || [[ "$DATAZONE_OK" == "1" ]] \
-  && echo "**R-06 result: DataZoneStandard IS offered for this model/region as of $(date -u +%Y-%m-%d) — this contradicts the assumption below and needs Marco's review before this ADR is treated as settled.**" \
-  || echo "**R-06 result: DataZoneStandard is confirmed NOT offered for realtime models as of $(date -u +%Y-%m-%d) (empirical deployment attempt failed).**")
+  && echo "**R-06 result: DataZoneStandard IS offered for this model/region as of $(date -u +%Y-%m-%d) — this contradicts the block below and needs Marco's review before this ADR is treated as settled.**" \
+  || echo "**R-06 result: DataZoneStandard is confirmed NOT offered for \`${DEPLOYMENT_NAME:-gpt-realtime-mini}\` version \`${MODEL_VERSION:-2025-10-06}\`, as of $(date -u +%Y-%m-%d) — an empirical deployment attempt, not an assumption.** Exact error returned by the account-deployment PUT call against \`${AOAI_NAME:-<aoai resource>}\`:
+
+\`\`\`
+$R06_ERROR_BLOCK
+\`\`\`
+
+Explicit and unambiguous — a SKU-not-supported error for this model+version, not a quota or permission
+error that might resolve differently under other conditions.")
 
 cat > "$ADR_DIR/ADR-001-data-residency.md" <<EOF
 # ADR-001 — Data residency
@@ -717,10 +728,13 @@ Date: $(date -u +%Y-%m-%d)
 
 $R06_LINE
 
+Full record: \`docs/phase0/findings.md\`, "R-06 — DataZoneStandard deployment probe".
+
 ## Decision
 
-Every resource (ACS, Azure OpenAI, Container Apps, Table Storage) is provisioned in a single Canadian
-jurisdiction (Canada Central / dataLocation: Canada). Data at rest stays in that geography.
+Every resource this project provisions (ACS, Azure OpenAI, Container Apps, Table Storage) is created in
+a single Canadian jurisdiction (Canada Central / \`dataLocation: Canada\`). Data **at rest** stays in
+that geography.
 
 Quotable, from the Foundry data-privacy page:
 
@@ -728,20 +742,28 @@ Quotable, from the Foundry data-privacy page:
 > where the relevant model sold by Azure is deployed. [...] any data stored at rest [...] is stored in
 > the customer-designated geography. Only the location of processing is affected.
 
-**Inference may still run in any of the six Global Standard regions** (canadacentral, centralus, eastus2,
-francecentral, swedencentral, southindia), spanning the US, Canada, the EU, and India — Global deployment
-type does not pin processing to the resource's own region, even though this project's resource footprint
-is entirely Canadian. A real Canadian bank under strict data-residency requirements would need a Standard
-(single-region) or Data Zone deployment type instead of Global, trading away Global's throughput/
-availability advantages. Per R-06 above, [Data Zone is / is not] offered for this model in this region —
-see the R-06 line above for which.
+**This project's resource footprint is entirely Canadian, but that does not make its processing
+Canadian-only — the two claims are separate and neither should be conflated with the other.** The
+\`${DEPLOYMENT_NAME:-gpt-realtime-mini}\` deployment used here is \`GlobalStandard\`, the only SKU R-06
+confirmed is actually offered for this model. Global deployment type means inference may run in any of
+the six Global Standard regions (canadacentral, centralus, eastus2, francecentral, swedencentral,
+southindia) — spanning the US, EU, and India, not just Canada — regardless of where the resource itself
+is deployed. A real Canadian bank under strict data-residency requirements would need a Standard
+(single-region) deployment type instead of Global to close that gap — Data Zone is not available as that
+alternative for this model, per R-06 above.
 
 ## Consequences
 
-- At-rest data (ACS recordings, Table Storage, App Insights) is provably single-jurisdiction Canadian.
-- Processing (the realtime model call itself) is not — this is disclosed, not hidden.
-- Retention figures: do not cite "30 days" for abuse-monitoring retention (no longer in current
-  documentation as of the scoping pass that produced docs/PLAN.md); cite the DPA or omit the number.
+- At-rest data (ACS call artifacts, Table Storage, App Insights) is provably single-jurisdiction
+  Canadian — this claim is fully supported and should be stated without hedging.
+- Processing (the realtime model call itself) is not single-jurisdiction — this is disclosed, not
+  hidden, and should never be stated as "processed only in Canada" anywhere in this project's docs or
+  portfolio write-up. That would overstate the residency guarantee this architecture actually provides.
+- Retention figures: do not cite a "30 days" abuse-monitoring retention figure anywhere in this
+  project's documentation — it does not appear in current Microsoft documentation as of the scoping pass
+  that produced \`docs/PLAN.md\`, and using it would be citing a number nobody re-confirmed. Cite the DPA
+  directly, or state that retention is not independently verified, rather than repeating an unconfirmed
+  figure.
 EOF
 ok "wrote $ADR_DIR/ADR-001-data-residency.md"
 
@@ -753,30 +775,81 @@ Date: $(date -u +%Y-%m-%d)
 
 ## Context
 
-R-05 verified: ACS number purchase is gated only by Azure subscription billing address, never by the ACS
-resource's \`dataLocation\` — there was never a technical requirement forcing any particular pairing.
-Live area-code inventory for locality=Toronto, administrativeDivision=ON, as measured in this Phase 0 run,
-is recorded in \`docs/phase0/findings.md\` under "R-05".
+The question this ADR originally set out to answer: does ACS's \`dataLocation\` property constrain which
+countries or localities a phone number can be purchased from, forcing this project's ACS resource and
+Azure OpenAI resource into a coordinated regional split? **Answer, confirmed empirically: no.** Number
+purchase is gated only by the Azure subscription's billing address (Canada), never by the ACS resource's
+\`dataLocation\` — there was never a technical coupling to design around. \`location\` (ACS's ARM
+control-plane field) is always \`'global'\` — ACS is not a regional resource — and is independent of
+\`dataLocation\` (data-at-rest geography, governing only call artifacts and resource metadata).
 
-\`location\` (ACS's ARM control-plane field) is always \`'global'\` — ACS is not a regional resource — and
-is independent of \`dataLocation\` (data-at-rest geography, governing only 24h call recordings + chat/
-resource data).
+That question turned out not to be the interesting one. Investigating it surfaced a real, undocumented
+platform constraint instead:
+
+**ACS's Canadian geographic phone number inventory is thin and volatile, not merely uncoupled from
+\`dataLocation\`.** Measured, not assumed — full queries and evidence in \`docs/phase0/findings.md\`
+("R-05", "R-05 supplemental", "ACS Canadian phone number inventory is genuinely volatile"):
+
+- An unfiltered List Available Localities query (no \`locality\`/\`administrativeDivision\` filter — the
+  only way to see the whole inventory rather than test one guess at a time) returned **10 localities in
+  the entire country** at first check: Brockville, Guelph, North Bay, Sault Sainte Marie, Thunder Bay
+  (all ON); Chicoutimi, Montreal, Thetford Mines (QC); Biggar, Lanigan (SK).
+- **Toronto is absent. No GTA-adjacent locality is present at all** — none of 416/647/437/905/289 are
+  reachable through this API, at any point this project queried it. Confirmed against the country-wide,
+  unfiltered list, not inferred from a single Toronto-filtered query returning \`404\` — a control query
+  against a locality that *is* listed (Guelph) returned a clean \`200\` with a real area code in the same
+  window, ruling out a broken endpoint, a bad token, or a malformed request as the explanation.
+- **The inventory changed within the same session, ~20 minutes apart.** Guelph returned \`200\` /
+  \`areaCode: 226\` on first check. A re-check roughly 20 minutes later returned \`404 NotFound\`,
+  reproduced three times, two seconds apart, to rule out a transient blip. A re-run of the unfiltered
+  nationwide dump confirmed the drop was real inventory change, not a query fluke: 8 localities
+  remained — Guelph and Biggar both gone, the other 8 unchanged.
+- No documented explanation from Microsoft rules this in or out — not a rate limit, not a permissions
+  scope, not an API version issue (all independently ruled out; see \`findings.md\`). The most plausible
+  explanation is real-time contention for a small shared number pool across every ACS customer
+  purchasing in the same localities, but that is stated there as inference, not as a confirmed fact.
 
 ## Decision
 
-With the region choice of Canada Central (decision 12), the two knobs land in the same place by choice,
-not by constraint: \`dataLocation: 'Canada'\` (matches billing address, zero cost) with ACS
-\`location: 'global'\`, and Azure OpenAI in Canada Central. This project chose to align them — a single-
-jurisdiction resource footprint — even though nothing coupled them together technically.
+Two decisions follow directly from this finding, not from the original \`dataLocation\` question:
+
+1. **Decision 13 (\`docs/PLAN.md\`) revised.** "Canada local geographic, Toronto area
+   (416/647/437/905/289)" is unfulfillable against ACS's actual Canadian inventory — not "available but
+   taken," genuinely absent. Revised to **705 (North Bay / Sault Ste Marie, ON)**, live-confirmed
+   purchasable via Search Available Phone Numbers immediately before purchase, not carried over from an
+   earlier List Area Codes check in the same session.
+2. **R-09 added** to \`docs/PLAN.md\`'s tracked risks and to \`CLAUDE.md\`'s stop conditions: the
+   purchased number is never released, by any script, at any phase, for any reason. Given observed
+   volatility, there is no guarantee an equivalent replacement — or any number in the same numbering
+   plan area — would still be purchasable if this one were ever lost, unlike almost every other resource
+   in this project, which Bicep/the deploy CLI can recreate identically. Every purchase-adjacent script
+   must re-verify actual inventory via Search Available Phone Numbers (not List Area Codes / List
+   Localities, which only prove a locality is server-side recognized, not that a number is currently
+   reservable) immediately before acting — never from an earlier-in-session check, however recent.
+
+Number actually purchased under this revised decision: \`${PHONE_NUMBER:-<pending>}\` (\`COSTS.md\`,
+"First billable resource purchased").
 
 ## Consequences
 
-- No cross-region hop between ACS's control plane and its data-at-rest geography.
-- The residual gap is the one ADR-001 covers: Global deployment type's processing geography, not this.
+- The \`dataLocation\`/number-purchase coupling question is fully closed: no cross-region hop, no design
+  constraint to build around. ACS (\`location: global\`, \`dataLocation: Canada\`) and Azure OpenAI
+  (Canada Central) share a single jurisdiction by choice, not by technical requirement — the residual
+  gap in that jurisdiction claim is ADR-001's, not this one's.
+- The real constraint this project designed around here is inventory scarcity and volatility, not
+  geography-pairing. There is no further number-purchase code path planned past Phase 0, but if one is
+  ever added, it must treat a \`200\` from the locality/area-code list endpoints as a point-in-time
+  snapshot with no stated TTL, never a purchase guarantee.
+- This is a genuinely undocumented characteristic of ACS's Canadian geographic-number product — not
+  inferable from Microsoft's public pricing or availability pages, not something a plan written from
+  documentation alone would have caught. Recorded here as a platform finding for the Phase 8 portfolio
+  write-up: the kind of thing that distinguishes having built on ACS from having read about it, not a
+  note explaining away a changed plan.
 EOF
 ok "wrote $ADR_DIR/ADR-002-geography-knobs.md"
-note "Both ADRs use the R-06 result measured above. Read them before committing — the DataZone line"
-note "is templated from this run's actual result, not assumed."
+note "Both ADRs use the R-06 result and the R-05 inventory finding measured earlier this run. Read them"
+note "before committing — the DataZone error block and the purchased number are templated from this"
+note "run's actual results, not assumed."
 
 # ── Stage 11: minimal echo WebSocket app ─────────────────────────────────────
 stage "Generate the minimal echo WebSocket app"
