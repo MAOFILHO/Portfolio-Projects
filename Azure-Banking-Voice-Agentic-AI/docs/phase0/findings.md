@@ -329,3 +329,120 @@ now confirmed by a live deployment attempt, not just the pricing/availability ta
 R-06 for ADR-001: DataZoneStandard is not a fallback option for this model, full stop, error is
 explicit and unambiguous (SKU not supported for this model+version), not a quota or permission error
 that might resolve differently under other conditions.
+
+## B3 end-to-end check — deployed reality vs. code's expectation, 2026-08-20
+
+Live deployment (fresh `az cognitiveservices account deployment show`, not reused from an earlier
+call this session):
+
+```json
+{
+  "deploymentName": "gpt-realtime-mini",
+  "modelName": "gpt-realtime-mini",
+  "modelVersion": "2025-10-06",
+  "provisioningState": "Succeeded",
+  "sku": "GlobalStandard",
+  "state": "Running",
+  "versionUpgradeOption": "NoAutoUpgrade"
+}
+```
+
+Matches `docs/PLAN.md` decision 14 exactly: model `gpt-realtime-mini`, version `2025-10-06`,
+`GlobalStandard`, `NoAutoUpgrade`.
+
+**Code side does not exist yet.** Searched the full repo tree: no `voice-agent/`, no `infra/`, no
+`.py` or `.bicep` files anywhere outside `scripts/` (the pre-commit scope hook). B3's startup guard
+(`assert_boot_safety`, `docs/PLAN.md` lines 140-167) is documented design only — it ships in Phase 2
+("control ships here" per the phase plan), consistent with Phase 0 being provisioning-only. This is
+not a Phase 0 gap; it's the plan working as sequenced.
+
+**Honest gap worth naming for Phase 2's implementation, found by reading the documented guard
+literally**: `ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})`
+is a set of **deployment-name strings** (`"gpt-realtime-mini"`, `"gpt-realtime-1-5"`), and the guard
+checks `settings.realtime_deployment not in ALLOWED_REALTIME_MODELS` — a name comparison. The version
+pin (`2025-10-06`) is carried only in an adjacent comment, not in the compared value. R-01 already
+proved two different model *versions* can share the same name (`gpt-realtime-mini` 2025-10-06 vs.
+2025-12-15, different retirement dates, different rate limits). So as currently documented, the
+startup guard would not by itself catch a redeploy of the `gpt-realtime-mini` deployment name onto a
+different version — e.g. an operator (or IaC drift) repointing it at `2025-12-15` would still pass
+`assert_boot_safety()` unchanged, silently. Today, version correctness rests entirely on (a) what's
+actually deployed in Azure (verified above, correct) and (b) the human "Model pin review" process at
+every phase gate (`CLAUDE.md`), not a runtime assertion. Worth Phase 2 deciding deliberately whether
+`ALLOWED_REALTIME_MODELS` should key on `(name, version)` pairs instead of name alone — not fixed here,
+since the guard doesn't exist as code yet to fix; flagged so it isn't rediscovered as a surprise once
+it does.
+
+**Verdict: B3 holds today** — the one deployment that exists matches the pin exactly, and nothing else
+can reach it (no application code exists yet to reach it wrongly). The gap identified is a
+forward-looking design note for Phase 2, not a live violation.
+
+## R-05 — live Toronto-area area-code inventory, 2026-08-20
+
+**Endpoint/api-version correction**: the wizard script's original call used
+`api-version=2022-01-11-preview2`, which returned `400 UnsupportedApiVersion` live. Verified current
+version via Microsoft Learn (List Area Codes REST reference, GA `2025-06-01`,
+https://learn.microsoft.com/en-us/rest/api/communication/phonenumbers/phone-numbers/list-area-codes?view=rest-communication-phonenumbers-2025-06-01)
+— query parameters (`phoneNumberType`, `assignmentType`, `locality`, `administrativeDivision`)
+unchanged, only the version string moved. `01-provision.sh` should be corrected before this stage is
+relied on again (not yet fixed — flagging for a follow-up commit).
+
+**Direct query, locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01:**
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+HTTP 404. Reproduced with `assignmentType=person` and with `assignmentType` omitted entirely — same
+404 in all three cases. Not an assignmentType artifact.
+
+**Root-caused via List Available Localities** (`/availablePhoneNumbers/countries/CA/localities`,
+same api-version), which is what List Area Codes actually validates `locality` against. Two calls:
+
+`administrativeDivision=ON` (all localities in Ontario, no more pages — `nextLink: null`):
+```json
+{
+  "phoneNumberLocalities": [
+    {"localizedName": "Brockville", "administrativeDivision": {"localizedName": "ON", "abbreviatedName": "ON"}},
+    {"localizedName": "Guelph", "administrativeDivision": {"localizedName": "ON", "abbreviatedName": "ON"}},
+    {"localizedName": "North Bay", "administrativeDivision": {"localizedName": "ON", "abbreviatedName": "ON"}},
+    {"localizedName": "Sault Sainte Marie", "administrativeDivision": {"localizedName": "ON", "abbreviatedName": "ON"}},
+    {"localizedName": "Thunder Bay", "administrativeDivision": {"localizedName": "ON", "abbreviatedName": "ON"}}
+  ],
+  "nextLink": null
+}
+```
+(`administrativeDivision=Ontario`, full name instead of abbreviation, returned `404 NotFound` — `ON`
+is the only accepted form.)
+
+All of Canada, no filter, `maxPageSize=100`, one page (`nextLink: null`) — **10 localities total in
+the entire country**:
+```
+Brockville, Guelph, North Bay, Sault Sainte Marie, Thunder Bay (all ON),
+Chicoutimi, Montreal, Thetford Mines (QC), Biggar, Lanigan (SK)
+```
+**Toronto is not present. No GTA-adjacent locality is present. None of 416/647/437/905/289 are
+reachable through this API at all** — not "available but taken", genuinely absent from ACS's
+geographic-number locality inventory for Canada as of this query.
+
+**Sanity check that the endpoint itself works** (not a broken call): queried a locality that *is* in
+the list — `locality=Guelph, administrativeDivision=ON` — got a clean `200` with a real area code:
+```json
+{"areaCodes": [{"areaCode": "226"}], "nextLink": null}
+```
+Confirms the 404 for Toronto is real inventory absence, not a malformed request.
+
+**Does ACS `dataLocation` constrain this?** This ACS resource was created with `dataLocation: Canada`.
+`docs/PLAN.md` ADR-002 already established (pre-Phase-0 research) that number purchase is gated only
+by subscription billing address, never by `dataLocation` — this result is consistent with that: the
+constraint isn't a dataLocation filter narrowing an otherwise-larger Toronto inventory, it's that
+Toronto/GTA doesn't appear in the country-wide, unfiltered locality list at all. Not ruled out
+without testing a second ACS resource on a different `dataLocation`, which hasn't been done (would be
+a second resource created solely to test this — not done without asking first).
+
+**Consequence for decision 13 (`docs/PLAN.md`): "Canada local geographic, Toronto area
+(416/647/437/905/289)" cannot be fulfilled as written against current ACS inventory.** This needs
+Marco's decision, not a silent substitution — options on the table, not yet chosen: (a) a different
+Canadian geographic locality from the 10 available (none are Toronto-area — nearest is Guelph, ON,
+~100km from Toronto, area code 226, not 416/647/437/905/289), (b) a Canada toll-free number instead of
+geographic, (c) re-check at purchase time in case ACS's Canadian geographic inventory has changed
+(unlikely to shift quickly, but not verified as static). No option chosen or acted on — Stage 9 (number
+purchase) has not run.
