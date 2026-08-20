@@ -56,7 +56,7 @@ banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 4/4: Idle verdict, R-
 
 if [[ -z "${PROVISION_TIME:-}" ]]; then
   warn "PROVISION_TIME isn't in $ENV_FILE — can't confirm the 72h window. Continuing on your word."
-  confirm "Has it genuinely been ~72h since the Container App was created, idle, with no test calls?" || exit 0
+  confirm "Has it genuinely been ~72h since the Container App was created (the brief 02-test-calls.sh session right after provisioning is expected and fine — it's calls SINCE then that would invalidate this), with no calls or manual pokes in that time?" || exit 0
 else
   ELAPSED_H=$(( ( $(date -u +%s) - $(date -u -d "$PROVISION_TIME" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$PROVISION_TIME" +%s) ) / 3600 ))
   if (( ELAPSED_H < 72 )); then
