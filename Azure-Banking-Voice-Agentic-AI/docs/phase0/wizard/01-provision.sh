@@ -631,20 +631,71 @@ say "Search reserved a number under searchId $SEARCH_ID. Purchasing it now."
 say "Reserved number and rate — CONFIRM before this goes further:"
 printf '%s\n' "$SEARCH_RESULT" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$SEARCH_RESULT"
 
-curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2025-06-01" \
-  -d "{\"searchId\":\"$SEARCH_ID\"}" -H "Content-Type: application/json" >/dev/null
+CANDIDATE_NUMBER=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("phoneNumbers") or [""])[0])' 2>/dev/null || true)
 
-say "Purchase submitted (this is an async operation). Polling the search result for the purchased number..."
-sleep 15
-PURCHASED_NUMBER=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("phoneNumbers") or [""])[0])' 2>/dev/null || true)
-if [[ -n "$PURCHASED_NUMBER" ]]; then
-  ok "purchased: $PURCHASED_NUMBER"
-  write_env "PHONE_NUMBER" "$PURCHASED_NUMBER"
+# Purchase is itself async (202 + Operation-Location, same shape as search) -- polled properly below
+# rather than a blind sleep-then-hope, so a real failure (R-09: the number this searchId reserved can
+# evaporate between search and purchase, same as Guelph did between two checks 20min apart this
+# session -- see docs/phase0/findings.md) is detected and reported, not silently missed.
+PURCHASE_HEADERS=$(curl -s -D - -o /dev/null -X POST -H "Authorization: Bearer $ACS_TOKEN" \
+  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2025-06-01" \
+  -d "{\"searchId\":\"$SEARCH_ID\"}" -H "Content-Type: application/json")
+OPERATION_ID=$(printf '%s' "$PURCHASE_HEADERS" | tr -d '\r' | sed -n 's/^operation-id: //Ip')
+
+if [[ -z "$OPERATION_ID" ]]; then
+  err "purchase call didn't return an operation-id — raw headers:"
+  printf '%s\n' "$PURCHASE_HEADERS" | sed 's/^/    /'
+  err "Do not assume the purchase went through either way. Check the Azure portal (ACS resource ->"
+  err "Phone Numbers) manually before re-running this stage, to avoid a double-purchase attempt."
+  exit 1
+fi
+
+say "Purchase submitted (operation $OPERATION_ID). Polling for completion — this can take up to a minute."
+PURCHASE_STATUS="notStarted"
+for _ in $(seq 1 18); do
+  OP_RESULT=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers/operations/${OPERATION_ID}?api-version=2025-06-01")
+  PURCHASE_STATUS=$(printf '%s' "$OP_RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)
+  [[ "$PURCHASE_STATUS" == "succeeded" || "$PURCHASE_STATUS" == "failed" ]] && break
+  sleep 5
+done
+
+if [[ "$PURCHASE_STATUS" == "succeeded" ]]; then
+  # Belt-and-suspenders: confirm the number is actually in the account's owned list, not just that the
+  # operation reported success -- matches the same discipline as Stage 7's NoAutoUpgrade verification
+  # (don't trust an API's own success signal alone when a cheap direct check is available).
+  OWNED=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers?api-version=2025-06-01")
+  if printf '%s' "$OWNED" | grep -qF "$CANDIDATE_NUMBER"; then
+    ok "purchased and confirmed owned: $CANDIDATE_NUMBER"
+    write_env "PHONE_NUMBER" "$CANDIDATE_NUMBER"
+  else
+    err "operation reported succeeded but $CANDIDATE_NUMBER isn't in the owned-numbers list."
+    err "Do not treat this as purchased. Check the Azure portal manually before re-running this stage."
+    exit 1
+  fi
+elif [[ "$PURCHASE_STATUS" == "failed" ]]; then
+  # R-09 in practice: the reserved number can be gone by purchase time. Per Marco's explicit
+  # instruction -- never silently substitute a different number than the one approved. Auto-run ONE
+  # fresh search so the next attempt has a real candidate ready, print it, then STOP and wait; do not
+  # loop, do not auto-purchase the replacement.
+  err "Purchase FAILED. Operation result:"
+  printf '%s\n' "$OP_RESULT" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$OP_RESULT"
+  warn "The number searched above ($CANDIDATE_NUMBER) is not purchased. Nothing was bought, no"
+  warn "half-completed state -- write_env for PHONE_NUMBER was never called."
+  say "Running a fresh search for area code $AREA_CODE so you have a live candidate to review:"
+  RETRY_SEARCH=$(curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" -H "Content-Type: application/json" \
+    "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2025-06-01" \
+    -d "{\"phoneNumberType\":\"geographic\",\"assignmentType\":\"application\",\"capabilities\":{\"calling\":\"inbound\",\"sms\":\"none\"},\"areaCode\":\"$AREA_CODE\",\"quantity\":1}")
+  printf '%s\n' "$RETRY_SEARCH" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$RETRY_SEARCH"
+  err "STOP — this is a new candidate, not yet approved. Review it with Marco, then re-run this stage"
+  err "(everything through Stage 8 is idempotent) rather than proceeding automatically."
+  exit 1
 else
-  warn "couldn't confirm the number programmatically — check the Azure portal (ACS resource →"
-  warn "Phone Numbers) and write it into $ENV_FILE as PHONE_NUMBER= yourself before script 2."
-  SKIPPED+=("confirm purchased number and set PHONE_NUMBER in $ENV_FILE")
+  err "purchase operation still '$PURCHASE_STATUS' after ~90s — not resolved within this script's poll"
+  err "window. Do not assume success or failure. Check manually:"
+  err "  curl -H \"Authorization: Bearer \$TOKEN\" \"https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers/operations/${OPERATION_ID}?api-version=2025-06-01\""
+  exit 1
 fi
 
 # ── Stage 10: write ADR-001 and ADR-002 ──────────────────────────────────────
