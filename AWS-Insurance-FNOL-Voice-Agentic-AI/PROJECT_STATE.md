@@ -10,7 +10,18 @@
 
 ---
 
-**Last updated:** 2026-08-18 (staleness pattern named — evidence for the file-split work, not four
+**Last updated:** 2026-08-19 (Phase 12 exit criteria table `APPROVED: Phase 12`; Phase 11 closed 9 of 9).
+
+**Phase 12 exit criteria `APPROVED: Phase 12`, 2026-08-19** (table only — row 15's telephony spend needs
+its own separate approval at execution, per the table's own design). Built via `/grill-with-docs`, three
+rounds, from the ledger's own record rather than a fresh framing — 16 criteria, full table and the grilling
+record in the session log at the end of this file. Phase 11 stands closed, all 9 of 9 criteria closed or
+satisfied (criterion 4 closed earlier the same day — see that row and Phase status table row 11). The
+finding that shaped the table: "Phase 12 entry condition" never functioned as a gate across three prior
+phase transitions — checked, not assumed — so the label is retired; the eight items it used to hold are now
+either ordinary Phase 12 criteria with a real closing bar, or an explicit stated deferral (`CF2`/`CF3`).
+
+**Last updated, 2026-08-18** (staleness pattern named — evidence for the file-split work, not four
 separate corrections).
 
 **A structural finding, not a fourth correction, 2026-08-18.** Today's status pass found four rows gone
@@ -269,7 +280,7 @@ Pre-existing accrual: the claimed Canada DID, confirmed **$0.06/day = $1.83/mont
 | 9 | Testing | ✅ Closed 2026-08-14 (criterion 3(b), carry-forward) — `C14` accepted-and-carried-forward as measured-failing: warm-path p95 1,819ms on a sample excluding cold starts, true p95 over real traffic mix ≥1,819ms, distance to target unmeasured (corrected phrasing 2026-08-15); open item `H` re-opens on five named triggers |
 | 10 | CI/CD and progressive delivery | ✅ **Closed 2026-08-14**, **scope-corrected 2026-08-15 — not reopened.** Criterion 3 verified file identity (byte-identical copy), not pipeline execution — the workflow had never run on GitHub **as of 2026-08-15T13:41Z**, and criterion 1 (`CF6`) is unit-verified as a function but has never executed inside the pipeline it guards. Criterion 4 (`CF4`) downgraded DISCHARGED → **UNAUDITED**: two real-call sites (`measure_composed_pipeline.py`, `verify_inference_profiles.py`) bypass the guard entirely via raw `boto3.client("bedrock", ...)` control-plane calls. `RESULTS.md` §12 has the full correction; ledger rows updated in place. Criteria 2/5/6 stand as before. **First real CI run: done and green** — run `31887876709`, `head_sha c08184c5`, 2026-08-15T13:41:24Z, `conclusion: success` (`RESULTS.md` §14). Branch-protection required-status-check is now unblocked (the workflow has reported once) but not yet done — `MANUAL-STEPS.md` item 5 |
 | 11 | Observability and operations | 🟡 **APPROVED 2026-08-15.** Stage 0 (preflight) complete. Stage A (budget alarm + cost dashboard) applied 2026-08-15 — 12/12 resources live, verified against plan, no drift. **Criterion 1 CLOSED 2026-08-16** — full firing-proof chain confirmed (threshold applied → `ALARM` live → SNS published → breach email received and confirmed by Marco, `ACTUAL $0.71`); temporary test notification's removal plan ready, awaiting apply (`OI1`). Stage B1 (operational dashboard) applied and committed. **Criterion 8a CLOSED 2026-08-16** (`RESULTS.md` §74) — Lambda-invocation p95 1,651.06ms, 121 samples, scope-qualified. **Criterion 2 CLOSED 2026-08-16** (`RESULTS.md` §75) — cross-checked against a live independent CE read, mechanism confirmed correct; named gap not folded in: the weekly schedule itself has never fired (next ~2026-08-22), the one datapoint on the dashboard is a pre-schedule manual test invocation. **Criterion 3 claim (b) CLOSED 2026-08-16** (`RESULTS.md` §76) — real OUTPUT intervention confirmed on an ordinary path (`UpdateContactInfo`/`field=email`); the intervention itself is a new, real, live-confirmed defect, `D121`/`OI39` — resolved 2026-08-17 by `ADR-017`/direction 3-coarse, built and verified (see `OI39`'s own row for the corrected status). **Criterion 5 CLOSED 2026-08-18** — both ops runbooks written and committed (`19f912b`, `66aee22`; see criteria-table row 5). **Corrected 2026-08-18, replacing this row's own prior "all 9 closed" claim, which was wrong**: criterion 4 was OPEN, restated with its actual gap (see criteria-table row 4) — `OI2`'s closure only proves the redaction filter is *attached* in the deployed runtime, not that it redacts; no run at any layer had exercised phone redaction, and `D124`/`OI46` showed the deployed pattern would fail if it were. **Criterion 4 CLOSED 2026-08-19** — `D124`/`OI46` fixed and deployed (`e7763ff`), artifact identity confirmed mechanically (hash + direct extraction), `C1` re-verified 1.000 (26/26) against the new build, residual named as a permanent, unprovable-by-construction property rather than a pending gap (see criteria-table row 4's full closure). **Criterion 3 closes as recorded** — B2's carve-out was a deliberate, Marco-made scope split (2026-08-16), not staleness; left as-is. **All 9 criteria (1, 2, 3, 4, 5, 6, 7, 8a, 8b) closed or satisfied** |
-| 12 | Documentation and demo | ⬜ Not started |
+| 12 | Documentation and demo | 🟡 **`APPROVED: Phase 12` 2026-08-19 — exit criteria table only.** 16 criteria written (session log, end of this file), **none yet satisfied**. Eight are promoted from Phase 11's former "entry condition" items (`CF8`, `D89`/`OI6`, `D90` part 1/`OI7`, `D99`/`OI17`, `D100`/`OI18`, `D120`/`OI38`, `D101`/`OI19`, `D127`/`OI50`) plus `B2` (turn-latency dashboard panel) — that label is retired, checked against three prior phase transitions and found never to have functioned as a gate. `D140`/`OI58` (row 9) gates the demo walkthrough (row 15); `CF2`/`CF3` given an explicit stated deferral (row 12), not silently carried |
 | 13 | Continuous improvement design | ⬜ Not started |
 
 ---
@@ -8220,3 +8231,111 @@ C1 status: unchanged -- VERIFIED, WARM PATH, 1.000 (26/26). Not touched -- ADR-0
 Blocked on: Marco's review of the live per-site results (this entry) before committing.
 Last apply + gate result: none -- no Terraform touched. Real spend: ≈$0.00312 this session, logged in COSTS.md.
 ```
+
+---
+
+## Session log — 2026-08-19 (Phase 12 exit criteria table grilled via `/grill-with-docs`, amended in
+three rounds, `APPROVED: Phase 12`)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Phase 11 stands CLOSED, all 9 of 9 criteria closed or satisfied** — criterion 4 closed earlier the same
+day, on `e7763ff`'s deployed `PHONE_RE` fix and its three-tier `C1` re-verification (that row, above; Phase
+status table row 11). Per STOP CONDITION 1, Phase 12 could not begin without written exit criteria and this
+approval. Read before writing, not taken on a fresh framing: Phase 11's own exit-criteria table above, the
+Carried-forward table's `CF1`/`CF8` rows, the Open-items rows for `D89`/`OI6`, `D90` part 1/`OI7`,
+`D98`/`OI15`, `D99`/`OI17`, `D100`/`OI18`, `D120`/`OI38`, `D101`/`OI19`, `D127`/`OI50`, `D140`/`OI58`, and
+`:2161`'s original 2026-08-12 Phase 12 scope statement (clone→live-call walkthrough, model/data cards, demo
+script).
+
+**Cross-reference (Q4), per Marco's decision**: the 21 commits from `93bed8e` onward prefixed
+`fnol-phase12` (this file's own top-of-file correction, 2026-08-18) are **not** this phase — they are Phase
+11 criterion 5 work, mislabeled. A reader who greps `git log` for "phase12" and lands here should read that
+correction paragraph before assuming any of those 21 commits belong to what this table scopes.
+
+### Finding, ahead of the table: "Phase 12 entry condition" never functioned as a gate
+
+Checked directly, not assumed: Phase 9's, Phase 10's, and Phase 11's own entry-conditions tables were each
+written at the prior phase's close, and none blocked the next phase's start — Phase 11 itself was
+`APPROVED` and Stage 0 began while its own entry condition 6 (branch protection) read "unblocked, not yet
+done," closing only mid-phase. `CF8`'s own row underscored this from the other side, stating that today's
+gate state (then 10/13, now 11/13) "is the correct state to enter Phase 12 scoping with" — not blocking
+even the conversation that produced this table. Structurally, the label has meant *inherited status,
+tracked but not gating*, throughout this ledger's history — never *precondition to starting*. **Retired for
+this project.** The eight items previously parked under it are promoted below into ordinary exit criteria
+(`D98`/`OI15` excepted — it auto-closes with rows 2+3, no row of its own), or given an explicit stated
+deferral (`CF2`/`CF3`, row 12).
+
+### Decisions, three grilling rounds, Marco's, applied below
+
+1. **Every promoted row (1-10) closes on EITHER a verified fix OR a written accept-risk decision naming the
+   residual plainly — never on an undecided state.** A row that can close while still undecided reproduces
+   the exact failure the finding above diagnoses. `D140`/`OI58` (row 9) is the one deliberate exception: no
+   accept-risk alternative, because accepting the risk does not remove it from a recorded demo walkthrough.
+2. `D140`/`OI58` gates the demo walkthrough (row 15). `D127`/`OI50` gets its own row (8) whose bar is
+   "decided and recorded," not "fixed" — either answer is a valid close. `D122`/`OI44` and `D125`/`OI48`
+   become disclosed known limitations in the demo script's own text (row 14), not blockers.
+3. The `PROJECT_STATE.md` split (row 16) is a Phase 12 criterion, bar stated strictly: a mechanism that
+   would have caught this session's staleness incidents, not a smaller file carrying the same property.
+4. This cross-reference, above.
+5. `B2` (turn-latency dashboard panel) becomes a Phase 12 criterion (row 10), same liveness shape B1 got in
+   Phase 11 — a panel is not delivered without a heartbeat/synthetic-injection proof.
+
+**One self-caught correction, recorded rather than quietly fixed**: the draft table shown for approval
+omitted `B2`'s own row entirely, despite decision 5 above being reached in the same round — a gap in the
+draft, not a reversal of anything Marco decided. Row 10 below is that missing row, added before writing;
+flagged here per this project's own standing discipline against letting a decided item go unrecorded.
+
+### Phase 12 exit criteria — `APPROVED: Phase 12` 2026-08-19 (table only — row 15's telephony spend needs
+its own separate approval at execution, per this table's own design)
+
+| # | Criterion | Liveness requirement |
+|---|---|---|
+| 1 | **`CF8`** — a standing, generalized `D87`-shaped root-resolution gate (every ordinary intent's real, deployed, slot-filled happy path), run at minimum on every `stacks/main` deploy. Currently exists only as hand-added events (11/13 green) | **Closes on EITHER**: the check is generalized beyond hand-added events (a data-driven matrix over all six intents, not four bespoke functions) and green against the deployed Lambda, verified live — **OR** a written accept-risk decision naming exactly which intents/paths stay uncovered by the standing form and why hand-added events are judged sufficient going forward. A row that stays "proposed" with neither is not closed |
+| 2 | **`D89`/`OI6`** — `legal_and_medical_advice` guardrail false-blocks a benign `FileAutoClaim` confirmation containing "file"; v5 restored v3's original (and pre-existing, never-before-tested) behavior, including a real medical-example gap found in the same probe run | **Closes on EITHER**: a guardrail-definition change (reword or surgical topic split) verified against a real `ApplyGuardrail` probe set that both fixes the false-block and does not regress the topic's own canonical examples — **OR** a written accept-risk decision naming the false-block rate accepted and why no fix was taken |
+| 3 | **`D90` part 1/`OI7`** — `route_and_classify` misroutes `RentalTowingEntitlement` from zero conversational context; Option 1 (context-enrichment) shipped, deployed, and confirmed live **not** to fix it | **Closes on EITHER**: a fix verified against the same live repro that showed Option 1 insufficient (event 13's exact `AgentState`, or an equivalent real-Bedrock check), confirming the correct intent is now reached — **OR** a written accept-risk decision naming the misroute rate accepted |
+| 4 | **`D99`/`OI17`** — `non_auto_insurance_products`'s own canonical example ("claim on my husband's life insurance policy") does not trigger the topic; a 9-call probe left the mechanism unisolated | **Closes on EITHER**: a definition fix verified against a real probe set showing the canonical example now blocks *and* no new regression on the `D89` medical-example finding or elsewhere — **OR** a written accept-risk decision naming the containment gap accepted |
+| 5 | **`D100`/`OI18`** — continuation-turn exposure (a low-information "yes" misrouted or false-blocked deep in a real, checkpointer-accumulated conversation) is unmeasured; no live multi-turn probe through the DynamoDB checkpointer has ever run | **Closes on a terminal disposition, not a decision to decide later**: EITHER the live multi-turn probe is actually run through the real checkpointer and its result is acted on (fixed if it shows real exposure, recorded as benign if it doesn't) — **OR** an explicit ACCEPT-unmeasured decision is recorded with reasoning, without running the probe. "We'll measure this" is not a closing state |
+| 6 | **`D120`/`OI38`** — `git checkout <ref> -- <path>` run on an unchecked assumption silently overwrote uncommitted work twice in one session; two guard shapes proposed, neither built | **Closes on EITHER**: one of the two proposed guards (pre-checkout diff-and-refuse, or stash-wrap) built and demonstrated actually blocking a reproduction of the exact incident — **OR** a written accept-risk decision naming this a permanent convention-only risk and why no guard was built |
+| 7 | **`D101`/`OI19`** — cross-session coordination (via `SendMessage`/`ListAgents`) has no recorded audit trail, no independent re-verification of a peer's self-reported diff, and no resolved scheme for session self-labels colliding | **Closes on**: all three named sub-questions decided and recorded (log exchanges into the record or not; independently re-verify a peer's self-report or trust it; how self-labels are assigned/verified) — any resulting mechanism named as built or explicitly deferred, but the decision itself, recorded, is what closes this row |
+| 8 | **`D127`/`OI50`** — whether a caller should hear their own VIN and policy number read back on `FileAutoClaim`'s exception-branch failure message has never been decided; the guardrail's `action: NONE` on this site is correct behavior either way, so this is a design call, not a bug | **Closes on a recorded decision alone, not a fix**: either answer is a valid closing state. If "not intended," name the fix direction (a routing exception mirroring `UpdateContactInfo`'s shape, or a rewritten except-branch message) — building it is not required to close this row, only naming it is. If "intended," record that the current behavior is correct as-is |
+| 9 | **`D140`/`OI58`** — three sites (`agents/graph.py:96-102`, `agents/nodes/guardrails_nodes.py:106-107`, `agents/nodes/update_contact_info.py:59-63`) speak a canned "let me connect you with someone" with no `EscalationRecord`, so the real Connect-level transfer never fires — the caller is told a human is coming and none is | **Verified fix required — no accept-risk alternative on this row.** Unlike rows 2-7, accepting this risk doesn't remove it from a recorded demo walkthrough (row 15): a viewer would see the system make and break the exact promise on camera. All three sites must call `initiate_escalation()` and attach a real `EscalationRecord`, confirmed via a live deployed check showing an actual transfer signal at each site, before row 15 may be recorded. This is the one criterion that gates another criterion in this table |
+| 10 | **`B2`** — turn-latency dashboard sub-component panel, carved out of Phase 11 criterion 3 (B1 built; B2 explicitly deferred, "needs live latency instrumentation that doesn't exist yet") | Same liveness bar B1 was held to (Phase 11 criterion 3): **every panel needs a heartbeat or synthetic-injection proof with known ground truth** — a panel that cannot distinguish "zero data" from "the emitter is dead" is not delivered. Built: sub-component latency instrumentation (at minimum, node-processing time and Bedrock call time, the two components this project can measure without a real Lex/Polly leg) wired into a dashboard panel, verified live with a real or synthetically-injected data point of known value |
+| 11 | **`CF1`** — state in the README, explicitly, that only two prompts in the entire system invoke generation (`CoverageQuestion`, `RentalTowingEntitlement`); everything else is fixed/templated and cannot hallucinate | README section written and cross-checked directly against `docs/phase4/PROMPT-REGISTRY.md` (or its current equivalent) at write time, not asserted from memory of `D20`'s original finding |
+| 12 | **`CF2`/`CF3` record-hygiene disposition** — Phase 9's own dropped load-test approach (`CF2`) and Phase 6's own uncompleted n≥20 Nova Micro sampling criterion (`CF3`), both corrected from a false "discharged" status 2026-08-15, both named in Phase 11's own entry-conditions table as "worth a future session's five minutes," never picked up | **Not a Phase 12 build item — explicit deferral, not silence, satisfied by being stated.** Owner: unassigned. Revisit trigger: the next session that touches Phase 6's or Phase 9's own exit-criteria row directly, or opportunistically alongside row 16's file-split work, since both already require reading the same historical rows closely. Recorded here so "named, not silently dropped" is itself verifiable — a future scan of this table finds a stated disposition, not an absence |
+| 13 | **Model/data cards** (from `:2161`'s original Phase 12 scope statement) | Cards written and verified against what's actually deployed, not aspirational: real model IDs/versions in use (Nova Micro/Lite, Titan embed, any Claude Haiku path), and the synthetic-data provenance section explicitly names the 555-exchange fixture convention (`D125`/`OI48`) as a stated limitation of the data, not silently omitted. No invented capability or metric, per this project's standing Responsible-AI rule |
+| 14 | **Demo script** (from `:2161`) | Script written and cross-checked line-by-line against actual live system behavior at write time — no aspirational claim about a path that hasn't been verified live. Explicitly discloses `D122`/`OI44` (partial-mask leak on grouped-digit phrasing) and `D125`/`OI48` (555-fixture convention) as named known limitations. Reflects row 8's decision on VIN/policy readback as whatever it settles to |
+| 15 | **Clone→live-call walkthrough** (from `:2161`) | **Real telephony spend — cost gate applies at execution, not at this table's approval.** Blocked on rows 2, 3, and 9 each reaching a terminal disposition — not only row 9. `D89` (row 2) false-blocks an ordinary `FileAutoClaim` confirmation and `D90` part 1 (row 3) misroutes `RentalTowingEntitlement`, both live today, both on the exact happy path a demo call would take. If either row 2 or row 3 closes as a written accept-risk decision rather than a verified fix, the demo script (row 14) must disclose that specific residual explicitly before the call is placed, not written up after the call has already shown it. A fresh clone (or verified clean-checkout equivalent) taken through `make bootstrap`/`make deploy`, followed by an actual real inbound call to the live DID (`+14169871547`) reaching genuine fulfillment on at least one intent — the **first real call this project has ever received**, per the standing fact repeated throughout `CLAUDE.md`'s Verified-environment-facts table. **Recording constraint**: any capture of this walkthrough must not enable Connect-side call, screen, or IVR recording (constraint 18, `check_flows.py`'s CI gate) — captured externally (the presenter's own screen/audio), never through `RecordingBehavior`. **Side benefit worth stating explicitly**: this call is also the first opportunity to measure the still-unmeasured per-minute inbound telephony rate named as an open gap in the Verified-environment-facts table — worth recording the actual line-item cost from this one call for that table's own sake. **Cost table required before the call is placed** (resource → SKU/tier → free-tier coverage → estimated cost → cost if forgotten), per `CLAUDE.md`'s Cost Gate, and a written approval for this specific call required before it happens |
+| 16 | **`PROJECT_STATE.md` split** | **Strict bar, not "the file is smaller."** A mechanism designed and built in-repo — not inherited from elsewhere — that would have caught **all four** of this session's staleness incidents (criterion 5's row, `OI39`'s row, criterion 4's row, `D126`/`D127`'s missing table rows), demonstrated by reproducing each of the four shapes against a stale version of the split structure and showing the new mechanism flags every one — **or**, for any incident not covered, an explicit written statement of which incident is out of scope and why, not a silent gap. Three of the four sharing one shape (a status changed, a dependent claim elsewhere did not move with it) is what makes this structural rather than four separate mistakes; a mechanism that catches that shared shape but misses the fourth (a wholly missing row, not a stale one) hasn't addressed the actual finding. A smaller file that still lets a status change and a dependent claim drift apart independently does not close this row |
+
+**Explicitly out of scope, unchanged from Phase 11's own carry list**: Contact Lens real-time analytics
+(banned-by-default list) — no row above touches it, none should.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 CLOSED, 9 of 9. Phase 12 exit criteria table APPROVED 2026-08-19 (`APPROVED: Phase 12`, table only) — 16 criteria, none yet satisfied. Built via /grill-with-docs, three grilling rounds, from the ledger's own record (Phase 11's table, Carried-forward/Open-items rows, :2161's original scope statement), not a fresh framing.
+Open defects: all named in the table above by row. Highest-severity live-facing one is D140/OI58 (row 9), the only row with no accept-risk alternative because it gates the demo walkthrough (row 15) directly.
+C1 status: unchanged -- VERIFIED, 1.000 (26/26), build MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJT8Sx8= (2026-08-19). Not touched this entry -- no code or deploy this session, table-writing only.
+Blocked on: every row in the table above is currently open; row 15 additionally blocked on rows 2, 3, 9 closing and on its own separate telephony-spend approval at execution. No code, no apply, no invoke this session.
+Last apply + gate result: none -- no Terraform touched, no AWS call made. Real spend this session: $0.
+```
+
+**Self-review (`REVIEW-CRITERIA.md` §1), what it caught:**
+1. Could this have gone the other way? Yes — the "entry condition" finding could have gone unchecked and the label kept; checking three actual phase transitions instead of trusting the name is what surfaced it.
+2. Any asserted-but-unchecked claim? `CF8`'s own "correct state to enter Phase 12 scoping with" quote was read directly from its row, not paraphrased from memory, before being used as corroborating evidence.
+3. Infra error scored as a result? N/A — no infra call this entry.
+4. Cost below estimate? $0 exactly, as expected — a grilling session and a documentation write, no liveness concern.
+5. Identical markers, different paths? N/A this entry.
+6. Has this check ever failed for the right reason? N/A — no new mechanical check built this entry, only criteria written.
+7. Headline-number interpretation change? Row count is new (16, not asserted anywhere before this entry) — stated as a count of criteria written, not criteria satisfied; the distinction is stated explicitly in the table header and the Phase status table row.
+8. `C1` a tradeable term? Not touched, not scored, not implicated by anything in this entry.
+
+**Not done:** none of the 16 criteria are satisfied — this entry only writes and approves the table. No
+code, no Terraform, no AWS call. `B2`'s row was missing from the draft shown for approval and added before
+writing, flagged above rather than silently corrected. Cost this session: $0.
