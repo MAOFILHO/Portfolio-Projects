@@ -481,15 +481,31 @@ else
     --sku-name GlobalStandard \
     --sku-capacity 1 \
     --output none
-  # version-upgrade-option isn't universally exposed as a create-time flag across CLI versions —
-  # set it explicitly as a follow-up so NoAutoUpgrade (B3's requirement) is never left to a default.
-  az cognitiveservices account deployment update \
-    --name "$AOAI_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --deployment-name "$DEPLOYMENT_NAME" \
-    --version-upgrade-option NoAutoUpgrade \
-    --output none 2>/dev/null || warn "couldn't set version-upgrade-option via CLI — verify NoAutoUpgrade in the portal before Phase 1."
-  ok "deployment $DEPLOYMENT_NAME created (GlobalStandard, targeting NoAutoUpgrade)"
+  ok "deployment $DEPLOYMENT_NAME created (GlobalStandard)"
+fi
+
+# version-upgrade-option isn't a create-time flag at all on this CLI's `az cognitiveservices account
+# deployment` group (only create/delete/list/show exist — confirmed live, azure-cli 2.87.0), and there
+# is no `update` subcommand to fall back to either, contrary to what this script originally assumed.
+# Checked/set unconditionally (not just on fresh create) via a direct ARM PATCH, so a deployment that
+# already existed from an earlier partial run also gets brought into compliance with B3's NoAutoUpgrade
+# requirement rather than silently left on whatever default the API assigned (observed:
+# OnceNewDefaultVersionAvailable — the opposite of what B3 requires).
+CURRENT_UPGRADE_OPT=$(az cognitiveservices account deployment show \
+  --name "$AOAI_NAME" --resource-group "$RESOURCE_GROUP" --deployment-name "$DEPLOYMENT_NAME" \
+  --query properties.versionUpgradeOption -o tsv 2>/dev/null || true)
+if [[ "$CURRENT_UPGRADE_OPT" != "NoAutoUpgrade" ]]; then
+  note "versionUpgradeOption is '$CURRENT_UPGRADE_OPT', not NoAutoUpgrade — patching via ARM REST."
+  DEPLOYMENT_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$AOAI_NAME/deployments/$DEPLOYMENT_NAME"
+  az rest --method patch \
+    --url "https://management.azure.com${DEPLOYMENT_ID}?api-version=2026-07-01" \
+    --body '{"properties":{"versionUpgradeOption":"NoAutoUpgrade"}}' \
+    --headers "Content-Type=application/json" \
+    --output none \
+    || { err "couldn't set versionUpgradeOption via ARM REST either — verify NoAutoUpgrade in the portal before Phase 1, do not assume it's set."; exit 1; }
+  ok "versionUpgradeOption set to NoAutoUpgrade (B3 requirement)"
+else
+  ok "versionUpgradeOption already NoAutoUpgrade"
 fi
 write_env "DEPLOYMENT_NAME" "$DEPLOYMENT_NAME"
 write_env "MODEL_VERSION" "$MODEL_VERSION"
