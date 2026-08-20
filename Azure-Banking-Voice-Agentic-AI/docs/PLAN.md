@@ -97,7 +97,7 @@ specialists via `handoff(...)` (`main.py:98-150`).
 | 11 | **Fixtures** | TTS-synthesized from YAML text scripts + telephony degradation |
 | 12 | **Region** | **Canada Central** (revised from East US 2 — Canada Central is physically Toronto, confirmed via the Azure regions page, same metro as the caller; East US 2 is Virginia, a cross-border hop. Also unifies the ACS/OpenAI footprint into one geography). **No fallback chain.** If Canada Central cannot serve a realtime deployment: **stop and report**, do not relocate |
 | 13 | **Number** | **Canada local geographic**, Toronto area (416/647/437/905/289) |
-| 14 | **Model pin** | `gpt-realtime-mini` **2025-12-15 (GA)**, GlobalStandard, `versionUpgradeOption: NoAutoUpgrade` |
+| 14 | **Model pin** | `gpt-realtime-mini` **2025-10-06 (GA)**, GlobalStandard, `versionUpgradeOption: NoAutoUpgrade`. **Revised 2026-08-20** from `2025-12-15` (the `isDefaultVersion`) after the full Models API catalog was pulled live in Phase 0, mid-gate: `2025-12-15` retires 2026-12-15 — ~4 months out, not a distant fallback. `2025-10-06` retires 2027-04-06 (~7.5 months out) at **identical audio-token pricing** ($10/$20 per 1M in/out, flat across every mini-tier snapshot checked), with a *better* request-rate limit (10/60s vs 3/60s) and still ample token-rate headroom (5000/60s vs the ~1200/min this project's own turn-rate estimate needs). Not the default version, so the deployment must name it explicitly — no other trade-off found. Documented successor for B3, not today's pin: `gpt-realtime-1.5` (2026-02-23, GA, full tier, retires 2027-08-24) — ~3.2x the per-token audio cost (full tier vs mini tier is the reason, not the version), held in reserve for if nothing with longer mini-tier runway has reached GA by the time `2025-10-06` approaches retirement. See `docs/phase0/findings.md` "Model pin reconsideration" for the full comparison table. |
 | 15 | **WS lifecycle** | Close both WebSockets on call end; measure replica billing state empirically |
 | 16 | **Non-functionals** | IaC, CI/CD, tests, OTel+redaction, managed identity, guardrails, docs/ADRs. API auth = shared-secret only |
 | 17 | **`escalate_to_human`** | **Graceful apology + call termination**, with a logged escalation record (call correlation ID, reason code, timestamp) persisted to Table Storage. **No outbound transfer leg.** A real transfer needs a real second number and a real human on the other end — neither exists in this prototype, and simulating one (transferring to a personal number, a voicemail box) wouldn't demonstrate a real capability, only add ACS transfer-API complexity and an outbound $0.013/min cost for a feature that can't be meaningfully tested end-to-end. Named test case: `T-ESCALATION-LOGGED` |
@@ -134,15 +134,36 @@ IVR **refuses calls** and plays the closed path. It must never fail open. `spend
 confirmed on the subscription — **Azure will not stop spend at any threshold. B4 is the only brake
 that exists.** Named test case: `T-B4-FAILCLOSED`.
 
-**B3's startup guard** is one function, refusing to boot on either violation:
+**B3's startup guard**, restructured 2026-08-20 to carry a named successor rather than a single frozen
+constant — model retirement is a scheduled decision now, reviewed at every phase gate (`CLAUDE.md`),
+not something that surprises Phase 6 or 7 when the pin's clock runs out:
 ```python
-ALLOWED_REALTIME_MODELS = frozenset({"gpt-realtime-mini"})  # 2025-12-15, GA
+# Reviewed at every phase gate (CLAUDE.md, "Model pin review"). Each entry's retirement date is
+# verified live via the Models API (docs/phase0/findings.md "Model pin reconsideration"), never
+# assumed from isDefaultVersion -- that assumption is exactly what R-01 caught being wrong.
+
+# The pin actually in service. Only this deployment name may run without a WARNING at boot.
+ACTIVE_REALTIME_MODEL = "gpt-realtime-mini"  # version 2025-10-06, GA, retires 2027-04-06
+
+# Pre-vetted fallback, not live today. Named here so migrating, when it's needed, is swapping
+# ACTIVE_REALTIME_MODEL's value plus a deployment-name change in infra -- not a from-scratch model
+# evaluation done under time pressure as 2027-04-06 approaches.
+SUCCESSOR_REALTIME_MODEL = "gpt-realtime-1-5"  # version 2026-02-23, GA, retires 2027-08-24, ~3.2x cost
+
+ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 
 def assert_boot_safety() -> None:
     if "AZURE_OPENAI_API_KEY" in os.environ:
         raise SystemExit("keyless auth breaks when AZURE_OPENAI_API_KEY is set")
     if settings.realtime_deployment not in ALLOWED_REALTIME_MODELS:
         raise SystemExit(f"model {settings.realtime_deployment!r} not in B3 allowlist")
+    if settings.realtime_deployment != ACTIVE_REALTIME_MODEL:
+        # Booting on the successor is allowed (so a migration can be tested) but must never be
+        # silent -- this is the "scheduled decision, not a surprise" requirement, mechanically enforced.
+        log.warning(
+            "booting on %r, not the active pin %r -- confirm this is a deliberate migration",
+            settings.realtime_deployment, ACTIVE_REALTIME_MODEL,
+        )
 ```
 
 **B5 budget legs** (provisional after Phase 2, frozen after Phase 5):
@@ -496,7 +517,7 @@ suites at their weekly/on-demand cadence. Any ADRs not already written during th
 
 | ID | Risk | Fallback |
 |---|---|---|
-| **R-01** | `gpt-realtime-mini` listed **twice with conflicting retirement dates** — 2025-10-06 as both `2027-04-06` and `2026-09-21` (~1 month out); 2025-12-15 as both `2027-06-15` and `2026-12-15` | Plan against the pessimistic date; verify per-SKU via Models API in Phase 0; `NoAutoUpgrade` |
+| **R-01** | ~~`gpt-realtime-mini` listed twice with conflicting retirement dates~~ — **resolved 2026-08-20**, live Models API query: `2025-10-06` retires `2027-04-06`, `2025-12-15` retires `2026-12-15` (the pessimistic case in both, confirmed real). Triggered a decision 14 revision — see there and `docs/phase0/findings.md` "Model pin reconsideration" | Closed. `NoAutoUpgrade`; B3 now carries a documented successor (`gpt-realtime-1.5`) reviewed at every phase gate rather than a single frozen date |
 | **R-02** | `Pcm24KMono` behaviour is a **documentation-based assumption**, and the resampler was deleted on that basis | If ACS misbehaves, resampler returns and B5's breakdown changes. Phase 0 verifies by measurement |
 | **R-03** | `DtmfData` during active bidirectional streaming | Documented and used in all four language pivots; narrowed but unproven. If it fails: pause-stream-and-`recognize`, which changes the auth flow and B5 |
 | **R-04** | Open-but-silent WebSocket may keep a Container App replica **active**-billed (~$10/mo swing) | Decision 15 closes WS between calls; measured over 72h in Phase 0 |

@@ -207,8 +207,11 @@ ACS_NAME="acs-azure-banking-voice"
 CAE_NAME="cae-azure-banking-voice-p0"
 CONTAINERAPP_NAME="ca-azbank-echo-p0"
 MODEL_NAME="gpt-realtime-mini"
-MODEL_VERSION="2025-12-15"          # the GA version this project pins to (decision 14)
-MODEL_VERSION_OLD="2025-10-06"      # the other listed version, checked for R-01 comparison only
+MODEL_VERSION="2025-10-06"          # the GA version this project pins to (decision 14, revised
+                                     # 2026-08-20 from 2025-12-15/isDefaultVersion after the live
+                                     # Models API pull showed 2025-10-06 has ~3.7 more months of
+                                     # runway at identical audio-token pricing — see PLAN.md decision 14
+MODEL_VERSION_OLD="2025-12-15"      # the isDefaultVersion — retires 2026-12-15, ~4mo out; not pinned
 DEPLOYMENT_NAME="gpt-realtime-mini" # deployment name == model name, matching B3's allowlist string
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # docs/phase0/wizard -> project root
@@ -305,10 +308,13 @@ write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # ── Stage 2: R-01 — Models API deprecationDate check (free, read-only) ─────
 stage "R-01 — verify gpt-realtime-mini retirement dates via the Models API"
-say "docs/PLAN.md records this model listed TWICE with conflicting retirement dates:"
-say "  ${MODEL_VERSION_OLD}: 2027-04-06 vs 2026-09-21"
-say "  ${MODEL_VERSION}: 2027-06-15 vs 2026-12-15"
-say "Querying the real per-region model catalog to see what's actually true right now."
+say "Originally: docs/PLAN.md recorded this model listed TWICE with conflicting retirement dates per"
+say "version (2025-10-06 as 2027-04-06 or 2026-09-21; 2025-12-15 as 2027-06-15 or 2026-12-15)."
+say "Resolved 2026-08-20 by a live query: 2025-10-06 -> 2027-04-06, 2025-12-15 -> 2026-12-15 — the"
+say "pessimistic case in both, confirmed real. Decision 14 was revised to pin 2025-10-06 on that"
+say "basis (~3.7 more months of runway, identical cost). Re-querying now to reconfirm it still holds —"
+say "dates on a live catalog can move, and this pin decision deserves the same live check every time"
+say "this script runs, not just the one that found it."
 warn "VERIFY: api-version below (2023-05-01) against the current Azure REST API reference before"
 warn "trusting a non-200 response as \"not available\" rather than \"wrong api-version\"."
 

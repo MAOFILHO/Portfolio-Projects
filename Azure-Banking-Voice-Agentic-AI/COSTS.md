@@ -71,3 +71,22 @@ quantity is measured; the rate is Microsoft's own published rate, not a guess.
 
 This section will be updated with the Portal check's actual result once Stage 0 of
 `03-cost-check-24h.sh` runs (~24h after test calls, per the wizard's timing).
+
+## Model pin revised — 2026-08-20
+
+`docs/PLAN.md` decision 14 changed: `gpt-realtime-mini` pin moved from version `2025-12-15`
+(`isDefaultVersion`, retires 2026-12-15, ~4mo runway at the time) to `2025-10-06` (retires 2027-04-06,
+~7.5mo runway), at **identical audio-token pricing** ($10/$20 per 1M in/out — flat across every
+mini-tier snapshot in the catalog). No cost impact from this change; runway impact is real.
+
+Full comparison across every realtime-capable model in canadacentral (not just `gpt-realtime-mini`),
+including why `gpt-realtime-2.1-mini` was considered and rejected (Preview, retires 2026-10-15 — the
+*shortest* runway found, despite matching pricing) and the named B3 successor
+(`gpt-realtime-1.5`, ~3.2x cost, reserved not adopted): `docs/phase0/findings.md`, "Model pin
+reconsideration."
+
+**Budget impact of the reserved successor, if ever adopted**: `gpt-realtime-1.5`'s full-tier pricing
+would roughly double this project's per-minute floor (model cost portion goes from ~$0.009/min to
+~$0.029/min at the same token-rate assumptions), materially cutting R-08's demo-runs/month figure.
+Not adopted now for exactly that reason — recorded here so a future phase-gate reviewer sees the
+trade-off already quantified, not something to re-derive.

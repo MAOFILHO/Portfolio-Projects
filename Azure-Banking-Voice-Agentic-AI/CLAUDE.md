@@ -35,7 +35,7 @@ a judgment call.
 |---|---|---|---|
 | **B1** | **Auth Gate Integrity** — zero authenticated-only tool invocations reach the core-banking client while `session.auth_state != Authenticated` | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the frozen allowlist | **0 violations** | startup guard + CI static check + Bicep |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
 | **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
 
@@ -45,6 +45,12 @@ threshold.** B4 is the only brake that exists. Any p95 latency figure quoted any
 
 Full detail (fail-closed test cases, the B3 startup guard, B5's staged measurement) lives in
 `docs/PLAN.md` — this table is the quick-reference, not the definition.
+
+**Model pin review**: B3's active pin (`docs/PLAN.md` decision 14) is checked against the live Models
+API at every phase gate — its retirement date is a scheduled decision to revisit on a known clock, not
+something that gets discovered as a surprise partway through a later phase. If the active pin's
+retirement is under 2 months out at any gate and no better-runway GA option exists yet, that's a
+stop-and-ask before the phase proceeds, same as any other named constraint here.
 
 ---
 
