@@ -412,7 +412,13 @@ note F0 allows only **1 concurrent** request).
 explicitly not repo 2's `$1,000.00` bug; caller-facing path handles it gracefully),
 `T-B4-FAILCLOSED` (cost store unreachable → refuse calls), `T-ESCALATION-LOGGED` (escalation record
 persisted with call correlation ID + reason code; call terminates gracefully; no outbound leg ever
-attempted).
+attempted), `T-B3-SUCCESSOR-BOOT` (added Phase 2, added 2026-08-20 alongside B3's active-pin/successor
+restructure — see decision 14: boots `SUCCESSOR_REALTIME_MODEL` against `FakeRealtimeServer` and
+completes one turn. **Skip-by-default** — not part of normal CI, gated behind an env flag or marked
+`xfail` — because it exercises a model that isn't live yet. Exists so that migrating to the named
+successor when the active pin's retirement approaches is a five-minute check against something already
+proven to boot, not a discovery made under deadline pressure. Whoever runs Phase 2 kickoff owns writing
+it; it cannot exist before `FakeRealtimeServer` does).
 
 ---
 
@@ -468,7 +474,11 @@ a gate already in front of it. Phase 4 only *adds permissions* to an existing co
 introduces one.
 **Exit:** full app runs end-to-end between two fakes in CI with zero Azure dependency; gate defaults
 closed and is provably in front of every tool, even stub ones. **B5 provisional** after N≥100 real
-turns through a live `RealtimeSession`, turn count stated.
+turns through a live `RealtimeSession`, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
+2026-08-20, decision 14): boots `SUCCESSOR_REALTIME_MODEL` (`gpt-realtime-1.5` as of Phase 0) against
+`FakeRealtimeServer` and completes one turn, skip-by-default so it never runs in normal CI — it's Phase
+2's own deliverable because it's the first phase where `FakeRealtimeServer` exists to boot anything
+against.
 
 ### Phase 3 — mock-core-banking
 FastAPI + SQLite, own Container App, own Dockerfile. Timeouts, retries, circuit-breaking in the
