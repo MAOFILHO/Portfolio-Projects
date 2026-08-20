@@ -298,9 +298,35 @@ else
   warn "an app still in it usually won't delete anyway. Fix that first, then re-run."
 fi
 
-say "Verifying the phone number and ACS resource are still there (must NOT be deleted):"
+say "Verifying the ACS resource is still there (must NOT be deleted):"
 az communication show --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query "{name:name,dataLocation:dataLocation}" -o table
-ok "ACS resource intact — number stays leased per docs/PLAN.md's explicit design"
+ok "ACS resource intact"
+
+# R-09 (docs/PLAN.md): the number is irreplaceable if ever lost -- ACS's Canadian geographic inventory
+# has been observed losing entire localities within ~20 minutes (docs/phase0/findings.md). This script
+# never calls a release/delete on it (see the file header), but "never calls delete" isn't the same
+# claim as "still exists" -- checking the parent ACS resource's existence (above) doesn't prove the
+# number specifically is still owned. Checked directly via the same GET /phoneNumbers this project's
+# other scripts use, not assumed from the container resource being present.
+say "Verifying the phone number itself is still owned (not just its parent ACS resource):"
+if [[ -z "${PHONE_NUMBER:-}" ]]; then
+  err "PHONE_NUMBER isn't set in $ENV_FILE — cannot verify. Check the Azure portal manually before"
+  err "trusting this teardown's result: ACS resource -> Phone Numbers."
+else
+  ACS_TOKEN=$(az account get-access-token --resource "https://communication.azure.com" --query accessToken -o tsv)
+  OWNED_NUMBERS=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers?api-version=2025-06-01")
+  if printf '%s' "$OWNED_NUMBERS" | grep -qF "$PHONE_NUMBER"; then
+    ok "confirmed: $PHONE_NUMBER is still owned — number stays leased per docs/PLAN.md's explicit R-09 design"
+  else
+    err "R-09 VIOLATION OR DRIFT: $PHONE_NUMBER not found in the live /phoneNumbers response."
+    err "This script never calls a release/delete on it -- if it's really gone, something outside this"
+    err "script's control did it. Raw response:"
+    printf '%s\n' "$OWNED_NUMBERS" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$OWNED_NUMBERS"
+    err "STOP -- tell Marco before proceeding. Do not treat this as a script bug to silently work around."
+    exit 1
+  fi
+fi
 
 if [[ "$TEARDOWN_OK" != "1" ]]; then
   _clear
