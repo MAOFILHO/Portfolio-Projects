@@ -527,3 +527,52 @@ as fallback) — 705 turned out to be the one that's actually live, while the or
 fallback (Guelph) evaporated during this same session. `docs/PLAN.md` decision 13 updated accordingly.
 **Not yet purchased** — Stage 9 has not run; a fresh `Search Available Phone Numbers` call is required
 immediately before it does, per the volatility finding above.
+
+## ACS Canadian phone number inventory is genuinely volatile, not just thin (R-05/R-09), 2026-08-20
+
+Standalone write-up — the raw queries live in "R-05" and "R-05 supplemental" above; this consolidates
+what they show into one finding, because it's a real operational characteristic of the platform, not
+documented anywhere Microsoft publishes, and it drove a hard rule (R-09, `docs/PLAN.md`).
+
+**What was measured, not assumed:**
+
+| Check | Time | Result |
+|---|---|---|
+| `List Localities`, all Canada, unfiltered | Stage 8, first pass | 10 localities: Brockville, Guelph, North Bay, Sault Sainte Marie, Thunder Bay (ON); Chicoutimi, Montreal, Thetford Mines (QC); Biggar, Lanigan (SK) |
+| `List Area Codes`, `locality=Guelph` | Stage 8, first pass | `200`, `areaCode: 226` |
+| `List Area Codes`, `locality=Guelph` | ~20 min later, retried 3x | `404 NotFound`, every attempt |
+| `List Localities`, all Canada, unfiltered | ~20 min later | 8 localities: Guelph **and** Biggar both gone; the other 8 unchanged |
+
+**Why this isn't a query bug, an auth issue, or a fluke:**
+- Retried the failing query 3 separate times, 2 seconds apart — consistent `404` every time, not
+  intermittent.
+- Ran a control query against a locality that *did* still return results (Brockville, North Bay,
+  Sault Sainte Marie, Thunder Bay all returned clean `200`s with real area codes in the same window) —
+  proves the endpoint, token, and query shape all still work correctly; the absence is data, not error.
+- The unfiltered, whole-country locality dump (no `locality`/`administrativeDivision` filter at all)
+  independently corroborates the drop — not just one filtered query changing behavior, the actual
+  inventory list shrank.
+
+**What this means in practice, beyond the Toronto/705 decision it drove:**
+1. A `200` from `List Area Codes` or `List Localities` is a point-in-time snapshot with **no stated
+   TTL** anywhere in Microsoft's documentation — it is not a purchase guarantee, and the gap between
+   "confirmed available" and "gone" was observed to be as short as ~20 minutes in this project's own
+   usage, not a hypothetical edge case.
+2. Canada's ACS geographic-number inventory is **thin in absolute terms** (single digits to low tens
+   of localities nationwide, not hundreds) *and* **actively changing**, which is a materially different
+   risk profile than "thin but stable." A capacity-planning assumption based on one inventory check
+   would already be stale by the time a second engineer reads it.
+3. This has no documented explanation from Microsoft (not a rate limit, not a permissions scope, not
+   an API version issue — all ruled out above). The most likely explanation is real-time competition
+   for a small shared pool of numbers across all ACS customers purchasing in the same localities, but
+   that's inference, not confirmed — stated as inference, not fact.
+4. **Operational consequence, now a hard rule (R-09, `docs/PLAN.md`; also a `CLAUDE.md` stop
+   condition)**: any number this project owns is treated as irreplaceable once purchased. No teardown
+   script may ever release it, and every purchase-adjacent script must re-verify actual inventory
+   (`Search Available Phone Numbers`, not `List Area Codes`/`List Localities` — those only prove a
+   *locality* is server-side recognized, not that a number is currently reservable) immediately before
+   acting, never from an earlier check in the same session.
+
+This is the kind of platform behavior that only surfaces from actually operating against live ACS
+inventory across a working session, not from reading Microsoft's docs or pricing pages — worth keeping
+in the Phase 8 write-up as evidence of hands-on platform experience, not just planning.
