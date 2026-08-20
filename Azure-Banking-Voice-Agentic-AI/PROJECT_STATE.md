@@ -10,11 +10,20 @@ move the oldest closed material out to `docs/phase0/` first if an addition would
 through `docs/phase0/wizard/01-provision.sh` one stage at a time, stopping at each — Marco's explicit
 preference this phase, not a default to assume carries to later phases.
 
-**Stage reached: 3 of 12** (the hard gate itself, now passed). Stages 1–2 (pre-flight, R-01) done —
-read-only, nothing created. **Nothing billable exists in Azure yet** except `Microsoft.Communication`
-provider registration, which Marco triggered himself outside any session, currently `Registering`.
+**Stage reached: 4 of 12, confirmed complete via live check 2026-08-20** (not just the doc's prior
+`Registering` snapshot — `az provider show` now returns `registrationState: Registered`). Stages 1–3
+(pre-flight, R-01, the hard gate) done — read-only, nothing created. **Nothing billable exists in
+Azure yet** — resource group `rg-azure-banking-voice-agentic-ai` confirmed absent via live check.
 
-**Next action**: Stage 4 — register `Microsoft.Communication` (free, idempotent if already registering).
+**Previous session ended without committing two fixes** (found uncommitted in the working tree on
+resume, matched their own in-code comments dated 2026-08-20): 01-provision.sh's `PROVISION_TIME` write
+moved from Stage 1 to Stage 12 (correct R-04 anchor), and 02-test-calls.sh's `on_error` upgraded to
+match 01's report-and-offer-cleanup shape instead of remind-only. Both reviewed and committed this
+session (`2e3678a`, `4711c70`). Lesson generalized into `CLAUDE.md` as a standing resume-verification
+rule — see there.
+
+**Next action**: Stages 5–7 — resource group, Azure OpenAI resource, R-06 DataZone probe, real
+`gpt-realtime-mini` 2025-10-06 deployment.
 
 ## Open items
 

@@ -1,5 +1,10 @@
 # CLAUDE.md — Azure-Banking-Voice-Agentic-AI
 
+**Canonical project path**: `/Users/marco/K21/Real-world/Azure-Banking-Voice-Agentic-AI`, inside the
+`Portfolio-Projects` monorepo (`git@github.com:MAOFILHO/Portfolio-Projects.git`), branch
+`azure-banking-voice-agentic-ai`. Recorded here because a session started from an unrelated directory
+has no other way to find it — added 2026-08-20 after exactly that happened.
+
 ### STOP CONDITIONS — absolute, no exceptions
 
 - No phase begins without written exit criteria from the prior phase and Marco's explicit approval.
@@ -65,6 +70,17 @@ biggest token cost. Check the file's size before every edit; if an addition woul
 ceiling, move the oldest closed material out to `docs/phaseN/` first, in the same commit.
 
 ---
+
+## Resume discipline
+
+**On resuming any session, verify live Azure state before acting on `PROJECT_STATE.md`.** At minimum:
+resource-provider registration state, resource-group existence, and any resources the doc claims
+exist. `PROJECT_STATE.md` is a snapshot and goes stale between sessions (a registration can finish, a
+manual action can happen outside any session) — the API is truth, the doc is not. Report any
+disagreement between the two rather than silently trusting either one and proceeding. Added 2026-08-20
+after a resume found `Microsoft.Communication` already `Registered` while the doc still said
+`Registering`, and separately found two real fixes sitting uncommitted in the working tree from a
+session that ended without closing them out.
 
 ## Hard exclusions
 
