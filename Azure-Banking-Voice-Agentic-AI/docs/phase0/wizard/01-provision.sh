@@ -304,7 +304,10 @@ write_env "RESOURCE_GROUP" "$RESOURCE_GROUP"
 write_env "LOCATION" "$LOCATION"
 write_env "CONTAINERAPP_NAME" "$CONTAINERAPP_NAME"
 write_env "CAE_NAME" "$CAE_NAME"
-write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# PROVISION_TIME is deliberately NOT written here. 04-teardown-and-r08.sh uses it to anchor R-04's
+# 72h idle-billing observation window, and the Container App this measures doesn't exist until
+# Stage 12 below -- writing it this early would understate the window by however long Stages 4-11
+# take. Written at Stage 12 instead, right after the container passes its health check.
 
 # ── Stage 2: R-01 — Models API deprecationDate check (free, read-only) ─────
 stage "R-01 — verify gpt-realtime-mini retirement dates via the Models API"
@@ -915,6 +918,9 @@ if [[ "$HEALTHY" != "1" ]]; then
   on_error 1
 fi
 ok "container is healthy (/healthz responding) — safe to wire Event Grid to it"
+write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+note "PROVISION_TIME written now, not at Stage 1 -- this is when the billable Container App this"
+note "value anchors (R-04's 72h window in 04-teardown-and-r08.sh) actually started existing."
 
 say "Wiring the Event Grid subscription so ACS's IncomingCall event reaches the app."
 az eventgrid event-subscription create \
