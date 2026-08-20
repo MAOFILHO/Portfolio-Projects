@@ -526,21 +526,45 @@ else
   ok "ACS resource $ACS_NAME created"
 fi
 
-warn "VERIFY: List Area Codes path/api-version below against the current Communication Services REST"
-warn "reference — phone-number APIs have moved api-versions before and this one was not re-verified"
-warn "live for this wizard."
-
+# api-version corrected 2026-08-20: 2022-01-11-preview2 returned a live 400 UnsupportedApiVersion.
+# Verified current GA version against the Microsoft Learn REST reference (List Area Codes,
+# rest-communication-phonenumbers-2025-06-01) rather than re-guessing — query parameters unchanged,
+# only the version string moved. Re-verify this again if it ever 400s the same way; api-versions here
+# have moved before and will again.
+ACS_API_VERSION="2025-06-01"
 ACS_TOKEN=$(az account get-access-token --resource "https://communication.azure.com" --query accessToken -o tsv)
+ACS_HOST="${ACS_NAME}.canada.communication.azure.com"
+
 AREA_CODES_JSON=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/areaCodes?api-version=2022-01-11-preview2&phoneNumberType=geographic&assignmentType=application&locality=Toronto&administrativeDivision=ON")
+  "https://${ACS_HOST}/availablePhoneNumbers/countries/CA/areaCodes?api-version=${ACS_API_VERSION}&phoneNumberType=geographic&assignmentType=application&locality=Toronto&administrativeDivision=ON")
 
 say "Area codes returned for locality=Toronto, administrativeDivision=ON:"
 printf '%s\n' "$AREA_CODES_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$AREA_CODES_JSON"
+
+# A 404 here means the locality itself isn't in ACS's inventory (confirmed live 2026-08-20: Toronto is
+# absent from the entire country-wide locality list, not just filtered out for ON) -- not necessarily
+# that codes are all taken. Pull the real locality list too, every time, so a "no results" reading
+# never gets mistaken for "sold out" without the operator seeing what actually IS available.
+if printf '%s' "$AREA_CODES_JSON" | grep -q '"NotFound"'; then
+  warn "No area codes for locality=Toronto — pulling the real available-locality list instead of guessing why."
+fi
+LOCALITIES_JSON=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+  "https://${ACS_HOST}/availablePhoneNumbers/countries/CA/localities?api-version=${ACS_API_VERSION}&maxPageSize=100")
+say "All Canada-wide geographic localities currently in ACS's inventory (unfiltered):"
+printf '%s\n' "$LOCALITIES_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$LOCALITIES_JSON"
+
 {
   echo "## R-05 — live Toronto-area area-code inventory"
   echo ""
+  echo "Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,"
+  echo "assignmentType=application, api-version=${ACS_API_VERSION}"
   echo '```json'
   printf '%s\n' "$AREA_CODES_JSON"
+  echo '```'
+  echo ""
+  echo "All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):"
+  echo '```json'
+  printf '%s\n' "$LOCALITIES_JSON"
   echo '```'
   echo ""
 } >> "$FINDINGS_FILE"
