@@ -11018,3 +11018,100 @@ C1 status: unchanged, not touched -- no deployed code changed.
 Blocked on: the deployed-runtime proof (Run 3) or an explicit accept-risk decision, per criterion 4's row -- Marco's, not attempted here.
 Last apply + gate result: none -- no AWS calls, no Terraform touched. Real spend: $0.00.
 ```
+
+---
+
+## 96. Phase 11 criterion 4 -- Run 3 scoped, found structurally unbuildable against this code as written, accept-risk taken (option (b)); `e7763ff` deployed; each closing link verified mechanically; criterion CLOSED
+
+**Scoping, before any AWS call.** `terraform plan` against `stacks/main` (allow-listed, read-only) confirmed the deploy's blast radius: `0 to add, 2 to change, 0 to destroy` -- `aws_lambda_function.codehook.source_code_hash` the one real change, `aws_s3_object.codehook_deps_layer`'s etag the pre-existing `OI3` phantom (content-independent, unrelated, `RESULTS.md` §27). No `replace_triggered_by`/`lifecycle` block anywhere in `lambda.tf` -- grepped, zero matches -- so nothing else is pulled in. `terraform apply` itself is hard-denied in `.claude/settings.json`, same as every prior Phase 11 apply -- Marco's terminal, as always.
+
+**Run 3, designed then found unbuildable as specified.** The design: real-shaped phone text through the deployed filter, read back from CloudWatch Logs, distinct from `OI2` (attachment only). Before building a harness around it, swept every logging call site reachable from the deployed Lambda (`grep` across `src/fnol_voice_agent/` for `logger\.(info|debug|warning|error)\(` and `logging\.getLogger\(.*\)\.(info|...)\(`): `escalating contact %s...` (x2, structured fields only -- `contact_id`/`triggering_layer`/`route`/`escalation_reason`), `guardrail_usage %s` (JSON metrics, no free text), four `D83` timing diagnostics (elapsed-time floats only), `pii_log_filter_installed handlers=%d` (`OI2`'s own line), `logger.exception("codehook failed")` (`exc_info`, the already-disclosed, still-open, higher-risk gap). **None of these ever carries a caller-supplied phone number or any free-text slot/turn_input value.** This matches `RESULTS.md` §23's own residual #1 read to its logical end: there is no reachable invoke, real or synthetic, that would ever write "416-987-1547" to a log line this filter's target handler processes. Not an effort or cost problem -- there is no event to construct.
+
+**Two paths scoped, not picked unilaterally** (same discipline as §25): (a) add a new log call that actually emits real slot/turn_input text, making the literal Run 3 buildable at the cost of reopening §23's own declined trade and a fresh TDD cycle + apply + `C1` re-verification (~$0.10); (b) accept that the deployed-runtime *content* proof cannot be obtained without (a), close on the local proof (Run 1) + attachment proof (`OI2`) + a **new, mechanical** confirmation that the exact fixed code is what the deploy mechanism ships, and name the residual as a permanent, unprovable-by-construction property rather than a pending gap.
+
+**Marco took (b)**, with one addition: make the "identical code" link mechanical rather than inferred. Reasoning for declining (a), recorded per instruction so it isn't re-proposed as an oversight in a future session: shipping a raw-PII log call to production exists for exactly one purpose -- manufacturing a proof artifact -- and the cost isn't the ~$0.10 re-verification, it's a permanent new exposure surface in a system that currently has none. `RESULTS.md` §23 already weighed this trade once and declined it; the absence of any PII-logging call site is a property this build is *supposed* to have, not a testing inconvenience.
+
+### Deploy
+
+`APPROVED: Phase 11` (Marco, this entry, scoped explicitly to the `stacks/main` apply and the `C1` re-verification it requires, ~$0.10). Plan regenerated fresh immediately before handoff (not reused from the earlier scoping check) -- identical shape, confirming no drift: `0 to add, 2 to change, 0 to destroy`, saved to `infra/terraform/stacks/main/phase11_criterion4_phone_redaction.tfplan` (gitignored, `*.tfplan`). Marco ran `terraform apply "phase11_criterion4_phone_redaction.tfplan"` from his own terminal:
+
+```
+Apply complete! Resources: 0 added, 2 changed, 0 destroyed.
+```
+
+Matched the reviewed plan exactly -- `aws_lambda_function.codehook`'s `source_code_hash`, `aws_s3_object.codehook_deps_layer`'s `OI3` etag phantom, nothing else.
+
+### Link 1 -- artifact identity, made mechanical (Marco's addition to option (b))
+
+A hash match alone would prove the deployed artifact is byte-identical to the zip Terraform built locally -- it would not, by itself, read the pattern. Stated plainly per instruction, then closed the gap three independent ways rather than resting on one:
+
+1. **Hash comparison.** `git status --porcelain -- src/` clean, `e7763ff` the last commit touching `src/` -- the zip Terraform built came from that exact tree. Live `aws lambda get-function --function-name fnol-codehook`: `CodeSha256 MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJT8Sx8=`, identical to the `source_code_hash` the plan computed before the apply ran.
+2. **Independent third hash.** Downloaded the deployed package directly from its own `Code.Location` presigned URL (read-only `get-function` field, no separate download API/cost) and computed its SHA256 myself, not reusing AWS's or Terraform's reported value: `MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJT8Sx8=` -- same value, third computation, third source.
+3. **Direct content read.** Extracted `fnol_voice_agent/guardrails/pii.py` from that downloaded zip and diffed it byte-for-byte against the committed file (`diff`, exit 0, "files are identical", whole file -- not a line-level spot check). `PHONE_RE` read directly out of the extracted source at line 158: `PHONE_RE = re.compile(r"(?<!\w)(?:\(?[2-9]\d{2}\)?[-.\s]?)?[2-9]\d{2}[-.\s]?\d{4}\b")` -- the exact final, `/code-review`-hardened pattern, not the intermediate `[2-9]`-only fix.
+
+Scratch download deleted after the diff; nothing retained outside the repo.
+
+### Link 2/3 -- unchanged, cited not repeated
+
+Run 1 (§95, executable, real-shaped phone redaction proven locally) and `OI2` (§28, attachment proof, `pii_log_filter_installed handlers=1`) stand exactly as before -- neither re-run this entry, neither needed to be: nothing in this deploy touches either mechanism.
+
+### `verify-lambda-execution` -- 11/13, both failures pre-existing and unrelated
+
+```
+ok   FileAutoClaim first turn
+ok   CheckClaimStatus first turn
+ok   CoverageQuestion first turn
+ok   RentalTowingEntitlement first turn
+ok   UpdateContactInfo first turn
+ok   FallbackIntent (unclassifiable turn)
+ok   Raw-text L1 trigger (pre-graph, injury)
+ok   Raw-text L3 trigger (pre-graph, agent override, D74)
+ok   injuries_present confirmed True, no injury vocabulary (D79)
+ok   CheckClaimStatus fulfilled, identifier slot pre-filled (D87 regression)
+ok   UpdateContactInfo fulfilled, all four slots pre-filled (D87 regression)
+FAIL FileAutoClaim filed, all slots pre-filled (D87 closure, tightened)
+FAIL RentalTowingEntitlement fulfilled, entitlement+policy pre-filled (D87 closure, tightened)
+```
+
+Checked against `PROJECT_STATE.md` before attributing either failure to this deploy, rather than assuming: both failure messages name their own defect class in the assertion text, and both `D89` (`FileAutoClaim`, INPUT guardrail false-blocks the confirmation) and `D90` part 1 (`RentalTowingEntitlement`, zero-context router misroute) are already-filed, already-OPEN, dated 2026-08-16 -- weeks before this session's `pii.py` change existed. Neither mechanism (guardrail deny-topic config, router classification) is anywhere near a log-redaction regex. **Named, not chased**: this is 11/13, not the "10/13, three known" figure recorded at several earlier points in `RESULTS.md` -- the third historical failure (the `D90`-part-1/event-13 router-context item tied to the now-long-resolved `D97`/`OI14` guardrail-version outage) is absent from this run's fail list. Out of scope for criterion 4; `D89`/`D90` are tracked at `OI6`/`OI7` and this deploy leaves both exactly as they were.
+
+### `C1` composed-pipeline harness -- full three-tier accounting
+
+```
+DEPLOYED composed recall 1.0 (26, 26)
+contingency items used 0
+unstable items 0
+false escalations on the 17 negatives: 9
+Cost: lex $0.07125 + bedrock $0.026757 = $0.098007
+```
+
+- **Tier 1, composed recall**: 1.000 (26/26), 0 contingency, 0 unstable, no per-item divergence from `D52`'s local verdicts. 9/17 false escalations on the negatives matches every prior run of this instrument exactly (§0/§2/§11.6/§11.7/§25/§28/§32/§95's own predecessor runs) -- a consistency confirmation, not a new finding.
+- **Tier 2, build-hash artifact identity**: `CodeSha256 MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJT8Sx8=`, confirmed live via `get-function` immediately before this harness ran. `PROJECT_STATE.md` phase-status row 8 updated -- the prior current pointer, `/4FFnR9Q7...`, moves to the "prior builds" list.
+- **Tier 3, VCS reproducibility**: `git status --porcelain -- src/` clean, `e7763ff` the last commit touching `src/` -- checked against the whole tree `data.archive_file.codehook` packages, not only the one changed file. Reproducible from `main` as of `e7763ff`. Not a permanent property, same caveat as every prior instance of this claim.
+
+Baseline JSON: the canonical `evals/baselines/composed_pipeline_deployed_k3_lineE.json` was already archived under its own hash suffix from a prior session (`.4FFnR9Q7.json`, byte-diffed identical before this run) -- confirmed rather than assumed before overwriting. This run's own result additionally archived to `.MXFPM7wE.json` (hash's leading alnum run, specials stripped for a filename-safe suffix -- `D92`'s overwrite guard is still not built, this remains a manual step).
+
+### Residual, stated as the closing act, not a caveat tacked on
+
+No deployed invoke has ever produced a redacted PII log line, because no code path in this project logs one. **Unprovable by construction, not unproven for want of effort.** If a future code change introduces a log call carrying real caller-supplied text, this proof becomes both possible and necessary again -- not optional, because the filter's correctness would then be load-bearing against a real exposure.
+
+### Self-review (`REVIEW-CRITERIA.md` §1)
+
+1. *Opposite result possible?* Yes, at two points: the artifact-identity check could have found a hash mismatch (a stale deploy, a build-mechanism defect) -- it didn't, checked three independent ways rather than once; and `verify-lambda-execution` could have shown a NEW failure signature -- it didn't, both failures matched already-filed defects exactly, checked against `PROJECT_STATE.md` before concluding that rather than assumed.
+2. *Asserted-but-unchecked?* Caught before landing as a claim: the temptation to call the hash match alone sufficient, per Marco's own instruction to make the distinction explicit rather than let it pass unstated -- extended to a third independent hash plus a direct content read instead of stopping at one comparison.
+3. *Infra error scored as a result?* N/A -- no `invalid`-classified run this entry; `verify-lambda-execution`'s two FAILs are real, attributed, pre-existing defects, not instrument errors.
+4. *Cost below estimate?* No, effectively exact -- $0.098007 against the ~$0.10 approved figure.
+5. *Identical markers, different paths?* Yes -- three independent computations of the same SHA256 (Terraform's own `source_code_hash`, AWS's reported `CodeSha256`, my own re-hash of the downloaded zip) all agreeing is the strongest instance of this check this project has run for an artifact-identity claim.
+6. *Has this check ever failed for the right reason?* `verify-lambda-execution`'s FileAutoClaim/RentalTowingEntitlement events have -- they are `D89`/`D90`'s own discovery mechanism, cited already above as why this run's two FAILs are trusted as pre-existing rather than re-litigated from scratch.
+7. *Headline-number interpretation change?* Yes: criterion 4 moves from OPEN to CLOSED this entry -- the phase's one remaining gap at session start, all 9 criteria closed as of this entry.
+8. `C1` a tradeable term? No -- reported with all three tiers intact, per Marco's explicit instruction not to compress it to "C1 verified."
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 11 criterion 4 -- Run 3 scoped (terraform plan: 0 add/2 change/0 destroy, no replace_triggered_by, blast radius confirmed), found structurally unbuildable as specified (swept every logger.*/logging.getLogger(...).* call site in src/fnol_voice_agent/ -- none carries caller-supplied free text, so no reachable invoke would ever produce a real-shaped PII log line to test against). Option (a) (add a diagnostic PII-carrying log call) declined -- reasoning recorded: reopens §23's already-declined trade, a permanent exposure surface for a proof artifact. Option (b) taken: e7763ff deployed (0 added/2 changed/0 destroyed, matching plan exactly), each closing link verified mechanically -- artifact identity via three independent SHA256 computations (Terraform's plan, AWS's live CodeSha256, an independent re-hash of the downloaded package) plus a direct byte-for-byte diff of the extracted pii.py against the committed file, PHONE_RE read directly at line 158. verify-lambda-execution 11/13, both failures pre-existing (D89, D90 part 1), checked against PROJECT_STATE.md and confirmed unrelated. C1 re-verified 1.000 (26/26), full three-tier accounting (composed recall / build-hash identity / VCS reproducibility), $0.098007. Residual named as a permanent, unprovable-by-construction property, not a pending gap -- becomes both possible and necessary again if a future PII-carrying log call is ever added.
+Open defects: none new. D89/D90 (OI6/OI7) unchanged, confirmed unrelated to this deploy. D124/OI46/OI47 stay CLOSED on their local scope (§95); criterion 4 itself now CLOSED on the deployed half.
+C1 status: VERIFIED, 1.000 (26/26), build MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJT8Sx8=, reproducible from main as of e7763ff -- re-verified this entry, superseding the prior current build /4FFnR9Q7... (now a prior-build entry, PROJECT_STATE.md phase-status row 8).
+Blocked on: nothing -- criterion 4 CLOSED, this entry.
+Last apply + gate result: terraform apply "phase11_criterion4_phone_redaction.tfplan" -- SUCCESS (Marco's terminal), 0 added/2 changed/0 destroyed, clean. verify-lambda-execution 11/13 (2 known-open, unrelated). measure_composed_pipeline_deployed.py: 1.000 (26/26), $0.098007 real spend, logged COSTS.md.
+```
