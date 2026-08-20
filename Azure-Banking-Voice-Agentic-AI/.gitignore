@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+credentials
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Bicep / az deploy
+deployment_state.json
+*.local.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

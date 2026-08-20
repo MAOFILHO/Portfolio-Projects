@@ -93,6 +93,13 @@ Reintroducing any of them is a regression, not a fresh judgment call.
 
 ## Skill discipline
 
+**Marco invokes skills — Claude does not invoke them on its own initiative.** When a phase or situation
+calls for `/research`, `/wizard`, `/code-review`, or `/prototype` below, Claude's job is to say so
+plainly (name the skill and why it applies) and stop — not to reach for a `Skill` tool call itself. This
+is a deliberate override of the general default (elsewhere, calling a skill proactively is normal
+practice); here it exists because Phase 0's hard gates depend on a human decision point actually being a
+stop, not a pass-through Claude reasons its way around under time pressure.
+
 - **Main flow, per phase:** design → build → test → `/code-review` → exit-criteria check → commit →
   `/handoff` → `/clear`.
 - **`/research`** for any factual unknown — pricing, API shape, region/model availability,
