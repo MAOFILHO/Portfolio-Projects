@@ -314,3 +314,18 @@ checking the Foundry portal's Quota page directly once the Phase 0 AOAI deployme
 **Action for L3's eval design** (20 batched runs): pace new session-starts at ≤3/60s as safe insurance
 under the worst-case reading. Costs nothing — eval runs aren't latency-sensitive to a few seconds of
 pacing — and sidesteps the ambiguity rather than resolving it under time pressure later.
+
+## R-06 — DataZoneStandard deployment probe
+
+NOT OFFERED — confirmed empirically. Attempt failed with:
+ERROR: (InvalidResourceProperties) The specified SKU 'DataZoneStandard' of account deployment is not supported by the model 'gpt-realtime-mini' version: '2025-10-06'.
+Code: InvalidResourceProperties
+Message: The specified SKU 'DataZoneStandard' of account deployment is not supported by the model 'gpt-realtime-mini' version: '2025-10-06'.
+
+Queried 2026-08-20, resource aoai-azure-banking-voice-cc, resource group
+rg-azure-banking-voice-agentic-ai, location canadacentral. Matches docs/PLAN.md's prediction
+(availability tables list realtime under Global Standard only, zero rows under Data Zone Standard) —
+now confirmed by a live deployment attempt, not just the pricing/availability table reading. Settles
+R-06 for ADR-001: DataZoneStandard is not a fallback option for this model, full stop, error is
+explicit and unambiguous (SKU not supported for this model+version), not a quota or permission error
+that might resolve differently under other conditions.

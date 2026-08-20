@@ -10,10 +10,28 @@ move the oldest closed material out to `docs/phase0/` first if an addition would
 through `docs/phase0/wizard/01-provision.sh` one stage at a time, stopping at each — Marco's explicit
 preference this phase, not a default to assume carries to later phases.
 
-**Stage reached: 4 of 12, confirmed complete via live check 2026-08-20** (not just the doc's prior
-`Registering` snapshot — `az provider show` now returns `registrationState: Registered`). Stages 1–3
-(pre-flight, R-01, the hard gate) done — read-only, nothing created. **Nothing billable exists in
-Azure yet** — resource group `rg-azure-banking-voice-agentic-ai` confirmed absent via live check.
+**Stage reached: 7 of 12, this session, 2026-08-20.** Stages 1–4 (pre-flight, R-01, hard gate,
+provider registration) done. **First billable-capable resources now exist**: resource group
+`rg-azure-banking-voice-agentic-ai`, Azure OpenAI resource `aoai-azure-banking-voice-cc` (S0,
+consumption-only, $0/hr idle — per `COSTS.md`), and the real `gpt-realtime-mini` 2025-10-06
+`GlobalStandard` deployment, `deploymentState: Running`, `versionUpgradeOption: NoAutoUpgrade`
+confirmed (B3 satisfied). **Still nothing metered per-hour** — ACS resource, Container App, and phone
+number (Stages 8, 9, 12) don't exist yet.
+
+**R-06 resolved**: DataZoneStandard probe attempted and failed — `InvalidResourceProperties: SKU
+'DataZoneStandard' ... not supported by the model 'gpt-realtime-mini' version: '2025-10-06'`. Confirms
+`docs/PLAN.md`'s prediction empirically, not just from the pricing/availability tables. Full detail in
+`docs/phase0/findings.md`. Feeds ADR-001 (Stage 10, not yet written).
+
+**Wizard bug found and fixed live**: `01-provision.sh`'s Stage 7 called
+`az cognitiveservices account deployment update --version-upgrade-option NoAutoUpgrade`, but that
+subcommand doesn't exist on the installed CLI (azure-cli 2.87.0 — only create/delete/list/show). The
+script's `2>/dev/null || warn` fallback would have silently left the live deployment on
+`OnceNewDefaultVersionAvailable` (confirmed that's what create-time actually returns) while only
+telling you to go check the portal — a real B3 gap, not a hypothetical one. Fixed to use a direct ARM
+REST PATCH instead, applied unconditionally and hard-failing (not warning) if it doesn't stick.
+Committed `4dc5966`. This session's live deployment is confirmed corrected to `NoAutoUpgrade` via the
+same PATCH.
 
 **Previous session ended without committing two fixes** (found uncommitted in the working tree on
 resume, matched their own in-code comments dated 2026-08-20): 01-provision.sh's `PROVISION_TIME` write
@@ -22,8 +40,8 @@ match 01's report-and-offer-cleanup shape instead of remind-only. Both reviewed 
 session (`2e3678a`, `4711c70`). Lesson generalized into `CLAUDE.md` as a standing resume-verification
 rule — see there.
 
-**Next action**: Stages 5–7 — resource group, Azure OpenAI resource, R-06 DataZone probe, real
-`gpt-realtime-mini` 2025-10-06 deployment.
+**Next action**: Stage 8 — ACS resource + live Toronto-area code inventory (R-05). **Stopping before
+Stage 9 (number purchase) per Marco's explicit request — irreversible-ish, review needed first.**
 
 ## Open items
 
@@ -34,12 +52,13 @@ rule — see there.
    throwaway) stays on Docker Hub or moves to ACR with managed-identity pull — the latter matches
    Phase 7's "no keys" direction (`docs/PLAN.md` Phase 7) but costs a real, budgeted ~$5/mo. Don't let
    Docker Hub persist by default with nobody having chosen it.
-2. **Rate-limit meaning unresolved** — the Models API's per-deployment `rateLimits` field (`3
-   requests/60s` for the active pin) doesn't reconcile against Microsoft's documented subscription-level
-   Quota Tier table, which doesn't list `gpt-realtime-mini` by name at all. Strong circumstantial
-   evidence points to "request = new session", not "request = turn" (see `docs/phase0/findings.md`,
-   "Rate-limit interpretation"), but this is not confirmed by an exact documentation quote. Check the
-   Foundry portal's Quota page once the Phase 0 AOAI deployment exists (Stage 5–7) — cheap, ~30s.
+2. **Rate-limit meaning unresolved** — the Models API's per-deployment `rateLimits` field (`10
+   requests/60s` for the pinned 2025-10-06 deployment, confirmed live on the actual deployment this
+   session) doesn't reconcile against Microsoft's documented subscription-level Quota Tier table, which
+   doesn't list `gpt-realtime-mini` by name at all. Strong circumstantial evidence points to "request =
+   new session", not "request = turn" (see `docs/phase0/findings.md`, "Rate-limit interpretation"), but
+   this is not confirmed by an exact documentation quote. **Now actionable** — the AOAI deployment
+   exists; check the Foundry portal's Quota page directly, cheap, ~30s, still not done.
 3. **`gpt-realtime-1.5` successor path is untested** — named in B3 (`docs/PLAN.md` decision 14) but its
    session-config/event/tool-call shape has never actually been booted against anything. `T-B3-SUCCESSOR-BOOT`
    is recorded as a Phase 2 deliverable (skip-by-default L1 test) but does not exist as code yet — it
@@ -53,19 +72,18 @@ rule — see there.
 
 Still open, unresolved by anything measured yet: **R-02** (Pcm24KMono empirical behavior), **R-03**
 (DtmfData during active streaming), **R-04** (Container Apps idle-vs-active billing, 72h window),
-**R-05** (live Toronto-area area-code inventory), **R-06** (DataZoneStandard confirm/deny), **R-08**
-(demo-runs/month, computed from measured meters — the Phase 0→1 gate). **R-01 resolved** (2026-08-20,
-decision 14 revised). **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
+**R-05** (live Toronto-area area-code inventory), **R-08** (demo-runs/month, computed from measured
+meters — the Phase 0→1 gate). **R-01 resolved** (2026-08-20, decision 14 revised). **R-06 resolved**
+(2026-08-20, DataZoneStandard confirmed NOT OFFERED — see Current phase above and
+`docs/phase0/findings.md`). **R-07** is a standing fact (`spendingLimit: Off`), not something to
+resolve.
 
 ## Next actions (in order)
 
-1. Stage 4: register `Microsoft.Communication` (free).
-2. Stages 5–7: resource group, Azure OpenAI resource, R-06 DataZone probe, real `gpt-realtime-mini`
-   2025-10-06 deployment.
-3. Stage 8: ACS resource + live area-code inventory (R-05).
-4. Stage 9: **number purchase — irreversible-ish, ongoing $1/mo. Marco wants to review before this
+1. Stage 8: ACS resource + live area-code inventory (R-05).
+2. Stage 9: **number purchase — irreversible-ish, ongoing $1/mo. Marco wants to review before this
    specific stage runs, flagged separately from the general gate.**
-5. Stages 10–12: ADRs, echo app, Container App deploy.
-6. Script 2: 3 test calls (human-only — Marco dials).
-7. Script 3 (~24h later): Free Services portal check (open item 4), Cost Analysis sanity check.
-8. Script 4 (~72h after provisioning): R-04 verdict, R-08 computation, teardown compute (keep number).
+3. Stages 10–12: ADRs, echo app, Container App deploy.
+4. Script 2: 3 test calls (human-only — Marco dials).
+5. Script 3 (~24h later): Free Services portal check (open item 4), Cost Analysis sanity check.
+6. Script 4 (~72h after provisioning): R-04 verdict, R-08 computation, teardown compute (keep number).
