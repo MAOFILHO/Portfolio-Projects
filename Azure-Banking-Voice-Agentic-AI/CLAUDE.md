@@ -91,6 +91,12 @@ Reintroducing any of them is a regression, not a fresh judgment call.
 - **`/clear` at every phase boundary**, and only after `/handoff` has written a handoff doc under
   `docs/handoffs/` and the phase's work is committed. Never `/clear` with uncommitted work or an
   unwritten handoff outstanding.
+- **`/handoff` itself always writes to the OS temp directory, never into the repo** — that's the
+  skill's own fixed behavior (`~/.claude/skills/handoff/SKILL.md`: "Save to the temporary directory of
+  the user's OS"), not a mistake to fix per-invocation. macOS `/tmp` is periodically cleaned and gone on
+  reboot, so **every `/handoff` output must be copied to `docs/handoffs/` and committed before the
+  session ends** — this is the compensating step that actually makes "unwritten handoff outstanding"
+  above mean what it says. Added 2026-08-20 after a handoff nearly got lost this way.
 - **Never auto-accept a diff that provisions a billable resource, or that touches `dispatch/gate.py`
   (B1) or the DTMF/PIN path (B2).** Repeated from the stop conditions above deliberately — this is
   the one rule most likely to get skipped under time pressure.
