@@ -40,7 +40,7 @@ a judgment call.
 |---|---|---|---|
 | **B1** | **Auth Gate Integrity** — zero authenticated-only tool invocations reach the core-banking client while `session.auth_state != Authenticated` | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard + CI static check + Bicep |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist, keyed on **(deployment name, model version) together, not name alone** (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard (reads the live deployment's actual model version at boot, not config alone) + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
 | **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
 
@@ -56,6 +56,12 @@ API at every phase gate — its retirement date is a scheduled decision to revis
 something that gets discovered as a surprise partway through a later phase. If the active pin's
 retirement is under 2 months out at any gate and no better-runway GA option exists yet, that's a
 stop-and-ask before the phase proceeds, same as any other named constraint here.
+
+Phase 0 also found (2026-08-20) that the startup guard's original design checked deployment *name*
+only, not name+version — promoted to a hard Phase 2 requirement after R-01's own evidence showed one
+name can span multiple versions with different retirement dates and rate limits, which a name-only
+allowlist would not catch on a silent redeploy. See `docs/PLAN.md`'s B3 code block and
+`docs/phase0/findings.md` "B3 end-to-end check".
 
 ---
 
