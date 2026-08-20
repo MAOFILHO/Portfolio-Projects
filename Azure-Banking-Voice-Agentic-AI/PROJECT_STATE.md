@@ -10,12 +10,24 @@ move the oldest closed material out to `docs/phase0/` first if an addition would
 through `docs/phase0/wizard/01-provision.sh` one stage at a time, stopping at each — Marco's explicit
 preference this phase, not a default to assume carries to later phases.
 
-**Stage reached: 9 of 12, this session, 2026-08-20.** Resources that exist: resource group
+**Stage reached: 10 of 12, this session, 2026-08-20.** Resources that exist: resource group
 `rg-azure-banking-voice-agentic-ai`; Azure OpenAI resource `aoai-azure-banking-voice-cc` (S0, $0/hr
 idle) with `gpt-realtime-mini` 2025-10-06 `GlobalStandard` deployed (`NoAutoUpgrade` confirmed, B3
 satisfied); ACS resource `acs-azure-banking-voice` (`global`/`Canada`, $0/hr); **phone number
 `+17059100383`, purchased, $1.00/mo, the project's first genuinely billable resource** (Container App,
 Stage 12, is the next one that will bill just for existing — not created yet).
+
+**Stage 10 done: ADR-001 and ADR-002 written**, `docs/adr/`. ADR-001 (data residency) carries R-06's
+exact error string (SKU not supported, not a quota/permission error) and states the residency claim
+both ways deliberately — at-rest data provably Canadian, processing not guaranteed Canadian-only under
+Global deployment type — with an explicit instruction not to overstate either direction, and drops the
+unconfirmed "30 days" retention figure. ADR-002 (geography knobs) closed the original `dataLocation`
+question (no coupling to number purchase, confirmed) but is written around the finding that mattered
+more: ACS's Canadian geographic inventory is 10 localities nationwide with no Toronto/GTA presence at
+all, and volatile on a ~20min timescale (10→8, Guelph vanished) — the actual cause of decision 13's
+revision and R-09. Written as a platform finding for the Phase 8 write-up, not an apology for a changed
+plan. `01-provision.sh`'s Stage 10 heredoc corrected to match (was templating a thinner/stale version of
+both ADRs) — committed with the ADRs.
 
 **R-09 added: number irreplaceability, now a hard stop condition.** ACS's Canadian geographic inventory
 proved volatile enough this session (10→8 nationwide localities, one gone in ~20min) that a lost number
@@ -49,9 +61,9 @@ Verified every commit this session touches only `Azure-Banking-Voice-Agentic-AI/
 worktree separation agreed with Marco, deliberately deferred to after Phase 0 completes — see open
 items.
 
-**Next action**: Stage 10+ (ADRs, echo app, Container App deploy). **Stopped here per explicit
-request** — Marco wants to confirm the first billable resource (the number, above) is exactly as
-expected before anything else runs.
+**Next action**: Stage 11 (minimal echo WebSocket app) and Stage 12 (build/push/deploy to Container
+Apps). **Stopped here per explicit request** — Stage 12 starts the hourly meter and the 72h R-04 idle
+window; Marco wants to review before that clock starts.
 
 ## Open items
 
@@ -97,13 +109,12 @@ Current phase above. **R-07** is a standing fact (`spendingLimit: Off`), not som
 
 ## Next actions (in order)
 
-1. Stage 10: write ADR-001 (data residency) and ADR-002 (geography knobs), using R-05/R-06 findings.
-2. Stage 11: minimal echo WebSocket app.
-3. Stage 12: build, push (Docker Hub — open item 1), deploy to Container Apps. **This is the next
+1. Stage 11: minimal echo WebSocket app.
+2. Stage 12: build, push (Docker Hub — open item 1), deploy to Container Apps. **This is the next
    billable-per-hour resource** — state its rate from `COSTS.md` before it runs, per the standing gate.
-4. Script 2: 3 test calls (human-only — Marco dials).
-5. Script 3 (~24h later): Free Services portal check (open item 4), Cost Analysis sanity check —
+3. Script 2: 3 test calls (human-only — Marco dials).
+4. Script 3 (~24h later): Free Services portal check (open item 4), Cost Analysis sanity check —
    including confirming the number's actual first bill date and amount, per the "not confirmed" note
    in `COSTS.md`.
-6. Script 4 (~72h after provisioning): R-04 verdict, R-08 computation, teardown compute (keep number,
+5. Script 4 (~72h after provisioning): R-04 verdict, R-08 computation, teardown compute (keep number,
    per R-09 — never released).
