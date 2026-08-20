@@ -90,3 +90,26 @@ would roughly double this project's per-minute floor (model cost portion goes fr
 ~$0.029/min at the same token-rate assumptions), materially cutting R-08's demo-runs/month figure.
 Not adopted now for exactly that reason — recorded here so a future phase-gate reviewer sees the
 trade-off already quantified, not something to re-derive.
+
+## Pre-spend cost estimate — before any Stage 4+ resource is created (2026-08-20)
+
+Every figure below is `docs/PLAN.md`'s Budget section estimate, restated as an hourly-equivalent for
+the gate check before provisioning starts. These are estimates, not measurements — Phase 0's own job
+is to replace them with real Cost Analysis numbers (see the sections above and below). Nothing here
+should be read as already measured.
+
+| What Stage 3+ creates | Fixed/idle rate | Hourly-equivalent | Starts billing at |
+|---|---|---|---|
+| Phone number (Stage 9) | $1.00/mo | ~$0.00137/hr | purchase — the one resource kept past teardown |
+| Azure OpenAI resource + deployment (Stages 5–7) | $0 fixed | $0/hr while idle | consumption-only; only bills per token actually processed |
+| ACS resource (Stage 8) | $0 fixed | $0/hr while idle | consumption-only; only bills per PSTN minute / streaming minute actually used |
+| Container App, min-replicas=1, 0.25 vCPU/0.5GiB (Stage 12) | $4.29/mo idle – $14.31/mo active | ~$0.00588/hr – ~$0.0196/hr | from creation — this is the one resource that bills just for existing, R-04 is what determines which end of the range applies |
+
+**Per-minute, only while an actual call is connected** (not an hourly rate — stated separately so it
+isn't conflated with the idle rates above): $0.0215/min floor – $0.031/min realistic (PSTN + ACS
+streaming + model tokens). Applies only during the 3 test calls in script 2, not during provisioning.
+
+**Worst-case all-in hourly rate while Phase 0's resources sit idle between test calls**: ~$0.0196/hr
+(Container App active-state ceiling) + ~$0.00137/hr (number) ≈ **$0.021/hr, ~$0.50/day** — this is the
+number that matters for "how much does leaving this running overnight cost," not the per-minute call
+rate.
