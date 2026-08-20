@@ -51,6 +51,26 @@ set -a; source "$ENV_FILE"; set +a
 
 FINDINGS_FILE="$SCRIPT_DIR/../findings.md"
 
+# on_error — this script doesn't provision or delete anything, so unlike 01's trap there's nothing
+# to offer to clean up. What there is: a Container App that's been running and billing since 01
+# finished, and a failure here (a bad `date` parse, a log-pull that errors, you closing the terminal
+# mid-stage) would otherwise just die silently with no reminder of that. This exists purely to say so.
+on_error() {
+  local exit_code="${1:-$?}"
+  _clear
+  printf '\n%s%s  ✗ 02-test-calls.sh failed at stage %s/%s (exit %s)%s\n\n' \
+    "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
+  warn "The Container App ($CONTAINERAPP_NAME) is still running and still billing — this script"
+  warn "only reads from it, it never started or stopped anything. That's expected and fine to leave"
+  warn "running while you fix whatever broke and re-run this script."
+  note "If you want to stop it early instead of finishing the test calls, run:"
+  note "  az containerapp delete --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --yes"
+  note "(04-teardown-and-r08.sh does this properly, with verification — this is the manual escape"
+  note "hatch, not a substitute for it.)"
+  exit "$exit_code"
+}
+trap 'on_error $?' ERR
+
 TOTAL_STAGES=4
 banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 2/4: Test calls"
 
