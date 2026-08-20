@@ -446,3 +446,84 @@ Canadian geographic locality from the 10 available (none are Toronto-area — ne
 geographic, (c) re-check at purchase time in case ACS's Canadian geographic inventory has changed
 (unlikely to shift quickly, but not verified as static). No option chosen or acted on — Stage 9 (number
 purchase) has not run.
+
+## R-05 supplemental — decision 13 revision, live purchasable number, inventory volatility, 2026-08-20
+
+**Barrie/705 checked, per Marco's request.** `locality=Barrie, administrativeDivision=ON` → `404
+NotFound`, same as Toronto. "Barrie" is not an ACS-recognized locality name (consistent with it not
+appearing in the earlier full 10-locality nationwide dump). **But the 705 area code itself is live** —
+reachable via `locality=North Bay` or `locality=Sault Sainte Marie` (both ON, both returned `areaCode:
+705`). Area code, not city name, is what determines the number's dial-in prefix; North Bay/Sault Ste
+Marie share the 705 numbering plan area with Barrie.
+
+**Guelph disappeared from the inventory between two checks in this same session** — a genuine
+volatility finding, not a query artifact:
+- First check (Stage 8, earlier this session): `locality=Guelph` → `200`, `areaCode: 226`. Full
+  nationwide dump: 10 localities, Guelph included.
+- Second check (~20 minutes later, same query, retried 3x to rule out a fluke): `locality=Guelph` →
+  `404 NotFound`, all 3 attempts. Full nationwide dump re-run: **8 localities**, Guelph and Biggar both
+  gone (`Brockville, North Bay, Sault Sainte Marie, Thunder Bay` [ON], `Chicoutimi, Montreal, Thetford
+  Mines` [QC], `Lanigan` [SK]).
+- **Consequence**: a `List Area Codes`/`List Localities` 200 response is a point-in-time snapshot, not
+  a purchase guarantee — confirmed empirically, not just as a theoretical caveat. Any purchase must
+  re-verify with `Search Available Phone Numbers` immediately beforehand, not rely on an
+  earlier-in-session check, however recent.
+
+**Actual purchasable-number check, per Marco's explicit request** (a locality/area-code 200 is not the
+same as confirmed inventory) — used `Search Available Phone Numbers`
+(`POST .../availablePhoneNumbers/countries/CA/:search?api-version=2025-06-01`, current GA version,
+confirmed via the `api-supported-versions` response header). Request:
+```json
+{
+  "phoneNumberType": "geographic",
+  "assignmentType": "application",
+  "capabilities": {"calling": "inbound", "sms": "none"},
+  "areaCode": "705",
+  "quantity": 1
+}
+```
+Result (polled from the `Location` header after `202 Accepted`):
+```json
+{
+  "searchId": "6ee7c101-2c3d-490a-8b15-0f5f4c38c485",
+  "phoneNumbers": ["+17054829832"],
+  "phoneNumberType": "geographic",
+  "assignmentType": "application",
+  "capabilities": {"calling": "inbound", "sms": "none"},
+  "cost": {"amount": 1.0, "currencyCode": "USD", "billingFrequency": "monthly"},
+  "searchExpiresBy": "2026-08-20T21:42:44.5980893+00:00",
+  "isAgreementToNotResellRequired": false,
+  "error": "NoError"
+}
+```
+Confirmed real, purchasable, correctly capabilitied (inbound-only, no SMS, matching decision 17's
+scope), $1.00/mo — matches `COSTS.md`. This search hold itself is non-billable and expires in <15min
+(per Microsoft's documented behavior) — it does not commit to a purchase; nothing has been bought.
+**This specific searchId will very likely be expired by the time Stage 9 actually runs — a fresh
+search is required at purchase time regardless, same discipline as the Toronto re-check below.**
+
+**Toronto re-checked once more, as requested** (in case inventory had shifted by the time of this
+supplemental check): still `404 NotFound`. No change — did not need to stop and flag.
+
+**Per-minute inbound rate — confirmed unaffected by locality choice.** Checked whether Canada PSTN
+pricing varies by region/area code (relevant since the number moved from a hypothetical Toronto
+listing to a confirmed North Bay one). Microsoft's own PSTN pricing doc
+(`articles/communication-services/concepts/pstn-pricing.md`) states a single national table for
+Canada, no regional/city/area-code breakdown:
+
+| Number type | Lease | Inbound | Outbound (starting at) |
+|---|---|---|---|
+| Geographic | $1.00/mo | $0.0085/min | $0.0130/min |
+| Toll-free | $2.00/mo | $0.0220/min | $0.0130/min |
+
+Confirms `COSTS.md`'s existing $0.0085/min figure is unchanged for a 705 number — **no COSTS.md edit
+needed, no R-08 recomputation triggered**, since the input that feeds R-08 didn't move. Also confirms
+the toll-free rejection reasoning in decision 13: 2.6x the inbound per-minute rate, 2x the monthly
+lease — both real costs against R-08's already-tight budget, not toll-free's often-cited "free to
+caller" upside (irrelevant here — the caller is Marco's own mobile, not a cost-sensitive third party).
+
+**Decision: proceed with 705 (North Bay, ON)**, per Marco's own stated conditional (705 first, Guelph
+as fallback) — 705 turned out to be the one that's actually live, while the originally-planned
+fallback (Guelph) evaporated during this same session. `docs/PLAN.md` decision 13 updated accordingly.
+**Not yet purchased** — Stage 9 has not run; a fresh `Search Available Phone Numbers` call is required
+immediately before it does, per the volatility finding above.
