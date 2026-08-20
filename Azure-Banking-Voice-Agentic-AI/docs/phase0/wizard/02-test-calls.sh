@@ -51,22 +51,39 @@ set -a; source "$ENV_FILE"; set +a
 
 FINDINGS_FILE="$SCRIPT_DIR/../findings.md"
 
-# on_error — this script doesn't provision or delete anything, so unlike 01's trap there's nothing
-# to offer to clean up. What there is: a Container App that's been running and billing since 01
-# finished, and a failure here (a bad `date` parse, a log-pull that errors, you closing the terminal
-# mid-stage) would otherwise just die silently with no reminder of that. This exists purely to say so.
+# on_error — this script doesn't provision anything itself, but by the time it runs the Container
+# App from 01-provision.sh is live and billing per-hour, same as 01's own trap guards against. A
+# failure here (a bad `date` parse, a log-pull that errors, you closing the terminal mid-stage)
+# would otherwise die silently with no reminder that compute is still running. Matches 01's
+# report-and-offer-cleanup shape rather than remind-only, upgraded 2026-08-20 — one keypress to stop
+# billing beats copying a command by hand.
 on_error() {
   local exit_code="${1:-$?}"
   _clear
   printf '\n%s%s  ✗ 02-test-calls.sh failed at stage %s/%s (exit %s)%s\n\n' \
     "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
-  warn "The Container App ($CONTAINERAPP_NAME) is still running and still billing — this script"
-  warn "only reads from it, it never started or stopped anything. That's expected and fine to leave"
-  warn "running while you fix whatever broke and re-run this script."
-  note "If you want to stop it early instead of finishing the test calls, run:"
-  note "  az containerapp delete --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --yes"
-  note "(04-teardown-and-r08.sh does this properly, with verification — this is the manual escape"
-  note "hatch, not a substitute for it.)"
+  say "Resources that exist in $RESOURCE_GROUP right now:"
+  az resource list --resource-group "$RESOURCE_GROUP" --output table 2>/dev/null \
+    || note "(resource group query failed — check manually before assuming nothing's billing)"
+  printf '\n'
+  if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+    warn "Container App $CONTAINERAPP_NAME exists and is billing right now."
+    warn "Deleting it now ends this test-call session — remaining calls can't be placed until"
+    warn "01-provision.sh is re-run to redeploy. Only delete if you're stopping for a while, not if"
+    warn "you're about to fix a small thing and immediately retry a call."
+    if confirm "Delete it now?"; then
+      az containerapp delete --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" --yes --output none 2>/dev/null || true
+      az containerapp env delete --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --yes --output none 2>/dev/null || true
+      ok "deleted — re-run 01-provision.sh from the top once you've fixed the cause above"
+    else
+      warn "left running — it is billing until you delete it or finish the test calls."
+      note "Manual escape hatch: az containerapp delete --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --yes"
+    fi
+  else
+    ok "no Container App exists — nothing here is billing beyond the number (by design)"
+  fi
+  note "04-teardown-and-r08.sh is still the proper verified teardown once Phase 0 completes — this"
+  note "is the mid-session escape hatch, not a substitute for it."
   exit "$exit_code"
 }
 trap 'on_error $?' ERR
