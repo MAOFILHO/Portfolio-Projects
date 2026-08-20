@@ -525,6 +525,34 @@ pause "Review the area codes above — you'll pick one in the next stage. Press 
 
 # ── Stage 9: purchase the number ─────────────────────────────────────────────
 stage "Purchase a Canada local geographic number"
+
+# Hard precondition: phone number purchase is a Microsoft.Communication data-plane operation and
+# fails if the provider hasn't finished registering yet. Stage 4 kicked registration off and polled
+# for up to 5 minutes, but registration can legitimately still be in flight past that window (it was
+# already "Registering" at Stage 1 before this script touched it, from outside this session) — so this
+# is checked again, right here, rather than trusted from Stage 4's earlier poll. Failing here with a
+# clear message beats the same failure surfacing as an opaque 4xx from the phone-number search API.
+say "Confirming Microsoft.Communication has actually reached Registered before attempting a purchase —"
+say "this failed opaquely from the phone-number API before this check existed."
+CURRENT_REG_STATE=$(az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv)
+if [[ "$CURRENT_REG_STATE" != "Registered" ]]; then
+  err "Microsoft.Communication is '$CURRENT_REG_STATE', not 'Registered' — a purchase attempt would"
+  err "fail here with a confusing API error instead. Waiting up to 3 more minutes, then stopping if it"
+  err "hasn't settled (registration can occasionally take longer than Stage 4's own poll window)."
+  for _ in $(seq 1 18); do
+    CURRENT_REG_STATE=$(az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv)
+    [[ "$CURRENT_REG_STATE" == "Registered" ]] && break
+    sleep 10
+  done
+  if [[ "$CURRENT_REG_STATE" != "Registered" ]]; then
+    err "still '$CURRENT_REG_STATE' — stopping rather than hitting an opaque error at the purchase call."
+    err "Check manually: az provider show --namespace Microsoft.Communication --query registrationState"
+    err "Re-run this script once it shows 'Registered'; everything before this stage is idempotent."
+    exit 1
+  fi
+fi
+ok "Microsoft.Communication is Registered — safe to purchase"
+
 say "\$1.00/mo, ongoing — this is the one resource that survives today's teardown, by design."
 ask AREA_CODE "Which area code from the list above do you want (e.g. 416, 647, 437, 905, 289)?"
 

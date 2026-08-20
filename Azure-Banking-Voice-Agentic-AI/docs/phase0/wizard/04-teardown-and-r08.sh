@@ -183,15 +183,20 @@ write_env "R08_GATE" "$R08_GATE"
 
 # ── Stage 4: finalize COSTS.md ───────────────────────────────────────────────
 stage "Write measured findings to COSTS.md"
+# Appended, never overwritten: COSTS.md may already carry earlier sections (e.g. the free-tier
+# promotion investigation, written before Phase 0 spending began) that this script has no business
+# clobbering. Only the top title/preamble is written if the file doesn't exist yet at all.
+if [[ ! -f "$COSTS_FILE" ]]; then
+  {
+    echo "# COSTS.md — Azure-Banking-Voice-Agentic-AI"
+    echo ""
+    echo "Phase 0 measured meters and related findings. Superseded by whatever \`make deploy\`'s later"
+    echo "phases add — this is the Phase 0 exit-gate evidence, not a running ledger yet."
+    echo ""
+  } > "$COSTS_FILE"
+fi
 {
-  echo "# COSTS.md — Azure-Banking-Voice-Agentic-AI"
-  echo ""
-  echo "Phase 0 measured meters. Superseded by whatever \`make deploy\`'s later phases add — this is"
-  echo "the Phase 0 exit-gate evidence, not a running ledger yet."
-  echo ""
-  echo "Generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by docs/phase0/wizard/04-teardown-and-r08.sh."
-  echo ""
-  echo "## Measured, not estimated"
+  echo "## Measured, not estimated (generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by docs/phase0/wizard/04-teardown-and-r08.sh)"
   echo ""
   echo "| Item | Plan estimate | Measured |"
   echo "|---|---|---|"
@@ -200,17 +205,22 @@ stage "Write measured findings to COSTS.md"
   echo "| Container Apps idle-vs-active (R-04) | undocumented, decision 15 assumed idle | **${R04_VERDICT}** |"
   echo "| Demo runs/month (R-08) | ~30-160 (naive, pre-eval-budget estimate) | **${R08_RUNS}** (gate: ${R08_GATE}) |"
   echo ""
-  echo "## Transport RTT baseline"
+  echo "If the free-tier promotion section above (or added by 03-cost-check-24h.sh) flagged any of these"
+  echo "meters as free-tier-covered, treat the \"Measured\" column with that caveat — see that section's"
+  echo "fallback (measured quantity × PLAN.md's list rate) before trusting these dollar figures."
+  echo ""
+  echo "### Transport RTT baseline"
   echo ""
   echo "See docs/phase0/findings.md \"R-02 / R-03 / RTT\" section — app-side processing-latency samples"
   echo "from 3 test calls (turns, not calls; not a turn-latency percentile — that needs Phase 2's"
   echo "RealtimeSession per B5)."
   echo ""
-  echo "## Full detail"
+  echo "### Full detail"
   echo ""
   echo "docs/phase0/findings.md has every raw query result this wizard captured (R-01, R-02, R-03, R-04,"
   echo "R-05, R-06, R-08) with timestamps."
-} > "$COSTS_FILE"
+  echo ""
+} >> "$COSTS_FILE"
 ok "wrote $COSTS_FILE"
 
 # ── Stage 5: teardown compute, keep the number ───────────────────────────────
