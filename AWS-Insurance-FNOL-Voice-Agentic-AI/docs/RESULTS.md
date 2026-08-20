@@ -11442,3 +11442,142 @@ C1 status: unchanged, not touched -- no application code changed this entry.
 Blocked on: nothing -- commit (a) retried next with the pathspec form per the newly adopted pattern, then (b) and (c) the same way.
 Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
 ```
+
+## 100. `D140`/`OI58` row 9 -- live deployed check scoped, not run: three-layer verification model, the deploy + `C1` re-verification it requires, and what (little) is read-only
+
+**Scoping only, per instruction -- nothing in this entry runs anything, deploys anything, or spends anything.**
+
+### Three layers, named explicitly so "the live check passed" can never later mean more than it does
+
+Row 9's own liveness text (`PROJECT_STATE.md` row 9) names the bar precisely: "real transfer signal --
+`sessionAttributes.escalate`/`escalation_reason` on the real Lex response -- at each of the three sites."
+That is one specific layer of a three-layer stack, and only one of the three is what row 9 is actually
+asking for:
+
+- **Layer 0 -- local graph state. DONE, 720/720, `RESULTS.md` §97/§98.** `tests/unit/test_graph_integration.py`,
+  `test_guardrails_nodes.py`, `test_update_contact_info.py` call `graph.invoke()` in-process and assert
+  `result.get("escalation")` is a real `EscalationRecord`. No Lex event is ever constructed, `_close()` and
+  `_respond_from_graph_result()` (`api/lex_codehook.py`) are never called, no Lambda, no AWS. This proves the
+  three fixed nodes produce the right *state*; it does not touch the wire format at all.
+- **Layer 1 -- the deployed Lambda's real Lex response. NOT DONE. This is row 9's actual bar.** The mapping
+  from `AgentState["escalation"]` to the wire signal is `_close(escalated=True, ...)` setting
+  `session_attributes["escalate"] = "true"` and `session_attributes["escalation_reason"]`
+  (`api/lex_codehook.py:326-328`) inside `sessionState.sessionAttributes` on the Lex response. That mapping
+  is exercised **today only by `lex_codehook.py`'s own unit tests, against a hand-built mock Lex `event`
+  dict** -- never a real Lex bot alias, real IAM role, real cold start, or the actual packaged Lambda zip.
+  Layer 0 proves the graph is right; Layer 1 proves the fix survives everything between the graph and a real
+  wire response. These are genuinely different claims and this entry keeps them separate on purpose.
+- **Layer 2 -- the actual Connect-level transfer. NOT DONE, NOT row 9's stated bar, named here so it is not
+  silently assumed once Layer 1 passes.** `infra/terraform/stacks/main/flows/fnol-inbound.json.tftpl` already
+  contains a `Compare` action on `$.Attributes.escalate` (`:92-94`) branching to a `TransferContactToQueue`
+  action (`:135`) -- confirmed present by reading the flow file directly, unrelated to and unaffected by this
+  session's `src/` change, already Terraform-applied. Proving that branch actually fires and a real caller
+  actually reaches a queue requires a real phone call through the DID and a Contact Trace Record / queue-metric
+  read -- that is row 15's territory (the live-call walkthrough), not row 9's. Naming it here purely so the
+  boundary is explicit: row 9 closing on Layer 1 is not the same claim as "a real call gets transferred."
+
+### What the Layer-1 harness would invoke, per site -- and why it is a new script, not a reuse
+
+`C1`'s existing harness (`scripts/measure_composed_pipeline_deployed.py`) drives **injury-language** turns
+against the live bot and measures escalation *recall* on the safety-trigger/classifier surface. None of the
+three `D140` sites are on that surface -- they are an INPUT-guardrail block, an OUTPUT-guardrail block, and a
+retry-ceiling exhaustion, all orthogonal to whether the caller said something injury-shaped. Reusing
+`measure_composed_pipeline_deployed.py` as-is would not touch any of the three sites. A new script is required
+-- named here as not existing yet, rather than assumed reusable, per this project's own standing discipline
+against overclaiming coverage from an artifact that was built for a different question (`D67`/`D69`'s lesson).
+
+Per site, real `lexv2-runtime.RecognizeText` calls, fresh `sessionId` each:
+
+1. **`agents/graph.py:96-102`, INPUT-guardrail block.** A caller turn already known to trip the live Bedrock
+   Guardrail's INPUT policy -- reuse a known-blocking turn from `D89`'s own probe corpus or
+   `redteam/attacks.py`'s denied-topic set, rather than inventing a new one and re-deriving whether it blocks.
+2. **`agents/nodes/guardrails_nodes.py:106-107`, OUTPUT-guardrail block.** Harder to trigger deterministically
+   -- needs a turn whose *generated* response gets blocked by the OUTPUT guardrail, the same
+   `[BLOCKED AT OUTPUT]` outcome `redteam/run.py`'s `RealSystemDefender._generation_path` already produces
+   against known payloads in `redteam/attacks.py`. Likely reuses one of those payloads rather than a fresh one.
+3. **`agents/nodes/update_contact_info.py:59-63`, `_CONFIRM_CEILING` exhausted.** A two-turn live conversation,
+   one `sessionId`: a mismatched/no-match confirmation, then a second, to exhaust `_CONFIRM_CEILING = 1`.
+
+**What it reads, to prove the claim and not a proxy for it:** each real `RecognizeText` response's
+`sessionState.sessionAttributes`, asserting `escalate == "true"` and `escalation_reason` present -- read
+directly off the wire response, no CloudWatch or DynamoDB correlation needed, exactly the design intent `D81`
+item 4 stated for this field (`api/lex_codehook.py:327`, "readable directly from the wire response"). A pass
+here is Layer 1's whole claim; it is not evidence for Layer 2.
+
+### Deploy requirement and `C1` re-verification -- not specific to these three files, a blanket project rule
+
+The three fixed files (`agents/graph.py`, `agents/nodes/guardrails_nodes.py`,
+`agents/nodes/update_contact_info.py`) are core application code inside `fnol-codehook`'s Lambda package --
+the same deployment unit `RESULTS.md` §24 (Stage C's `log_redaction.py` change) already moved. A `stacks/main`
+apply is required, changing `aws_lambda_function.codehook`'s `source_code_hash`/`CodeSha256`, plausibly with
+the same cosmetic `aws_s3_object.codehook_deps_layer` etag shift §24 saw (no new resource expected -- no new
+third-party dependency was added by this fix). **No `terraform plan` was run this entry, per instruction to
+scope only** -- real numbers need a real plan at apply time, not reused from §24's stale hashes (different
+code, different diff).
+
+**`C1` re-verification is mandatory the instant that apply lands**, per this project's own already-established
+rule (§24; reconfirmed at `RESULTS.md` "any `stacks/main` code change requires re-verifying `C1` against the
+new build") -- a consequence of `CodeSha256` changing at all, not something specific to these three sites'
+content. Reuses the existing harness and protocol unchanged: `scripts/measure_composed_pipeline_deployed.py`,
+26 `should_escalate=True` items, k=3 real calls each, +4 contingency (k=7) on any non-unanimous item, budgeted
+for up to 6 of 26. Last real run of this exact script cost $0.097668 (§24, 2026-08-14) -- same order of
+magnitude expected here, **not re-priced this entry**; this project's own standing rule is to re-verify
+pricing at run time rather than trust a remembered figure, and that applies to Lex/Bedrock rates same as AWS
+SKU prices.
+
+**The new Layer-1 three-site check is a separate cost line from `C1`**, different trigger surface entirely.
+Estimated at 3-5 real `RecognizeText`/turn calls total (one per site, two for site 3) at the same per-call cost
+order `C1`'s own run showed ($0.097668 / 95 calls ≈ $0.00103/call blended Lex+Bedrock) -- on the order of a few
+cents, stated as an estimate, not measured, and not yet built as a script to measure with.
+
+### Read-only determination -- almost none of the substantive claim can be, and the reason is structural
+
+**Nothing about the substantive claim can be established read-only against the currently-deployed build.** The
+live Lambda today is the pre-fix build -- that is `D140`'s own defect. A real call against it today would
+either not exercise these branches informatively, or would correctly demonstrate the bug is still live: a
+legitimate pre-deploy baseline/control (a real, remote RED state, the same evidentiary shape as this session's
+local RED reproduction for §97), but not progress toward *closing* row 9, which requires the fixed code to be
+the thing answering.
+
+**What can be established read-only, today, with zero deploy and zero spend:**
+1. The contact flow's own consumption mechanism -- confirmed above by reading `fnol-inbound.json.tftpl`
+   directly (`Compare $.Attributes.escalate` → `TransferContactToQueue`), already applied, untouched by this
+   change.
+2. The current pre-apply build's `CodeSha256` via a read-only `aws lambda get-function` call, to record the
+   "before" value the eventual apply transitions away from -- prep for making the `PENDING RE-VERIFICATION`
+   status transition legible (§24's own sequence step 1 pattern), not evidence toward the claim itself.
+
+Neither of these two proves any part of "the fixed sites set the wire signal live." That fact is unavoidable,
+not a gap in this scoping: the claim is inherently about code that is not yet deployed.
+
+### Proposed sequence, mirroring §24's own step-by-step + status-transition pattern
+
+1. Build the new Layer-1 three-site harness (does not exist yet).
+2. Real `terraform plan` against `stacks/main` with these three files' actual diff; cost table shown for
+   approval before any apply, per `CLAUDE.md`'s Cost Gate.
+3. Apply (`APPROVED: Phase 12` + explicit go) -- `C1`'s status flips to `PENDING RE-VERIFICATION (build
+   <new-hash>)` in `PROJECT_STATE.md` and every report header from that instant, not left reading the old
+   build for even one cycle.
+4. `make verify-lambda-execution` (read-only, CloudWatch Logs only, $0) -- confirm the new build executes at
+   all before trusting it for anything further.
+5. `C1` re-verification, full protocol, real spend logged to `COSTS.md` as it happens (~$0.10-0.13, per §24).
+6. The new Layer-1 three-site check, real spend logged (~$0.01-0.05, estimate).
+7. Row 9 closes only if `C1` = 1.000 (26/26) **and** all three sites' wire signal is confirmed. A result short
+   of either is a reported breach at that step, not smoothed into a partial close.
+
+**Row 9 remains OPEN. Not marked closed by this entry** -- this is scoping only, nothing above has run. Row 9
+gates row 15 exactly as before; `PROJECT_STATE.md` row 9 updated to cite this entry and restate the "NOT
+closed" status explicitly rather than leaving it implied.
+
+**Cost**: $0.00 -- reading source files and Terraform config only. No AWS calls, no Bedrock calls, no
+Terraform command run.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 row 9 -- live deployed check scoped, not run, per explicit instruction. Three-layer model named: Layer 0 (local graph state, DONE, 720/720) vs Layer 1 (deployed Lambda's real Lex response sessionAttributes, row 9's actual bar, NOT done) vs Layer 2 (real Connect-level transfer/CTR, NOT row 9's bar, row 15's territory, named so it isn't silently assumed once Layer 1 passes). Layer-1 harness does not exist yet (measure_composed_pipeline_deployed.py drives a different trigger surface, injury-language not guardrail-block/ceiling-exhaustion) -- would need building: 3 real RecognizeText/turn calls across the three sites, reading sessionState.sessionAttributes.escalate/escalation_reason off the wire. Deploy required (stacks/main, fnol-codehook CodeSha256 change, same deployment unit as §24) plus mandatory C1 re-verification (blanket project rule on any CodeSha256 change, not specific to these files) -- reuses measure_composed_pipeline_deployed.py's existing protocol, ~$0.10-0.13 per §24's last real run, not re-priced this entry. New Layer-1 check estimated a few cents, not measured. Read-only determination: nothing about the substantive claim is establishable read-only against the current (pre-fix) build -- structural, not a gap in the scoping; only the contact flow's already-applied consumption mechanism and the pre-apply build-identity baseline are read-only-checkable today.
+Open defects: unchanged this entry -- D140/OI58 row 9 stays OPEN (three sites fixed/verified locally, live deployed check outstanding); D141/OI59 stays OPEN, untriaged; OI60 stays OPEN, convention-only.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3... -- UNCHANGED, no apply this entry, no re-verification run. Will flip to PENDING RE-VERIFICATION the instant a stacks/main apply lands with these three files.
+Blocked on: building the Layer-1 harness; a real terraform plan against stacks/main with these three files' actual diff; APPROVED: Phase 12 plus explicit go for the apply; the C1 re-verification spend (~$0.10-0.13) and the new check's spend (~$0.01-0.05), both real AWS spend requiring explicit approval before they happen.
+Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
+```
