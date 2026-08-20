@@ -1,4 +1,4 @@
-.PHONY: ingest test lint format typecheck eval bootstrap verify-backend verify-inference \
+.PHONY: ingest test lint format typecheck eval redteam bootstrap verify-backend verify-inference \
         verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
         verify-project-root-scope verify-duplicate-identifiers install-hooks \
         deploy provision destroy teardown
@@ -7,6 +7,12 @@
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
 # in the phases that build what they need: nothing may be stubbed out and labeled "would work" before it
 # actually does (CLAUDE.md's own rule, applied to this file too).
+#
+# `redteam` was the one canonical name this policy's own comment had already listed (the line above,
+# unedited since before Phase 7) while `redteam/{run,suite,attacks}.py` sat genuinely functional and
+# unreachable by that name -- CLAUDE.md documented a command that never existed, and nothing caught it
+# until ADR-017 condition part 3 needed to run it. Filed as its own item, `D126`/`OI49`
+# (`PROJECT_STATE.md`), not folded into ADR-017's own scope.
 
 VENV := .venv/bin
 BOOTSTRAP_DIR := infra/terraform/bootstrap
@@ -140,14 +146,21 @@ verify-project-root-scope:
 verify-duplicate-identifiers:
 	@$(VENV)/python scripts/check_duplicate_identifiers.py
 
-# `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook itself
-# (scripts/git-hooks/pre-commit) is tracked and reviewable inside PROJECT_ROOT; this target is the only
-# place a write lands outside it, and only because a git hook cannot live anywhere else.
+# `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
+# installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not the local copy
+# this target used to install -- as of 2026-08-19 (Marco-approved, AskUserQuestion "Multi-project
+# dispatcher") git allows only one `.git/hooks/pre-commit`, and this project now shares that slot with
+# Azure-Banking-Voice-Agentic-AI (and any future project that registers itself in the dispatcher) instead
+# of each project's install-hooks silently overwriting the other's. The old local
+# scripts/git-hooks/pre-commit is removed; the dispatcher still calls this project's own
+# check_project_root_scope.py and check_duplicate_identifiers.py exactly as before, it just routes to
+# them from outside PROJECT_ROOT rather than duplicating them there. See the dispatcher's own header
+# comment for the full rationale.
 install-hooks:
 	@git_root=$$(git rev-parse --show-toplevel); \
-	cp scripts/git-hooks/pre-commit "$$git_root/.git/hooks/pre-commit"; \
+	cp "$$git_root/scripts/git-hooks/pre-commit" "$$git_root/.git/hooks/pre-commit"; \
 	chmod +x "$$git_root/.git/hooks/pre-commit"; \
-	echo "install-hooks: installed to $$git_root/.git/hooks/pre-commit"
+	echo "install-hooks: installed shared dispatcher to $$git_root/.git/hooks/pre-commit"
 
 # Read the deployed Lex release back from the service and compare it against what Terraform declared.
 #
@@ -195,6 +208,41 @@ ingest:
 # spend money by accident. Same posture as `ingest`: the free path is what you get for typing the name.
 eval:
 	$(VENV)/python -m evals.report $(ARGS)
+
+# Guardrail effectiveness report, real system: the live `BedrockGuardrailClient`, the shipped
+# classify_turn/lexicon/generation path -- no mock rule engine (redteam/suite.py's own docstring).
+# `CLAUDE.md` has documented this as a canonical command since before Phase 7; `redteam/{run,suite,
+# attacks}.py` have been genuinely functional since Phase 7 Stage 6 and this target did not exist until
+# `ADR-017` condition part 3 needed to run it -- `D126`/`OI49` (`PROJECT_STATE.md`) files that gap as its
+# own item, filed separately from the ADR-017 work that surfaced it.
+#
+# GUARDRAIL_ID/GUARDRAIL_VERSION are required, no default baked in -- deliberately: `docs/runbooks/
+# GUARDRAIL-OPERATIONS.md` §1's whole point is that a policy edit publishes a new immutable version
+# without changing the guardrail's ARN, so any hardcoded version number in this file would go stale
+# exactly the way `FNOL_GUARDRAIL_VERSION` did in `D97`/`OI14` -- read it live before every run:
+#   aws bedrock list-guardrails --guardrail-identifier <id> --region us-west-2
+# and never pass `DRAFT` (same runbook section: "Never point production at DRAFT").
+#
+# Real spend: on-demand Bedrock inference + ApplyGuardrail calls, covered by CLAUDE.md's standing $5
+# Bedrock cap, not gated behind a fresh `APPROVED:` (no provisioning, no Terraform, no redeploy).
+redteam:
+	@test -n "$(GUARDRAIL_ID)" || { \
+		echo "GUARDRAIL_ID is required, e.g.:"; \
+		echo "  make redteam GUARDRAIL_ID=zl5ppnyorwd2 GUARDRAIL_VERSION=<read live, GUARDRAIL-OPERATIONS.md §1>"; \
+		exit 1; \
+	}
+	@test -n "$(GUARDRAIL_VERSION)" || { \
+		echo "GUARDRAIL_VERSION is required -- read it live (never DRAFT), GUARDRAIL-OPERATIONS.md §1:"; \
+		echo "  aws bedrock list-guardrails --guardrail-identifier $(GUARDRAIL_ID) --region us-west-2"; \
+		exit 1; \
+	}
+	@test "$(GUARDRAIL_VERSION)" != "DRAFT" || { \
+		echo "GUARDRAIL_VERSION=DRAFT is refused -- GUARDRAIL-OPERATIONS.md §1: DRAFT moves on every edit, a"; \
+		echo "result measured against it is unattributable to any fixed configuration."; \
+		exit 1; \
+	}
+	$(VENV)/python -m redteam.run \
+		--guardrail-id $(GUARDRAIL_ID) --guardrail-version $(GUARDRAIL_VERSION) $(ARGS)
 
 # Run the unit test suite. No AWS credentials required — moto covers every AWS call in tests.
 test:

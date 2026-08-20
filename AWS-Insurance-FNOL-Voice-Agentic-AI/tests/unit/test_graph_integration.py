@@ -25,6 +25,7 @@ from fnol_voice_agent.agents.testing.fake_llm import (
     converse_tool_use_response,
 )
 from fnol_voice_agent.aws.checkpointer import build_test_checkpointer
+from fnol_voice_agent.guardrails.client import MockGuardrailClient, MockGuardrailRule
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, MockEmbedder, run_ingestion
 
 _ROUTER_MODEL = "us.amazon.nova-micro-v1:0"
@@ -320,6 +321,59 @@ def test_update_contact_info_happy_path_two_turns(real_store_and_embedder: Any) 
     assert "updated" in r2["response_text"].lower()
 
 
+def test_adr_017_update_contact_info_readback_survives_a_guardrail_that_would_have_masked_it(
+    real_store_and_embedder: Any,
+) -> None:
+    """`D121`'s actual observable symptom, not just the structural invariant `test_the_real_compiled_
+    graph_is_buildable_meaning_output_guardrail_dominance_except_uci_already_held` proves in the
+    abstract: a `new_value` shaped so an OUTPUT guardrail rule *would* mask it, configured on this test's
+    own `guardrail_client`, comes back to the caller unmasked -- proving `ADR-017`'s bypass holds in a real
+    turn through the compiled graph, not only in `builder.branches`' static edge map. Real-shaped fixture
+    (`647-321-9876`), not the `555`-exchange convention `D124`/`D125` flag -- this rule is a stand-in for
+    Bedrock's real `PHONE` `ANONYMIZE` and must actually match a real-looking number to prove anything.
+    """
+    store, embedder = real_store_and_embedder
+    caller = FakeBedrockConverseClient(
+        by_model={_ROUTER_MODEL: _classification("UpdateContactInfo")}
+    )
+    phone_masking_guardrail = MockGuardrailClient(
+        output_rules=(
+            MockGuardrailRule(
+                pattern=r"\d{3}-\d{3}-\d{4}",
+                reason="pii:PHONE (test stand-in for Bedrock's ANONYMIZE, D121)",
+                is_regex=True,
+                action="MASK",
+                replacement="{PHONE}",
+            ),
+        )
+    )
+    checkpointer = build_test_checkpointer("fnol-checkpoints-uci-adr017-test")
+    graph = build_graph(
+        vector_store=store,
+        embedder=embedder,
+        bedrock_caller=caller,
+        guardrail_client=phone_masking_guardrail,
+        checkpointer=checkpointer,
+    )
+    config = {"configurable": {"thread_id": "uci-adr017-1"}}
+
+    # Sanity check on the rule itself, independent of the graph: prove it would mask this exact value if
+    # it were ever handed to it, so the assertion below is meaningful rather than trivially true.
+    direct_check = phone_masking_guardrail.apply_guardrail(
+        "OUTPUT", "That's 647-321-9876 -- is that right?"
+    )
+    assert direct_check.masked and "{PHONE}" in direct_check.output_text
+
+    result = _invoke_turn(
+        graph,
+        config,
+        turn_input="update my phone number to 647-321-9876",
+        new_slots={"policy_number": "PY4821", "field": "phone", "new_value": "647-321-9876"},
+    )
+    assert "647-321-9876" in result["response_text"]
+    assert "{PHONE}" not in result["response_text"]
+
+
 def test_file_auto_claim_full_multi_turn_happy_path(real_store_and_embedder: Any) -> None:
     store, embedder = real_store_and_embedder
     caller = FakeBedrockConverseClient(by_model={_ROUTER_MODEL: _classification("FileAutoClaim")})
@@ -480,6 +534,19 @@ def test_the_real_compiled_graph_is_buildable_meaning_l1_dominance_already_held(
     # re-implement that check, it proves the real graph reaches this line at all, which it can only do if
     # that construction-time assertion already passed. A future edit that broke dominance would fail here
     # via the exception build_graph() raises, not silently.
+    store, embedder = real_store_and_embedder
+    graph = build_graph(vector_store=store, embedder=embedder)
+    assert graph is not None
+
+
+def test_the_real_compiled_graph_is_buildable_meaning_output_guardrail_dominance_except_uci_already_held(
+    real_store_and_embedder: Any,
+) -> None:
+    # ADR-017 condition part 2, same defense-in-depth shape as the L1 test above: build_graph() itself
+    # calls assert_dominates_except before compiling (agents/graph.py) -- reaching this line at all proves
+    # that construction-time assertion already passed for the real graph, not a hand-built stand-in. A
+    # future edit that let some other node bypass guardrails_output_check, or that accidentally routed
+    # update_contact_info back through it, fails here via the exception build_graph() raises.
     store, embedder = real_store_and_embedder
     graph = build_graph(vector_store=store, embedder=embedder)
     assert graph is not None

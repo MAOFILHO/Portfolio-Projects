@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Shared pre-commit dispatcher for the Portfolio-Projects monorepo.
+#
+# Installed as .git/hooks/pre-commit by any registered project's `make install-hooks`. git allows only
+# one file at that path, so this is the single canonical copy -- every project's install-hooks target
+# installs THIS file, rather than each project shipping its own shim that silently overwrites the last
+# one installed. Created 2026-08-19, Marco-approved (AskUserQuestion, "Multi-project dispatcher" option),
+# when Azure-Banking-Voice-Agentic-AI needed the same scope protection AWS-Insurance-FNOL-Voice-Agentic-AI
+# already had and a second independent shim would have meant either project's install-hooks silently
+# disarming the other's.
+#
+# git hooks run with CWD at the repo root (the monorepo root), so every path below is relative to it.
+# Requires bash (not plain /bin/sh) for the arrays below -- every platform this repo is worked from has it.
+#
+# WHAT THIS DOES
+#   For each staged path, work out which top-level project directory it falls under. For every
+#   REGISTERED project this commit touches, run that project's own check script(s). Each check script is
+#   tracked and reviewable inside that project's own directory, per that project's own scope rule --
+#   this dispatcher only routes to them, it does not duplicate or reimplement their logic.
+#
+#   A commit that stages files under two different registered projects at once fails BOTH projects'
+#   scope checks (each staged path outside a project's own root is a violation to that project's own
+#   check). That's correct, not a limitation: this monorepo's convention is one project per commit, and
+#   routing to every touched project's check enforces that as a side effect of enforcing each project's
+#   own boundary, rather than needing a separate cross-project rule here.
+#
+#   A project not listed in REGISTER below (most of this monorepo's sibling folders) is not scope-checked
+#   -- that reflects reality, not endorsement: most projects here have not built this apparatus yet.
+#   Register a new project by adding one line to REGISTER and creating its own
+#   <project>/scripts/check_project_root_scope.py (copy an existing one and change PROJECT_ROOT).
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+readarray -t STAGED < <(git diff --cached --name-only)
+
+# REGISTER["<project-dir>"]="<space-separated check scripts, relative to repo root>"
+declare -A REGISTER=(
+  ["AWS-Insurance-FNOL-Voice-Agentic-AI"]="AWS-Insurance-FNOL-Voice-Agentic-AI/scripts/check_project_root_scope.py AWS-Insurance-FNOL-Voice-Agentic-AI/scripts/check_duplicate_identifiers.py"
+  ["Azure-Banking-Voice-Agentic-AI"]="Azure-Banking-Voice-Agentic-AI/scripts/check_project_root_scope.py"
+)
+
+# project_touched PROJECT -- true if any staged path falls under PROJECT/
+project_touched() {
+  local project="$1" path
+  for path in "${STAGED[@]}"; do
+    [[ "$path" == "$project"/* ]] && return 0
+  done
+  return 1
+}
+
+# run_check PROJECT SCRIPT -- run one check script, using that project's own venv if it has one.
+run_check() {
+  local project="$1" script="$2" python
+  if [[ -x "$project/.venv/bin/python" ]]; then
+    python="$project/.venv/bin/python"
+  else
+    python="python3"
+  fi
+  "$python" "$script"
+}
+
+status=0
+
+for project in "${!REGISTER[@]}"; do
+  if project_touched "$project"; then
+    for script in ${REGISTER[$project]}; do
+      run_check "$project" "$script" || status=1
+    done
+  fi
+done
+
+exit "$status"

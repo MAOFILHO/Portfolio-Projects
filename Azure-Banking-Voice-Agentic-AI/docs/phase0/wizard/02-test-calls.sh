@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+#
+# Phase 0 wizard, script 2 of 4 — Test calls.
+# Run this today, right after 01-provision.sh succeeds.
+#
+# WHAT ONLY YOU CAN DO HERE: dial a real phone number from your mobile, three times. Nothing in this
+# script can do that for you. Everything else (pulling logs, extracting the meter/latency/DTMF
+# evidence afterward) is automated.
+
+set -euo pipefail
+
+if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
+  BOLD=$(tput bold); DIM=$(tput dim); RESET=$(tput sgr0)
+  BLUE=$(tput setaf 4); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); RED=$(tput setaf 1)
+else
+  BOLD=""; DIM=""; RESET=""; BLUE=""; GREEN=""; YELLOW=""; RED=""
+fi
+
+TOTAL_STAGES=0
+_STAGE_INDEX=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.phase0}"
+WRITTEN_ENV=()
+
+_clear() { [[ -t 1 ]] || return 0; if command -v tput >/dev/null 2>&1; then tput clear; else printf '\033[2J\033[3J\033[H'; fi; }
+banner() {
+  _clear
+  printf '\n%s%s  %s%s\n' "$BOLD" "$BLUE" "$1" "$RESET"
+  printf '%s  %s stages%s\n\n' "$DIM" "$TOTAL_STAGES" "$RESET"
+  pause "Ready to start?"
+}
+stage() { _clear; _STAGE_INDEX=$((_STAGE_INDEX + 1)); printf '\n%s%s▸ Stage %s/%s · %s%s\n' "$BOLD" "$BLUE" "$_STAGE_INDEX" "$TOTAL_STAGES" "$1" "$RESET"; }
+say()  { printf '  %s\n' "$1"; }
+step() { printf '  %s•%s %s\n' "$BLUE" "$RESET" "$1"; }
+note() { printf '  %s%s%s\n' "$DIM" "$1" "$RESET"; }
+warn() { printf '  %s⚠ %s%s\n' "$YELLOW" "$1" "$RESET"; }
+ok()   { printf '  %s✓ %s%s\n' "$GREEN" "$1" "$RESET"; }
+pause() { printf '  %s%s%s ' "$DIM" "${1:-Press Enter to continue}" "$RESET"; read -r _ || true; }
+confirm() { local reply=""; printf '  %s? %s [y/N] ' "$YELLOW" "$1"; read -r reply || true; [[ "$reply" =~ ^[Yy] ]]; }
+_existing() { [[ -f "$ENV_FILE" ]] || return 1; local line; line=$(grep -E "^${1}=" "$ENV_FILE" | tail -n1) || return 1; printf '%s' "${line#*=}"; }
+ask() { local key="$1" prompt="$2" current input; current=$(_existing "$key" || true); if [[ -n "$current" ]]; then printf '  %s%s%s %s[Enter keeps current: %s]%s ' "$BOLD" "$prompt" "$RESET" "$DIM" "$current" "$RESET"; else printf '  %s%s%s ' "$BOLD" "$prompt" "$RESET"; fi; read -r input || true; [[ -z "$input" && -n "$current" ]] && input="$current"; printf -v "$key" '%s' "$input"; }
+write_env() { local key="$1" value="$2" tmp; touch "$ENV_FILE"; tmp=$(mktemp); grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$value" >> "$tmp"; mv "$tmp" "$ENV_FILE"; WRITTEN_ENV+=("$key"); printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"; }
+finish() { _clear; printf '\n%s%s  ✓ Script complete%s\n' "$BOLD" "$GREEN" "$RESET"; (( ${#WRITTEN_ENV[@]} )) && note "wrote ${#WRITTEN_ENV[@]} value(s) to $ENV_FILE: ${WRITTEN_ENV[*]}"; printf '\n'; }
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  printf 'No %s found — run 01-provision.sh first.\n' "$ENV_FILE"
+  exit 1
+fi
+# shellcheck source=/dev/null
+set -a; source "$ENV_FILE"; set +a
+
+FINDINGS_FILE="$SCRIPT_DIR/../findings.md"
+
+# on_error — this script doesn't provision or delete anything, so unlike 01's trap there's nothing
+# to offer to clean up. What there is: a Container App that's been running and billing since 01
+# finished, and a failure here (a bad `date` parse, a log-pull that errors, you closing the terminal
+# mid-stage) would otherwise just die silently with no reminder of that. This exists purely to say so.
+on_error() {
+  local exit_code="${1:-$?}"
+  _clear
+  printf '\n%s%s  ✗ 02-test-calls.sh failed at stage %s/%s (exit %s)%s\n\n' \
+    "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
+  warn "The Container App ($CONTAINERAPP_NAME) is still running and still billing — this script"
+  warn "only reads from it, it never started or stopped anything. That's expected and fine to leave"
+  warn "running while you fix whatever broke and re-run this script."
+  note "If you want to stop it early instead of finishing the test calls, run:"
+  note "  az containerapp delete --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --yes"
+  note "(04-teardown-and-r08.sh does this properly, with verification — this is the manual escape"
+  note "hatch, not a substitute for it.)"
+  exit "$exit_code"
+}
+trap 'on_error $?' ERR
+
+TOTAL_STAGES=4
+banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 2/4: Test calls"
+
+if [[ -z "${PHONE_NUMBER:-}" ]]; then
+  warn "PHONE_NUMBER isn't set in $ENV_FILE — script 1 may not have confirmed the purchase."
+  ask PHONE_NUMBER "Enter the purchased number manually (E.164, e.g. +14165551234):"
+  write_env "PHONE_NUMBER" "$PHONE_NUMBER"
+fi
+
+# ── Stage 1: call 1 — plain echo ────────────────────────────────────────────
+stage "Call 1/3 — plain echo test"
+say "Dial ${BOLD}${PHONE_NUMBER}${RESET} from your mobile now."
+step "Speak a few words after it connects and confirm you hear your own voice echoed back."
+step "Stay on for ~20 seconds, then hang up."
+confirm "Did you complete the call and hear the echo?" || warn "recorded as not confirmed — you can redial before moving on."
+CALL1_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+write_env "CALL1_TIME" "$CALL1_TIME"
+
+# ── Stage 2: call 2 — DTMF during active streaming (R-03) ──────────────────
+stage "Call 2/3 — DTMF during active bidirectional streaming (R-03)"
+say "This call specifically tests R-03: docs/PLAN.md records DtmfData-during-streaming as"
+say "\"documented and used in all four language pivots; narrowed but unproven\" until measured here."
+step "Dial ${BOLD}${PHONE_NUMBER}${RESET} again."
+step "While the echo is actively going (i.e. mid-call, audio still flowing both ways — not before"
+step "the call connects, not after you'd normally hang up), press a few DTMF digits, e.g. 1  2  3."
+step "Keep talking/listening for a few more seconds after the tones, then hang up."
+confirm "Did you press DTMF tones mid-call and confirm the echo kept working after?" || warn "recorded as not confirmed."
+CALL2_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+write_env "CALL2_TIME" "$CALL2_TIME"
+
+# ── Stage 3: call 3 — sustained call for RTT sampling ───────────────────────
+stage "Call 3/3 — sustained call for a transport RTT baseline"
+say "A longer call gives more echoed frames to sample for the RTT baseline (turns, not calls —"
+say "B5 in docs/PLAN.md: this is transport RTT only, not a turn-latency percentile; that's Phase 2's job)."
+step "Dial ${BOLD}${PHONE_NUMBER}${RESET} once more and stay on for at least 60 seconds, talking"
+step "intermittently so there's real audio (not silence) flowing both ways."
+confirm "Completed the sustained call?" || warn "recorded as not confirmed."
+CALL3_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+write_env "CALL3_TIME" "$CALL3_TIME"
+
+# ── Stage 4: pull logs and extract evidence ─────────────────────────────────
+stage "Pull Container App logs and extract R-02 / R-03 / RTT evidence"
+say "Reading application logs written by the echo app (docs/phase0/echo-app/app.py) since call 1."
+
+LOGS=$(az containerapp logs show \
+  --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
+  --type console --tail 500 2>/dev/null || echo "")
+
+if [[ -z "$LOGS" ]]; then
+  warn "no logs returned — az containerapp logs show may need --follow removed or a moment to flush."
+  warn "Retry manually: az containerapp logs show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --type console"
+else
+  DTMF_LINES=$(printf '%s\n' "$LOGS" | grep -i "DTMF tone=" || true)
+  FRAME_LINES=$(printf '%s\n' "$LOGS" | grep -i "frame .* echoed" || true)
+  WS_LINES=$(printf '%s\n' "$LOGS" | grep -i "WS open\|WS closed" || true)
+
+  say "WebSocket open/close events:"
+  printf '%s\n' "$WS_LINES" | sed 's/^/    /'
+  say "DTMF evidence (R-03):"
+  if [[ -n "$DTMF_LINES" ]]; then
+    printf '%s\n' "$DTMF_LINES" | sed 's/^/    /'
+    ok "R-03 confirmed: DTMF tones logged arriving during active streaming (frame_count > 0 alongside them)"
+    R03_RESULT="CONFIRMED — DTMF tones observed arriving during active bidirectional streaming. See raw log lines below."
+  else
+    warn "no DTMF log lines found — either call 2's tones weren't sent, or logs haven't flushed yet."
+    R03_RESULT="UNCONFIRMED THIS RUN — no DTMF log lines captured. Re-run this stage, or redo call 2."
+  fi
+  say "Frame-echo / processing-latency samples (R-02 + RTT):"
+  printf '%s\n' "$FRAME_LINES" | tail -20 | sed 's/^/    /'
+
+  {
+    echo "## R-02 / R-03 / RTT — evidence from 3 test calls"
+    echo ""
+    echo "Calls at: $CALL1_TIME, $CALL2_TIME, $CALL3_TIME (UTC)."
+    echo ""
+    echo "### R-03 (DTMF during active streaming)"
+    echo ""
+    echo "$R03_RESULT"
+    echo ""
+    echo '```'
+    printf '%s\n' "$DTMF_LINES"
+    echo '```'
+    echo ""
+    echo "### R-02 (Pcm24KMono) + transport RTT samples"
+    echo ""
+    echo "Processing-latency samples logged by the app (recv-to-echo, once per ~50 frames /1s):"
+    echo '```'
+    printf '%s\n' "$FRAME_LINES"
+    echo '```'
+    echo ""
+    echo "Note: this is APP-SIDE processing latency (frame received → frame re-sent), not full"
+    echo "caller-to-caller RTT. It's the transport-RTT-adjacent number Phase 0 can actually produce;"
+    echo "the true turn-latency percentile needs a real RealtimeSession (Phase 2, B5)."
+    echo ""
+  } >> "$FINDINGS_FILE"
+  ok "recorded to $FINDINGS_FILE"
+fi
+
+say "Real ACS Audio Streaming meter (list price \$0.004/min) is a billing-side number, not a log —"
+say "script 3 (after 24h) reads it from actual Cost Analysis, not an estimate."
+
+finish
+printf '\n%sNext:%s wait 24 hours for Cost Analysis to populate, then run %s03-cost-check-24h.sh%s.\n\n' \
+  "$BOLD" "$RESET" "$BLUE" "$RESET"

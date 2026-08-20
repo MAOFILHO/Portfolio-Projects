@@ -25,9 +25,13 @@ WHAT IT CHECKS
 
 RUNS AS
 
-    A git pre-commit hook (`scripts/git-hooks/pre-commit` execs this via `make install-hooks` —
-    `.git/hooks/` is not tracked by git itself, so the hook must be (re)installed per clone) and as
-    `make verify-project-root-scope` for a standalone check against whatever is currently staged.
+    Invoked by the shared dispatcher `scripts/git-hooks/pre-commit` at the monorepo root (installed to
+    `.git/hooks/pre-commit` via this project's `make install-hooks` — `.git/hooks/` is not tracked by git
+    itself, so the hook must be (re)installed per clone), and as `make verify-project-root-scope` for a
+    standalone check against whatever is currently staged. The dispatcher is shared with
+    Azure-Banking-Voice-Agentic-AI's own check (and any future project's) as of 2026-08-19, because git
+    allows only one `.git/hooks/pre-commit` per repo — see that dispatcher's own header for why a single
+    shared shim beats two independent ones silently overwriting each other.
 
 LIMITATION, STATED RATHER THAN LEFT IMPLICIT
 
@@ -56,6 +60,19 @@ ALLOWLIST: frozenset[str] = frozenset(
         # Phase 10, Marco-approved by absolute path (/Users/marco/K21/Real-world/.github/workflows/...),
         # verified byte-identical to the PROJECT_ROOT source. RESULTS.md §12.1/§12.6.
         ".github/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml",
+        # setup-matt-pocock-skills scaffold, Marco-approved 2026-08-16 by absolute path via
+        # AskUserQuestion ("Yes, approve and record it") in the Claude Code session that authored
+        # them, naming each of the four paths below explicitly:
+        #   /Users/marco/K21/Real-world/CLAUDE.md
+        #   /Users/marco/K21/Real-world/docs/agents/domain.md
+        #   /Users/marco/K21/Real-world/docs/agents/issue-tracker.md
+        #   /Users/marco/K21/Real-world/docs/agents/triage-labels.md
+        # No RESULTS.md entry exists for this approval (it predates this project's own session log
+        # for that date) — this comment is the citation.
+        "CLAUDE.md",
+        "docs/agents/domain.md",
+        "docs/agents/issue-tracker.md",
+        "docs/agents/triage-labels.md",
     }
 )
 

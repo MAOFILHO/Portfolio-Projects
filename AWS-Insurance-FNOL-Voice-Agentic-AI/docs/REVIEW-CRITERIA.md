@@ -233,6 +233,28 @@ this everywhere this *effect* can happen" — the second question is the one a d
 question does not automatically answer it. The v2->v3 fix was **incomplete, not wrong in kind** — its
 target outcome was correctly identified, its enumeration stopped one layer too shallow.
 
+**Extended again 2026-08-17, Marco, after `D123` (`docs/adr/ADR-017-d121-pii-readback-fix.md`,
+`docs/audits/2026-08-16-d121-guardrail-mechanism-sweep.md`, `PROJECT_STATE.md` `OI45`) — a third,
+narrower way an enumeration undercounts: it can be complete about *which functions* it walked and still
+be incomplete about *which control-flow branches inside them* it walked.** `D121`'s own `§8` mechanism
+sweep enumerated every `response_text` call site across `agents/nodes/*.py` — 27 sites, all real
+`return` statements, cross-checked by grep. `update_contact_info.py:79` is a 28th: a `response_text`
+constructed inside an `except (InvalidUpdateContactInfoError, PolicyNotFoundError) as exc:` block,
+interpolating `exc`, whose message wraps a Pydantic `ValidationError` and can carry the caller's own
+`new_value` back — the same echo mechanism, the same node, the same policy-config entities, missed
+purely because the site sits in an exception handler rather than the function's normal control flow.
+
+**The finding worth carrying forward is not "one site was missed" — every enumeration under-counts by
+one occasionally, and that alone would not earn a second entry here. It is that the enumeration method
+itself had a shape: it walked `return` statements and not `except` branches, so any sweep performed the
+same way — grep for a call shape, list where it appears in the normal-path code — inherits the identical
+blind spot.** A function's error-handling branches are not a marginal or unusual place for a value to
+reach a caller; in this codebase specifically, at least one of them does. **Restated once more, one level
+narrower than the mechanism-sweep rule above: a call-site or mechanism enumeration must state, and check,
+whether it walked exceptional control flow (`except`/`finally` blocks, error-response branches, fallback
+paths) as well as the normal path — silently scoping to one and not saying so is indistinguishable, to a
+later reader, from having checked both.**
+
 ## 9. A summary carrying a scoped claim must cite its source line, and the scope must be verified against it
 
 Added 2026-08-16, Marco, after a handoff document (`docs/handoffs/2026-08-16-phase11-midflight.md`, `RESULTS.md`
@@ -299,3 +321,35 @@ the same way in the same file. When a fix changes a definition and a listed exam
 assume the fix caused it — probe the *unchanged* baseline (a prior version, or a byte-identical revert) for
 the same phrase before attributing the change to the edit under test; §47's correction of §43/§44's
 "regression" finding is the worked example of doing this the right way, one round late.
+
+## 11. A mechanism's own name or comment is a claim about itself, not a traced fact
+
+Added 2026-08-18, Marco, after `D140`/`OI58` (`docs/RESULTS.md` §94, `PROJECT_STATE.md` `OI58`):
+`update_contact_info.py`'s `_CONFIRM_CEILING`-exhausted branch returns a constant named
+`_ESCALATION_SCRIPT` and speaks a sentence promising a human transfer. It does not set
+`EscalationRecord`/`escalate`, so `D43`'s real Connect-level transfer never fires there. That gap sat
+underneath the exact claim "the retry ladder escalates to a human" — stated in `docs/adr/ADR-017-*.md` at
+`:36`, carried through four `/grill-with-docs` rounds, and used as one arm of Round 5's accepted
+failure-shape comparison — for two full sessions, without anyone tracing whether the `escalation` key the
+name promises actually reaches `lex_codehook.py`'s `_close(..., escalated=True, ...)`.
+
+**This is the same error `/grill-with-docs` Round 1 Q1 caught once already, one level lower.** Round 1 Q1
+rejected inferring the readback's *requirement* from `update_contact_info.py`'s current wording — Marco's
+correction there, recorded verbatim in the ADR: "that is inferring a requirement from an implementation,
+which tells you what the previous author did, not what the system must do." Round 5's escalation claim
+made the identical substitution one layer down: not inferring a *requirement* from an implementation, but
+inferring a *behavior* from an implementation's name for itself. A constant called `_ESCALATION_SCRIPT`, a
+comment describing what a branch is *for*, a function named `handle_no_match_or_barge_in` — these are the
+author's stated intent, not a traced fact about what the code does when it runs. The first time, the
+substitution was caught before it closed anything. The second time, it wasn't — it passed through Round 1,
+Round 2, Round 4, Round 5, an accepted ADR, and Marco's own Round 5 argument for `ADR-017`, all without
+being named as the same class of error, because nobody asked the question in a form that would have caught
+it a second time.
+
+**A claim about what a mechanism *does* requires tracing the mechanism — reading the return value, the
+state key, the call site that consumes it — not reading the code that names, comments, or scripts it.**
+Same family as §7 (activity signals are not effect signals) and §10 (an `examples` entry is a config input,
+not a verified behavior): a self-description sitting next to the thing it describes is not evidence about
+the thing, however confidently named. Before citing what a function, branch, or constant *does* in a
+decision document, a grill round, or a report — trace it to its consumer, the way `D140`/`OI58` traced
+`_ESCALATION_SCRIPT` forward to `lex_codehook.py` and found the key it promises was never set.
