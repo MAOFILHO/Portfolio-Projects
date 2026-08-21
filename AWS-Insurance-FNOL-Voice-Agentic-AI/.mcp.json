@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "fnol-policy": {
+      "command": "${CLAUDE_PROJECT_DIR:-.}/.venv/bin/python",
+      "args": ["-m", "fnol_voice_agent.mcp.policy_server"]
+    },
+    "fnol-claims": {
+      "command": "${CLAUDE_PROJECT_DIR:-.}/.venv/bin/python",
+      "args": ["-m", "fnol_voice_agent.mcp.claims_server"]
+    },
+    "fnol-contact": {
+      "command": "${CLAUDE_PROJECT_DIR:-.}/.venv/bin/python",
+      "args": ["-m", "fnol_voice_agent.mcp.contact_server"]
+    },
+    "fnol-escalation": {
+      "command": "${CLAUDE_PROJECT_DIR:-.}/.venv/bin/python",
+      "args": ["-m", "fnol_voice_agent.mcp.escalation_server"]
+    }
+  }
+}
