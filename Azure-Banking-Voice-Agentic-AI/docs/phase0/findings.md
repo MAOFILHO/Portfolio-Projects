@@ -1130,6 +1130,110 @@ Both `COSTS.md` sites are the same shape as the original (now-fixed) Stage 2/Sta
 `findings.md` duplicate-append risk, just in a different file. Not fixed as part of this
 commit — reported per the audit request, Marco's call on priority.
 
+## Re-run guards verified live, 2026-08-21
+
+A real re-run of `01-provision.sh` (after the `ECHO_DIR`/buildx/Stage-10/`PROVISION_TIME`
+fixes above) reached Stage 12 and failed at `docker login` (unauthorized — token issue, not a
+script bug). Before that failure, **Stages 6, 9, 10, and 11 all skipped as designed**: no
+duplicate R-06 probe, no second phone-number purchase attempt (R-09's number, `+17059100383`,
+untouched), no ADR regeneration, no echo-app regeneration. Nothing billable was created by
+this run. First real evidence these guards work under an actual re-run, not just `bash -n` and
+inspection — recorded as verified, not just written.
+
+**Same run, one gap found**: the `docker login` failure surfaced as raw `registry-1.docker.io`
+daemon output, not a wizard-framed message. Fixed — wrapped with the same `on_error` pattern as
+every other Stage 12 check, framed toward the most likely cause (wrong/expired token, or
+missing Read & Write scope) rather than requiring the operator to parse registry error text.
+
+## APP_BASE_URL placeholder race — the call that reached the app and still failed
+
+First real test call: rang ~60s, nobody answered, despite `/healthz` returning `{"status":"ok"}`
+from a browser and Event Grid delivering `Microsoft.Communication.IncomingCall` correctly
+(`provisioningState: Succeeded`, endpoint matched the live FQDN exactly). Container App logs
+showed the actual failure: `answer_call()` raised `HttpResponseError: (400) Invalid request —
+The field CallbackUri is invalid`, on two separate `IncomingCall` deliveries, both producing a
+`500` back to Event Grid.
+
+Root cause, confirmed by direct inspection, not assumed: Stage 12 created the Container App with
+`app-base-url` secret literally set to the string `"placeholder"` (the real FQDN doesn't exist
+until after `containerapp create` returns), then queried the live FQDN and patched the secret
+*afterward* via `containerapp secret set` + `containerapp update --set-env-vars`. `az containerapp
+revision list` showed exactly **one** revision, from container start to failure — the later patch
+never created a new revision, and Container Apps injects `secretRef` env vars as literal OS
+environment variables at container start, not a live-refreshed value. `app.py` reads
+`APP_BASE_URL` once at import time (`APP_BASE_URL = os.environ["APP_BASE_URL"]`), so the running
+process almost certainly held `APP_BASE_URL="placeholder"` the entire time, making
+`CALLBACK_URL = "placeholder/api/callbacks"` — exactly what "The field CallbackUri is invalid"
+describes. Could not directly confirm via the process's live environment (no read-only path
+found — see below); confirmed instead by fixing the root cause and verifying the FQDN was
+knowable before creation, which the diagnosis didn't strictly require but strengthens it.
+
+**Fixed 2026-08-21**: `az containerapp env show --query properties.defaultDomain`, queried
+*before* `containerapp create`, reproduces the real FQDN exactly (`{app-name}.{defaultDomain}` —
+verified live against the actual running app: `ca-azbank-echo-p0.livelybay-0fe80dd3.
+canadacentral.azurecontainerapps.io`). The environment already exists by the point Stage 12
+creates the app, so the true `APP_BASE_URL` is computable up front. No more placeholder, no more
+post-create secret/env patch, no revision-forcing needed — the first (and only) revision now
+starts with the correct value. A post-create assertion checks the computed value against the
+live FQDN and fails loudly (before Event Grid is wired) if the `defaultDomain` formula and
+reality ever diverge.
+
+**Two options considered and rejected**, for the record:
+- *Force a new revision after patching the secret* (`--revision-suffix`) — works, but still ships
+  a broken first revision and depends on an unverified assumption that the flag actually forces
+  recreation. Strictly worse than not creating the placeholder at all.
+- *Read `APP_BASE_URL` lazily per-request in `app.py`* — does not work. Container Apps'
+  `secretRef` env vars are fixed for a process's entire lifetime once it starts; re-reading
+  `os.environ` more often doesn't produce a different value without an actual new container start.
+
+**No read-only way found to directly confirm the live process's environment.** Checked two paths:
+`az containerapp logs show --tail 300` only retains back to a few minutes before the check (never
+reached the container's actual `21:56:37Z` start), and the Log Analytics workspace nominally
+linked to the environment had zero rows in `ContainerAppConsoleLogs` (see next section — a real,
+separate gap). Only `exec` would have read `os.environ` directly; not used, per the read-only
+constraint in place at diagnosis time.
+
+## healthz-as-window-gate — the design flaw, more interesting than the bug that triggered it
+
+`PROVISION_TIME` (R-04's 72h idle-billing anchor) was written by `01-provision.sh` immediately
+after `/healthz` returned `200`. Today's failure showed exactly why that's the wrong gate: the
+container was genuinely healthy — serving HTTP, responding to `/healthz`, receiving and even
+correctly routing `IncomingCall` events from Event Grid — and still could not perform the one
+thing this whole project exists to do: answer a phone call. **A green health check is evidence a
+process is running, not evidence the system it's part of works.** R-04's 72h window had already
+been open for the two prior failed-answer attempts and would have stayed anchored to that moment
+regardless of whether a call ever succeeded, silently measuring idle-vs-active billing behavior
+against a container that had never demonstrated it could do its job.
+
+**Fix (designed, not yet applied — pending Marco's sign-off on the diff)**: `PROVISION_TIME`'s
+write moves out of `01-provision.sh` entirely, into `02-test-calls.sh`, gated on a specific,
+verifiable signal — a `Microsoft.Communication.CallConnected` event observed in the Container
+App's own logs, not a healthz check and not an operator confirming a prompt. If no such event is
+found, `PROVISION_TIME` stays unset and the script exits non-zero rather than silently completing.
+`04-teardown-and-r08.sh` needs no changes — it reads `PROVISION_TIME` generically from
+`.env.phase0` with no assumption about which script wrote it.
+
+## Log Analytics: two workspaces, neither delivering
+
+Found while investigating why boot-log lines (`PHASE0_LOG_DTMF_VALUES`, `installed-versions.txt`)
+couldn't be recovered after the log-streaming buffer scrolled past container start. Two separate
+auto-created Log Analytics workspaces exist in the resource group —
+`workspace-rgazurebankingvoiceagenticaixC` (found and documented in an earlier session, unused)
+and `workspace-rgazurebankingvoiceagenticaiCS` (the one actually linked to the current Container
+Apps environment via `appLogsConfiguration`) — almost certainly the result of the environment
+having been created more than once across today's several partial Stage-12 attempts. Querying
+the *correctly*-linked workspace's `ContainerAppConsoleLogs` table still returned **zero rows**,
+over an hour after a running, actively-logging container — the native
+`appLogsConfiguration`-based log forwarding is configured but not delivering, for reasons not
+diagnosed. No classic Diagnostic Settings resource existed on the environment as a fallback path
+(`az monitor diagnostic-settings list` returned empty).
+
+**Fixed 2026-08-21**: added an explicit `az monitor diagnostic-settings create` targeting the
+environment resource, routing `ContainerAppConsoleLogs` and `ContainerAppSystemLogs` to the
+correctly-linked workspace. Whether this resolves the delivery gap or the native path was simply
+slow needs confirming after the next redeploy — not assumed either way. The orphaned second
+workspace is left in place (harmless, $0, not touched) rather than deleted without asking.
+
 ## Stage 12 — auto-created Log Analytics workspace, cost verified
 
 `az containerapp env create` (line 1086, no `--logs-workspace-id`/`--logs-destination`
@@ -1164,4 +1268,478 @@ in this project's cost tooling would currently notice. `az containerapp env crea
 avoid creating it at all (`--logs-destination none`) or point at a pre-existing workspace
 (`--logs-workspace-id`/`--logs-workspace-key`, confirmed via `--help`); neither is used
 today.
+
+## R-01 — Models API deprecation-date check
+
+Queried 2026-08-21T21:37:07Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Calgary","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"Brockville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"North Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Montreal","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Sherbrooke","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}}],"nextLink":null}
+```
+
+## R-01 — Models API deprecation-date check
+
+Queried 2026-08-21T21:49:09Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Calgary","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"Brockville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"North Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Montreal","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Sherbrooke","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}}],"nextLink":null}
+```
 

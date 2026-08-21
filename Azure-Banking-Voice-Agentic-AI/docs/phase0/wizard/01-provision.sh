@@ -307,10 +307,11 @@ write_env "RESOURCE_GROUP" "$RESOURCE_GROUP"
 write_env "LOCATION" "$LOCATION"
 write_env "CONTAINERAPP_NAME" "$CONTAINERAPP_NAME"
 write_env "CAE_NAME" "$CAE_NAME"
-# PROVISION_TIME is deliberately NOT written here. 04-teardown-and-r08.sh uses it to anchor R-04's
-# 72h idle-billing observation window, and the Container App this measures doesn't exist until
-# Stage 12 below -- writing it this early would understate the window by however long Stages 4-11
-# take. Written at Stage 12 instead, right after the container passes its health check.
+# PROVISION_TIME is deliberately NOT written here, and not by this script at all anymore.
+# 04-teardown-and-r08.sh uses it to anchor R-04's 72h idle-billing observation window; that window
+# is now anchored in 02-test-calls.sh, gated on a confirmed answered call rather than on this
+# script's healthz check -- see Stage 12's note and docs/phase0/findings.md,
+# "healthz-as-window-gate".
 
 # ── Stage 2: R-01 — Models API deprecationDate check (free, read-only) ─────
 stage "R-01 — verify gpt-realtime-mini retirement dates via the Models API"
@@ -944,7 +945,16 @@ ask_secret DOCKERHUB_TOKEN "Docker Hub access token, Read & Write scope (Account
 write_env "DOCKERHUB_USERNAME" "$DOCKERHUB_USERNAME"
 
 IMAGE="docker.io/${DOCKERHUB_USERNAME}/azbank-echo-p0:latest"
-echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+LOGIN_OUTPUT="$(echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin 2>&1)" || {
+  err "docker login to docker.io failed for user '$DOCKERHUB_USERNAME' -- most likely the token is"
+  err "wrong, expired, or doesn't have Read & Write scope (Account Settings → Security → the token's"
+  err "Access permissions dropdown). Generate a fresh Read & Write token and re-run this script --"
+  err "the username/token prompt above will ask again."
+  err "Raw docker login output:"
+  sed 's/^/    /' <<<"$LOGIN_OUTPUT"
+  on_error 1
+}
+ok "logged in to docker.io as $DOCKERHUB_USERNAME"
 
 # `docker buildx build --platform linux/amd64`, not plain `docker build`: a classic-builder build on
 # Apple Silicon defaults to arm64, which Container Apps rejects at `containerapp create` --
@@ -1003,11 +1013,41 @@ else
   ok "Container Apps environment $CAE_NAME created"
 fi
 
+# Computed BEFORE create, not queried after: verified live 2026-08-21 that a Container App's FQDN is
+# fully deterministic from {app-name}.{environment's own defaultDomain}, and the environment already
+# exists by this point -- so the real APP_BASE_URL is knowable up front. This replaces a
+# create-with-a-placeholder-secret-then-patch-it-after design that shipped a container whose running
+# process started with APP_BASE_URL="placeholder" and never picked up the later fix: Container Apps
+# injects secretRef env vars as literal OS env vars at container start, not a live-refreshed value,
+# and no new revision was ever created by the later `secret set`/`update` calls (confirmed: exactly
+# one revision existed, from container start to failure). CALLBACK_URL built from "placeholder" is
+# exactly why ACS rejected answer_call() with "The field CallbackUri is invalid." Full account:
+# docs/phase0/findings.md, "APP_BASE_URL placeholder race".
+ENV_DEFAULT_DOMAIN=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.defaultDomain" -o tsv)
+APP_BASE_URL="https://${CONTAINERAPP_NAME}.${ENV_DEFAULT_DOMAIN}"
+
 if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-  say "updating existing container app with the freshly-pushed image"
+  # `az containerapp update --image` alone does two things wrong on a retry: (1) it takes no --secrets
+  # flag at all, so an already-existing app keeps whatever secret value it already has -- for this
+  # project's currently-deployed app, that's the stale "placeholder" app-base-url from the race
+  # documented above; (2) --image is a mutable Docker Hub `:latest` tag, so if the tag string is
+  # byte-identical to what's already on the app, Azure may see no spec diff and skip creating a new
+  # revision at all -- meaning secretRef env vars, which are only read at container start, would never
+  # be re-read even if the secret's stored value were corrected first. Fixed by (1) setting secrets
+  # explicitly via the separate `secret set` verb before updating, and (2) forcing a distinct revision
+  # unconditionally via --revision-suffix, so a new container start (and therefore a fresh env-var
+  # read) happens regardless of whether Azure would have detected an image-string diff on its own.
+  say "updating existing container app: refreshing secrets, then forcing a new revision"
+  az containerapp secret set \
+    --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+    --output none
   az containerapp update \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-    --image "$IMAGE" --output none
+    --image "$IMAGE" \
+    --revision-suffix "p0$(date -u +%Y%m%d%H%M%S)" \
+    --output none
+  ok "container app $CONTAINERAPP_NAME updated: secrets refreshed, new revision forced"
 else
   az containerapp create \
     --name "$CONTAINERAPP_NAME" \
@@ -1022,17 +1062,46 @@ else
     --min-replicas 1 --max-replicas 1 \
     --cpu 0.25 --memory 0.5Gi \
     --env-vars "ACS_CONNECTION_STRING=secretref:acs-conn" "APP_BASE_URL=secretref:app-base-url" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=placeholder" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
     --output none
   ok "container app $CONTAINERAPP_NAME created (min-replicas=1, 0.25 vCPU / 0.5 GiB per docs/PLAN.md)"
 fi
 
+# Sanity check, not blind trust in the formula above: confirm Azure actually assigned what was
+# computed, before Event Grid gets wired to a possibly-wrong URL and before healthz is even checked.
 APP_FQDN=$(az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv)
-APP_BASE_URL="https://${APP_FQDN}"
-az containerapp secret set --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-  --secrets "app-base-url=$APP_BASE_URL" --output none
-az containerapp update --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-  --set-env-vars "APP_BASE_URL=secretref:app-base-url" --output none
+if [[ "https://$APP_FQDN" != "$APP_BASE_URL" ]]; then
+  err "computed APP_BASE_URL ($APP_BASE_URL) doesn't match the live FQDN (https://$APP_FQDN) -- the"
+  err "defaultDomain assumption this fix relies on may not hold here. Investigate before proceeding."
+  on_error 1
+fi
+ok "confirmed APP_BASE_URL was correct from container start: $APP_BASE_URL"
+
+# Diagnostic setting, explicit: found live 2026-08-21 that the environment's built-in
+# appLogsConfiguration (auto-wired to a Log Analytics workspace at `containerapp env create` time)
+# was NOT actually delivering console logs to that workspace's ContainerAppConsoleLogs table --
+# confirmed empty after over an hour of a running, logging container. `az containerapp logs show`'s
+# own streaming buffer also doesn't retain back to container start, so a boot-time issue is currently
+# unrecoverable once the buffer scrolls past it. This adds the classic Diagnostic Settings resource
+# as a second, standard path to the same workspace -- whether it resolves the gap or the native path
+# was simply slow, confirm after this redeploy, don't assume either way. Full account:
+# docs/phase0/findings.md, "Log Analytics: two workspaces, neither delivering".
+CAE_ID=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)
+LOGS_WORKSPACE_ID=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" -o tsv)
+LOGS_WORKSPACE_RESOURCE_ID=$(az monitor log-analytics workspace list --resource-group "$RESOURCE_GROUP" --query "[?customerId=='${LOGS_WORKSPACE_ID}'].id | [0]" -o tsv)
+if [[ -z "$LOGS_WORKSPACE_RESOURCE_ID" ]]; then
+  warn "couldn't resolve the environment's linked workspace to a resource ID -- skipping the explicit"
+  warn "diagnostic setting this run. Console logs still flow through the native appLogsConfiguration"
+  warn "path (unconfirmed whether it's actually delivering -- see findings.md)."
+else
+  az monitor diagnostic-settings create \
+    --name "azbank-p0-console-logs" \
+    --resource "$CAE_ID" \
+    --workspace "$LOGS_WORKSPACE_RESOURCE_ID" \
+    --logs '[{"category":"ContainerAppConsoleLogs","enabled":true},{"category":"ContainerAppSystemLogs","enabled":true}]' \
+    --output none
+  ok "diagnostic setting wired: environment console+system logs -> $LOGS_WORKSPACE_RESOURCE_ID"
+fi
 
 write_env "APP_BASE_URL" "$APP_BASE_URL"
 ok "app live at $APP_BASE_URL"
@@ -1055,20 +1124,14 @@ if [[ "$HEALTHY" != "1" ]]; then
 fi
 ok "container is healthy (/healthz responding) — safe to wire Event Grid to it"
 
-# Same shape as Stage 9's PHONE_NUMBER guard, same reason: R-04's 72h idle-billing window is
-# anchored on this value, and a silent reset on a re-run is corruption R-04 can't survive and
-# Marco would have no way to notice from the file alone. Guarded 2026-08-21 after Stage 12 failed
-# once already today (arch mismatch) -- a retry reaching this line after a *successful* deploy is
-# a real path, not a hypothetical. Read directly from ENV_FILE via _existing, not a shell variable.
-if [[ -n "$(_existing "PROVISION_TIME" || true)" ]]; then
-  ok "PROVISION_TIME already set: $(_existing "PROVISION_TIME") -- R-04's window is already anchored, not resetting it"
-  note "If a genuinely new R-04 window is ever needed, delete PROVISION_TIME from .env.phase0 by hand --"
-  note "never as an accidental side effect of re-running this script."
-else
-  write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  note "PROVISION_TIME written now, not at Stage 1 -- this is when the billable Container App this"
-  note "value anchors (R-04's 72h window in 04-teardown-and-r08.sh) actually started existing."
-fi
+# PROVISION_TIME is NOT written here anymore. Found live 2026-08-21: a healthy /healthz response
+# proves the container is up, not that it can answer a real call -- this app was healthy for over
+# an hour while every real call to it failed. R-04's window now opens in 02-test-calls.sh instead,
+# gated on a confirmed Microsoft.Communication.CallConnected event in the Container App logs, not
+# on this script reaching this line. Full account: docs/phase0/findings.md,
+# "healthz-as-window-gate -- the design flaw, more interesting than the bug that triggered it".
+note "R-04's 72h window does NOT open here. Run 02-test-calls.sh next -- it only writes PROVISION_TIME"
+note "once a real call is confirmed answered (a CallConnected event in the logs), not on healthz alone."
 
 say "Wiring the Event Grid subscription so ACS's IncomingCall event reaches the app."
 az eventgrid event-subscription create \
@@ -1082,5 +1145,6 @@ ok "Event Grid subscription wired"
 
 finish
 
-printf '\n%sNext:%s run %s02-test-calls.sh%s today — dial the number and let the wizard capture the meters.\n\n' \
+printf '\n%sNext:%s run %s02-test-calls.sh%s today — dial the number 3 times. R-04'"'"'s 72h window has NOT\n' \
   "$BOLD" "$RESET" "$BLUE" "$RESET"
+printf 'started yet; it opens inside that script, only once a call is confirmed answered.\n\n'

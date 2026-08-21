@@ -145,6 +145,25 @@ else
   DTMF_LINES=$(printf '%s\n' "$LOGS" | grep -i "DTMF tone=" || true)
   FRAME_LINES=$(printf '%s\n' "$LOGS" | grep -i "frame .* echoed" || true)
   WS_LINES=$(printf '%s\n' "$LOGS" | grep -i "WS open\|WS closed" || true)
+  CALLCONNECTED_LINES=$(printf '%s\n' "$LOGS" | grep "callback event: Microsoft.Communication.CallConnected" || true)
+
+  # R-04's 72h window opens HERE, not in 01-provision.sh, and only on this specific evidence -- a
+  # passing /healthz check proved the container was up, not that it could answer a real phone call
+  # (docs/phase0/findings.md, "healthz-as-window-gate"). Same guard shape as 01's old Stage 9/12
+  # guards: read directly from ENV_FILE via _existing, never overwrite an already-anchored window.
+  if [[ -n "$(_existing "PROVISION_TIME" || true)" ]]; then
+    ok "PROVISION_TIME already set: $(_existing "PROVISION_TIME") -- R-04's window is already anchored, not resetting it"
+  elif [[ -n "${CALLCONNECTED_LINES:-}" ]]; then
+    write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ok "R-04's 72h window opens now -- anchored on a confirmed CallConnected event, not just a healthy container:"
+    printf '%s\n' "$CALLCONNECTED_LINES" | sed 's/^/    /'
+  else
+    err "no Microsoft.Communication.CallConnected event found in Container App logs -- no call has been"
+    err "confirmed answered. PROVISION_TIME NOT written; R-04's window has not opened."
+    err "Fix whatever's blocking the app from answering, then re-run this script -- safe to re-run,"
+    err "PROVISION_TIME only gets written once real evidence exists."
+    exit 1
+  fi
 
   say "WebSocket open/close events:"
   printf '%s\n' "$WS_LINES" | sed 's/^/    /'
