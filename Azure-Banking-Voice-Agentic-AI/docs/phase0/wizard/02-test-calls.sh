@@ -63,7 +63,9 @@ on_error() {
   printf '\n%s%s  ✗ 02-test-calls.sh failed at stage %s/%s (exit %s)%s\n\n' \
     "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
   say "Resources that exist in $RESOURCE_GROUP right now:"
-  az resource list --resource-group "$RESOURCE_GROUP" --output table 2>/dev/null \
+  # --location "" overrides any stale `az config`/`~/.azure/config` defaults.location — see
+  # docs/phase0/findings.md and 01-provision.sh's on_error trap for the same fix/rationale.
+  az resource list --resource-group "$RESOURCE_GROUP" --location "" --output table 2>/dev/null \
     || note "(resource group query failed — check manually before assuming nothing's billing)"
   printf '\n'
   if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then

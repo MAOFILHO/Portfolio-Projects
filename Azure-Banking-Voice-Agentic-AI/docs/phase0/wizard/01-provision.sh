@@ -231,7 +231,10 @@ on_error() {
   printf '\n%s%s  ✗ 01-provision.sh failed at stage %s/%s (exit %s)%s\n\n' \
     "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
   say "Resources that exist in $RESOURCE_GROUP right now:"
-  az resource list --resource-group "$RESOURCE_GROUP" --output table 2>/dev/null \
+  # --location "" overrides any stale `az config`/`~/.azure/config` defaults.location — without it,
+  # a machine with a non-canadacentral/global default silently returns an empty table here even
+  # while the Container App is billing. Found 2026-08-21; see docs/phase0/findings.md.
+  az resource list --resource-group "$RESOURCE_GROUP" --location "" --output table 2>/dev/null \
     || note "(resource group itself doesn't exist yet, or the query failed — nothing billable then)"
   printf '\n'
   note "Only two things here bill per-hour: a Container App (min-replicas=1) and its environment."
@@ -517,6 +520,12 @@ say "location: 'global' (ACS control plane isn't regional); dataLocation: 'Canad
 if az communication list --resource-group "$RESOURCE_GROUP" --query "[?name=='$ACS_NAME']" -o tsv | grep -q .; then
   ok "ACS resource $ACS_NAME already exists"
 else
+  # --location must stay explicit below — `az communication create --help` confirms this command
+  # falls back to `az config`'s defaults.location (currently a stale "eastus" on this machine) when
+  # omitted. Don't let a future edit drop it. Placed above the command, not between its
+  # backslash-continued args: a comment line mid-continuation silently truncates the command instead
+  # of erroring (confirmed empirically, docs/phase0/findings.md) — everything after it, including
+  # --location itself, would be dropped, which is exactly the failure this comment warns against.
   az communication create \
     --name "$ACS_NAME" \
     --resource-group "$RESOURCE_GROUP" \
@@ -1015,7 +1024,7 @@ say "Avoiding az containerapp up's auto-provisioned ACR (~\$5/mo, not in docs/PL
 say "Pushing to Docker Hub's free tier instead, then pointing Container Apps at that external image."
 
 ask DOCKERHUB_USERNAME "Docker Hub username:"
-ask_secret DOCKERHUB_TOKEN "Docker Hub access token (Account Settings → Security → New Access Token):"
+ask_secret DOCKERHUB_TOKEN "Docker Hub access token, Read & Write scope (Account Settings → Security → New Access Token; set the Access permissions dropdown to Read & Write — this same token both pushes the image below and is used as the Container App's pull credential later, so it needs both; do NOT grant Delete, which neither step uses):"
 write_env "DOCKERHUB_USERNAME" "$DOCKERHUB_USERNAME"
 
 IMAGE="docker.io/${DOCKERHUB_USERNAME}/azbank-echo-p0:latest"

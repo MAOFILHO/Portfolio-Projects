@@ -605,3 +605,141 @@ revision. Full purchase sequence:
 
 `docs/phase0/wizard/.env.phase0` updated: `PHONE_NUMBER=+17059100383`. Full detail and the R-09 policy
 this purchase falls under: `COSTS.md`, "First billable resource purchased."
+
+## `az` CLI stale `defaults.location` — resource-enumeration blind spot (B4), 2026-08-21
+
+A resume-discipline live-state check (`az resource list -g rg-azure-banking-voice-agentic-ai`) returned
+`[]` on a resource group independently confirmed populated (`az cognitiveservices account show`, `az
+communication list`, `az communication phonenumber list` all returned the expected AOAI resource, ACS
+resource, and phone number). Root-caused rather than dismissed as CLI flakiness, per Marco's explicit
+instruction not to assert "unreliable" without finding the mechanism.
+
+**Root cause**: `~/.azure/config` (machine-level, `/Users/marco/.azure/config`, not project-scoped, not
+version-controlled) has `[defaults] location = eastus` — leftover from some other project/session, not
+this one. `az config get` confirms it's the *only* `defaults.*` key set on this machine (no other
+default, no `AZURE_*` environment variable adding a second override layer). `az resource list -g <rg>`
+silently folds that default into a server-side OData filter — confirmed via `--debug`:
+
+```
+GET .../resources?$filter=resourceGroup eq 'rg-azure-banking-voice-agentic-ai' and location eq 'eastus'&...
+```
+
+This project's resource group is `canadacentral` (AOAI) / `global` (ACS) — neither matches `eastus`,
+so the filtered query legitimately, silently returns empty. Confirmed the fix: `az resource list -g
+<rg> --location ""` cancels the filter and correctly returns both resources.
+
+**Audited every `az ... create` call site in `01-provision.sh` for the same exposure** (a create
+silently landing in the wrong region would be a data-residency break, not just a display bug):
+
+| Call site | `--location` passed? | Exposed? |
+|---|---|---|
+| `az group create` (:407) | explicit `"$LOCATION"` | No |
+| `az cognitiveservices account create` (:413, AOAI) | explicit `"$LOCATION"` | No |
+| `az cognitiveservices account deployment create` (:434, :474) | command has no `--location` param at all (confirmed via `--help`) — scoped to the parent account | No — architecturally immune |
+| `az communication create` (:520, ACS) | explicit `"global"` | No, **but** `--help` confirms this command *does* fall back to `defaults.location` when omitted — safe today only because the flag is present; flagged for a guarding comment |
+| `az containerapp env create` (:1041) | explicit `"$LOCATION"` | No |
+| `az containerapp create` (:1051, Stage 12) | command has no `--location` param at all (confirmed via full `--help` param dump) — a Container App's region is fixed by its `--environment`, not settable per-app | No — architecturally immune |
+| `az eventgrid event-subscription create` (:1101) | command has no `--location` param — scoped to `--source-resource-id` | No — architecturally immune |
+
+`$LOCATION` itself is a hardcoded literal (`LOCATION="canadacentral"`, :203), not derived from any CLI
+default, so it isn't a second exposure path. **Conclusion: no `create` call site in this script is
+exposed to the stale default** — Stage 12's two creates (env + app) are both clean, one explicit, one
+architecturally immune.
+
+**What *is* exposed, and matters for B4**: `01-provision.sh:234` and `02-test-calls.sh:66`, both inside
+their scripts' `on_error` traps, call the vulnerable form
+(`az resource list --resource-group "$RESOURCE_GROUP" --output table`, no `--location` override) to
+show Marco what exists/bills at the moment a script fails. On a machine with this stale default, that
+display silently prints empty even while the Container App is up and billing. The actual delete-offer
+logic immediately below it (`az containerapp show --name "$CONTAINERAPP_NAME" ...`) is a scoped direct
+GET, unaffected by the location filter, so **the automated safety mechanism itself still fires
+correctly** — it's the human-facing "here's what exists" table that's silently wrong, at exactly the
+moment a human needs to trust it.
+
+**Fix identified, not yet applied** (per Marco's instruction — shown as a diff, pending sign-off):
+add `--location ""` to both `az resource list` call sites to unconditionally cancel any machine-level
+default, regardless of what `~/.azure/config` says on whatever machine runs this script next; and a
+guarding comment on the `az communication create` call site noting it must keep an explicit
+`--location` because that command (unlike the ones proven architecturally immune above) does honor the
+stale default when omitted. `~/.azure/config` itself deliberately left untouched — a machine-level fix
+there would be invisible to this repo and could affect the FNOL project sharing this machine in ways
+not evaluated here.
+
+## Why `min-replicas=1`, not `0` — checked, partially confirmed, 2026-08-21
+
+Marco's read: ACS's inbound webhook can't absorb a cold start on `IncomingCall`. Checked against
+`docs/PLAN.md` rather than answering from memory. What's actually there (line 348): "`min-replicas=0`
+is **disqualifying** for inbound telephony (cold start seconds→30s)" — this confirms the *conclusion*
+(scale-to-zero is out) and the *magnitude* (up to 30s), sourced to "decision 15," but **does not spell
+out the specific failure mechanism**. Searched `docs/PLAN.md`, `docs/adr/`, and this file for a
+separate "decision 15" entry defining that mechanism — found only two citations (lines 348, 476), no
+standalone definition. So: Marco's read is directionally consistent with the stated conclusion (a
+30-second gap before a cold container answers is not viable for a live inbound call either way — the
+caller experience fails regardless of which specific layer times out first) but the precise mechanism
+(Event Grid webhook delivery timeout vs. ACS's own call-answer timeout vs. plain caller-perceived dead
+air/ring delay) isn't confirmed by any text found in this repo. **Mechanism unconfirmed, logged as an
+open Phase 2 question — does not change the setting.** `min-replicas` stays `1` either way; the
+unconfirmed mechanism affects only how the reason gets written up later, not what Stage 12 does. No
+`/research` pass on this — Marco's explicit call.
+
+## Stage 12 abort path — `PROVISION_TIME` / R-04 window, verified from script logic, 2026-08-21
+
+Not yet observed live (Stage 12 hasn't run) — verified by reading `01-provision.sh`'s actual control
+flow, not by running it.
+
+- `PROVISION_TIME` is written at line 1105 (was 1096 before this session's edits), **strictly after**
+  the health-check success branch. The failure branch (`HEALTHY != 1` after 2 minutes, line 1098) logs
+  recent container logs and calls `on_error 1` (line 1102), which — per its own definition (line
+  228ff) — reports what exists in `$RESOURCE_GROUP`, offers to delete the Container App + environment,
+  and `exit`s. **`PROVISION_TIME` is never reached on that path.** So: a failed first attempt does not
+  start R-04's window — there is no window to "abandon," because none was ever opened.
+- Re-running `01-provision.sh` after a failed attempt: `az containerapp show` (line 1054) finds the
+  already-created Container App and takes the "update existing" branch (`az containerapp update
+  --image`, not `create`) rather than re-provisioning from scratch. The healthz wait re-runs regardless
+  of which branch was taken; `PROVISION_TIME` is written on whichever attempt is the first to actually
+  pass health — that attempt's timestamp is what anchors the window, not the first attempt overall.
+- **Separate from window validity**: a failed attempt that isn't cleaned up (Marco declines `on_error`'s
+  delete offer, to fix-and-retry quickly) still leaves the Container App + environment billing hourly
+  (`min-replicas=1`) from whenever `az containerapp create` ran, independent of whether healthz ever
+  passed or `PROVISION_TIME` was ever written. That spend is real and unanchored to any R-04 window —
+  the `on_error` cleanup offer is what stops it, not `PROVISION_TIME`'s absence.
+
+**Marco's standing decision, 2026-08-21**: if healthz never goes green, **accept `on_error`'s delete
+offer.** Tear down the Container App and its environment rather than leave either billing while
+debugging — don't fix-and-retry against a live, still-billing resource. Confirmed the offer actually
+covers both, not just the app (`01-provision.sh:246-247`):
+```
+az containerapp delete --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" --yes --output none 2>/dev/null || true
+az containerapp env delete --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --yes --output none 2>/dev/null || true
+```
+Both calls fire on a single "Delete it now?" confirmation — app first, then its environment. Next
+attempt after accepting is always a fresh `az containerapp create` (line 1060), never the `update`
+branch, since `az containerapp show` finds nothing once both are gone.
+
+**Revision-swap deferral, reasoning corrected 2026-08-21**: an earlier chat-only note said the revision-
+swap rollout-mechanics question (does an `update` health-gate the new replica before killing the old
+one, or leave a gap — unresolved, `/research`-worthy per the Docker Hub token turn) "only matters if
+something touches the app after Stage 12." That's wrong on its own terms — this section's own finding
+is that a failed-healthz retry (before the standing decision above existed) takes the `az containerapp
+update --image` branch (line 1056), which **is** a revision swap, and that can happen before Stage 12
+ever finishes. The actual reason it doesn't block: no R-04 window is open pre-healthz regardless (per
+`PROVISION_TIME`'s placement, above) — the deferral is safe because it's scoped by whether the window
+is open, not by whether a revision swap could occur at all. Corrected here so it doesn't read as
+settled later.
+
+**`update`'s config scope, verified against `--help`, not observed live**: `az containerapp update`
+has **no** `--registry-server`/`--registry-username`/`--registry-password`/`--secrets`/`--target-port`/
+`--ingress` parameters — confirmed by grepping the full parameter list, zero matches. These aren't
+"left unspecified and therefore preserved," they're **structurally absent from the command** — there is
+no way to change registry credentials, secrets, target port, or ingress via `az containerapp update` at
+all, which means a retry cannot accidentally clear or diverge them from whatever the original `create`
+set. `--min-replicas`/`--max-replicas`/`--cpu`/`--memory` do exist as `update` params but aren't passed
+by the script's call; Microsoft's own canonical example for this command (`az containerapp update -n
+... --image myregistry.azurecr.io/my-app:v2.0`, nothing else) matches the script's exact pattern and
+documents that existing settings are preserved when omitted, not reset. **Caveat**: this is verified
+from `--help`'s documented parameter surface, not from watching a real retry happen — no Container App
+has existed this session to observe. In practice this whole question is moot now: the standing decision
+above means the `update` branch never fires on a failed-healthz retry — every retry after a delete is a
+fresh `create` with full config. It would only matter for some *other* re-run that reaches Stage 12 with
+the app already existing and healthy (e.g., re-running the script after a successful prior run to push
+an unrelated fix) — a different scenario than the abort path this section is about.
