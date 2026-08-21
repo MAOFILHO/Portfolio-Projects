@@ -134,13 +134,41 @@ write_env "CALL3_TIME" "$CALL3_TIME"
 stage "Pull Container App logs and extract R-02 / R-03 / RTT evidence"
 say "Reading application logs written by the echo app (docs/echo-app/app.py) since call 1."
 
+# --tail 300, not 500: the CLI hard-caps this flag at 300 ("--tail must be between 0 and 300") and
+# rejects anything higher with a non-zero exit. Found live 2026-08-21 -- --tail 500 had been failing
+# on every single run of this stage, every time, silently: the old `2>/dev/null || echo ""` swallowed
+# that error and always produced LOGS="", so the entire evidence-extraction block below (and the
+# PROVISION_TIME gate inside it) had never actually executed once this whole session. A real call
+# session (3 confirmed CallConnected events, DTMF, frame-echo) went unrecorded and R-04's window
+# never opened, and the script still exited 0 saying "wait 24 hours" as if nothing were wrong.
+# docs/phase0/findings.md, "02-test-calls.sh Stage 4 -- --tail 500 always failed, silently".
+LOGS_STDERR_FILE=$(mktemp)
 LOGS=$(az containerapp logs show \
   --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-  --type console --tail 500 2>/dev/null || echo "")
+  --type console --tail 300 2>"$LOGS_STDERR_FILE")
+LOGS_EXIT=$?
+LOGS_STDERR=$(cat "$LOGS_STDERR_FILE" 2>/dev/null || true)
+rm -f "$LOGS_STDERR_FILE"
 
-if [[ -z "$LOGS" ]]; then
-  warn "no logs returned — az containerapp logs show may need --follow removed or a moment to flush."
-  warn "Retry manually: az containerapp logs show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --type console"
+# The old check couldn't tell "the command itself failed" from "it succeeded but there's genuinely
+# nothing yet" -- both looked like an empty $LOGS, and both were treated as a soft warn-and-continue,
+# which is exactly how the --tail bug above went unnoticed all session. Distinguished explicitly now,
+# and both cases exit non-zero rather than let the script reach `finish` and report success with no
+# evidence gathered and no window opened.
+if [[ $LOGS_EXIT -ne 0 ]]; then
+  warn "az containerapp logs show FAILED (exit $LOGS_EXIT) -- a command error, not \"no logs yet\"."
+  warn "Raw stderr:"
+  sed 's/^/    /' <<<"$LOGS_STDERR"
+  warn "Fix the command above and re-run this script. No evidence was evaluated; PROVISION_TIME was"
+  warn "not touched."
+  exit 1
+elif [[ -z "$LOGS" ]]; then
+  warn "az containerapp logs show succeeded (exit 0) but returned zero lines -- genuinely no logs yet,"
+  warn "not a command failure. Retry the pull directly first, before re-running the whole script (a"
+  warn "full re-run means 3 fresh phone calls, not just a retried log pull):"
+  warn "  az containerapp logs show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP --type console --tail 300"
+  warn "PROVISION_TIME was not touched."
+  exit 1
 else
   DTMF_LINES=$(printf '%s\n' "$LOGS" | grep -i "DTMF tone=" || true)
   FRAME_LINES=$(printf '%s\n' "$LOGS" | grep -i "frame .* echoed" || true)
@@ -202,11 +230,11 @@ else
     ok "R-04's 72h window opens now -- anchored on a confirmed CallConnected event, not just a healthy container:"
     printf '%s\n' "$CALLCONNECTED_LINES" | sed 's/^/    /'
   else
-    err "no Microsoft.Communication.CallConnected event found in Container App logs -- no call has been"
-    err "confirmed answered. PROVISION_TIME NOT written; R-04's window has not opened."
-    err "Fix whatever's blocking the app from answering, then re-run this script -- safe to re-run,"
-    err "PROVISION_TIME only gets written once real evidence exists. Evidence above (if any) is"
-    err "already recorded to $FINDINGS_FILE regardless of this exit."
+    warn "no Microsoft.Communication.CallConnected event found in Container App logs -- no call has been"
+    warn "confirmed answered. PROVISION_TIME NOT written; R-04's window has not opened."
+    warn "Fix whatever's blocking the app from answering, then re-run this script -- safe to re-run,"
+    warn "PROVISION_TIME only gets written once real evidence exists. Evidence above (if any) is"
+    warn "already recorded to $FINDINGS_FILE regardless of this exit."
     exit 1
   fi
 fi
