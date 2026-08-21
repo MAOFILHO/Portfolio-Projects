@@ -2286,3 +2286,24 @@ Note: this is APP-SIDE processing latency (frame received → frame re-sent), no
 caller-to-caller RTT. It's the transport-RTT-adjacent number Phase 0 can actually produce;
 the true turn-latency percentile needs a real RealtimeSession (Phase 2, B5).
 
+
+## 02-test-calls.sh — Stage 4 (free, read-only) is welded to Stages 1-3 (billable calls)
+
+Found tonight while trying to re-run evidence extraction without placing new calls: Stage 4 (pull
+logs, extract R-02/R-03/RTT evidence, all free and read-only) has no way to run on its own.
+Stages 1-3 each unconditionally prompt for a fresh dial and block on `confirm`, with no
+skip-if-already-confirmed guard — unlike `01-provision.sh`'s idempotent stages, which check
+`_existing` before repeating a billable action. Reaching Stage 4 always means placing 3 more real
+calls first, whether or not evidence from prior calls already exists.
+
+Same general shape as several other findings from today: an operation that's cheap or free gets
+structurally coupled to one that isn't, removing any way to retry or extend the cheap part in
+isolation. Here the consequence was concrete tonight — 3 already-successful calls, and the only way
+the script itself offered to re-derive their evidence was 3 more calls against a window meant to be
+idle from that point on. Worked around by extracting manually (this file, "R-02 / R-03 / RTT —
+evidence from 3 test calls", above) rather than placing unnecessary billable calls.
+
+**Not fixed now — noted for later.** Candidate fixes: an `--extract-only` flag on
+`02-test-calls.sh` that jumps straight to Stage 4 against the current log buffer; or per-call
+guards on Stages 1-3 (`_existing "CALL1_TIME"`, etc.) so a partial or already-completed run can
+resume or skip cleanly, same shape as `01-provision.sh`'s existing stage guards.
