@@ -99,12 +99,22 @@ if [[ -z "${PHONE_NUMBER:-}" ]]; then
   write_env "PHONE_NUMBER" "$PHONE_NUMBER"
 fi
 
-# ── Stage 1: call 1 — plain echo ────────────────────────────────────────────
-stage "Call 1/3 — plain echo test"
+# DTMF is now requested on all three calls, not just Call 2. Found live 2026-08-21: with only Call 2
+# prompted, Call 1 and Call 3 were both technically "unprompted" -- Call 3 registered 6/6 tones
+# anyway (Marco pressed keys on all three regardless of what the script asked), Call 1 registered
+# zero, with nothing in the logs explaining the difference. A single-call R-03 test can't tell a real
+# gap from a fluke; asking on all three gets three independent data points instead of one, and stops
+# conflating "the script didn't ask" with "nothing was pressed" when a caller presses anyway. See
+# docs/phase0/findings.md, "R-03 -- DTMF evidence from the 3 real calls: confirmed by 2 of 3...".
+
+# ── Stage 1: call 1 — plain echo + DTMF ─────────────────────────────────────
+stage "Call 1/3 — plain echo test + DTMF"
 say "Dial ${BOLD}${PHONE_NUMBER}${RESET} from your mobile now."
 step "Speak a few words after it connects and confirm you hear your own voice echoed back."
-step "Stay on for ~20 seconds, then hang up."
-confirm "Did you complete the call and hear the echo?" || warn "recorded as not confirmed — you can redial before moving on."
+step "While the echo is actively going (mid-call, not right at connect and not right before you hang"
+step "up), press a few DTMF digits, e.g. 1  2  3. Keep listening for a few seconds after."
+step "Stay on for ~20 seconds total, then hang up."
+confirm "Did you complete the call, hear the echo, and press DTMF mid-call?" || warn "recorded as not confirmed — you can redial before moving on."
 CALL1_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 write_env "CALL1_TIME" "$CALL1_TIME"
 
@@ -120,13 +130,15 @@ confirm "Did you press DTMF tones mid-call and confirm the echo kept working aft
 CALL2_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 write_env "CALL2_TIME" "$CALL2_TIME"
 
-# ── Stage 3: call 3 — sustained call for RTT sampling ───────────────────────
-stage "Call 3/3 — sustained call for a transport RTT baseline"
+# ── Stage 3: call 3 — sustained call for RTT sampling + DTMF ────────────────
+stage "Call 3/3 — sustained call for a transport RTT baseline + DTMF"
 say "A longer call gives more echoed frames to sample for the RTT baseline (turns, not calls —"
 say "B5 in docs/PLAN.md: this is transport RTT only, not a turn-latency percentile; that's Phase 2's job)."
 step "Dial ${BOLD}${PHONE_NUMBER}${RESET} once more and stay on for at least 60 seconds, talking"
 step "intermittently so there's real audio (not silence) flowing both ways."
-confirm "Completed the sustained call?" || warn "recorded as not confirmed."
+step "Also press a few DTMF digits at some point mid-call, same as calls 1 and 2 -- a third"
+step "independent data point for R-03, on a call with a much longer active-streaming window."
+confirm "Completed the sustained call and pressed DTMF mid-call?" || warn "recorded as not confirmed."
 CALL3_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 write_env "CALL3_TIME" "$CALL3_TIME"
 
@@ -170,7 +182,12 @@ elif [[ -z "$LOGS" ]]; then
   warn "PROVISION_TIME was not touched."
   exit 1
 else
-  DTMF_LINES=$(printf '%s\n' "$LOGS" | grep -i "DTMF tone=" || true)
+  # "DTMF tone=" never matched anything the app actually logs -- the real per-digit evidence line is
+  # "DTMF digit #N arrived DURING streaming ... -- R-03 evidence" (docs/echo-app/app.py:149);
+  # "DTMF tone=" only appears in the B2-gated raw-value line, off by default. Found live 2026-08-21:
+  # this meant R03_RESULT below had been reporting UNCONFIRMED every run regardless of what the call
+  # actually did. docs/phase0/findings.md, "R-03 -- ... Separate bug found while investigating this".
+  DTMF_LINES=$(printf '%s\n' "$LOGS" | grep -i "DTMF digit #.*arrived DURING streaming" || true)
   FRAME_LINES=$(printf '%s\n' "$LOGS" | grep -i "frame .* echoed" || true)
   WS_LINES=$(printf '%s\n' "$LOGS" | grep -i "WS open\|WS closed" || true)
   CALLCONNECTED_LINES=$(printf '%s\n' "$LOGS" | grep "callback event: Microsoft.Communication.CallConnected" || true)

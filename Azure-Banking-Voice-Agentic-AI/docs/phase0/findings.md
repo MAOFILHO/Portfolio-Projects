@@ -2039,7 +2039,7 @@ Recorded here so it's unambiguous later: this value did **not** come from either
 logic. If R-04's teardown math ever looks off by a few minutes against what `02-test-calls.sh`
 would have produced on its own, this is why.
 
-## R-03 — DTMF evidence from the 3 real calls, and the call-1 discrepancy
+## R-03 — DTMF evidence from the 3 real calls: confirmed by 2 of 3, one unexplained miss on call 1
 
 From the captured log (`docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-3-test-calls.txt`):
 
@@ -2049,27 +2049,41 @@ From the captured log (`docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-
 | 2 | 22:51:52.921 → 22:52:25.767 (~33s) | 1641 | **6** |
 | 3 | 22:52:50.514 → 22:53:57.344 (~67s) | 3341 | **6** |
 
-`02-test-calls.sh`'s own instructions only ask the caller to press DTMF on **Call 2** ("Call
-2/3 — DTMF during active bidirectional streaming (R-03)"); Call 1's instructions ("Call 1/3 — plain
-echo test") say only to speak and listen, no DTMF mentioned; Call 3's instructions ("sustained call
-for a transport RTT baseline") don't mention DTMF either. Marco reports pressing keys on all three
-calls regardless of what the script asked for.
+Marco pressed DTMF keys on all three calls. An earlier version of this entry reasoned that Call 3
+(not explicitly prompted by the script) registering 6/6 tones was evidence the app captures DTMF
+reliably "even unprompted," and used that to wave off Call 1's zero as probably a prompting
+artifact. **That reasoning was wrong and has been corrected here.** If only Call 2 was scripted,
+then Calls 1 *and* 3 were equally unprompted — one got 6, the other got 0. That's an inconsistency
+between two calls in the same condition, not a pattern explained by prompting. Caught by Marco, not
+found independently.
 
-**R-03 itself is fully and unambiguously confirmed** — the property being tested is "DTMF tones
-arrive and are correctly registered during active bidirectional streaming," and Calls 2 and 3 both
-demonstrate exactly that: 6/6 tones registered on two independent calls, one of which (Call 3)
-wasn't even prompted by the script, which is itself evidence the app's DTMF path works reliably on
-unprompted input, not just the one scripted attempt.
+**R-03 is confirmed by Calls 2 and 3** — 6/6 tones registered on two independent calls,
+per-digit timestamps landing cleanly mid-stream (e.g. call 2's digit #1 at t=10.226s into a
+~33s-total call, frame_count=511 at that point — squarely mid-call, not at the edges).
 
-**Call 1's zero is a genuine open question, not resolved here.** Two explanations are both
-consistent with the evidence and neither can be ruled out from the app's own logs alone: (a) DTMF
-wasn't actually sent during Call 1 — plausible given the script's own instructions didn't ask for
-it, and human recall across three back-to-back real phone calls is fallible; (b) DTMF was sent but
-not recognized — the app's DTMF handling depends on ACS's own telephony-layer tone recognition
-happening *before* the app's callback ever fires, so a tone that was pressed but not decoded
-upstream would be indistinguishable, from inside this app, from a tone that was never sent. Not
-written up as an R-03 gap because R-03's claim doesn't depend on Call 1 at all — but flagging the
-discrepancy explicitly rather than letting it go unmentioned.
+**Call 1's zero is a real, unexplained gap — not reasoned away.** Full log block for Call 1
+(`IncomingCall` 22:51:12.212 → `WS closed` 22:51:37.861) shows: `CallConnected` at 22:51:13.864,
+1218 frames echoed steadily at ~1/sec for the full ~24s duration, `MediaStreamingStopped` then `WS
+closed frames=1218 dtmf_tones=0` — **zero `DtmfData` websocket messages arrived at any point**.
+Nothing in the log distinguishes Call 1's shape from Calls 2/3: it's shorter (24s vs. 33s/67s) but
+not short — comparable to Call 2's DTMF press landing at t=10s into a similarly-lengthed call, so
+there was ample active-streaming window for a mid-call press to land, same as the other two. No
+technical factor in the captured evidence (timing, frame count, event ordering) explains why DTMF
+didn't arrive on Call 1 specifically. Two explanations remain open and neither can be ruled in or
+out from the app's own logs: DTMF wasn't actually sent during that call, or it was sent but not
+recognized upstream (ACS's telephony-layer tone recognition happens before the app's WS callback
+ever fires, so a tone pressed but not decoded upstream is indistinguishable, from inside this app,
+from a tone never sent). Recorded as an open gap, not resolved, not smoothed over.
+
+**Separate bug found while investigating this**: `02-test-calls.sh`'s `DTMF_LINES` extraction
+(`grep -i "DTMF tone="`) never matches anything the app actually logs. The real per-digit evidence
+line is `"DTMF digit #%d arrived DURING streaming t=...s since stream start ... — R-03 evidence"`
+(`docs/echo-app/app.py:149`); `"DTMF tone="` only appears in the B2-gated raw-value line (off by
+default). Confirmed against the capture file: 12 real DTMF lines present, zero matches for the
+script's pattern. This means the automated R-02/R-03 findings.md write has been reporting
+`R03_RESULT="UNCONFIRMED THIS RUN"` every single run regardless of what actually happened on the
+call — a second silent-failure bug in the same evidence path as the `--tail 500` one above, caught
+in the same pass. Fixed alongside the DTMF-prompt-on-all-3-calls fix below.
 
 ## Log delivery — still zero rows after a full lifecycle, diagnostic setting confirmed attached
 
