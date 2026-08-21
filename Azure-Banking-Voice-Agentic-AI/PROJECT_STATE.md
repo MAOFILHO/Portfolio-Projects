@@ -11,11 +11,16 @@ through `docs/phase0/wizard/01-provision.sh` one stage at a time, stopping at ea
 preference this phase, not a default to assume carries to later phases.
 
 **Stage reached: 10 of 12, this session, 2026-08-20.** Resources that exist: resource group
-`rg-azure-banking-voice-agentic-ai`; Azure OpenAI resource `aoai-azure-banking-voice-cc` (S0, $0/hr
-idle) with `gpt-realtime-mini` 2025-10-06 `GlobalStandard` deployed (`NoAutoUpgrade` confirmed, B3
-satisfied); ACS resource `acs-azure-banking-voice` (`global`/`Canada`, $0/hr); **phone number
-`+17059100383`, purchased, $1.00/mo, the project's first genuinely billable resource** (Container App,
-Stage 12, is the next one that will bill just for existing — not created yet).
+`rg-azure-banking-voice-agentic-ai`; Azure OpenAI resource `aoai-azure-banking-voice-cc` (S0,
+**consumption-billed** — pay-per-token, currently $0 because zero tokens have been consumed, not
+because the resource type is free) with `gpt-realtime-mini` 2025-10-06 `GlobalStandard` deployed
+(`NoAutoUpgrade` confirmed, B3 satisfied); ACS resource `acs-azure-banking-voice` (`global`/`Canada`,
+same consumption-billed/$0-currently basis); **phone number `+17059100383`, purchased, $1.00/mo — the
+first resource this project actually *purchased* (flat recurring fee, not usage-based)**, per
+`COSTS.md`'s own precise framing. Container App (Stage 12) will be the first resource that bills **for
+merely existing over time** (hourly rate, `min-replicas=1`), not the "second billable resource" —
+AOAI and ACS are already billable-capable and predate it; corrected 2026-08-21 after stating this
+wrong in chat.
 
 **Stage 10 done: ADR-001 and ADR-002 written**, `docs/adr/`. ADR-001 (data residency) carries R-06's
 exact error string (SKU not supported, not a quota/permission error) and states the residency claim
