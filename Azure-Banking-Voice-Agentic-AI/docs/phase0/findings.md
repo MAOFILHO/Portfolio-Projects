@@ -2117,3 +2117,172 @@ session (~300 lines in under 4 minutes of active calling), any future burst of r
 will scroll past captured evidence within minutes if it isn't pulled promptly. Idle-period volume
 (occasional healthz/watchdog `GET / 404` lines) is much lower and likely safe over gaps of hours,
 but this hasn't been measured precisely enough to state a safe polling interval with confidence.
+## R-02 / R-03 / RTT — evidence from 3 test calls
+
+**Extracted manually, not by running `02-test-calls.sh`.** The script's Stage 4 (this exact
+extraction) only runs after Stages 1-3 each prompt for and confirm a fresh dial -- there is no
+guard to skip already-completed calls, unlike `01-provision.sh`'s idempotent stages. The 3 calls
+this evidence comes from already happened and succeeded; re-running the script to reach Stage 4
+would have required 3 more real calls, adding active-billing minutes to a window meant to measure
+idle behavior from here on. Extraction below uses the exact grep patterns just fixed in
+`02-test-calls.sh` (commit b805646), run against the committed capture
+(`docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-3-test-calls.txt`) instead of a fresh
+`az containerapp logs show` pull, since that file is the already-verified source for this session.
+
+Calls at: , ,  (UTC).
+
+### R-03 (DTMF during active streaming)
+
+CONFIRMED — DTMF tones observed arriving during active bidirectional streaming, on 2 of 3 calls
+(Call 2 and Call 3, 6/6 each). Call 1 registered zero despite Marco pressing keys during it too --
+a real, unexplained gap, not folded into this CONFIRMED verdict. Full analysis, including why the
+gap isn't explained by call duration/timing/prompting: this file, "R-03 — DTMF evidence from the
+3 real calls: confirmed by 2 of 3, one unexplained miss on call 1", above.
+
+```
+{"TimeStamp": "2026-08-21T22:52:03.1486718+00:00", "Log": "F 2026-08-21 22:52:03,148 DTMF digit #1 arrived DURING streaming t=10.226s since stream start (frame_count so far=511) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:04.1148742+00:00", "Log": "F 2026-08-21 22:52:04,114 DTMF digit #2 arrived DURING streaming t=11.193s since stream start (frame_count so far=559) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:05.0938035+00:00", "Log": "F 2026-08-21 22:52:05,093 DTMF digit #3 arrived DURING streaming t=12.172s since stream start (frame_count so far=608) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.0556528+00:00", "Log": "F 2026-08-21 22:52:21,055 DTMF digit #4 arrived DURING streaming t=28.133s since stream start (frame_count so far=1406) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.574832+00:00", "Log": "F 2026-08-21 22:52:21,574 DTMF digit #5 arrived DURING streaming t=28.653s since stream start (frame_count so far=1432) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:22.240715+00:00", "Log": "F 2026-08-21 22:52:22,240 DTMF digit #6 arrived DURING streaming t=29.319s since stream start (frame_count so far=1465) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:24.458221+00:00", "Log": "F 2026-08-21 22:53:24,457 DTMF digit #1 arrived DURING streaming t=33.944s since stream start (frame_count so far=1697) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:24.9806141+00:00", "Log": "F 2026-08-21 22:53:24,980 DTMF digit #2 arrived DURING streaming t=34.466s since stream start (frame_count so far=1723) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:25.5104563+00:00", "Log": "F 2026-08-21 22:53:25,510 DTMF digit #3 arrived DURING streaming t=34.996s since stream start (frame_count so far=1749) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:26.1903539+00:00", "Log": "F 2026-08-21 22:53:26,190 DTMF digit #4 arrived DURING streaming t=35.676s since stream start (frame_count so far=1783) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:26.7205134+00:00", "Log": "F 2026-08-21 22:53:26,720 DTMF digit #5 arrived DURING streaming t=36.206s since stream start (frame_count so far=1810) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:27.2812573+00:00", "Log": "F 2026-08-21 22:53:27,280 DTMF digit #6 arrived DURING streaming t=36.767s since stream start (frame_count so far=1838) \u2014 R-03 evidence"}
+```
+
+### R-02 (Pcm24KMono) + transport RTT samples
+
+Processing-latency samples logged by the app (recv-to-echo, once per ~50 frames /1s):
+```
+{"TimeStamp": "2026-08-21T22:51:14.4443815+00:00", "Log": "F 2026-08-21 22:51:14,444 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:15.4384785+00:00", "Log": "F 2026-08-21 22:51:15,438 frame 100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:16.4392616+00:00", "Log": "F 2026-08-21 22:51:16,439 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:17.4397658+00:00", "Log": "F 2026-08-21 22:51:17,439 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:18.43801+00:00", "Log": "F 2026-08-21 22:51:18,437 frame 250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:19.439011+00:00", "Log": "F 2026-08-21 22:51:19,438 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:20.4389716+00:00", "Log": "F 2026-08-21 22:51:20,438 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:21.4404781+00:00", "Log": "F 2026-08-21 22:51:21,440 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:22.4406821+00:00", "Log": "F 2026-08-21 22:51:22,440 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:23.4400808+00:00", "Log": "F 2026-08-21 22:51:23,439 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:24.4404916+00:00", "Log": "F 2026-08-21 22:51:24,440 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:25.4406254+00:00", "Log": "F 2026-08-21 22:51:25,440 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:26.4400246+00:00", "Log": "F 2026-08-21 22:51:26,439 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:27.4399702+00:00", "Log": "F 2026-08-21 22:51:27,439 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:28.4390585+00:00", "Log": "F 2026-08-21 22:51:28,438 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:29.4391806+00:00", "Log": "F 2026-08-21 22:51:29,438 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:30.4403278+00:00", "Log": "F 2026-08-21 22:51:30,440 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:31.4396402+00:00", "Log": "F 2026-08-21 22:51:31,439 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:32.4539727+00:00", "Log": "F 2026-08-21 22:51:32,453 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:33.4398723+00:00", "Log": "F 2026-08-21 22:51:33,439 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:34.4401414+00:00", "Log": "F 2026-08-21 22:51:34,439 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:35.4399135+00:00", "Log": "F 2026-08-21 22:51:35,439 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:36.4397965+00:00", "Log": "F 2026-08-21 22:51:36,439 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:37.4405771+00:00", "Log": "F 2026-08-21 22:51:37,440 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:53.9345163+00:00", "Log": "F 2026-08-21 22:51:53,934 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:54.9337823+00:00", "Log": "F 2026-08-21 22:51:54,933 frame 100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:55.9341034+00:00", "Log": "F 2026-08-21 22:51:55,933 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:56.9351275+00:00", "Log": "F 2026-08-21 22:51:56,934 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:57.9343651+00:00", "Log": "F 2026-08-21 22:51:57,934 frame 250 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:51:58.9348079+00:00", "Log": "F 2026-08-21 22:51:58,934 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:59.9292581+00:00", "Log": "F 2026-08-21 22:51:59,929 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:00.9343031+00:00", "Log": "F 2026-08-21 22:52:00,934 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:01.9294131+00:00", "Log": "F 2026-08-21 22:52:01,929 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:02.929683+00:00", "Log": "F 2026-08-21 22:52:02,929 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:03.9335376+00:00", "Log": "F 2026-08-21 22:52:03,933 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:04.9345549+00:00", "Log": "F 2026-08-21 22:52:04,934 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:05.93384+00:00", "Log": "F 2026-08-21 22:52:05,933 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:06.9294888+00:00", "Log": "F 2026-08-21 22:52:06,929 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:07.9339099+00:00", "Log": "F 2026-08-21 22:52:07,933 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:08.9338506+00:00", "Log": "F 2026-08-21 22:52:08,933 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:09.9342229+00:00", "Log": "F 2026-08-21 22:52:09,933 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:10.9339785+00:00", "Log": "F 2026-08-21 22:52:10,933 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:11.9339159+00:00", "Log": "F 2026-08-21 22:52:11,933 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:12.934046+00:00", "Log": "F 2026-08-21 22:52:12,933 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:13.9339303+00:00", "Log": "F 2026-08-21 22:52:13,933 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:14.9333265+00:00", "Log": "F 2026-08-21 22:52:14,933 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:15.9340754+00:00", "Log": "F 2026-08-21 22:52:15,933 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:16.9340853+00:00", "Log": "F 2026-08-21 22:52:16,933 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:17.9341493+00:00", "Log": "F 2026-08-21 22:52:17,933 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:18.9305193+00:00", "Log": "F 2026-08-21 22:52:18,930 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:19.9311375+00:00", "Log": "F 2026-08-21 22:52:19,930 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:20.930395+00:00", "Log": "F 2026-08-21 22:52:20,930 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:21.9321579+00:00", "Log": "F 2026-08-21 22:52:21,931 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:22.9307719+00:00", "Log": "F 2026-08-21 22:52:22,930 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:23.9320376+00:00", "Log": "F 2026-08-21 22:52:23,931 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:24.9324992+00:00", "Log": "F 2026-08-21 22:52:24,932 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:51.5147543+00:00", "Log": "F 2026-08-21 22:52:51,514 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:52.5158194+00:00", "Log": "F 2026-08-21 22:52:52,515 frame 100 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:52:53.5197741+00:00", "Log": "F 2026-08-21 22:52:53,519 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:54.5202317+00:00", "Log": "F 2026-08-21 22:52:54,520 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:55.5153899+00:00", "Log": "F 2026-08-21 22:52:55,515 frame 250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:56.5148911+00:00", "Log": "F 2026-08-21 22:52:56,514 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:57.5204605+00:00", "Log": "F 2026-08-21 22:52:57,520 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:58.515876+00:00", "Log": "F 2026-08-21 22:52:58,515 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:59.5203161+00:00", "Log": "F 2026-08-21 22:52:59,519 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:00.5151024+00:00", "Log": "F 2026-08-21 22:53:00,514 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:01.5182072+00:00", "Log": "F 2026-08-21 22:53:01,517 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:02.5178134+00:00", "Log": "F 2026-08-21 22:53:02,517 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:03.5174064+00:00", "Log": "F 2026-08-21 22:53:03,517 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:04.5186392+00:00", "Log": "F 2026-08-21 22:53:04,518 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:05.517239+00:00", "Log": "F 2026-08-21 22:53:05,516 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:06.5187534+00:00", "Log": "F 2026-08-21 22:53:06,518 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:07.5173954+00:00", "Log": "F 2026-08-21 22:53:07,517 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:08.5190026+00:00", "Log": "F 2026-08-21 22:53:08,518 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:09.5155725+00:00", "Log": "F 2026-08-21 22:53:09,515 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:10.5205183+00:00", "Log": "F 2026-08-21 22:53:10,520 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:11.5199673+00:00", "Log": "F 2026-08-21 22:53:11,519 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:12.516817+00:00", "Log": "F 2026-08-21 22:53:12,516 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:13.51635+00:00", "Log": "F 2026-08-21 22:53:13,516 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:14.5161601+00:00", "Log": "F 2026-08-21 22:53:14,515 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:15.5165751+00:00", "Log": "F 2026-08-21 22:53:15,516 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:16.5168803+00:00", "Log": "F 2026-08-21 22:53:16,516 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:17.5176783+00:00", "Log": "F 2026-08-21 22:53:17,517 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:18.5187121+00:00", "Log": "F 2026-08-21 22:53:18,518 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:19.5189643+00:00", "Log": "F 2026-08-21 22:53:19,518 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:20.5198829+00:00", "Log": "F 2026-08-21 22:53:20,519 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:21.5201908+00:00", "Log": "F 2026-08-21 22:53:21,519 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:22.5195952+00:00", "Log": "F 2026-08-21 22:53:22,519 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:23.5194162+00:00", "Log": "F 2026-08-21 22:53:23,519 frame 1650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:24.5208725+00:00", "Log": "F 2026-08-21 22:53:24,520 frame 1700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:25.5203345+00:00", "Log": "F 2026-08-21 22:53:25,520 frame 1750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:26.5202117+00:00", "Log": "F 2026-08-21 22:53:26,519 frame 1800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:27.5216159+00:00", "Log": "F 2026-08-21 22:53:27,521 frame 1850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:28.5196329+00:00", "Log": "F 2026-08-21 22:53:28,519 frame 1900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:29.5207952+00:00", "Log": "F 2026-08-21 22:53:29,520 frame 1950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:30.5210238+00:00", "Log": "F 2026-08-21 22:53:30,520 frame 2000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:31.5218186+00:00", "Log": "F 2026-08-21 22:53:31,521 frame 2050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:32.5222078+00:00", "Log": "F 2026-08-21 22:53:32,521 frame 2100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:33.5182775+00:00", "Log": "F 2026-08-21 22:53:33,518 frame 2150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:34.5177891+00:00", "Log": "F 2026-08-21 22:53:34,517 frame 2200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:35.5180087+00:00", "Log": "F 2026-08-21 22:53:35,517 frame 2250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:36.5190894+00:00", "Log": "F 2026-08-21 22:53:36,518 frame 2300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:37.5176099+00:00", "Log": "F 2026-08-21 22:53:37,517 frame 2350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:38.5186194+00:00", "Log": "F 2026-08-21 22:53:38,518 frame 2400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:39.5195976+00:00", "Log": "F 2026-08-21 22:53:39,519 frame 2450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:40.5212349+00:00", "Log": "F 2026-08-21 22:53:40,520 frame 2500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:41.5207848+00:00", "Log": "F 2026-08-21 22:53:41,520 frame 2550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:42.5199062+00:00", "Log": "F 2026-08-21 22:53:42,519 frame 2600 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:53:43.5167039+00:00", "Log": "F 2026-08-21 22:53:43,516 frame 2650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:44.5259311+00:00", "Log": "F 2026-08-21 22:53:44,525 frame 2700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:45.5191576+00:00", "Log": "F 2026-08-21 22:53:45,518 frame 2750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:46.5185822+00:00", "Log": "F 2026-08-21 22:53:46,518 frame 2800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:47.5184664+00:00", "Log": "F 2026-08-21 22:53:47,518 frame 2850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:48.5199423+00:00", "Log": "F 2026-08-21 22:53:48,519 frame 2900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:49.5187746+00:00", "Log": "F 2026-08-21 22:53:49,518 frame 2950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:50.518943+00:00", "Log": "F 2026-08-21 22:53:50,518 frame 3000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:51.5196928+00:00", "Log": "F 2026-08-21 22:53:51,519 frame 3050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:52.5196063+00:00", "Log": "F 2026-08-21 22:53:52,518 frame 3100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:53.5215552+00:00", "Log": "F 2026-08-21 22:53:53,521 frame 3150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:54.5222791+00:00", "Log": "F 2026-08-21 22:53:54,521 frame 3200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:55.518685+00:00", "Log": "F 2026-08-21 22:53:55,518 frame 3250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:56.517255+00:00", "Log": "F 2026-08-21 22:53:56,516 frame 3300 echoed, local processing latency=0.1ms"}
+```
+
+Note: this is APP-SIDE processing latency (frame received → frame re-sent), not full
+caller-to-caller RTT. It's the transport-RTT-adjacent number Phase 0 can actually produce;
+the true turn-latency percentile needs a real RealtimeSession (Phase 2, B5).
+
