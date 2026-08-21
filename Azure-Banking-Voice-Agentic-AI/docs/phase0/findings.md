@@ -1743,3 +1743,363 @@ All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSiz
 {"phoneNumberLocalities":[{"localizedName":"Calgary","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"Brockville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"North Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Montreal","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Sherbrooke","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}}],"nextLink":null}
 ```
 
+## R-01 — Models API deprecation-date check
+
+Queried 2026-08-21T22:47:45Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Brockville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"North Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Montreal","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Sherbrooke","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}}],"nextLink":null}
+```
+
+
+## 02-test-calls.sh Stage 4 — `--tail 500` always failed, silently, all session
+
+The 3 real test calls placed 2026-08-21 (~22:51–22:53 UTC) all worked — first ring, clear echo,
+DTMF registered. `02-test-calls.sh` still exited 0 and printed "wait 24 hours" as if nothing had
+been recorded, and `PROVISION_TIME` (moved to this script in the previous fix, gated on a
+confirmed `CallConnected` event) was never written.
+
+Root cause, verified live: Stage 4 called `az containerapp logs show --tail 500`. The CLI hard-caps
+`--tail` at 300:
+
+```
+$ az containerapp logs show --name ca-azbank-echo-p0 --resource-group rg-azure-banking-voice-agentic-ai --type console --tail 500
+ERROR: --tail must be between 0 and 300.
+```
+
+The old code was `LOGS=$(az containerapp logs show ... --tail 500 2>/dev/null || echo "")` — the
+`2>/dev/null` discarded that error, and `|| echo ""` produced `LOGS=""` on any failure. This is not
+a flush-timing race (the first hypothesis, based on the script's own "may need a moment to flush"
+message) — it is a hardcoded, deterministic bug that has **never once succeeded**, on any run, this
+entire session. Confirmed by absence: no `## R-02 / R-03 / RTT` section exists anywhere in this
+file prior to this entry, meaning the evidence-extraction `else` branch (and the `CallConnected`
+gate inside it) had literally never executed.
+
+**Fixed**: `--tail 300` (the real max). The command's exit code is now captured explicitly and
+distinguished from "succeeded but genuinely empty" — both cases `exit 1` with a message identifying
+which, rather than the old warn-and-continue that let the script reach `finish` and report success
+with nothing gathered and no window opened. Same silent-failure shape as the `on_error` empty-table
+ambiguity Marco flagged separately — fixed here where it was live and had already cost real time.
+
+Also caught and fixed while touching this code: every message in this block (both the new ones and
+the `CallConnected` gate committed earlier tonight) called `err()`, which `02-test-calls.sh` —
+unlike `01-provision.sh` — never defines. Under `set -u` this would have failed with "command not
+found" at exactly the moment a clear failure message mattered most. Switched to `warn()`, the
+function this file actually has.
+
+## PROVISION_TIME — set manually, not by the normal path
+
+Because of the `--tail` bug above, `02-test-calls.sh`'s `CallConnected` gate never got the chance
+to fire against real, successful evidence. `PROVISION_TIME` was set by hand on 2026-08-21, **not**
+via `write_env` inside either wizard script, to `2026-08-21T22:49:35Z` — the active Container App
+revision's `properties.createdTime` (`az containerapp revision list`), not `CALL1_TIME`
+(`22:51:43Z`) and not the time this diagnosis finished.
+
+Reasoning: R-04 measures idle-vs-active *billing*, and on the Consumption plan this app bills from
+the moment its replica exists, not from the moment someone first dials it. The ~2m16s between the
+container's `createdTime` and `CALL1_TIME` is itself idle-billing time and belongs inside the
+measurement window — anchoring to `CALL1_TIME` instead would exclude it and understate the window
+relative to the resource's actual billed lifetime (the same failure mode the original
+`01-provision.sh` Stage-1 comment already flagged for writing `PROVISION_TIME` too early, mirrored
+here in the other direction). `systemData.createdAt` on the Container App resource itself reads
+`2026-08-21T22:49:27Z`, 8 seconds earlier than the revision's `createdTime` — immaterial at 72h
+scale; the revision timestamp was used as the more direct proxy for when compute was actually
+scheduled and started billing.
+
+Recorded here so it's unambiguous later: this value did **not** come from either script's guard
+logic. If R-04's teardown math ever looks off by a few minutes against what `02-test-calls.sh`
+would have produced on its own, this is why.
+
+## R-03 — DTMF evidence from the 3 real calls, and the call-1 discrepancy
+
+From the captured log (`docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-3-test-calls.txt`):
+
+| Call | WS open→close | frames | dtmf_tones |
+|---|---|---|---|
+| 1 | 22:51:13.426 → 22:51:37.860 (~24s) | 1218 | **0** |
+| 2 | 22:51:52.921 → 22:52:25.767 (~33s) | 1641 | **6** |
+| 3 | 22:52:50.514 → 22:53:57.344 (~67s) | 3341 | **6** |
+
+`02-test-calls.sh`'s own instructions only ask the caller to press DTMF on **Call 2** ("Call
+2/3 — DTMF during active bidirectional streaming (R-03)"); Call 1's instructions ("Call 1/3 — plain
+echo test") say only to speak and listen, no DTMF mentioned; Call 3's instructions ("sustained call
+for a transport RTT baseline") don't mention DTMF either. Marco reports pressing keys on all three
+calls regardless of what the script asked for.
+
+**R-03 itself is fully and unambiguously confirmed** — the property being tested is "DTMF tones
+arrive and are correctly registered during active bidirectional streaming," and Calls 2 and 3 both
+demonstrate exactly that: 6/6 tones registered on two independent calls, one of which (Call 3)
+wasn't even prompted by the script, which is itself evidence the app's DTMF path works reliably on
+unprompted input, not just the one scripted attempt.
+
+**Call 1's zero is a genuine open question, not resolved here.** Two explanations are both
+consistent with the evidence and neither can be ruled out from the app's own logs alone: (a) DTMF
+wasn't actually sent during Call 1 — plausible given the script's own instructions didn't ask for
+it, and human recall across three back-to-back real phone calls is fallible; (b) DTMF was sent but
+not recognized — the app's DTMF handling depends on ACS's own telephony-layer tone recognition
+happening *before* the app's callback ever fires, so a tone that was pressed but not decoded
+upstream would be indistinguishable, from inside this app, from a tone that was never sent. Not
+written up as an R-03 gap because R-03's claim doesn't depend on Call 1 at all — but flagging the
+discrepancy explicitly rather than letting it go unmentioned.
+
+## Log delivery — still zero rows after a full lifecycle, diagnostic setting confirmed attached
+
+Re-checked after the container's full lifecycle (create → healthz → 3 real answered calls) with
+the diagnostic setting from the previous fix in place the entire time:
+
+```
+ContainerAppConsoleLogs | count  →  0 rows
+ContainerAppSystemLogs  | count  →  0 rows
+```
+
+Confirmed this is not a configuration mistake on this project's end — both the native path and the
+explicit fallback are correctly wired:
+
+- `az containerapp env show ... --query properties.appLogsConfiguration` → `destination:
+  "log-analytics"`, `customerId` matching the correct (non-orphaned) workspace.
+- `az monitor diagnostic-settings list --resource <environment id>` → `azbank-p0-console-logs`
+  present, `ContainerAppConsoleLogs` and `ContainerAppSystemLogs` both `enabled: true`, pointed at
+  the same correct workspace.
+
+Both delivery paths are configured exactly as documented and neither has delivered a single row,
+over an hour after real, confirmed activity (not an idle container — three actual answered calls).
+This is now a confirmed platform-level gap, not a "give it more time" situation — genuinely
+undiagnosed, not explained by anything found so far.
+
+**Practical consequence for R-04's remaining ~72h**: Log Analytics cannot be relied on for any
+evidence during this window. `az containerapp logs show --tail 300` (the CLI's live streaming
+buffer, confirmed independent of the Log Analytics pipeline above) is the only working read path,
+and it does not retain past ~300 lines — at this app's observed log volume during the 3-call
+session (~300 lines in under 4 minutes of active calling), any future burst of real call activity
+will scroll past captured evidence within minutes if it isn't pulled promptly. Idle-period volume
+(occasional healthz/watchdog `GET / 404` lines) is much lower and likely safe over gaps of hours,
+but this hasn't been measured precisely enough to state a safe polling interval with confidence.
