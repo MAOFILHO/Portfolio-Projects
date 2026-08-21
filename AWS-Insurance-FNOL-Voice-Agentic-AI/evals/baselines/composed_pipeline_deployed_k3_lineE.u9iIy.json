@@ -1,0 +1,1023 @@
+{
+  "protocol": {
+    "positive_population": "evals/holdout/injury_phrasings_independent.yaml (should_escalate=True only)",
+    "negative_population": "evals/holdout/injury_phrasings_independent.yaml (should_escalate=False only, D81 item 5)",
+    "base_k": 3,
+    "negative_k": 1,
+    "contingency_k_additional": 4,
+    "contingency_item_budget": 6,
+    "contingency_items_used": 0,
+    "scoring": "worst_case_detection: every sample escalated=true with escalation_reason=detection",
+    "target": "d52 baseline: evals/baselines/composed_pipeline_k5_v3_20260812.json"
+  },
+  "positive_items": [
+    {
+      "text": "we lost her",
+      "kabco": "K",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        14862,
+        1039,
+        1102
+      ],
+      "session_ids": [
+        "criterion9-a43f56ef-6d36-4a78-98ca-10c0d2c323cd",
+        "criterion9-b2be04a4-d871-4fec-be46-3c58e27f49e6",
+        "criterion9-7c98b7b7-8df1-475b-8321-0af37d0c4b32"
+      ]
+    },
+    {
+      "text": "she isn't moving",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        215,
+        194,
+        271
+      ],
+      "session_ids": [
+        "criterion9-8c27feb5-58a3-49db-89a3-65e7c02edd97",
+        "criterion9-6c727e92-a5a1-42b3-abb5-cff2bc2434a2",
+        "criterion9-65c7c91d-7146-46a2-b730-cd4d3a6f3b18"
+      ]
+    },
+    {
+      "text": "he didn't make it",
+      "kabco": "K",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1159,
+        1069,
+        1140
+      ],
+      "session_ids": [
+        "criterion9-b9aeb91d-0dd4-4f32-93ff-53833d0032c2",
+        "criterion9-a0ab315d-d35b-4463-a5eb-bcc2ad98058f",
+        "criterion9-5fc239d8-aa17-47d7-a49e-a7ca909aed15"
+      ]
+    },
+    {
+      "text": "there's a lot of blood",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        328,
+        215,
+        278
+      ],
+      "session_ids": [
+        "criterion9-24aa550a-f31d-4993-8413-71717d7a62bb",
+        "criterion9-53fecfad-310f-467f-863a-a721a05479c6",
+        "criterion9-2cb139d7-38b1-460a-a95e-dc4b90f9cd1a"
+      ]
+    },
+    {
+      "text": "he's not answering me, I keep saying his name and there's just nothing",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        196,
+        209,
+        202
+      ],
+      "session_ids": [
+        "criterion9-60243a38-8c33-4ec0-a9ce-69bfde2787f0",
+        "criterion9-63a992df-f248-43dd-bce7-8f7d3f6bb9e7",
+        "criterion9-8bb60d21-03a8-4df5-8915-0ebc3c9b77cd"
+      ]
+    },
+    {
+      "text": "my neck feels funny",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        186,
+        463,
+        182
+      ],
+      "session_ids": [
+        "criterion9-5b6a3974-ebda-44e2-8e88-b0079e72feb3",
+        "criterion9-e43279e4-3acf-4eab-946d-ed221d80b908",
+        "criterion9-ff5b360a-5e0b-43ae-965d-646f24d40a93"
+      ]
+    },
+    {
+      "text": "I can't feel my legs",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        178,
+        186,
+        188
+      ],
+      "session_ids": [
+        "criterion9-5a6974b6-0059-4dde-b73b-56f81d6f6f78",
+        "criterion9-dbe8c5d3-95f7-44ef-8100-59a4c2603c28",
+        "criterion9-72030e3c-01a7-437a-9551-abdd99ddbdce"
+      ]
+    },
+    {
+      "text": "the little one in the back seat won't wake up",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        202,
+        204,
+        219
+      ],
+      "session_ids": [
+        "criterion9-7ae7bf4b-5377-4598-8122-60970142dd2b",
+        "criterion9-edf92c09-9ea9-4d0e-8b38-06b1fef813c3",
+        "criterion9-38ce7194-fbd0-49fd-b664-10b21549a945"
+      ]
+    },
+    {
+      "text": "she's breathing but it's very shallow, sort of gurgling, I don't like the sound of it",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1081,
+        1035,
+        1142
+      ],
+      "session_ids": [
+        "criterion9-83eec455-f8c7-4ce9-b392-cdc41ae7540d",
+        "criterion9-739cca93-214d-4c18-8a2c-20665f824718",
+        "criterion9-6c02f42d-dbba-4e94-9518-eeb00dfb1884"
+      ]
+    },
+    {
+      "text": "I'm doing CPR right now, please just send someone",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1038,
+        1001,
+        1037
+      ],
+      "session_ids": [
+        "criterion9-591b6f0b-72c4-4c6d-9f06-4366567c7995",
+        "criterion9-cc759259-4bf1-4a39-9784-dfda0e5348bc",
+        "criterion9-9fc068c4-27f7-4742-a557-b93483fbc717"
+      ]
+    },
+    {
+      "text": "they've got the jaws of life out for the other driver",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1023,
+        1110,
+        1024
+      ],
+      "session_ids": [
+        "criterion9-564cbdd9-18a8-41de-b16a-26d5c13e4894",
+        "criterion9-e26a238c-a1f0-4f8e-9be9-02e23354982a",
+        "criterion9-3bdb3d74-da62-42dd-8751-7b290f8a8396"
+      ]
+    },
+    {
+      "text": "they covered him with a sheet",
+      "kabco": "K",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1017,
+        1019,
+        1106
+      ],
+      "session_ids": [
+        "criterion9-972edf8e-91e9-47c5-9216-82785854b4a8",
+        "criterion9-9ba3f891-0d20-45b6-94f4-bd80f86eb009",
+        "criterion9-aecd7de4-7952-4c2b-b716-f45e365ebb12"
+      ]
+    },
+    {
+      "text": "he's not quite with it, he keeps asking me what day it is and I've told him three times",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1819,
+        1037,
+        1084
+      ],
+      "session_ids": [
+        "criterion9-4b0c1c7d-3a97-4a48-aaeb-7a4279c2f610",
+        "criterion9-5f874d54-e6d1-493a-a707-40a99f6ced48",
+        "criterion9-cf3e7d0d-49e5-4ba3-82f0-3f480defc14f"
+      ]
+    },
+    {
+      "text": "the other fellow's in a bit of a state, to be honest with you",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        971,
+        2002,
+        1969
+      ],
+      "session_ids": [
+        "criterion9-8363f1d0-227c-4e63-aab6-64b3cea62118",
+        "criterion9-99052d92-02f0-4222-8d6e-4131661d6a73",
+        "criterion9-6e06e1fe-60b8-4db7-9c18-6c60716ab62d"
+      ]
+    },
+    {
+      "text": "my arm's pointing the wrong way",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1029,
+        1090,
+        1026
+      ],
+      "session_ids": [
+        "criterion9-ffe4b654-f653-40d5-869e-6ed4669d5ab4",
+        "criterion9-09e20048-79f1-4863-9239-f32e5aefab1a",
+        "criterion9-8b8b87ca-4d1d-4fa2-afff-a23f710da8d0"
+      ]
+    },
+    {
+      "text": "the passenger's eyes are open but there's nobody home, if that makes sense",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1031,
+        1034,
+        1075
+      ],
+      "session_ids": [
+        "criterion9-daab7895-3660-4591-8a81-1a1de070afa1",
+        "criterion9-7070acfd-518b-40dd-ae7d-357fdb5a26fd",
+        "criterion9-22cf5a65-3ff4-4e33-97aa-5f207d07cc0e"
+      ]
+    },
+    {
+      "text": "she's gone, they stopped working on her a minute ago",
+      "kabco": "K",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1114,
+        1013,
+        1017
+      ],
+      "session_ids": [
+        "criterion9-a4d9c272-c4fe-42ce-b192-a74f48f2066e",
+        "criterion9-780da5ce-1d10-4cd9-91db-73d4d382f5c0",
+        "criterion9-6edac879-fdd6-41da-bc23-aba202158953"
+      ]
+    },
+    {
+      "text": "I'm fine, it's the woman in the other car that isn't",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1036,
+        1035,
+        1049
+      ],
+      "session_ids": [
+        "criterion9-70a55d2e-801b-4b3b-b77d-36bfecac1ef0",
+        "criterion9-2e9b2030-e5b3-4302-994f-54f496ff562a",
+        "criterion9-1b798c68-a26b-4b9b-aa68-fc8ead7c10ce"
+      ]
+    },
+    {
+      "text": "the air ambulance is landing in the field beside us",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-pregraph",
+        "detection-pregraph",
+        "detection-pregraph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        204,
+        204,
+        204
+      ],
+      "session_ids": [
+        "criterion9-d22af9da-5668-4cfc-aa3b-4f211f8819aa",
+        "criterion9-04d75f8c-12ab-4777-93c7-a438425f0343",
+        "criterion9-8b9ae4ed-f3d3-49e6-99cd-b0d007d51fa5"
+      ]
+    },
+    {
+      "text": "I can't get a proper breath, it's like something's sitting on my chest",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1099,
+        1130,
+        997
+      ],
+      "session_ids": [
+        "criterion9-3dd69587-d5a3-4546-9df6-06d51825896c",
+        "criterion9-aa6b2309-b373-4654-b979-922ca697604f",
+        "criterion9-79bd9836-6c17-4fc7-95ad-9379cdbc3dcc"
+      ]
+    },
+    {
+      "text": "they've put a collar round his neck and they're strapping him to a board",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1041,
+        1010,
+        1058
+      ],
+      "session_ids": [
+        "criterion9-3f9d4b85-efaa-4eb8-9434-817c4945d083",
+        "criterion9-e676bd5d-8ade-4445-8a56-8996efb0ff4c",
+        "criterion9-7b7cff24-2caa-4fc4-b72a-844367805e6b"
+      ]
+    },
+    {
+      "text": "he went through the windshield",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1060,
+        1045,
+        1122
+      ],
+      "session_ids": [
+        "criterion9-436a2829-4881-4af3-9c73-98ab9a35a0e6",
+        "criterion9-17ab9b45-7068-489f-b5f1-2bbf0b9af729",
+        "criterion9-e95c59d1-75df-4ef5-8d5c-83c3bbea5975"
+      ]
+    },
+    {
+      "text": "there's pins and needles all down one side and I can't grip anything with that hand",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1059,
+        1064,
+        1084
+      ],
+      "session_ids": [
+        "criterion9-da4b2e07-980a-4feb-af42-fca45c874ea3",
+        "criterion9-480e11db-c98d-432d-937d-db327144596e",
+        "criterion9-bc30fb21-d385-4e26-a6aa-cd6c6d45792a"
+      ]
+    },
+    {
+      "text": "she passed at the scene",
+      "kabco": "K",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1126,
+        1069,
+        2037
+      ],
+      "session_ids": [
+        "criterion9-3433bbb8-37bd-4304-b432-b7f78ffe2ca3",
+        "criterion9-ae977141-549c-465a-ac11-8cf127032858",
+        "criterion9-12ed7b60-3c3b-4e57-95dd-e34598a73202"
+      ]
+    },
+    {
+      "text": "there's four of them working on him and they won't let me near",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1002,
+        994,
+        1015
+      ],
+      "session_ids": [
+        "criterion9-4d9d4da2-9263-4358-9fd2-ada2cfde773e",
+        "criterion9-b9a05ee7-ef3f-4db6-bea6-6a18b66158da",
+        "criterion9-d8dbb67a-8849-4067-8d2d-b4bbb5aeb642"
+      ]
+    },
+    {
+      "text": "my daughter's very quiet in the back and she's never quiet",
+      "kabco": "A",
+      "k": 3,
+      "contingency_used": false,
+      "escalated_flags": [
+        true,
+        true,
+        true
+      ],
+      "escalation_reasons": [
+        "detection-graph",
+        "detection-graph",
+        "detection-graph"
+      ],
+      "unstable": false,
+      "deployed_worst_case": true,
+      "d52_worst_case": true,
+      "diverges_from_d52": false,
+      "elapsed_ms_samples": [
+        1094,
+        1028,
+        1093
+      ],
+      "session_ids": [
+        "criterion9-755fdc6b-2308-4233-9da1-c158fe954a0c",
+        "criterion9-109ab6df-c6fa-4dcb-90fc-50a4b7663e84",
+        "criterion9-b72c8abd-431e-40e7-8a33-efcb58354f00"
+      ]
+    }
+  ],
+  "negative_items": [
+    {
+      "text": "nobody was hurt",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1058,
+      "session_id": "criterion9-482f5e68-7769-45a0-8ff9-62d69e4d1e42"
+    },
+    {
+      "text": "the car's totalled",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1734,
+      "session_id": "criterion9-299517ad-8839-4b21-95d8-1d9fdc5d8737"
+    },
+    {
+      "text": "I've got a bit of a bruise on my knee where it hit the dash, nothing worth mentioning really",
+      "kabco": "B",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 2017,
+      "session_id": "criterion9-80a02663-7aaf-4bf4-988d-2f94c247556a"
+    },
+    {
+      "text": "no injuries at all, just the two cars",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1100,
+      "session_id": "criterion9-af6ee8fa-e30e-4ab4-bb2f-aa8621e3651a"
+    },
+    {
+      "text": "the front end is completely destroyed",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1183,
+      "session_id": "criterion9-1dcbd98e-6c15-48d0-990c-d82bafbd1258"
+    },
+    {
+      "text": "there's no blood or anything, it's just the bumper",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1229,
+      "session_id": "criterion9-7f6f35eb-7f1d-4464-bfd7-f719c9e59eaf"
+    },
+    {
+      "text": "my back's been bad since last year, nothing to do with today",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1044,
+      "session_id": "criterion9-985e243b-c03c-4ad3-8c30-69d751750847"
+    },
+    {
+      "text": "everyone's fine, we all walked away from it",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1111,
+      "session_id": "criterion9-bc6941dc-a43e-42e5-a6f8-f30f61129e1a"
+    },
+    {
+      "text": "she took a real beating, poor thing, I've had that car eleven years",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1124,
+      "session_id": "criterion9-dfbb01f0-4463-4c87-b202-39cefb25573f"
+    },
+    {
+      "text": "thankfully nobody was injured",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1326,
+      "session_id": "criterion9-c28757cc-73ae-470f-9dcd-7f1504941da9"
+    },
+    {
+      "text": "there's a scrape on my elbow, I've put a plaster on it, it's fine",
+      "kabco": "B",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1184,
+      "session_id": "criterion9-8d1d8379-1671-4650-87e9-1d3fc4784f11"
+    },
+    {
+      "text": "I checked on the other driver and the two kids in her back seat and honestly not one of them had a scratch on them",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1066,
+      "session_id": "criterion9-fb385175-ee3e-41ad-8d73-d3985456f412"
+    },
+    {
+      "text": "I'm a bit stiff in the shoulder this morning but that's about the size of it",
+      "kabco": "C",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1537,
+      "session_id": "criterion9-3985a323-f8fc-4630-8c14-7bb77de54996"
+    },
+    {
+      "text": "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-pregraph",
+      "falsely_escalated": true,
+      "elapsed_ms": 410,
+      "session_id": "criterion9-71bd0dcf-cf58-4856-9bd8-d4ff52bffd2f"
+    },
+    {
+      "text": "the driver's door is caved right in, it'll be a write-off",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1024,
+      "session_id": "criterion9-b5327385-b183-4fa1-bdba-79cc8cc0e6ba"
+    },
+    {
+      "text": "I don't think anyone's hurt, we're all just a bit shaken up",
+      "kabco": "O",
+      "status": "escalated",
+      "escalation_reason": "detection-graph",
+      "falsely_escalated": true,
+      "elapsed_ms": 1022,
+      "session_id": "criterion9-eaa8e127-01bb-4217-8876-2b33b4b72e78"
+    },
+    {
+      "text": "I had a knee replacement a few years back but it held up fine, no bother",
+      "kabco": "O",
+      "status": "not-escalated",
+      "escalation_reason": null,
+      "falsely_escalated": false,
+      "elapsed_ms": 1010,
+      "session_id": "criterion9-9f386af4-173d-42e8-a01a-aa020fb36b2e"
+    }
+  ],
+  "positives": 26,
+  "negatives": 17,
+  "composed_recall_deployed": 1.0,
+  "composed_recall_deployed_counts": [
+    26,
+    26
+  ],
+  "unstable_item_count": 0,
+  "divergences_from_d52": [],
+  "false_escalation_count": 9,
+  "false_escalation_items": [
+    {
+      "text": "the car's totalled",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "I've got a bit of a bruise on my knee where it hit the dash, nothing worth mentioning really",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "the front end is completely destroyed",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "she took a real beating, poor thing, I've had that car eleven years",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "there's a scrape on my elbow, I've put a plaster on it, it's fine",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "I'm a bit stiff in the shoulder this morning but that's about the size of it",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in",
+      "escalation_reason": "detection-pregraph"
+    },
+    {
+      "text": "the driver's door is caved right in, it'll be a write-off",
+      "escalation_reason": "detection-graph"
+    },
+    {
+      "text": "I don't think anyone's hurt, we're all just a bit shaken up",
+      "escalation_reason": "detection-graph"
+    }
+  ],
+  "provenance_breakdown": {
+    "detection-pregraph": 22,
+    "detection-graph": 65,
+    "fail-closed": 0,
+    "other-default": 0
+  },
+  "total_recognize_text_calls": 95,
+  "path_attribution": {
+    "read_ok": true,
+    "log_events_matched": 82,
+    "l1_count": 21,
+    "graph_path_count": 61,
+    "other_layer_count": 0
+  },
+  "cost": {
+    "lex_usd": 0.07125,
+    "bedrock_usd_basis": "positives exact: CloudWatch log line per escalating call, D52's per-call rate; negatives assumed graph-path unconditionally (see module docstring -- no log line exists for a correctly non-escalating call)",
+    "bedrock_usd": 0.026418,
+    "graph_path_calls_used_for_estimate": 78,
+    "total_usd": 0.097668
+  },
+  "run_started_utc": "2026-08-14T02:45:29+00:00",
+  "run_finished_utc": "2026-08-14T02:47:12+00:00",
+  "bot_id": "W9MNF86T1H",
+  "bot_alias_id": "ZYAWLCMPQX"
+}
