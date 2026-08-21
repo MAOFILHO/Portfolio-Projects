@@ -3,6 +3,20 @@
 Date: 2026-08-20. Canonical path: `/Users/marco/K21/Real-world/Azure-Banking-Voice-Agentic-AI`, inside
 the `Portfolio-Projects` monorepo, branch `azure-banking-voice-agentic-ai`.
 
+**Addendum, same day, later:** Marco switched terminals to a git worktree —
+`/Users/marco/K21/Real-world-worktrees/azure-banking/Azure-Banking-Voice-Agentic-AI` (branch
+`azure-banking-work`, same history, currently identical tip to `azure-banking-voice-agentic-ai`). **That
+is now the working directory**, not the path above — the worktree-separation item this project deferred
+"until after Phase 0" turned out to get actioned by the concurrent FNOL session mid-Phase-0 instead (see
+its commit `ae4cb96`, "OI60 closed via git worktree"), not something this session initiated.
+
+Two things git doesn't carry between worktrees were copied over manually and confirmed byte-identical:
+`docs/phase0/wizard/.env.phase0` (gitignored — `PHONE_NUMBER`, resource names, everything the wizard
+scripts need) and `docs/echo-app/` (untracked, still awaiting Marco's sign-off). **If a fresh session
+ever finds either missing in the worktree path, check the old path above before assuming a clean
+slate — don't let a missing `.env.phase0` cause `01-provision.sh` to re-run stages 1–9 as if nothing
+exists**, especially Stage 9's number purchase (R-09).
+
 ## Read first, in order
 
 1. `CLAUDE.md` (project root) — operating rules, stop conditions, restate them verbatim before acting.
