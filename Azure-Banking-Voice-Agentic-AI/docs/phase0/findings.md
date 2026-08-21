@@ -743,3 +743,351 @@ above means the `update` branch never fires on a failed-healthz retry — every 
 fresh `create` with full config. It would only matter for some *other* re-run that reaches Stage 12 with
 the app already existing and healthy (e.g., re-running the script after a successful prior run to push
 an unrelated fix) — a different scenario than the abort path this section is about.
+## R-01 — Models API deprecation-date check
+
+Queried 2026-08-21T16:01:13Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"areaCodes":[{"areaCode":"647"}],"nextLink":null}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Calgary","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"White Rock","administrativeDivision":{"localizedName":"BC","abbreviatedName":"BC"}},{"localizedName":"Halifax","administrativeDivision":{"localizedName":"NS","abbreviatedName":"NS"}},{"localizedName":"Brockville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Cooksville","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"North Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Ottawa","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Ottawa-Hull","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Toronto","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Gatineau","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Montreal","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Sherbrooke","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Victoriaville","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}}],"nextLink":null}
+```
+
+## Stage 12 — ECHO_DIR misdirection (root cause) and linux/amd64 arch mismatch (symptom), 2026-08-21
+
+**Symptom Marco hit at `az containerapp create`:**
+```
+Field 'template.containers.ca-azbank-echo-p0.image' is invalid: no child with
+platform linux/amd64 in index docker.io/maofilho/azbank-echo-p0:latest
+```
+Expected on Apple Silicon: `docker build` with the classic builder produces a single-arch
+`arm64` image by default; Container Apps requires `linux/amd64`.
+
+**What the arch error was masking.** `01-provision.sh` computes
+`ECHO_DIR="$SCRIPT_DIR/../echo-app"` (line 897), and `SCRIPT_DIR` is the wizard script's own
+directory, `docs/phase0/wizard`. That resolves to **`docs/phase0/echo-app`** —
+not `docs/echo-app`, the git-tracked directory this session actually edited, tested
+(`py_compile`), and committed at `1004d54` with the SDK-version fix, the DTMF/B2 gating, and
+the `pip freeze` build assertion.
+
+`docs/phase0/echo-app/` is untracked (`git log` for it: empty; `git check-ignore`: not
+ignored either, exit 1) and its `app.py` mtime (12:02:05) postdates `docs/echo-app/app.py`'s
+last session edit (10:57:44) — it was written by this run's own Stage 11, from the *original,
+unfixed* heredoc template, because the Stage 11 guard added this session checks
+`$ECHO_DIR/app.py` (correctly, per its own logic) but `$ECHO_DIR` was never the directory this
+session had been fixing. Contents confirmed by direct diff against the committed
+`docs/echo-app/`: SDK pin back at `azure-communication-callautomation==1.2.*` (no media
+streaming support at all — see `## R-01`/Stage 11 commit above), `azure-identity==1.19.*`
+still present, `MediaStreamingTransportType` (wrong class name), no `enable_dtmf_tones`,
+**no B2 gating block at all** — its DTMF handler logs `msg.get("dtmfData", {}).get("data")`
+unconditionally, every digit, no `PHASE0_LOG_DTMF_VALUES` check — and its Dockerfile has no
+`pip freeze`/`test -s` build assertion line, which directly answers item 3: the assertion
+genuinely never existed in the image that got built, not because it was dropped, but because
+the build never read the Dockerfile that has it.
+
+**Severity note, not just a build nuisance:** Phase 0 has no PIN/auth path yet, so this
+specific near-miss carries no live PIN-confidentiality breach — but it is the shape of a B2
+violation (unconditional raw-value logging on the exact DTMF path), shipped from an untracked
+file nobody reviewed, caught only because an unrelated architecture mismatch happened to fail
+first. `az containerapp create` failing loudly on `image` is why this wasn't discovered by a
+green healthz check instead.
+
+**Fix (pending Marco's confirmation, not yet applied — Stage 11/12 script edits are
+DTMF/PIN-path-adjacent per `CLAUDE.md`'s B2 stop condition):** point `ECHO_DIR` at
+`docs/echo-app` (`$SCRIPT_DIR/../../echo-app`, verified by path arithmetic:
+`docs/phase0/wizard/../../echo-app` = `docs/echo-app`), and treat `docs/phase0/echo-app/` as
+contaminated scratch — never commit it, recommend deleting it once Marco says so.
+
+**Gotcha for anyone rebuilding on Apple Silicon** (item 4, independent of the above): the
+classic `docker build` builder targets the host architecture by default. `docker buildx`
+(confirmed present locally, `v0.35.0-desktop.2`) supports `--platform linux/amd64` and can
+build+push in one step; a manifest check between push and `containerapp create`/`update`
+(`docker buildx imagetools inspect "$IMAGE"`, checked for `linux/amd64` in its platform list)
+is the proposed fail-loud gate, same shape as the Dockerfile's own `pip freeze && test -s`
+assertion — catch it before the billable step, not after.
+
+**The finding worth remembering isn't the architecture mismatch — it's what it accidentally
+prevented.** Had this been built on amd64 hardware, `az containerapp create` would have
+succeeded on the first try, deploying an image whose DTMF handler logs raw tone values
+unconditionally, with no `PHASE0_LOG_DTMF_VALUES` gate at all. Nothing in the wizard's own
+flow would have caught that: `/healthz` would have gone green, Stage 12 would have reported
+success, and the next 72 hours would have been spent measuring R-04/R-08 against a container
+that was, the whole time, logging exactly the class of value B2 exists to keep out of any log
+line. The architecture mismatch is the only reason this was caught — not a guard, not a
+review, not a test. That's the gap this session's fix (git-root-anchored `ECHO_DIR` plus a
+hard exist-and-git-tracked assertion, `01-provision.sh` Stage 11) is meant to close
+structurally, so the next near-miss doesn't need an unrelated failure to get noticed.
+
+**RESOLVED 2026-08-21**: `ECHO_DIR` now resolves via `git -C "$SCRIPT_DIR" rev-parse
+--show-toplevel` rather than a relative `../..` chain, points at the git-tracked
+`docs/echo-app/`, and Stage 11 asserts the target exists and is git-tracked before Stage 12
+can run — no template-regeneration fallback remains in the script. `docs/phase0/echo-app/`
+(the orphaned, untracked directory) has been deleted. Every other `$SCRIPT_DIR/..`-relative
+path in the four wizard scripts (`REPO_ROOT`, `FINDINGS_FILE` ×4, `COSTS_FILE`) was audited
+and confirmed correct by direct execution (`cd ... && pwd`, `realpath`), not by counting `..`
+— `ECHO_DIR` was the only one that was wrong, and it was wrong by intent, not by arithmetic:
+the path always resolved exactly where its own math said it would, to a directory that turned
+out to hold the wrong content.
+
+## Stage 12 — auto-created Log Analytics workspace, cost verified
+
+`az containerapp env create` (line 1086, no `--logs-workspace-id`/`--logs-destination`
+flags) always auto-provisions a fresh Log Analytics workspace when none is passed in;
+`04-teardown-and-r08.sh` only calls `az containerapp env delete` and never references the
+workspace, matching Marco's observation that it survives teardown. Live workspace, queried
+directly rather than assumed:
+```json
+{
+  "dailyQuotaGb": -1.0,
+  "name": "workspace-rgazurebankingvoiceagenticaixC",
+  "provisioningState": "Succeeded",
+  "retentionInDays": 30,
+  "sku": "PerGB2018"
+}
+```
+`dailyQuotaGb: -1` = no cap set; `PerGB2018` = standard consumption SKU, not a locked
+free-tier SKU. Azure Retail Prices API, `armRegionName eq 'canadacentral'`, queried live
+(not from memory):
+- **Ingestion** (`Analytics Logs Data Ingestion` meter): `$0`/GB for the first pricing tier
+  (`tierMinimumUnits: 0`), `$2.76`/GB for the tier above `tierMinimumUnits: 5`.
+- **Retention** (`Analytics Logs Data Retention` meter): `$0.12`/GB-month for data held
+  past the workspace's included retention window.
+
+At this project's actual log volume (one throwaway Phase 0 echo app, console logs only, a
+few hours of a handful of test calls) both meters round to $0 in practice — this is not a
+hidden-cost finding. The actual **B4 blind spot** is structural, not financial: this is an
+auto-provisioned resource, unaccounted for by name in `COSTS.md`/`docs/PLAN.md`, with no
+teardown check verifying its state, that would keep accruing under these same consumption
+meters indefinitely if a later phase's log volume ever grew past the free tier — nothing
+in this project's cost tooling would currently notice. `az containerapp env create` can
+avoid creating it at all (`--logs-destination none`) or point at a pre-existing workspace
+(`--logs-workspace-id`/`--logs-workspace-key`, confirmed via `--help`); neither is used
+today.
+

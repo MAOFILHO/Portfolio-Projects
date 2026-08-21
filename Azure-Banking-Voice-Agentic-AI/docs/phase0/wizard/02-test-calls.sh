@@ -132,7 +132,7 @@ write_env "CALL3_TIME" "$CALL3_TIME"
 
 # ── Stage 4: pull logs and extract evidence ─────────────────────────────────
 stage "Pull Container App logs and extract R-02 / R-03 / RTT evidence"
-say "Reading application logs written by the echo app (docs/phase0/echo-app/app.py) since call 1."
+say "Reading application logs written by the echo app (docs/echo-app/app.py) since call 1."
 
 LOGS=$(az containerapp logs show \
   --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \

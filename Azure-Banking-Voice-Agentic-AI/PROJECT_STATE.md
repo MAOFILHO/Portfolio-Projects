@@ -130,6 +130,13 @@ window; Marco wants to review before that clock starts.
    an empty/wrong "what's billing" table on this machine, though the actual delete-offer safety check
    below each is unaffected. Fix (`--location ""` on both call sites) identified, shown as a diff,
    **not yet applied** — pending Marco's sign-off, same as everything else touching these scripts.
+7. **Phase 1 decision, not Phase 0**: `az containerapp env create` (Stage 12) always auto-provisions a
+   Log Analytics workspace when no `--logs-workspace-id`/`--logs-destination` flag is passed — verified
+   $0 in practice at this project's log volume (`docs/phase0/findings.md`, "Stage 12 — auto-created Log
+   Analytics workspace"), but it's an unaccounted-for resource that survives teardown. When Phase 1
+   stands up the real Container App(s), pass `--logs-destination none` (if Phase 6's Application
+   Insights resource is the only sink needed) or an explicit `--logs-workspace-id` pointing at one
+   workspace shared across this project's resources — not another auto-created one per environment.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 

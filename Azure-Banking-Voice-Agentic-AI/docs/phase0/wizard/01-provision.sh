@@ -734,6 +734,16 @@ fi
 
 # ── Stage 10: write ADR-001 and ADR-002 ──────────────────────────────────────
 stage "Write ADR-001 (data residency) and ADR-002 (geography knobs)"
+
+# Guarded 2026-08-21. Originally deferred as low-risk ("nothing exists yet to clobber") -- that
+# stopped being true the moment these files were first written, and a later re-run proved it: the
+# heredoc below regenerated both ADRs with that run's own live values, which regressed a committed
+# fact (the purchased number, `+17059100383`) back to a template placeholder (`<pending>`) in
+# ADR-002. Full diff: docs/phase0/findings.md. Skip once both files exist -- edit docs/adr/ directly
+# from then on, never via this script.
+if [[ -f "$ADR_DIR/ADR-001-data-residency.md" && -f "$ADR_DIR/ADR-002-geography-knobs.md" ]]; then
+  ok "$ADR_DIR/ADR-001-data-residency.md and ADR-002-geography-knobs.md already exist, skipping regeneration -- edit them directly, never via this script"
+else
 say "docs/PLAN.md step 9: write these now, using R-05/R-06 findings just measured, not deferred."
 mkdir -p "$ADR_DIR"
 
@@ -881,178 +891,48 @@ Number actually purchased under this revised decision: \`${PHONE_NUMBER:-<pendin
   note explaining away a changed plan.
 EOF
 ok "wrote $ADR_DIR/ADR-002-geography-knobs.md"
+fi
 note "Both ADRs use the R-06 result and the R-05 inventory finding measured earlier this run. Read them"
 note "before committing — the DataZone error block and the purchased number are templated from this"
 note "run's actual results, not assumed."
 
-# ── Stage 11: minimal echo WebSocket app ─────────────────────────────────────
-stage "Generate the minimal echo WebSocket app"
-say "This is throwaway Phase 0 code — just enough to answer a call, stream audio both ways, echo it,"
-say "and log DtmfData frames with timestamps for R-02/R-03/latency evidence."
-warn "VERIFY the azure-communication-callautomation SDK call in answer_call() below (MediaStreamingOptions"
-warn "field/enum names) against the installed package version's docs before building the image — these"
-warn "were written from docs/PLAN.md's verified protocol facts, not independently re-checked against the"
-warn "current SDK signature."
+# ── Stage 11: verify the echo WebSocket app is present and reviewed ──────────
+stage "Verify the echo WebSocket app (docs/echo-app/) is present and git-tracked"
+say "This stage no longer generates the echo app from a frozen template. The real, human-reviewed"
+say "app lives in docs/echo-app/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK"
+say "version (1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
+say "build-time pip-freeze assertion. This stage only verifies that file is where it should be."
 
-ECHO_DIR="$SCRIPT_DIR/../echo-app"
-mkdir -p "$ECHO_DIR"
+# Anchored to the git repo root via `git rev-parse`, not a relative "$SCRIPT_DIR/../..." chain --
+# that class of path is exactly what caused the ECHO_DIR misdirection this project already shipped
+# once: an untracked, unreviewed echo app (unconditional raw-DTMF logging, no B2 gating, the broken
+# 1.2.* SDK pin) got silently built and nearly deployed, caught only because an unrelated arch
+# mismatch failed first -- not by any guard. Full account: docs/phase0/findings.md, "Stage 12 --
+# ECHO_DIR misdirection". A path built by counting ".." is correctness verified by eye; a path built
+# from `git rev-parse --show-toplevel` is correctness verified by the tool.
+REPO_TOPLEVEL="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" || {
+  err "could not resolve the git repo root from $SCRIPT_DIR -- refusing to guess where the echo app lives"
+  on_error 1
+}
+ECHO_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/docs/echo-app"
 
-# Never regenerate over hand-fixed, committed source. This heredoc template is frozen at whatever
-# this script's own text says -- it does NOT track fixes made directly to docs/echo-app/ after Stage
-# 11 first ran (the azure-communication-callautomation SDK version bug found and fixed 2026-08-21 is
-# a concrete example: the template below still shows the broken 1.2.* pin). Regenerating from it on a
-# re-run would silently clobber real, committed fixes with stale, broken content. Skip once app.py
-# exists -- edit docs/echo-app/ directly from then on, never via this script.
-if [[ -f "$ECHO_DIR/app.py" ]]; then
-  ok "$ECHO_DIR/app.py already exists, skipping regeneration -- edit it directly, never via this script"
-else
-
-cat > "$ECHO_DIR/requirements.txt" <<'EOF'
-fastapi==0.115.*
-uvicorn[standard]==0.32.*
-azure-communication-callautomation==1.2.*
-azure-identity==1.19.*
-EOF
-
-cat > "$ECHO_DIR/app.py" <<'EOF'
-"""Phase 0 minimal echo app — NOT production code, exists only to answer calls and measure meters.
-
-Answers an incoming ACS call, starts bidirectional media streaming to /ws, echoes AudioData frames
-back verbatim, and logs DtmfData frames with wall-clock timestamps (evidence for R-03: does DTMF
-actually arrive during active bidirectional streaming). Also logs per-frame arrival/echo timestamps
-for a transport RTT baseline (B5 note in docs/PLAN.md: Phase 0 can only measure transport RTT, not
-turn latency — no realtime session exists yet).
-
-VERIFY before running: the exact MediaStreamingOptions field/enum names against the installed
-azure-communication-callautomation version. Written from docs/PLAN.md's verified protocol facts
-(frame shapes, WS URL, EnableBidirectional requirement), not independently re-checked against the
-current SDK signature.
-"""
-import base64
-import json
-import logging
-import os
-import time
-
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    MediaStreamingOptions,
-    MediaStreamingTransportType,
-    MediaStreamingContentType,
-    MediaStreamingAudioChannelType,
-    AudioFormat,
-)
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-log = logging.getLogger("echo")
-
-ACS_CONNECTION_STRING = os.environ["ACS_CONNECTION_STRING"]
-APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
-CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
-WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
-
-app = FastAPI()
-call_automation_client = CallAutomationClient.from_connection_string(ACS_CONNECTION_STRING)
-
-
-@app.post("/api/incoming-call")
-async def incoming_call(request: Request):
-    """Event Grid webhook target. Handles the CloudEvents subscription-validation handshake and,
-    on a real IncomingCall event, answers with bidirectional media streaming enabled."""
-    events = await request.json()
-    for event in events:
-        if event.get("eventType") == "Microsoft.EventGrid.SubscriptionValidationEvent":
-            code = event["data"]["validationCode"]
-            log.info("Event Grid validation handshake, code=%s", code)
-            return {"validationResponse": code}
-        if event.get("eventType") == "Microsoft.Communication.IncomingCall":
-            incoming_call_context = event["data"]["incomingCallContext"]
-            log.info("IncomingCall, correlationId=%s", event["data"].get("correlationId"))
-            call_automation_client.answer_call(
-                incoming_call_context=incoming_call_context,
-                callback_url=CALLBACK_URL,
-                media_streaming=MediaStreamingOptions(
-                    transport_url=WS_URL,
-                    transport_type=MediaStreamingTransportType.WEBSOCKET,
-                    content_type=MediaStreamingContentType.AUDIO,
-                    audio_channel_type=MediaStreamingAudioChannelType.MIXED,
-                    start_media_streaming=True,
-                    enable_bidirectional=True,
-                    audio_format=AudioFormat.PCM24_K_MONO,
-                ),
-            )
-    return {}
-
-
-@app.post("/api/callbacks")
-async def callbacks(request: Request):
-    events = await request.json()
-    for event in events:
-        log.info("callback event: %s", event.get("type"))
-    return {}
-
-
-@app.websocket("/ws")
-async def media_stream(websocket: WebSocket):
-    correlation_id = websocket.headers.get("x-ms-call-correlation-id")
-    connection_id = websocket.headers.get("x-ms-call-connection-id")
-    await websocket.accept()
-    log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    frame_count = 0
-    dtmf_count = 0
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            recv_ts = time.monotonic()
-            msg = json.loads(raw)
-            kind = msg.get("kind")
-
-            if kind == "AudioData":
-                b64 = msg["audioData"]["data"]
-                # Echo verbatim. Outbound keys are capitalized per docs/PLAN.md's verified protocol facts.
-                echo = {"Kind": "AudioData", "AudioData": {"Data": b64}}
-                await websocket.send_text(json.dumps(echo))
-                send_ts = time.monotonic()
-                frame_count += 1
-                if frame_count % 50 == 0:  # ~once/second at 50 frames/sec
-                    log.info(
-                        "frame %d echoed, local processing latency=%.1fms",
-                        frame_count, (send_ts - recv_ts) * 1000,
-                    )
-
-            elif kind == "DtmfData":
-                dtmf_count += 1
-                tone = msg.get("dtmfData", {}).get("data")
-                log.info(
-                    "DTMF tone=%s arrived DURING streaming (frame_count so far=%d) — R-03 evidence",
-                    tone, frame_count,
-                )
-
-    except WebSocketDisconnect:
-        log.info(
-            "WS closed correlationId=%s frames=%d dtmf_tones=%d",
-            correlation_id, frame_count, dtmf_count,
-        )
-
-
-@app.get("/healthz")
-async def healthz():
-    return {"status": "ok"}
-EOF
-
-cat > "$ECHO_DIR/Dockerfile" <<'EOF'
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
-
-ok "wrote $ECHO_DIR/{app.py,requirements.txt,Dockerfile}"
+# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked, or the script stops here.
+# This is the guard that would have caught the ECHO_DIR misdirection the moment it happened, instead
+# of silently building whatever sat at the wrong path. There is deliberately no "generate it if
+# missing" fallback left in this script -- a wrong path must stop the script, never regenerate from a
+# template.
+if [[ ! -f "$ECHO_DIR/app.py" ]]; then
+  err "ECHO_DIR=$ECHO_DIR has no app.py. Either this path is wrong or the file was moved/deleted --"
+  err "either way, refusing to proceed without it. Fix docs/echo-app/ directly, never via this script."
+  on_error 1
 fi
+if ! git -C "$ECHO_DIR" ls-files --error-unmatch app.py requirements.txt Dockerfile >/dev/null 2>&1; then
+  err "ECHO_DIR=$ECHO_DIR/{app.py,requirements.txt,Dockerfile} exist but aren't all git-tracked --"
+  err "refusing to build from an unreviewed file. This is exactly the failure mode that nearly shipped"
+  err "an unreviewed, B2-shaped image before (docs/phase0/findings.md, 'Stage 12 -- ECHO_DIR misdirection')."
+  on_error 1
+fi
+ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present and git-tracked"
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
@@ -1065,9 +945,45 @@ write_env "DOCKERHUB_USERNAME" "$DOCKERHUB_USERNAME"
 
 IMAGE="docker.io/${DOCKERHUB_USERNAME}/azbank-echo-p0:latest"
 echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
-docker build -t "$IMAGE" "$ECHO_DIR"
-docker push "$IMAGE"
-ok "pushed $IMAGE"
+
+# `docker buildx build --platform linux/amd64`, not plain `docker build`: a classic-builder build on
+# Apple Silicon defaults to arm64, which Container Apps rejects at `containerapp create` --
+# "no child with platform linux/amd64 in index ...". Found live 2026-08-21 (docs/phase0/findings.md,
+# "Stage 12 -- ECHO_DIR misdirection"). buildx build+push in one step also avoids a separate
+# build-then-push manifest-shape mismatch.
+#
+# --provenance=false --sbom=false: buildx attaches a provenance/SBOM attestation manifest to the
+# index by default, tagged Platform: unknown/unknown alongside the real linux/amd64 one. The original
+# failure here was Azure walking an image index looking for a platform child and not finding one --
+# Azure's resolver has never been shown to handle an index with an unknown/unknown entry cleanly, and
+# the one time it walked an index at all, it failed. Eliminating the variable is free; testing whether
+# Azure tolerates it costs a billable `containerapp create`. Verified manually 2026-08-21: with these
+# flags, `docker buildx imagetools inspect` shows a single linux/amd64 manifest, no second entry.
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false -t "$IMAGE" --push "$ECHO_DIR"
+ok "built for linux/amd64 and pushed $IMAGE"
+
+# Fail loudly here, before any Azure spend, if the pushed image isn't actually linux/amd64 --
+# Container Apps only rejects a mismatched image at `containerapp create`, after ARM has already
+# accepted the request. Same shape as the Dockerfile's own `pip freeze && test -s` build assertion:
+# verify before the billable step, not after.
+#
+# Queries the platform field structurally (`--format`), not by grepping `imagetools inspect`'s
+# display text. Verified empirically 2026-08-21: with --provenance=false --sbom=false, the pushed
+# image is a flat (non-index) manifest, and a flat manifest's default `imagetools inspect` output
+# never prints a "Platform:" line at all -- `grep -q "linux/amd64"` against it returns exit 1 even
+# for a correctly-built linux/amd64 image. That version of this gate would have failed closed, but
+# for the wrong reason, on every future correct build -- a gate that fails (or passes) for the wrong
+# reason is worse than no gate, so it's replaced rather than patched around.
+BUILT_PLATFORM="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Image.Platform.OS}}/{{.Image.Platform.Architecture}}' 2>&1)" || {
+  err "docker buildx imagetools inspect failed against $IMAGE -- can't confirm what actually got pushed"
+  err "$BUILT_PLATFORM"
+  on_error 1
+}
+if [[ "$BUILT_PLATFORM" != "linux/amd64" ]]; then
+  err "pushed image $IMAGE is platform '$BUILT_PLATFORM', not linux/amd64 -- Container Apps will reject it."
+  on_error 1
+fi
+ok "confirmed $IMAGE is linux/amd64 (queried structurally, not grepped from display text)"
 
 note "The image itself has no secrets baked in — ACS_CONNECTION_STRING and APP_BASE_URL are runtime"
 note "env vars set on the Container App below, never build args or COPY'd files, so docker history"
