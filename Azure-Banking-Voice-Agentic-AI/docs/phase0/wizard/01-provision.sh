@@ -1054,9 +1054,21 @@ if [[ "$HEALTHY" != "1" ]]; then
   on_error 1
 fi
 ok "container is healthy (/healthz responding) — safe to wire Event Grid to it"
-write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-note "PROVISION_TIME written now, not at Stage 1 -- this is when the billable Container App this"
-note "value anchors (R-04's 72h window in 04-teardown-and-r08.sh) actually started existing."
+
+# Same shape as Stage 9's PHONE_NUMBER guard, same reason: R-04's 72h idle-billing window is
+# anchored on this value, and a silent reset on a re-run is corruption R-04 can't survive and
+# Marco would have no way to notice from the file alone. Guarded 2026-08-21 after Stage 12 failed
+# once already today (arch mismatch) -- a retry reaching this line after a *successful* deploy is
+# a real path, not a hypothetical. Read directly from ENV_FILE via _existing, not a shell variable.
+if [[ -n "$(_existing "PROVISION_TIME" || true)" ]]; then
+  ok "PROVISION_TIME already set: $(_existing "PROVISION_TIME") -- R-04's window is already anchored, not resetting it"
+  note "If a genuinely new R-04 window is ever needed, delete PROVISION_TIME from .env.phase0 by hand --"
+  note "never as an accidental side effect of re-running this script."
+else
+  write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  note "PROVISION_TIME written now, not at Stage 1 -- this is when the billable Container App this"
+  note "value anchors (R-04's 72h window in 04-teardown-and-r08.sh) actually started existing."
+fi
 
 say "Wiring the Event Grid subscription so ACS's IncomingCall event reaches the app."
 az eventgrid event-subscription create \

@@ -1056,6 +1056,80 @@ and confirmed correct by direct execution (`cd ... && pwd`, `realpath`), not by 
 the path always resolved exactly where its own math said it would, to a directory that turned
 out to hold the wrong content.
 
+## Stage 10 regression, and the pattern behind three separate findings today
+
+A live run of `01-provision.sh` (before the Stage 10 guard existed) regenerated
+`docs/adr/ADR-002-geography-knobs.md` from its in-script heredoc template, using that run's own
+live variable state. The committed file correctly reads `+17059100383` (the real, purchased
+number); the regenerated working-tree copy read `<pending>` — a real content regression, not
+cosmetic (`ADR-001`'s regeneration only bumped a date). Caught before commit by inspecting
+`git diff` rather than assuming Stage 10's overwrite was harmless because it had been flagged as
+"low-risk" earlier in the session. Reverted via `git checkout --`, confirmed clean
+(`+17059100383` present, `<pending>` absent).
+
+**This is the third instance of the same pattern in one session**, not three unrelated bugs:
+
+1. **Stage 11** regenerated `docs/echo-app/`'s equivalent from a frozen template on every
+   re-run, until guarded.
+2. **The `ECHO_DIR` misdirection itself** was this same pattern one level removed: the guard
+   added for #1 was correct in form but pointed at the wrong directory, so it faithfully
+   protected the *wrong* file from regeneration while the *real* reviewed file
+   (`docs/echo-app/`) was never wired to the script at all.
+3. **Stage 10**, this entry — regenerated committed, human-relevant ADR content from a
+   template, unguarded, the moment a real run reached it for a second time.
+
+**The general principle, stated once rather than left implicit three times**: any wizard
+stage that writes a file it doesn't exclusively own is a regression risk from the moment that
+file has been read, reviewed, hand-edited, or committed by a human — regardless of whether the
+stage's own guard logic is otherwise correct. A guard that checks the right condition against
+the wrong path (#2) is exactly as dangerous as no guard at all (#1, #3 before their fixes). See
+the full remaining-risk audit below.
+
+## Full audit: every remaining file-write in all four wizard scripts, 2026-08-21
+
+Requested after the Stage 10 finding above — not just the one path that broke, every write
+site. Two write patterns exist in these scripts, and they carry different risk shapes:
+
+**Heredocs (`cat > file <<...`) — whole-file regeneration from a template.** This is the
+dangerous shape (#1–#3 above). Full inventory: exactly two remain, both `docs/adr/` writes,
+both now guarded (skip if both ADR files already exist) as part of this same fix. **Zero
+unguarded heredocs remain in any of the four scripts** — Stage 11's was removed entirely
+rather than guarded.
+
+**`write_env` calls — surgical single-key upsert into `.env.phase0`.** Structurally different
+and lower-risk by construction: `write_env` rewrites only the one line matching `^key=`,
+leaving every other line (including any a human hand-edited) untouched. Not the heredoc
+pattern. Of the ~20 call sites across all four scripts:
+- Most write fixed naming constants (`RESOURCE_GROUP`, `CONTAINERAPP_NAME`, `CAE_NAME`, …),
+  freshly-queried live Azure state (`AOAI_ENDPOINT`, `APP_BASE_URL`), or a value the human just
+  typed interactively that same run (`DOCKERHUB_USERNAME`) — safe by nature, same class as
+  Stage 2/8's deliberate free re-verification.
+- `PHONE_NUMBER` (Stage 9) and `R06_ANSWER_SHORT` (Stage 6) are protected transitively by
+  their enclosing stage guards added earlier this session.
+- **`PROVISION_TIME` (`01-provision.sh`, after the healthz check, Stage 12) — one real,
+  currently-latent finding.** Unconditional every time execution reaches that line with a
+  healthy container, regardless of whether the `create` or `update` branch fired above it.
+  Not triggered by any run so far — `containerapp create` has never actually succeeded yet
+  (every attempt failed before completion: first the arch mismatch, now fixed), so the next
+  successful run will be genuinely first-time. But a *future* re-run of this script after a
+  successful deploy — for an unrelated fix, say — would silently reset this timestamp, and
+  R-04's 72-hour idle-billing window is anchored on it. Flagged, not guarded, matching how
+  Stage 10's ADR risk was originally handled before it fired for real. Marco's call whether to
+  guard it now or accept the risk until it's closer to mattering.
+
+**`COSTS.md` appends — two unguarded duplicate-append sites, lower severity (additive, not
+destructive, but still a re-run hazard):**
+- `03-cost-check-24h.sh` Stage 1 (`>> "$COSTS_FILE"`, the Free Services portal check section)
+  — no guard against re-appending an identical section on a re-run.
+- `04-teardown-and-r08.sh`'s final "Measured, not estimated" section (`>> "$COSTS_FILE"`) — the
+  file-creation preamble above it *is* guarded (`if [[ ! -f "$COSTS_FILE" ]]`), but the actual
+  R-04/R-08 results block that follows is not; a re-run would duplicate-append rather than
+  overwrite the earlier measurement.
+
+Both `COSTS.md` sites are the same shape as the original (now-fixed) Stage 2/Stage 6
+`findings.md` duplicate-append risk, just in a different file. Not fixed as part of this
+commit — reported per the audit request, Marco's call on priority.
+
 ## Stage 12 — auto-created Log Analytics workspace, cost verified
 
 `az containerapp env create` (line 1086, no `--logs-workspace-id`/`--logs-destination`
