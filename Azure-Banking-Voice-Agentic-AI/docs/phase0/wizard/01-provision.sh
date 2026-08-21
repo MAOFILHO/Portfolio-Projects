@@ -434,6 +434,17 @@ say "Global Standard only for realtime models. This is the live test that actual
 say "This is a genuine attempt at a billable deployment — if it succeeds, it will be deleted right"
 say "after (decision 14 pins GlobalStandard; DataZone here is a probe, not what stays in service)."
 
+# No confirm gate on this probe (unlike Stage 9's purchase) -- deliberately guarded on the findings.md
+# section instead, since re-running this stage with no guard would re-attempt a real billable-deployment
+# API call every single time and duplicate-append this section on every run. Skip once R-06 is answered.
+if grep -q "^## R-06" "$FINDINGS_FILE" 2>/dev/null; then
+  ok "R-06 already answered in $FINDINGS_FILE, skipping the probe re-attempt"
+  # Stage 10's R06_LINE (line ~719) reads $DATAZONE_OK under `set -u` with no default -- must stay
+  # set on the skip path too, or a re-run crashes there instead of at this stage. Reconstructed from
+  # the persisted R06_ANSWER_SHORT rather than left unbound.
+  DATAZONE_OK=$([[ "$(_existing "R06_ANSWER_SHORT" || true)" == "OFFERED" ]] && echo 1 || echo 0)
+else
+
 DATAZONE_RESULT=$(az cognitiveservices account deployment create \
   --name "$AOAI_NAME" \
   --resource-group "$RESOURCE_GROUP" \
@@ -465,6 +476,7 @@ fi
 } >> "$FINDINGS_FILE"
 write_env "R06_ANSWER_SHORT" "$([[ "$DATAZONE_OK" == "1" ]] && echo OFFERED || echo NOT_OFFERED)"
 ok "recorded to $FINDINGS_FILE"
+fi
 
 # ── Stage 7: the real GlobalStandard deployment ──────────────────────────────
 stage "Create the real gpt-realtime-mini deployment (GlobalStandard, NoAutoUpgrade)"
@@ -583,6 +595,18 @@ pause "Review the area codes above — you'll pick one in the next stage. Press 
 
 # ── Stage 9: purchase the number ─────────────────────────────────────────────
 stage "Purchase a Canada local geographic number"
+
+# R-09 in practice: a second purchase is permanent (this rule forbids ever releasing either number),
+# so this stage must never re-run its search/purchase logic once PHONE_NUMBER is set -- not "usually
+# skip", structurally cannot reach the purchase call at all when it's already set. Read directly from
+# ENV_FILE via _existing (same mechanism ask()/ask_secret() use), not trusted from a shell variable
+# that might not be populated on a fresh invocation of this script.
+if [[ -n "$(_existing "PHONE_NUMBER" || true)" ]]; then
+  ok "already purchased, skipping: $(_existing "PHONE_NUMBER") (PHONE_NUMBER set in $ENV_FILE)"
+  note "R-09: this number is never released by any script, so a re-run never re-purchases while"
+  note "PHONE_NUMBER is set. Delete it from .env.phase0 yourself if you genuinely need a new search --"
+  note "never as an accidental side effect of re-running this script."
+else
 
 # Hard precondition: phone number purchase is a Microsoft.Communication data-plane operation and
 # fails if the provider hasn't finished registering yet. Stage 4 kicked registration off and polled
@@ -705,6 +729,7 @@ else
   err "window. Do not assume success or failure. Check manually:"
   err "  curl -H \"Authorization: Bearer \$TOKEN\" \"https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers/operations/${OPERATION_ID}?api-version=2025-06-01\""
   exit 1
+fi
 fi
 
 # ── Stage 10: write ADR-001 and ADR-002 ──────────────────────────────────────
@@ -872,6 +897,16 @@ warn "current SDK signature."
 ECHO_DIR="$SCRIPT_DIR/../echo-app"
 mkdir -p "$ECHO_DIR"
 
+# Never regenerate over hand-fixed, committed source. This heredoc template is frozen at whatever
+# this script's own text says -- it does NOT track fixes made directly to docs/echo-app/ after Stage
+# 11 first ran (the azure-communication-callautomation SDK version bug found and fixed 2026-08-21 is
+# a concrete example: the template below still shows the broken 1.2.* pin). Regenerating from it on a
+# re-run would silently clobber real, committed fixes with stale, broken content. Skip once app.py
+# exists -- edit docs/echo-app/ directly from then on, never via this script.
+if [[ -f "$ECHO_DIR/app.py" ]]; then
+  ok "$ECHO_DIR/app.py already exists, skipping regeneration -- edit it directly, never via this script"
+else
+
 cat > "$ECHO_DIR/requirements.txt" <<'EOF'
 fastapi==0.115.*
 uvicorn[standard]==0.32.*
@@ -1017,6 +1052,7 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 EOF
 
 ok "wrote $ECHO_DIR/{app.py,requirements.txt,Dockerfile}"
+fi
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
