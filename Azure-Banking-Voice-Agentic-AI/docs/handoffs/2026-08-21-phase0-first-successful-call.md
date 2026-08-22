@@ -1,4 +1,7 @@
-# Handoff — Azure-Banking-Voice-Agentic-AI, Phase 0, 2026-08-21 night session
+# Handoff — Azure-Banking-Voice-Agentic-AI, Phase 0, 2026-08-21 night session (final)
+
+This supersedes the earlier same-night version of this file — that one accumulated corrections
+in place as bugs were found; this is the clean final state, same filename, same commit history.
 
 ## STOP CONDITIONS — restated verbatim from CLAUDE.md, per its own requirement
 
@@ -14,128 +17,91 @@
 ## Where things stand
 
 **First real answered phone call happened tonight.** All 3 test calls to `+17059100383` connected,
-echoed correctly, and DTMF registered on 2 of 3. This followed a chain of same-night bug fixes —
-none of this needs re-litigating, it's all in `docs/phase0/findings.md` and the commits below.
-`PROJECT_STATE.md` (updated at the end of this session, read it for the authoritative current-state
-snapshot — this handoff doc will go stale, that file won't) is the source of truth for what's open.
+echoed correctly, DTMF registered on 2 of 3. That triggered a chain of same-night bug fixes and one
+infrastructure change (a local log-capture LaunchAgent) — none of it needs re-litigating, it's all
+in `docs/phase0/findings.md` and the commit list below. **`PROJECT_STATE.md` is the authoritative
+current-state snapshot** — read it first; this document exists for narrative context and the facts
+below that a cold resume needs but that aren't self-evident from `PROJECT_STATE.md` alone.
 
 **R-04's 72h idle-billing window is OPEN**, anchored to `PROVISION_TIME=2026-08-21T22:49:35Z`
-(closes ~2026-08-24T22:49:35Z). This value was set **manually**, not by either wizard script's
-normal write path — see "why" below. Do not touch it.
+(closes ~2026-08-24T22:49:35Z). **This value is manual**, not written by either wizard script's
+normal path — reasoning: `docs/phase0/findings.md`, "PROVISION_TIME — set manually...". Do not
+touch it; do not re-run `02-test-calls.sh` (no per-call skip guard exists there — it would force 3
+more billable calls before its free evidence-extraction stage could even run).
 
 ## Critical facts the next session needs, cold
 
-1. **`PROVISION_TIME` is a manual value and why.** `01-provision.sh` used to write it on a passing
-   `/healthz` check, which turned out to be the wrong gate (container was healthy for over an hour
-   while every real call failed — see findings.md "healthz-as-window-gate"). Redesigned to write in
-   `02-test-calls.sh` instead, gated on a confirmed `CallConnected` event. But `02-test-calls.sh`
-   Stage 4 had a second, independent bug (`--tail 500` against a CLI capped at 300, silently
-   swallowed) that meant the gate never got a chance to fire against tonight's real, successful
-   calls. Both bugs are now fixed in the script, but `PROVISION_TIME` itself was set by hand this
-   session to `2026-08-21T22:49:35Z` — the current Container App revision's actual `createdTime`
-   (`az containerapp revision list`), reasoned as the correct anchor because R-04 measures
-   idle-vs-active *billing*, which starts when the replica exists, not when someone first dials it.
-   Full reasoning: `docs/phase0/findings.md`, "PROVISION_TIME — set manually, not by the normal
-   path".
+1. **Log Analytics still delivers zero rows** through two independently-correct delivery paths,
+   confirmed after a full real-call lifecycle — a genuine platform gap, not a config mistake,
+   flagged for real diagnosis before Phase 1 (not fixed, just flagged).
 
-2. **Log Analytics delivers zero rows, through two correctly-configured paths, confirmed after a
-   full real-call lifecycle.** Both the native `appLogsConfiguration` (destination: log-analytics,
-   correct workspace) and an explicit `az monitor diagnostic-settings create` are wired correctly
-   and neither has delivered a single row. This is a confirmed platform-level gap, not a config
-   mistake — flagged for real diagnosis before Phase 1 (not fixed, just flagged: a production voice
-   agent can't run with no durable logs).
+2. **The only durable log-evidence mechanism is a local `launchd` LaunchAgent**, not Log Analytics
+   and not a `--follow` stream:
+   - `~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist` (local machine config, not in git)
+     runs a plain `az containerapp logs show --tail 300` (no `--follow`) every 15 minutes, appending
+     to `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`.
+   - `--follow` was tried first and found **not durable** — a known, unresolved upstream bug
+     ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)) plus this project's
+     own empirical evidence (two connections, each dying after exactly 5 idle heartbeats, ~5-6min).
+     Its capture file (`containerapp-logs-follow-2026-08-21.jsonl`) is kept but has a real,
+     acknowledged gap (Marco was mobile, cafe → home) — not continuous, prefer the snapshot file.
+   - Check health: `launchctl list | grep azbank` (exit `0` = healthy). Failures:
+     `~/Library/Logs/azbank-phase0-logsnapshot.err` (deliberately not `/tmp`, which clears on
+     reboot).
+   - **NOT yet confirmed to survive a real sleep/wake cycle** — verified only on a machine that
+     stayed awake throughout. Marco was checking this on getting home tonight (commute gap check).
+     **Before assuming this is solved, check `containerapp-logs-snapshot-2026-08-21.jsonl`'s
+     timestamps for a gap matching any period the laptop actually slept.** If found, log retention
+     is still an open problem, not a handled one — don't proceed as if it's fixed without checking.
+   - Both evidence files contain duplicate lines by design (dedup: `sort -u` or `awk
+     '!seen[$0]++'`, details in `docs/phase0/evidence/README.md`). **Neither is committed yet** —
+     Marco's explicit instruction: commit once, at teardown (script 4), after the dedup pass, not
+     periodically.
 
-   **[Corrected later the same night — this replaces what this section originally said.]** A
-   manually-run `--follow` capture was tried first and found **not durable**: it died on its own
-   twice, without being interrupted, each time after ~5-6 minutes of idle. Confirmed as a known,
-   unresolved upstream bug ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267))
-   plus this project's own empirical evidence (two connections, each ending after exactly 5
-   `"No logs since last 60 seconds"` heartbeats). **The durable log-evidence path now is** a
-   `launchd` LaunchAgent (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a
-   plain (non-`--follow`) `--tail 300` every 15 minutes into
-   `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — sidesteps the bug entirely
-   since it's a one-shot pull, not a long-lived stream. Check health with `launchctl list | grep
-   azbank` (exit `0` = healthy); on failure, `~/Library/Logs/azbank-phase0-logsnapshot.err` (durable
-   across a reboot, deliberately not `/tmp`).
+3. **R-02/R-03 evidence is confirmed, with one open gap.** DTMF confirmed on calls 2 and 3 (6/6
+   tones each). **Call 1 registered zero DTMF despite Marco pressing keys during it too** — nothing
+   in the logs explains the miss; recorded as a genuine open question, not resolved either way (an
+   earlier draft reasoned it away incorrectly; Marco caught it, it's corrected in
+   `docs/phase0/findings.md`). `02-test-calls.sh` now prompts for DTMF on all 3 calls going forward
+   (was only call 2) — irrelevant to tonight's already-collected evidence, matters for any future
+   test-call session.
 
-   **NOT yet confirmed: whether this LaunchAgent survives a real sleep/wake cycle.** It was verified
-   running on a machine that stayed awake the entire time — that is not the same guarantee as
-   surviving the laptop actually sleeping. Marco will check on getting home tonight, by looking for
-   a gap in the snapshot file's timestamps matching the commute. **If tomorrow's session finds such
-   a gap, treat the log-retention problem as still unsolved, not handled** — do not assume the
-   LaunchAgent fix from this session is sufficient without checking `docs/phase0/evidence/
-   containerapp-logs-snapshot-2026-08-21.jsonl`'s timestamps for continuity first.
-
-   Both evidence files **will contain duplicate lines** by design
-   (the `--follow` file on every restart; the snapshot file across overlapping 15-min pulls at idle
-   rates); dedup with `sort -u` or `awk '!seen[$0]++'` before analysing — see
-   `docs/phase0/evidence/README.md`. The original `--follow` file has a real, acknowledged gap from
-   tonight (Marco was mobile, cafe → home, during part of the window) — it is not continuous and
-   should not be read as such; prefer the snapshot file going forward. **Do not commit either file
-   periodically** — commit once, at teardown, after the dedup pass. Interim commits would just put
-   overlapping snapshots of the same growing file in git history.
-
-3. **`02-test-calls.sh` must NOT be re-run.** Its Stages 1-3 have no skip-if-already-confirmed
-   guard — running it unconditionally prompts for 3 fresh real dials before Stage 4's (free,
-   read-only) evidence extraction can run at all. Tonight's 3 calls already succeeded; R-02/R-03/RTT
-   evidence was extracted **manually** instead (same grep patterns the script now uses, run against
-   the committed capture file) specifically to avoid placing unnecessary billable calls against an
-   idle-measurement window. This design gap (cheap operation welded to an expensive one, no way to
-   separate them) is logged in findings.md, not fixed — candidate fix is an `--extract-only` flag or
-   per-call guards, for later.
-
-4. **R-02/R-03 evidence is confirmed, with one open gap.** DTMF confirmed on calls 2 and 3 (6/6
-   tones each, clean mid-stream timestamps). **Call 1 registered zero DTMF despite Marco pressing
-   keys during it too** — nothing in the logs (duration, frame count, event ordering) explains the
-   miss; it's recorded as a genuine open question in findings.md, not resolved either way. An
-   earlier draft of that findings.md entry reasoned this away incorrectly (conflated "call 3 wasn't
-   scripted for DTMF but worked" with "therefore call 1's miss is explainable") — Marco caught it,
-   it's been corrected in place. Don't re-introduce that reasoning.
-
-5. **`03-cost-check-24h.sh` Stage 1 is a human-only step** (a Cost Management Portal check with real
-   ingestion lag — nothing to automate). Runs tomorrow, ~24h after `PROVISION_TIME`'s *original*
-   healthz-based write tonight, not necessarily 24h after the manually-anchored value — worth
-   Marco's own judgment on timing when he runs it, not something to compute automatically.
+4. **`03-cost-check-24h.sh` Stage 1 is human-only** (Cost Management Portal Free Services check,
+   real ingestion lag, no API exists for it). Runs tomorrow.
 
 ## Commits this session (chronological, all on `azure-banking-work`)
 
-- `0f8604b` — ECHO_DIR misdirection fix (canonical `docs/echo-app/`, buildx `--platform linux/amd64`,
-  manifest gate), README.md, wizard README fix.
-- `d855923` — `PROVISION_TIME` re-run guard (superseded later tonight — see below).
-- `770c1f3` — `APP_BASE_URL` placeholder-race fix (computed pre-create from `defaultDomain`), update
-  branch's secret+revision-suffix fix, diagnostic-settings addition, `PROVISION_TIME` moved out of
-  `01-provision.sh` into `02-test-calls.sh`.
-- `9e16b81` — reordered `02-test-calls.sh`'s gate to sit after evidence recording, not before.
-- `1c67d51` → `9b893eb` (amended) — **the only copy of tonight's R-02/R-03 evidence is committed
-  here**: `docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-3-test-calls.txt`.
-- `76938c7` — `--tail 500` → `300` fix (the CLI's real cap), command-failure vs. genuinely-empty
-  distinguished, undefined `err()` bug also fixed.
-- `b805646` — DTMF prompted on all 3 calls (not just call 2), broken `DTMF_LINES` grep pattern fixed.
-- `5159d69` — manual R-02/R-03/RTT findings.md write, evidence README with dedup instructions.
-- `a3e98b8` — logged the Stage-1-3/Stage-4 coupling design gap (item 3 above), not fixed.
+`0f8604b` ECHO_DIR fix · `d855923` PROVISION_TIME guard (superseded) · `770c1f3` APP_BASE_URL
+placeholder-race fix + PROVISION_TIME moved to `02-test-calls.sh` · `9e16b81` gate reordered after
+evidence recording · `1c67d51`→`9b893eb` (amended) **R-02/R-03 evidence capture committed** ·
+`76938c7` `--tail 500`→`300` fix, undefined `err()` fixed · `b805646` DTMF prompt on all 3 calls,
+`DTMF_LINES` grep fixed · `5159d69` manual R-02/R-03/RTT extraction, evidence README · `a3e98b8`
+logged the Stage-1-3/Stage-4 billable-coupling design gap (not fixed) · `2f86750` first handoff
+committed · `fd5f85d` `PROJECT_STATE.md` rewritten for current state · `13376c3`→`bc9a3d2` (amended
+— evidence files pulled back out per Marco's standing instruction, self-corrected) `--follow`
+retired, `launchd` snapshot introduced · `952dc75` LaunchAgent stderr path fixed, sleep/wake caveat
+added everywhere.
 
-`docs/PLAN.md` has an uncommitted Observability-tooling section (Azure Monitor OpenTelemetry Distro
-vs. LangFuse) — **deliberately left uncommitted**, Marco's instruction: "separate work, commit it on
-its own after." Don't sweep it into an unrelated commit.
+`docs/PLAN.md` has an uncommitted Observability-tooling section — **deliberately left uncommitted**,
+Marco's instruction: "separate work, commit it on its own after." Don't sweep it into an unrelated
+commit.
 
 ## Live Azure state (verified, not assumed — re-verify on resume per CLAUDE.md's Resume Discipline)
 
-- Container App `ca-azbank-echo-p0`: exists, healthy, single revision, running and **billing** —
-  this is the R-04 measurement subject. Do not restart/update/delete it before the window closes.
+- Container App `ca-azbank-echo-p0`: healthy, single revision, running and **billing** — the R-04
+  measurement subject. Do not restart/update/delete before the window closes.
 - Environment `cae-azure-banking-voice-p0`, ACS `acs-azure-banking-voice`, AOAI
-  `aoai-azure-banking-voice-cc`: all present, unchanged.
-- Phone number `+17059100383`: owned, `$1.00/mo`, R-09 applies (never released, ever).
-- Two Log Analytics workspaces exist in the resource group (`...aixC`, orphaned/unused;
-  `...aiCS`, the real one) — the orphan is left in place, not deleted, per earlier-session decision
-  not to touch it without asking.
+  `aoai-azure-banking-voice-cc`: unchanged.
+- Phone number `+17059100383`: owned, $1.00/mo, R-09 (never released).
+- Two Log Analytics workspaces (`...aiCS` real/linked, `...aixC` orphan, left in place).
 
 ## Suggested skills for the next session
 
 - **`/research`** if `03-cost-check-24h.sh`'s Cost Management API/Portal query needs verifying
   against current Azure docs before running it — this project's standing rule is verify, don't
-  assume, and cost-query shapes move.
-- **`/code-review`** before Phase 0's exit-criteria gate, once `03`/`04` have run — not needed for
-  tonight's fixes, which were reviewed interactively, commit by commit, by Marco throughout.
+  assume.
+- **`/code-review`** before Phase 0's exit-criteria gate, once scripts 3 and 4 have run — not needed
+  for tonight's fixes, reviewed interactively, commit by commit, by Marco throughout.
 - **`/handoff`** again at the end of whichever session runs `03-cost-check-24h.sh` and/or
   `04-teardown-and-r08.sh`, before `/clear` — per this project's phase-boundary discipline.
 
