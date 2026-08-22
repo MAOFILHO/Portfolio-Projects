@@ -2307,3 +2307,42 @@ evidence from 3 test calls", above) rather than placing unnecessary billable cal
 `02-test-calls.sh` that jumps straight to Stage 4 against the current log buffer; or per-call
 guards on Stages 1-3 (`_existing "CALL1_TIME"`, etc.) so a partial or already-completed run can
 resume or skip cleanly, same shape as `01-provision.sh`'s existing stage guards.
+
+## `--follow` is not durable — known bug, empirically ~5-6min idle timeout, replaced with a scheduled snapshot
+
+The `--follow` capture Marco set up earlier tonight stopped on its own twice, without him
+interrupting it. Checked rather than assumed:
+
+- `az containerapp logs show --help` documents no timeout at all.
+- A live search found a matching, open, unresolved GitHub issue:
+  [Azure/azure-cli#28267, "Container Apps logs in follow mode exit after few seconds"](https://github.com/Azure/azure-cli/issues/28267)
+  — labeled `bug`/`Service Attention` by the Azure CLI team, no maintainer-confirmed root cause or
+  fix, no documented duration in the issue itself.
+- The capture file itself gives a precise, reproducible number: two independent connections both
+  died after printing **exactly 5** `"No logs since last 60 seconds"` heartbeats (60s apart) —
+  connection 1: 23:45:43 → last heartbeat 23:51:14; connection 2: 00:01:29 → last heartbeat
+  00:06:29. Both ~5-6 minutes of idle, then silent death, no error line. n=2, empirical, not an
+  official guarantee — but consistent and matching a known bug, not a fluke.
+
+**Fixed**: replaced with a `launchd` LaunchAgent
+(`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) running a plain (non-`--follow`)
+`az containerapp logs show --tail 300` every 15 minutes, appended to
+`docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`. This sidesteps the bug entirely
+— it's a one-shot pull, not a long-lived stream, so there's no idle connection to time out. 15
+minutes is generous margin over the observed idle rate (~11 lines/hour) while still tight enough to
+absorb an unexpected burst without overflowing the 300-line buffer. Verified working immediately:
+first run captured 302 lines including a fresh line timestamped 01:53:36, safely spanning the
+~1h52m gap since the last `--follow` activity (00:01:23) — confirms the idle-rate assumption holds
+in practice, not just in theory.
+
+To check on it later: `launchctl list | grep azbank` (exit status `0` after each 15-min run = healthy;
+non-zero or missing = investigate `/tmp/azbank-logsnapshot.err`). To stop it (e.g. at teardown):
+`launchctl unload ~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`.
+
+**Gap acknowledged, not hidden**: the `--follow` file
+(`containerapp-logs-follow-2026-08-21.jsonl`) has a real discontinuity from tonight — Marco was
+mobile (cafe → home) during part of the window covered by the two `--follow` connections above, and
+the file is not one continuous stream. The `--tail 300` replay on each reconnect (and now the
+snapshot file going forward) backfills what it can, but the `--follow` file itself should not be
+read as gap-free. Analysis should prefer the snapshot file going forward; the `--follow` file is
+kept as-is (not edited/spliced) since it's still real evidence of what it did capture.

@@ -3,27 +3,48 @@
 Raw Container App log captures backing R-02/R-03/RTT findings in `docs/phase0/findings.md`. This
 directory exists because `ContainerAppConsoleLogs` in Log Analytics has returned zero rows through
 two independently-configured delivery paths (`docs/phase0/findings.md`, "Log delivery — still zero
-rows...") — right now, these files and the CLI's own ~300-line streaming buffer are the only places
-this phase's call evidence exists at all.
+rows...") — these files are the only durable evidence of this phase's call/container activity.
 
 ## Files
 
 - `containerapp-logs-<timestamp>-3-test-calls.txt` — a one-shot `az containerapp logs show --tail
-  300` snapshot, captured immediately after a call session to beat the buffer scrolling past it.
-  Clean, single capture, no duplicates.
+  300` snapshot, captured immediately after the first successful call session. Clean, single
+  capture, no duplicates. This is the file R-02/R-03 findings are drawn from.
 
-- `containerapp-logs-follow-<date>.jsonl` — a long-running `az containerapp logs show --tail 300
-  --follow` capture, appended to (`>>`, never truncated) across the R-04 72h observation window.
+- `containerapp-logs-follow-2026-08-21.jsonl` — an early attempt at continuous coverage via
+  `az containerapp logs show --tail 300 --follow`, run manually in a terminal. **Superseded — see
+  below.** Kept as-is for what it did capture; do not treat it as gap-free.
 
-## The `--follow` file WILL contain duplicate lines — dedup before analysis
+- `containerapp-logs-snapshot-2026-08-21.jsonl` — the current, reliable evidence path: a `launchd`
+  LaunchAgent runs a plain (non-`--follow`) `--tail 300` pull every 15 minutes and appends it here.
 
-Every time the `--follow` capture is (re)started — laptop sleep, dropped connection, terminal
-closed and reopened — it first replays its own `--tail 300` window before continuing to stream live.
-Appending (`>>`, by design, so a restart never loses what's already captured) means those replayed
-lines land in the file a second time. This is deliberate: duplicate lines are harmless and
-recoverable; truncating on restart would not be.
+## `--follow` is not durable — use the scheduled snapshot instead
 
-**Before analysing this file, deduplicate first:**
+`az containerapp logs show --follow` died on its own twice, without being interrupted, both times
+after ~5-6 minutes of idle (no real container log activity) — confirmed via a matching, unresolved
+upstream bug, [Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267), and via this
+project's own capture file (two connections, each ending after exactly 5
+`"No logs since last 60 seconds"` heartbeats, 60s apart, then silent death). Full writeup:
+`docs/phase0/findings.md`, "`--follow` is not durable...".
+
+**Current setup**: `~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`, a macOS LaunchAgent
+running `az containerapp logs show --tail 300` (no `--follow` — sidesteps the bug entirely, since
+it's a one-shot pull, not a long-lived stream that can idle out) every 15 minutes, appended to
+`containerapp-logs-snapshot-2026-08-21.jsonl`. 15 minutes is generous margin over the observed idle
+rate (~11 lines/hour) while tight enough to absorb an unexpected burst without overflowing the
+300-line buffer.
+
+- **Check it's healthy**: `launchctl list | grep azbank` — exit status `0` is healthy; anything else,
+  or the label missing entirely, means investigate `/tmp/azbank-logsnapshot.err`.
+- **Stop it** (e.g. at teardown, script 4): `launchctl unload
+  ~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`.
+
+## The `--follow` file (and any future re-attempt at `--follow`) WILL contain duplicates
+
+If `--follow` is ever used again despite the above, know that every (re)start replays its own
+`--tail 300` window before streaming live, so appending (`>>`, by design — never truncate, a restart
+must not lose what's already captured) means those replayed lines land a second time. Dedup before
+analysis:
 
 ```bash
 sort -u containerapp-logs-follow-2026-08-21.jsonl > containerapp-logs-follow-2026-08-21.dedup.jsonl
@@ -31,12 +52,8 @@ sort -u containerapp-logs-follow-2026-08-21.jsonl > containerapp-logs-follow-202
 awk '!seen[$0]++' containerapp-logs-follow-2026-08-21.jsonl > containerapp-logs-follow-2026-08-21.dedup.jsonl
 ```
 
-Each line is a self-contained JSON object with its own `TimeStamp`, so exact-line dedup is safe —
-two lines are only identical if they really are the same log event replayed, never two distinct
-events that happen to collide.
+Each line is a self-contained JSON object with its own `TimeStamp`, so exact-line dedup is safe.
 
-**What a restart can still lose, even with append-and-dedup**: only the most recent 300 lines are
-replayed on reconnect. If the app produced more than 300 log lines during a gap the capture wasn't
-running for (e.g. a burst of real call activity while a laptop was asleep), whatever's older than
-the last 300 lines from that gap is gone — this file protects against the terminal/process dying,
-not against a long enough outage that outpaces the replay window.
+The scheduled snapshot file does **not** need this — each 15-minute pull's `--tail 300` window
+naturally overlaps the previous one at idle rates, so it also contains duplicate lines across
+consecutive runs, by the same mechanism. Same dedup commands apply to it before analysis.

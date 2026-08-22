@@ -43,14 +43,26 @@ normal write path — see "why" below. Do not touch it.
    correct workspace) and an explicit `az monitor diagnostic-settings create` are wired correctly
    and neither has delivered a single row. This is a confirmed platform-level gap, not a config
    mistake — flagged for real diagnosis before Phase 1 (not fixed, just flagged: a production voice
-   agent can't run with no durable logs). **The only durable log-evidence path right now is**
-   `docs/phase0/evidence/containerapp-logs-follow-2026-08-21.jsonl` — a long-running
-   `az containerapp logs show --tail 300 --follow` capture Marco is running in a terminal he's
-   leaving open across the 72h window. It **will contain duplicate lines** on every restart by
-   design (append-only); dedup with `sort -u` or `awk '!seen[$0]++'` before analysing — see
-   `docs/phase0/evidence/README.md`. **Do not commit this file periodically** — Marco's explicit
-   instruction is to commit it once, at teardown, after the dedup pass. Interim commits would just
-   put overlapping snapshots of the same growing file in git history.
+   agent can't run with no durable logs).
+
+   **[Corrected later the same night — this replaces what this section originally said.]** A
+   manually-run `--follow` capture was tried first and found **not durable**: it died on its own
+   twice, without being interrupted, each time after ~5-6 minutes of idle. Confirmed as a known,
+   unresolved upstream bug ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267))
+   plus this project's own empirical evidence (two connections, each ending after exactly 5
+   `"No logs since last 60 seconds"` heartbeats). **The durable log-evidence path now is** a
+   `launchd` LaunchAgent (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a
+   plain (non-`--follow`) `--tail 300` every 15 minutes into
+   `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — sidesteps the bug entirely
+   since it's a one-shot pull, not a long-lived stream. Check health with `launchctl list | grep
+   azbank` (exit `0` = healthy). Both evidence files **will contain duplicate lines** by design
+   (the `--follow` file on every restart; the snapshot file across overlapping 15-min pulls at idle
+   rates); dedup with `sort -u` or `awk '!seen[$0]++'` before analysing — see
+   `docs/phase0/evidence/README.md`. The original `--follow` file has a real, acknowledged gap from
+   tonight (Marco was mobile, cafe → home, during part of the window) — it is not continuous and
+   should not be read as such; prefer the snapshot file going forward. **Do not commit either file
+   periodically** — commit once, at teardown, after the dedup pass. Interim commits would just put
+   overlapping snapshots of the same growing file in git history.
 
 3. **`02-test-calls.sh` must NOT be re-run.** Its Stages 1-3 have no skip-if-already-confirmed
    guard — running it unconditionally prompts for 3 fresh real dials before Stage 4's (free,

@@ -35,13 +35,17 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
 1. **Log Analytics delivers zero rows — confirmed platform gap, needs real diagnosis before Phase
    1.** Both the native `appLogsConfiguration` path and an explicit `az monitor diagnostic-settings`
    resource are correctly configured (verified: right workspace, right categories enabled) and
-   neither has delivered a single row, even after a full real-call lifecycle. **The only durable log
-   path right now** is `docs/phase0/evidence/containerapp-logs-follow-2026-08-21.jsonl`, a
-   long-running `--follow` capture Marco is running manually across the 72h window — it accumulates
-   duplicate lines by design on every restart (dedup instructions: `docs/phase0/evidence/README.md`).
-   **Do not commit that file periodically** — commit once, at teardown, after the dedup pass. A
-   production voice agent cannot run on Phase 1 with no durable logging; this needs a real fix, not
-   a workaround, before then.
+   neither has delivered a single row, even after a full real-call lifecycle. `--follow`-based
+   capture was tried and found **not durable** — known unresolved upstream bug
+   ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)), empirically dies
+   after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
+   (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a plain `--tail 300`
+   every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — check
+   health with `launchctl list | grep azbank` (exit `0` = healthy). Contains duplicate lines across
+   overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
+   **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
+   pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
+   fix, not a workaround, before then.
 2. **`02-test-calls.sh` must not be re-run this window.** Its Stages 1-3 have no
    skip-if-already-confirmed guard, so it unconditionally prompts for 3 fresh billable calls before
    Stage 4's (free, read-only) evidence extraction can run — a design gap (cheap operation welded to
@@ -90,4 +94,4 @@ fact (`spendingLimit: Off`), not something to resolve.
    Analysis sanity check — including confirming the number's actual first bill date/amount.
 2. `04-teardown-and-r08.sh`, ~72h after `PROVISION_TIME` (2026-08-21T22:49:35Z, i.e. ~2026-08-24
    afternoon): R-04 verdict, R-08 computation, teardown (keep the number — R-09, never released).
-   Commit the `--follow` evidence capture (deduped) as part of this script's work, per open item 1.
+   Commit both evidence files (deduped) as part of this script's work, per open item 1.
