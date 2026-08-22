@@ -46,11 +46,16 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
    use `launchctl list <label>`'s output to check this** — it never echoes `StartInterval`/
    `RunAtLoad` for any job, scheduled correctly or not (verified against an unrelated known-scheduled
    agent), and `LastExitStatus 0` can't distinguish "ran once, dead" from "firing every 15min." The
-   only reliable check: does the evidence file's mtime advance across an interval boundary. **NOT yet
-   confirmed to survive a real sleep/wake cycle** (verified only on a machine that stayed awake) —
-   before trusting this is solved, check the snapshot file's timestamps for a gap matching any period
-   the laptop actually slept; if found, treat log retention as still unsolved. Contains duplicate
+   only reliable check: does the evidence file's mtime advance across an interval boundary.
+   **Confirmed 2026-08-22 to survive a real sleep/wake cycle** — fired ~10 times over an overnight
+   ~8h25m stretch, roughly every 50min rather than every 15 (`launchd` coalesces `StartInterval`
+   jobs across sleep; expected, not a defect). Idle-rate margin still holds at that spacing; a wide
+   gap between consecutive snapshot timestamps is coalescing, not an outage. Contains duplicate
    lines across overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
+   **The committed 3-test-calls capture and the snapshot file are not interchangeable** — call 1's
+   `CallConnected` scrolled out of the snapshot's `--tail 300` buffer before the LaunchAgent's first
+   pull and is only in the committed capture; teardown needs both files (`docs/phase0/evidence/
+   README.md`, `docs/phase0/findings.md` "Overnight idle window...").
    **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
    pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
    fix, not a workaround, before then.
@@ -91,7 +96,9 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-02 and R-03 confirmed** 2026-08-21 (real calls, real echo, DTMF on 2/3 — see open item 3 for the
-one gap). **R-04 in progress** — 72h window open, closes ~2026-08-24T22:49:35Z. **R-08** still
+one gap). **R-04 in progress** — 72h window open, closes ~2026-08-24T22:49:35Z; first overnight idle stretch
+confirmed clean 2026-08-22 (no unexpected inbound calls, `docs/phase0/findings.md` "Overnight idle
+window..."). **R-08** still
 pending — needs Cost Analysis data from script 3. **R-01, R-05, R-06 resolved** (2026-08-20). **R-09**
 (number irreplaceability) is a standing hard rule, not something to resolve. **R-07** is a standing
 fact (`spendingLimit: Off`), not something to resolve.

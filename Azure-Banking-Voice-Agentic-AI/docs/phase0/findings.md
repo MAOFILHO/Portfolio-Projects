@@ -2414,3 +2414,36 @@ mtime advance across a real interval boundary (as done here, T0 → T0+900s) —
 `launchctl list`, and not by reasoning about `LastExitStatus` (which is `0` whether the job ran once
 at load and never again, or is firing correctly every 15 minutes — it cannot distinguish those
 cases).
+
+## Overnight idle window — R-04 assumption holds; sleep/wake cadence confirmed non-uniform, 2026-08-22
+
+**R-04 idle check.** Deduped `CallConnected` count in the snapshot file
+(`docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`) is 2 — both from last night's
+test calls (22:51:53, 22:52:50), nothing overnight. R-04's idle assumption holds: no unexpected
+inbound calls during the idle stretch.
+
+One gap to flag, not a contradiction: call 1's `CallConnected` (22:51:13) is **not** in the snapshot
+file — the `--tail 300` buffer had already scrolled past it before the LaunchAgent's first pull
+fired. All three calls' `CallConnected` events **are** in the committed capture
+(`containerapp-logs-2026-08-21T2303Z-3-test-calls.txt`). The two evidence files are not
+interchangeable for this purpose: the committed capture is the source for call evidence (all 3 calls,
+one clean single-shot pull, no gaps); the snapshot file is the source for the idle window (continuous
+coverage since ~22:33, but its `--tail 300` window means anything older than the buffer at first-pull
+time is gone for good). Teardown analysis needs both. See `docs/phase0/evidence/README.md`, "Files",
+for the same note held next to the files themselves.
+
+**LaunchAgent overnight cadence — confirmed non-uniform, not a failure.** The LaunchAgent fired
+roughly every 50 minutes overnight during sleep, not every 15: ~3,021 lines gained over ~8h25m ≈ 10
+pulls, versus the ~34 a strict 15-minute `StartInterval` would produce awake. This matches known
+`launchd` behavior — `StartInterval` jobs are coalesced across sleep rather than fired on a strict
+wall clock, so a sleeping machine sees far fewer, unevenly-spaced firings than the interval alone
+would suggest. Two consequences:
+
+- This **does** answer the open question in `docs/phase0/evidence/README.md` / `PROJECT_STATE.md`
+  open item 1 ("not yet confirmed whether this LaunchAgent survives a real sleep/wake cycle") — it
+  survives and keeps firing, just not on the interval's nominal clock.
+- It is **not** a failure and the idle-rate margin (~11 lines/hour observed awake) still holds at
+  ~50min spacing without the 300-line buffer overflowing. But the file's cadence is genuinely
+  non-uniform once sleep is involved, and gaps between consecutive pull timestamps should not be
+  read as container/log outages — they're `launchd` coalescing, expected and now confirmed, not
+  missing evidence.
