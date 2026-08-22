@@ -55,7 +55,18 @@ normal write path — see "why" below. Do not touch it.
    plain (non-`--follow`) `--tail 300` every 15 minutes into
    `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — sidesteps the bug entirely
    since it's a one-shot pull, not a long-lived stream. Check health with `launchctl list | grep
-   azbank` (exit `0` = healthy). Both evidence files **will contain duplicate lines** by design
+   azbank` (exit `0` = healthy); on failure, `~/Library/Logs/azbank-phase0-logsnapshot.err` (durable
+   across a reboot, deliberately not `/tmp`).
+
+   **NOT yet confirmed: whether this LaunchAgent survives a real sleep/wake cycle.** It was verified
+   running on a machine that stayed awake the entire time — that is not the same guarantee as
+   surviving the laptop actually sleeping. Marco will check on getting home tonight, by looking for
+   a gap in the snapshot file's timestamps matching the commute. **If tomorrow's session finds such
+   a gap, treat the log-retention problem as still unsolved, not handled** — do not assume the
+   LaunchAgent fix from this session is sufficient without checking `docs/phase0/evidence/
+   containerapp-logs-snapshot-2026-08-21.jsonl`'s timestamps for continuity first.
+
+   Both evidence files **will contain duplicate lines** by design
    (the `--follow` file on every restart; the snapshot file across overlapping 15-min pulls at idle
    rates); dedup with `sort -u` or `awk '!seen[$0]++'` before analysing — see
    `docs/phase0/evidence/README.md`. The original `--follow` file has a real, acknowledged gap from

@@ -35,7 +35,14 @@ rate (~11 lines/hour) while tight enough to absorb an unexpected burst without o
 300-line buffer.
 
 - **Check it's healthy**: `launchctl list | grep azbank` — exit status `0` is healthy; anything else,
-  or the label missing entirely, means investigate `/tmp/azbank-logsnapshot.err`.
+  or the label missing entirely, means investigate `~/Library/Logs/azbank-phase0-logsnapshot.err`
+  (moved here from `/tmp` deliberately — `/tmp` is cleared on reboot, so a failure at hour 40
+  followed by a restart would otherwise take the diagnosis with it).
+- **Not yet confirmed**: whether this LaunchAgent survives a real sleep/wake cycle. It was verified
+  running on a machine that stayed awake the whole time. If the snapshot file's timestamps show a
+  gap matching a period the laptop was actually asleep (not just idle), the scheduled-snapshot
+  approach isn't fully solved yet and needs a different mechanism (e.g. a `WakeSystem`/power-managed
+  trigger, or falling back to manual periodic pulls) — don't assume it's handled without checking.
 - **Stop it** (e.g. at teardown, script 4): `launchctl unload
   ~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`.
 

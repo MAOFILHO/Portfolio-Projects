@@ -41,7 +41,10 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
    after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
    (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a plain `--tail 300`
    every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — check
-   health with `launchctl list | grep azbank` (exit `0` = healthy). Contains duplicate lines across
+   health with `launchctl list | grep azbank` (exit `0` = healthy). **NOT yet confirmed to survive a
+   real sleep/wake cycle** (verified only on a machine that stayed awake) — before trusting this is
+   solved, check the snapshot file's timestamps for a gap matching any period the laptop actually
+   slept; if found, treat log retention as still unsolved. Contains duplicate lines across
    overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
    **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
    pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
