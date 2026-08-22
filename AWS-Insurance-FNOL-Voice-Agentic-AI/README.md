@@ -192,6 +192,8 @@ All three were found the same way: by checking something that already looked set
 | **Type checking** | mypy 1.14 `--strict`, zero errors over `src evals scripts` |
 | **IaC** | Terraform ≥1.9; Lex bot via a nested `AWS::Lex::Bot` CloudFormation resource (`ADR-007`) |
 | **Cost control** | Simulator-first; per-run spend logged in [`COSTS.md`](COSTS.md); $25/mo hard ceiling |
+| **Observability — cost** | AWS Budgets + SNS + a Cost Explorer–pull Lambda, real CloudWatch dashboard (Phase 11) |
+| **Observability — tracing** | **Planned, not yet built** (Phase 14) — AWS Distro for OpenTelemetry (ADOT) Lambda layer → AWS X-Ray, chosen over Langfuse to keep trace data inside the AWS account boundary and avoid a new secret; see below |
 
 ## Architecture
 
@@ -237,9 +239,21 @@ the router call) and L3 (the caller's own "agent" barge-in) each escalate indepe
 another and nothing downstream can suppress the result. `agents/graph.py` refuses to build a graph in
 which `l1_safety_check` is not the sole successor of `START`.
 
+> **No tracing on this diagram yet, deliberately.** This project already has real observability, but only
+> one kind: cost (AWS Budgets, a CloudWatch dashboard, Phase 11 — see `docs/RESULTS.md`). Application-level
+> tracing — a span per LangGraph node, per Bedrock call, per MCP tool call, tied to the 1,800ms turn-latency
+> budget above — was named as a candidate in Phase 8 (`docs/phase8/EXISTING-INSTRUMENTS.md`), deferred to
+> Phase 11, and never built. **Phase 14** (`PROJECT_STATE.md`) proposes closing that gap with an AWS
+> Distro for OpenTelemetry (ADOT) Lambda layer exporting to AWS X-Ray — 100,000 traces recorded/mo free,
+> 1,000,000 traces retrieved-or-scanned/mo free, effectively $0 at this project's demo call volume. Chosen
+> over Langfuse specifically to keep trace data inside the AWS account boundary, the same boundary every
+> other sink in this project already respects (`ADR-011`), and to avoid provisioning a new external API
+> key. **Proposed, not approved, not built** — per this project's own STOP CONDITIONS, no Phase 14 work
+> starts without an explicit `APPROVED: Phase 14`.
+
 ## Build status
 
-Stated plainly so nothing here reads as more finished than it is. **14 phases, gated individually.**
+Stated plainly so nothing here reads as more finished than it is. **15 phases, gated individually.**
 
 | Phase | Status |
 |---|---|
@@ -257,6 +271,7 @@ Stated plainly so nothing here reads as more finished than it is. **14 phases, g
 | 11 · Observability and operations | ⬜ not started |
 | 12 · Documentation and demo | ⬜ not started |
 | 13 · Continuous-improvement design | ⬜ not started |
+| 14 · Application observability and tracing (ADOT → X-Ray) | ⬜ **proposed, awaiting approval** — see the Architecture note above |
 
 **Known issues**
 
@@ -414,6 +429,7 @@ make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGE
 | `make redteam` | Phase 7 (in progress) |
 | `make bootstrap` · `make deploy` · `make destroy` · `make verify-billable` | Phase 8 |
 | `make simulate` | Phase 8 — needs the Lex bot to replay turns against |
+| `make verify-traces` | Phase 14 (proposed, not approved) — asserts a recent X-Ray trace has the expected per-node span shape |
 
 ## Teardown
 
