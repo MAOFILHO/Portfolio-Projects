@@ -549,6 +549,66 @@ def _run_graph_turn(
     return result
 
 
+def _log_turn_observability(
+    event: dict[str, Any], result: dict[str, Any], response: dict[str, Any]
+) -> None:
+    """`D162`'s diagnostic prerequisite (`PROJECT_STATE.md` `OI80`) -- unconditional, unlike this module's
+    other three log lines (`:507`/`:566`/`:687`, each conditional on escalation or an unhandled exception).
+    `graph_intent` (`result.get("intent")`, named by `route_and_classify`, `agents/nodes/routing.py:54`)
+    has never been observable in CloudWatch for any turn: neither `agents/nodes/routing.py` nor
+    `agents/graph.py` logs anything at all. This is the one function that has both the graph's `result`
+    and the built outgoing `response` in scope, for every branch (`_close`'s escalation and default
+    branches, `_elicit_slot`'s branch) -- fires once per turn `_respond_from_graph_result` returns a
+    response for.
+
+    **Not literally every turn of every call -- six paths return a response to Lex without ever calling
+    this function, and correctly so, because none of them ever invoke the graph:**
+    - `_dispatch`'s L1 raw-text match, `:677-685`
+    - `_dispatch`'s `D79` `injuries_present`-confirmed check, `:714-726`
+    - `_dispatch`'s L3 ("agent"/"human") override, `:729-741`
+    - `handler`'s non-dict `event` guard, `:749-750`
+    - `handler`'s fail-open path (`_delegate`, when `_dispatch` raised and no safety signal was present),
+      `:767`
+    - `handler`'s fail-closed path (`_escalate`, from the same `except` block, when a safety signal was
+      present), `:771` onward
+
+    All six are correct to skip: `graph_intent` is `result.get("intent")`, and `result` is the graph's own
+    output (`_run_graph_turn`, `:522`). A turn that never reaches `_run_graph_turn` has no `result` to name
+    an intent from -- there is nothing this line could report on those paths that wouldn't be fabricated.
+    The three `_dispatch` checks exist specifically so certain turns bypass the graph and the checkpointer
+    entirely (the module docstring's own AWS-independent-fast-path property for L1); `handler`'s three
+    paths run only when `_dispatch` itself failed or was never reached. Extending this line to those six
+    paths would mean inventing a `graph_intent` value for a turn the graph never classified, which is a
+    worse diagnostic than reporting nothing.
+
+    **Keys only, never values** -- same redaction discipline as the existing `:566` line, which logs only
+    identifiers/labels (`contact_id`, `triggering_layer`, `route`, `reason`), never the caller's raw
+    utterance or any slot content. Slot dicts here are logged as sorted, comma-joined key strings; slot
+    VALUES (which may hold a phone number, an email, a VIN -- exactly `UpdateContactInfo`'s own slot
+    content) never reach this line.
+
+    **Passed as joined `str`, not as a bare `list`, deliberately.** `PIIRedactionLogFilter`
+    (`observability/log_redaction.py`) now walks into a `list`/`tuple` arg and redacts its `str` elements
+    (added alongside this line, for exactly this call site), so a bare `list[str]` arg would already be
+    covered. Joining to a single `str` here anyway is deliberate redundancy, not distrust of that filter
+    walk: it means this specific line's "keys only" guarantee is enforced by two independent layers (this
+    call's own construction, and the filter's plain `str` path) rather than resting on the filter's newer,
+    less-exercised container-walking branch alone.
+    """
+    incoming_intent = _intent_from(event)
+    outgoing_intent = response["sessionState"]["intent"]
+    logger.info(
+        "turn contact=%s lex_intent=%s lex_slot_keys=%s graph_intent=%s outgoing_intent=%s "
+        "outgoing_slot_keys=%s",
+        _contact_id_from(event),
+        incoming_intent.get("name"),
+        ",".join(sorted((incoming_intent.get("slots") or {}).keys())),
+        result.get("intent"),
+        outgoing_intent.get("name"),
+        ",".join(sorted((outgoing_intent.get("slots") or {}).keys())),
+    )
+
+
 def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     response_text = result.get("response_text") or (
         "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
@@ -570,17 +630,35 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
             escalation.get("route"),
             "detection-graph",
         )
-        return _close(event, response_text, escalated=True, escalation_reason="detection-graph")
+        response = _close(event, response_text, escalated=True, escalation_reason="detection-graph")
+    else:
+        active_slot = result.get("active_slot")
+        if active_slot:
+            response = _elicit_slot(event, result, active_slot, response_text)
+        else:
+            # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from
+            # whichever node the graph actually routed to (`result["intent"]`), but before this fix
+            # `_close()` never read that value, only `_intent_from(event)` (Lex's original echo).
+            # `executed_node_intent` is the fix; `intent.name`'s own value is deliberately unchanged
+            # (option A, not this option, is what would change it).
+            response = _close(event, response_text, executed_node_intent=result.get("intent"))
 
-    active_slot = result.get("active_slot")
-    if active_slot:
-        return _elicit_slot(event, result, active_slot, response_text)
-
-    # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from whichever node
-    # the graph actually routed to (`result["intent"]`), but before this fix `_close()` never read that
-    # value, only `_intent_from(event)` (Lex's original echo). `executed_node_intent` is the fix; `intent.
-    # name`'s own value is deliberately unchanged (option A, not this option, is what would change it).
-    return _close(event, response_text, executed_node_intent=result.get("intent"))
+    # This project treats escalation delivery as no-accept-risk (row 9, `PROJECT_STATE.md`'s exit-criteria
+    # table) -- a diagnostic must never be able to replace an already-built response (escalation above all)
+    # with `handler`'s fail-open/fail-closed path just because logging it failed. `_log_turn_observability`
+    # is caught narrowly (`Exception`, not `BaseException`, so `KeyboardInterrupt`/`SystemExit` still
+    # propagate) and the already-built `response` is returned regardless of whether the log line succeeded.
+    try:
+        _log_turn_observability(event, result, response)
+    except Exception:
+        # Arguments kept trivial and pre-stringified on purpose: this handler must not itself raise while
+        # reporting a failure. `response["sessionState"]["intent"]["name"]` is a plain `str` from `_close`/
+        # `_elicit_slot`'s own construction, never a value that could fail to format.
+        logger.warning(
+            "turn observability logging failed for outgoing intent %s -- response returned unaffected",
+            response["sessionState"]["intent"]["name"],
+        )
+    return response
 
 
 def _dispatch(event: dict[str, Any]) -> dict[str, Any]:

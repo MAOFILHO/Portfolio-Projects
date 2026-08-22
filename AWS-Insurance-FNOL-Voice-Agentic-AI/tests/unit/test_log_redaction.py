@@ -129,6 +129,40 @@ def test_non_string_arg_is_not_stringified(
     assert isinstance(record.args[0], int)
 
 
+def test_list_arg_elements_are_redacted_when_pii_shaped(
+    logger_and_handler: tuple[logging.Logger, _CapturingHandler],
+) -> None:
+    """`_log_turn_observability` (`api/lex_codehook.py`) passes two `list[str]` args -- slot-key lists --
+    the first non-`str` args this codebase has ever logged. The filter must walk INTO a list arg and
+    redact each string element the same way it redacts a bare string arg, not skip the whole list because
+    the top-level value isn't a `str`."""
+    logger, handler = logger_and_handler
+    install_pii_log_filter(logger)
+
+    logger.info("slot keys %s", [_SYNTHETIC_EMAIL, "policy_number"])
+
+    line = handler.lines[0]
+    assert _SYNTHETIC_EMAIL not in line
+    assert "[REDACTED:EMAIL]" in line
+    assert "policy_number" in line
+
+
+def test_list_arg_non_pii_elements_pass_through_unchanged(
+    logger_and_handler: tuple[logging.Logger, _CapturingHandler],
+) -> None:
+    """The negative case paired with the test above: ordinary slot-key-shaped strings in a list must not
+    be altered -- a redactor that mangles non-PII list contents fails differently but still fails."""
+    logger, handler = logger_and_handler
+    install_pii_log_filter(logger)
+
+    logger.info("slot keys %s", ["policy_number", "loss_datetime"])
+
+    line = handler.lines[0]
+    assert "policy_number" in line
+    assert "loss_datetime" in line
+    assert "[REDACTED:" not in line
+
+
 def test_install_is_idempotent_per_handler(
     logger_and_handler: tuple[logging.Logger, _CapturingHandler],
 ) -> None:

@@ -909,6 +909,120 @@ def test_close_refuses_an_unattributed_escalation() -> None:
 
 
 # ---------------------------------------------------------------------------------------------------
+# `D162` diagnostic prerequisite -- unconditional per-turn observability logging
+# ---------------------------------------------------------------------------------------------------
+#
+# `graph_intent` (`result["intent"]`, named by `route_and_classify`, `agents/nodes/routing.py:54`) has
+# never been observable in CloudWatch for any turn this project has run: this module's only three log
+# lines (`:507`/`:566`/`:687`) are each conditional on escalation or an unhandled exception, and neither
+# `agents/nodes/routing.py` nor `agents/graph.py` logs anything at all (confirmed by grep, `RESULTS.md`'s
+# live-log investigation of `D162`/`OI80`). These three tests drive `_respond_from_graph_result` directly
+# -- the same already-established seam `test_close_carries_executed_node_intent_on_an_ordinary_fulfillment`
+# and its neighbours use -- and assert a log record exists on the turn shapes that currently produce none.
+
+
+def test_a_per_turn_log_line_is_emitted_when_graph_intent_agrees_with_lex_intent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The plain, non-escalating, non-crashing case that today logs nothing at all: Lex's echoed intent
+    and the graph's own classification agree, the turn reaches `_close`'s default (non-escalated) branch.
+    """
+    event = _event(intent_name="CheckClaimStatus", slots={"policy_number": _slot("PY1234")})
+    result = {
+        "intent": "CheckClaimStatus",
+        "response_text": "Your claim CLM-1103-00001-1 is currently Open.",
+        "active_slot": None,
+        "escalation": None,
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1, "expected exactly one unconditional per-turn log line"
+    message = turn_records[0].message
+    assert "lex_intent=CheckClaimStatus" in message
+    assert "graph_intent=CheckClaimStatus" in message
+    assert "outgoing_intent=CheckClaimStatus" in message
+    assert "policy_number" in message  # a slot KEY, present on both sides
+    assert "PY1234" not in message, "slot VALUES must never reach this log line"
+
+
+def test_a_per_turn_log_line_is_emitted_and_names_both_intents_when_they_disagree(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The `D84` disagreement shape: Lex's own NLU landed on `CheckClaimStatus`, the graph classifies
+    `FileAutoClaim` and asks for its own first slot. The log line must name BOTH values, not just one --
+    that is the entire point of `D163`'s finding that `escalation_reason` alone cannot do this."""
+    event = _event(intent_name="CheckClaimStatus", slots={"policy_number": _slot("PY9001")})
+    result = {"intent": "FileAutoClaim", "active_slot": "loss_datetime", "escalation": None}
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    message = turn_records[0].message
+    assert "lex_intent=CheckClaimStatus" in message
+    assert "graph_intent=FileAutoClaim" in message
+    assert "outgoing_intent=FileAutoClaim" in message
+    assert "PY9001" not in message
+
+
+def test_an_escalating_turn_logs_both_its_own_escalation_line_and_the_per_turn_line(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The new unconditional line is additional to, not a replacement for, the existing `:566` escalation
+    line -- an escalating turn must produce both, so a CloudWatch query over either one still finds it."""
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {"contact_id": "c-d162-escalation", "triggering_layer": "L2", "route": 1},
+        "response_text": "connecting you now",
+        "intent": "FileAutoClaim",
+        "active_slot": None,
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    escalation_records = [r for r in caplog.records if r.message.startswith("escalating contact")]
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(escalation_records) == 1, "the existing :566 line must still fire, unchanged"
+    assert len(turn_records) == 1, "the new unconditional line must ALSO fire on an escalating turn"
+    assert "graph_intent=FileAutoClaim" in turn_records[0].message
+
+
+def test_a_raising_observability_log_does_not_replace_an_escalation_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Row 9's no-accept-risk rule for escalation delivery, applied to the diagnostic added for `D162`:
+    `_log_turn_observability` raising must never cost the caller an already-built `EscalationRecord`'s
+    response. If this call site were unguarded, the exception would propagate out of
+    `_respond_from_graph_result`, past `_dispatch`, into `handler`'s `except Exception` block, and the
+    caller would get the fail-closed escalation instead of the one actually computed here -- silently
+    replacing a real route/reason with a different one, for no reason connected to the escalation itself.
+    """
+    monkeypatch.setattr(
+        lex_codehook,
+        "_log_turn_observability",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {"contact_id": "c-observability-failure", "triggering_layer": "L2", "route": 1},
+        "response_text": "connecting you now",
+        "intent": "FileAutoClaim",
+        "active_slot": None,
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    session_attributes = response["sessionState"]["sessionAttributes"]
+    assert session_attributes["escalate"] == "true"
+    assert session_attributes["escalation_reason"] == "detection-graph"
+
+
+# ---------------------------------------------------------------------------------------------------
 # `ADR-009` — the properties that make a cold start cheap, asserted rather than intended
 # ---------------------------------------------------------------------------------------------------
 
