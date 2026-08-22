@@ -45,14 +45,28 @@ more billable calls before its free evidence-extraction stage could even run).
      own empirical evidence (two connections, each dying after exactly 5 idle heartbeats, ~5-6min).
      Its capture file (`containerapp-logs-follow-2026-08-21.jsonl`) is kept but has a real,
      acknowledged gap (Marco was mobile, cafe → home) — not continuous, prefer the snapshot file.
-   - Check health: `launchctl list | grep azbank` (exit `0` = healthy). Failures:
+   - **Periodic firing confirmed empirically**, 2026-08-21T22:33:30 local: evidence file mtime
+     advanced exactly at T0+900s with no manual action (`docs/phase0/findings.md`, "LaunchAgent —
+     StartInterval scare..."). A scare earlier the same night (`launchctl list` showing no
+     `StartInterval`/`RunAtLoad` key) turned out to be a red herring — that command **never** echoes
+     those keys for any job, confirmed against an unrelated known-scheduled agent
+     (`com.google.GoogleUpdater.wake`, identical dump shape). **Don't use `launchctl list <label>`'s
+     output to judge whether this is scheduled correctly — it can't tell you that, ever.** Check
+     health the only reliable way: does the evidence file's mtime advance across a real 15-min
+     interval boundary. `LastExitStatus 0` in `launchctl list` is necessary but not sufficient (it's
+     `0` whether the job ran once at load and died, or is firing correctly). Failures:
      `~/Library/Logs/azbank-phase0-logsnapshot.err` (deliberately not `/tmp`, which clears on
      reboot).
    - **NOT yet confirmed to survive a real sleep/wake cycle** — verified only on a machine that
-     stayed awake throughout. Marco was checking this on getting home tonight (commute gap check).
+     stayed awake throughout (tonight's interval-firing confirmation above was also on an awake
+     machine). Marco was checking this on getting home tonight (commute gap check).
      **Before assuming this is solved, check `containerapp-logs-snapshot-2026-08-21.jsonl`'s
      timestamps for a gap matching any period the laptop actually slept.** If found, log retention
      is still an open problem, not a handled one — don't proceed as if it's fixed without checking.
+   - Whether the LaunchAgent's earlier "flat 604 lines" period (before tonight's `bootout`/
+     `bootstrap` re-register) reflected a real scheduling gap or a job that had been firing correctly
+     all along is **unresolved and unresolvable after the fact** — no evidence either way survives.
+     Only the forward-looking fact is settled: it fires on schedule now.
    - Both evidence files contain duplicate lines by design (dedup: `sort -u` or `awk
      '!seen[$0]++'`, details in `docs/phase0/evidence/README.md`). **Neither is committed yet** —
      Marco's explicit instruction: commit once, at teardown (script 4), after the dedup pass, not

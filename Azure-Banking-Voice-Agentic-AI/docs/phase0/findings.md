@@ -2346,3 +2346,71 @@ the file is not one continuous stream. The `--tail 300` replay on each reconnect
 snapshot file going forward) backfills what it can, but the `--follow` file itself should not be
 read as gap-free. Analysis should prefer the snapshot file going forward; the `--follow` file is
 kept as-is (not edited/spliced) since it's still real evidence of what it did capture.
+
+## `launchd` LaunchAgent — StartInterval scare, and what `launchctl list` actually tells you
+
+**2026-08-22, ~02:18 UTC.** Marco checked on the snapshot LaunchAgent and reported it looked broken:
+`launchctl list com.azbank.phase0.logsnapshot` showed `Program`, `ProgramArguments`,
+`LimitLoadToSessionType`, `LastExitStatus=0`, `OnDemand=true` — and **no `StartInterval` key at
+all**, which read as "the plist never had a schedule, it only ever ran once at load, and it's been
+reporting healthy (`LastExitStatus 0`) the whole time regardless."
+
+**Checked before fixing, per this project's standing practice — and the diagnosis didn't fully
+hold:**
+
+- The plist **on disk did have `StartInterval` (900) and `RunAtLoad` (true)**, unchanged since it
+  was written earlier tonight. Not missing from the file.
+- `launchctl list <label>`'s per-job dump **never echoes `StartInterval` or `RunAtLoad`, working or
+  not**. Confirmed by comparison: `launchctl list com.google.GoogleUpdater.wake` — a third-party,
+  actively interval-scheduled agent with no relationship to this project — printed the **identical
+  shape** (`Label`/`OnDemand`/`LastExitStatus`/`Program`/`ProgramArguments`, no `StartInterval`, no
+  `RunAtLoad`). So the key's absence from `launchctl list` output is not diagnostic of
+  misconfiguration; it's just not a field that command prints, ever, for any job.
+- Whether the job had actually been firing on schedule before tonight, vs. only at the two known
+  load events (initial creation, the `StandardErrorPath` fix reload), is **genuinely unconfirmed
+  either way** — not proven broken, not proven working. The evidence file's line count (604 at
+  Marco's check, 906 moments later at mine, pre-any-reload-tonight) and its content timestamp spread
+  (22:51:51 → 02:02:13, ~3h before tonight's reload) don't settle it: at the documented idle rate
+  (~11 lines/hour), a single `--tail 300` pull can span well over a day of container log history in
+  one shot, so a wide timestamp spread in the file is consistent with either one pull or several —
+  it doesn't distinguish them.
+- Did anyway, as a clean baseline regardless of the above: unloaded/reloaded via the modern
+  per-user-domain commands (`launchctl bootout gui/<uid>/<label>`, `launchctl bootstrap gui/<uid>
+  <plist>`) rather than the legacy `load`/`unload` shim used for the earlier `StandardErrorPath`
+  fix, on the theory that the shim might not fully re-register a job on this macOS version. Exit 0
+  both ops; `RunAtLoad` fired immediately after (file grew by the expected ~300-line tail).
+
+**Real, still-open verification**: whether the interval actually re-fires **without** a load event
+triggering it is being checked with a live wait — record line count/mtime at reload time (T0
+2026-08-22T02:18:19Z), check again ~16min later (~T0+900s) for a **second**, later mtime bump, not
+just the load-time one. Result not yet known as of this writing.
+
+**Corrected lesson** (the original framing — "a LaunchAgent with no `StartInterval` exits 0 forever
+and looks fine in `launchctl list`" — doesn't hold, since the file never lacked `StartInterval`):
+**`launchctl list`'s dump is not a config mirror — it omits `StartInterval`/`RunAtLoad` unconditionally,
+for correctly-scheduled jobs and misconfigured ones alike. Don't diagnose a scheduling problem from
+that command's output; check the plist file directly, and verify actual firing behavior by watching
+the target file/mtime over a real interval, not by reading `launchctl list`.**
+
+**Confirmed, 2026-08-21T22:33:30 local (T0+900s exactly).** A scheduled run fired with no manual
+action: evidence file mtime advanced to 22:33:30 (T0 was 22:18:19/1250Z), line count 1208→1510 —
+a fresh ~300-line tail pull, not the load-time one. **Periodic firing is genuinely confirmed
+working, as of now.**
+
+What this does and doesn't settle: whether the earlier "flat 604" period Marco observed reflected a
+real gap in scheduling (and tonight's `bootout`/`bootstrap` re-register fixed it) or reflected a job
+that had been firing correctly all along (and 604 was simply a stale/early read, per the "can't
+distinguish from timestamp spread alone" reasoning above) **remains genuinely unknown — no evidence
+either way, and none is coming after the fact.** What's settled is only the forward-looking fact:
+the timer is armed and firing on interval, now, going forward, for the remainder of the R-04 window.
+
+**Diagnostic lesson, stated precisely**: `launchctl list <label>`'s per-job dump does not echo
+`StartInterval` or `RunAtLoad` for any job — confirmed by comparison against an unrelated,
+indisputably interval-scheduled third-party agent (`com.google.GoogleUpdater.wake`), which printed
+the identical shape with those keys absent too. **That command cannot be used to confirm or deny
+whether a job is scheduled, ever.** The only reliable check is empirical: read the plist file
+directly for the config, and confirm actual firing behavior by observing the target output file's
+mtime advance across a real interval boundary (as done here, T0 → T0+900s) — not by reading
+`launchctl list`, and not by reasoning about `LastExitStatus` (which is `0` whether the job ran once
+at load and never again, or is firing correctly every 15 minutes — it cannot distinguish those
+cases).

@@ -40,12 +40,17 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
    ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)), empirically dies
    after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
    (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a plain `--tail 300`
-   every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl` — check
-   health with `launchctl list | grep azbank` (exit `0` = healthy). **NOT yet confirmed to survive a
-   real sleep/wake cycle** (verified only on a machine that stayed awake) — before trusting this is
-   solved, check the snapshot file's timestamps for a gap matching any period the laptop actually
-   slept; if found, treat log retention as still unsolved. Contains duplicate lines across
-   overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
+   every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`. **Periodic
+   firing confirmed empirically 2026-08-21T22:33:30 local** (mtime advanced exactly at T0+900s with
+   no manual action — `docs/phase0/findings.md`, "LaunchAgent — StartInterval scare..."). **Do not
+   use `launchctl list <label>`'s output to check this** — it never echoes `StartInterval`/
+   `RunAtLoad` for any job, scheduled correctly or not (verified against an unrelated known-scheduled
+   agent), and `LastExitStatus 0` can't distinguish "ran once, dead" from "firing every 15min." The
+   only reliable check: does the evidence file's mtime advance across an interval boundary. **NOT yet
+   confirmed to survive a real sleep/wake cycle** (verified only on a machine that stayed awake) —
+   before trusting this is solved, check the snapshot file's timestamps for a gap matching any period
+   the laptop actually slept; if found, treat log retention as still unsolved. Contains duplicate
+   lines across overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
    **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
    pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
    fix, not a workaround, before then.
