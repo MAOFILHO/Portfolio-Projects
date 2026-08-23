@@ -39,6 +39,10 @@ pause() { printf '  %s%s%s ' "$DIM" "${1:-Press Enter to continue}" "$RESET"; re
 confirm() { local reply=""; printf '  %s? %s [y/N] ' "$YELLOW" "$1"; read -r reply || true; [[ "$reply" =~ ^[Yy] ]]; }
 write_env() { local key="$1" value="$2" tmp; touch "$ENV_FILE"; tmp=$(mktemp); grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$value" >> "$tmp"; mv "$tmp" "$ENV_FILE"; WRITTEN_ENV+=("$key"); printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"; }
 finish() { _clear; printf '\n%s%s  ✓ Script complete%s\n' "$BOLD" "$GREEN" "$RESET"; (( ${#WRITTEN_ENV[@]} )) && note "wrote ${#WRITTEN_ENV[@]} value(s) to $ENV_FILE: ${WRITTEN_ENV[*]}"; printf '\n'; }
+# Was called (3x below) but never defined -- confirmed 2026-08-22 this was a latent crash bug
+# ("ask: command not found", fatal under set -e) that would have hit the moment Stage 1 ran.
+# Assigns the typed reply into the named variable via printf -v (indirect assignment).
+ask() { local __var="$1" __prompt="$2" __reply=""; printf '  %s? %s%s ' "$YELLOW" "$__prompt" "$RESET"; read -r __reply || true; printf -v "$__var" '%s' "$__reply"; }
 
 if [[ ! -f "$ENV_FILE" ]]; then
   printf 'No %s found — run 01-provision.sh through 03-cost-check-24h.sh first.\n' "$ENV_FILE"
@@ -68,36 +72,180 @@ else
 fi
 
 # ── Stage 1: R-04 — idle-vs-active Container Apps billing verdict ───────────
-stage "R-04 — read the idle-window Container Apps billing state"
+stage "R-04 — idle-vs-active Container Apps billing verdict, from telemetry"
 say "docs/PLAN.md: an open-but-silent WebSocket may keep a replica active-billed (~\$10/mo swing)."
 say "Decision 15 closes both WebSockets on call end; this is the measured check of whether that holds."
+note "Verdict is computed from the Container App's own Azure Monitor telemetry, not by eyeballing"
+note "Cost Management dollars — confirmed 2026-08-22 that \$0/near-\$0 here is EXPECTED regardless of"
+note "idle-vs-active (the free compute grant, below), so a dollar reading alone can't carry this verdict."
 
-IDLE_COST_JSON=$(az costmanagement query \
-  --type ActualCost \
-  --timeframe Custom \
-  --time-period from="$(date -u -d "$CALL3_TIME" +%Y-%m-%d 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$CALL3_TIME" +%Y-%m-%d)" to="$(date -u +%Y-%m-%d)" \
-  --dataset-granularity Daily \
-  --dataset-aggregation '{"totalCost":{"name":"Cost","function":"Sum"}}' \
-  --dataset-filter "{\"dimensions\":{\"name\":\"ResourceId\",\"operator\":\"In\",\"values\":[\"$(az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)\"]}}" \
-  --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}" \
-  2>&1) || { warn "costmanagement query failed"; IDLE_COST_JSON=""; }
+CA_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/containerapps/${CONTAINERAPP_NAME}"
+NOW_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-say "Daily Container App cost since the last test call (idle window, no calls, WS closed per decision 15):"
-printf '%s\n' "$IDLE_COST_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$IDLE_COST_JSON" | sed 's/^/    /'
+say "Querying Replicas (Maximum, PT15M) since $CALL3_TIME — confirms no scale-to-zero gap:"
+REPLICAS_JSON=$(az monitor metrics list --resource "$CA_ID" \
+  --metric "Replicas" --aggregation Maximum --interval PT15M \
+  --start-time "$CALL3_TIME" --end-time "$NOW_TS" \
+  -o json 2>&1) || { warn "Replicas metric query failed"; REPLICAS_JSON=""; }
 
-say "docs/PLAN.md's two reference points: \$4.29/mo idle vs \$14.31/mo active (0.25 vCPU/0.5GiB)."
-say "Divide those by 30 for a rough per-day figure to compare against the daily numbers above:"
-note "  idle  ≈ \$0.143/day    active ≈ \$0.477/day"
-ask R04_VERDICT "Based on the numbers above, does this look IDLE or ACTIVE? (type idle/active):"
+say "Querying RxBytes/TxBytes (Total, PT15M) — the active-vs-idle signal, per PLAN.md's own stated"
+say "1,000 B/s threshold (24 kHz PCM16 = 48,000 B/s during a call):"
+NETBYTES_JSON=$(az monitor metrics list --resource "$CA_ID" \
+  --metric "RxBytes,TxBytes" --aggregation Total --interval PT15M \
+  --start-time "$CALL3_TIME" --end-time "$NOW_TS" \
+  -o json 2>&1) || { warn "RxBytes/TxBytes metric query failed"; NETBYTES_JSON=""; }
+
+TMP_REPLICAS=$(mktemp); TMP_NETBYTES=$(mktemp)
+printf '%s' "$REPLICAS_JSON" > "$TMP_REPLICAS"
+printf '%s' "$NETBYTES_JSON" > "$TMP_NETBYTES"
+
+R04_RESULT=$(python3 - "$TMP_REPLICAS" "$TMP_NETBYTES" <<'PYEOF'
+import json, sys
+
+def load(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+rep = load(sys.argv[1])
+net = load(sys.argv[2])
+THRESHOLD_BPS = 1000.0  # PLAN.md's own stated idle-vs-active threshold
+INTERVAL_S = 900.0      # PT15M
+
+rep_points = rep_gaps = 0
+if rep is not None:
+    for series in rep.get('value', []):
+        for ts in series.get('timeseries', []):
+            for dp in ts.get('data', []):
+                rep_points += 1
+                v = dp.get('maximum')
+                if v is None or v == 0:
+                    rep_gaps += 1
+
+by_ts = {}
+if net is not None:
+    for series in net.get('value', []):
+        for ts in series.get('timeseries', []):
+            for dp in ts.get('data', []):
+                t = dp.get('timeStamp')
+                by_ts[t] = by_ts.get(t, 0) + (dp.get('total') or 0)
+
+items = sorted(by_ts.items())
+total_intervals = len(items)
+first_ts = items[0][0] if items else None
+over = [(t, tb / INTERVAL_S) for t, tb in items if tb / INTERVAL_S > THRESHOLD_BPS]
+# The very first interval is expected to carry the tail of the last real test call (the idle window
+# is defined as starting AT that call's timestamp) -- exclude it from the verdict, not from the report.
+over_excl_first = [o for o in over if o[0] != first_ts]
+
+if rep is None or net is None:
+    verdict = "UNKNOWN (a metrics query failed -- see warnings above)"
+elif rep_gaps > 0:
+    verdict = "UNKNOWN (scale-to-zero: %d of %d Replicas datapoints)" % (rep_gaps, rep_points)
+elif len(over_excl_first) == 0:
+    verdict = "IDLE"
+elif len(over_excl_first) == total_intervals or len(over_excl_first) == total_intervals - 1:
+    verdict = "ACTIVE"
+else:
+    verdict = "MIXED (%d of %d intervals over threshold, excluding the expected call-tail interval)" % (len(over_excl_first), total_intervals)
+
+print("R04_VERDICT=%s" % verdict)
+print("R04_REPLICA_POINTS=%d" % rep_points)
+print("R04_REPLICA_GAPS=%d" % rep_gaps)
+print("R04_NET_INTERVALS=%d" % total_intervals)
+print("R04_NET_OVER_THRESHOLD=%d" % len(over))
+print("R04_NET_OVER_EXCL_FIRST=%d" % len(over_excl_first))
+PYEOF
+)
+eval "$R04_RESULT"
+rm -f "$TMP_REPLICAS" "$TMP_NETBYTES"
+
+say "Replicas: $R04_REPLICA_POINTS datapoints, $R04_REPLICA_GAPS gaps (scale-to-zero or missing)."
+say "Network: $R04_NET_INTERVALS intervals, $R04_NET_OVER_THRESHOLD over the 1,000 B/s threshold"
+say "($R04_NET_OVER_EXCL_FIRST excluding the expected first-interval call-tail)."
+say "Verdict: $R04_VERDICT"
 write_env "R04_VERDICT" "$R04_VERDICT"
+
+# Cost Management as a labeled CROSS-CHECK only -- not the verdict source. Same az rest fix as
+# 03-cost-check-24h.sh (the `az costmanagement query` CLI subcommand does not exist in the
+# installable costmanagement extension, v1.0.0 -- confirmed 2026-08-22).
+say "Cross-check: Cost Management's own dollar figure for this Container App over the same window"
+say "(informational only -- the verdict above does not depend on this):"
+QUERY_BODY=$(printf '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"%s","to":"%s"},"dataset":{"granularity":"Daily","aggregation":{"totalCost":{"name":"Cost","function":"Sum"}},"filter":{"dimensions":{"name":"ResourceId","operator":"In","values":["%s"]}}}}' \
+  "$(date -u -d "$CALL3_TIME" +%Y-%m-%d 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$CALL3_TIME" +%Y-%m-%d)" \
+  "$(date -u +%Y-%m-%d)" "$CA_ID")
+IDLE_COST_JSON=$(az rest --method post \
+  --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --body "$QUERY_BODY" \
+  2>&1) || { warn "Cost Management cross-check query failed"; IDLE_COST_JSON=""; }
+printf '%s\n' "$IDLE_COST_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$IDLE_COST_JSON" | sed 's/^/    /'
+warn "A \$0 or near-\$0 reading above is EXPECTED and does NOT indicate a broken check: the standing"
+warn "Container Apps free compute grant (180,000 vCPU-s / 360,000 GiB-s per month, confirmed via the"
+warn "Retail Prices API) covers ~200h (~8.3 days) of this app's continuous 0.25 vCPU/0.5GiB runtime"
+warn "every month, regardless of idle-vs-active classification. It does NOT mean compute is free"
+warn "for the whole month -- see R04_MONTHLY_NET_OF_GRANT below for the figure that actually matters."
+
+# Grant-corrected monthly Container Apps cost, net of that grant, for the verdict above -- computed
+# from officially-published per-second retail rates (Retail Prices API, canadacentral, Standard SKU,
+# confirmed 2026-08-22), NOT PLAN.md's own $4.29/$14.31 estimate (which doesn't fully reconcile with
+# these live rates -- flagged, not silently picked, in docs/phase0/findings.md).
+R04_MONTHLY_NET_OF_GRANT=$(python3 - "$R04_VERDICT" <<'PYEOF'
+import sys
+verdict = sys.argv[1]
+HOURS_PER_MONTH = 730.0
+FREE_VCPU_S = 180000.0
+FREE_GIB_S = 360000.0
+VCPU, MEM = 0.25, 0.5
+rates = {
+    "IDLE":   (0.000004, 0.000004),  # ($/vCPU-s, $/GiB-s)
+    "ACTIVE": (0.000034, 0.000004),
+}
+if verdict.startswith("IDLE"):
+    key = "IDLE"
+elif verdict.startswith("ACTIVE"):
+    key = "ACTIVE"
+else:
+    key = "ACTIVE"  # MIXED / UNKNOWN: report the conservative (higher-cost) bound, don't guess low
+vcpu_rate, mem_rate = rates[key]
+total_s = HOURS_PER_MONTH * 3600
+vcpu_s = VCPU * total_s
+gib_s = MEM * total_s
+billable_vcpu_s = max(0.0, vcpu_s - FREE_VCPU_S)
+billable_gib_s = max(0.0, gib_s - FREE_GIB_S)
+cost = billable_vcpu_s * vcpu_rate + billable_gib_s * mem_rate
+print("%.2f" % cost)
+PYEOF
+)
+say "Monthly Container Apps cost, net of the free grant, at this verdict's rate: \$${R04_MONTHLY_NET_OF_GRANT}"
+note "(this is the figure to use for Stage 3's fixed-monthly input below, not \$0 and not the raw"
+note "cross-check dollar figure above, which reflects only ~26h of a month, not a full month)"
+write_env "R04_MONTHLY_NET_OF_GRANT" "$R04_MONTHLY_NET_OF_GRANT"
 
 {
   echo "## R-04 — idle-vs-active Container Apps billing verdict"
   echo ""
-  echo "Idle window: $CALL3_TIME to $(date -u +%Y-%m-%dT%H:%M:%SZ) (UTC), Container App left untouched,"
-  echo "both WebSockets closed per decision 15."
+  echo "Idle window: $CALL3_TIME to $NOW_TS (UTC), Container App left untouched, both WebSockets"
+  echo "closed per decision 15."
   echo ""
-  echo "**Verdict: $R04_VERDICT**"
+  echo "**The free compute grant is the headline, not this verdict.** Container Apps' standing monthly"
+  echo "free compute grant (180,000 vCPU-s / 360,000 GiB-s) covers ~8.3 days of this app's continuous"
+  echo "0.25 vCPU/0.5 GiB runtime every month, regardless of idle-vs-active. For an always-on service"
+  echo "(min-replicas=1, required for inbound telephony), that means ~27.6% of every month's compute is"
+  echo "free no matter what; the remaining ~21.7 days bill at whichever rate this verdict determines."
+  echo ""
+  echo "**Idle-vs-active verdict (supporting detail): $R04_VERDICT**"
+  echo ""
+  echo "- Replicas: $R04_REPLICA_POINTS datapoints, $R04_REPLICA_GAPS gaps"
+  echo "- Network: $R04_NET_INTERVALS intervals, $R04_NET_OVER_THRESHOLD over 1,000 B/s"
+  echo "  ($R04_NET_OVER_EXCL_FIRST excluding the expected first-interval call-tail)"
+  echo "- Monthly Container Apps cost net of the free grant, at this verdict's rate: **\$${R04_MONTHLY_NET_OF_GRANT}**"
+  echo "  (officially-published per-second retail rates, not PLAN.md's \$4.29/\$14.31 estimate — see"
+  echo "  the flagged discrepancy between the two elsewhere in this file)"
+  echo ""
+  echo "Cost Management cross-check (informational only — a \$0/near-\$0 reading here is expected given"
+  echo "the free grant above and does not by itself confirm or contradict the verdict):"
   echo ""
   echo '```json'
   printf '%s\n' "$IDLE_COST_JSON"
@@ -111,15 +259,15 @@ stage "Full measured meter roundup"
 say "Pulling total actual cost for the resource group since provisioning, broken out by service —"
 say "this is the number COSTS.md gets, not docs/PLAN.md's estimate."
 
-FULL_COST_JSON=$(az costmanagement query \
-  --type ActualCost \
-  --timeframe Custom \
-  --time-period from="$(date -u -d "$PROVISION_TIME" +%Y-%m-%d 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$PROVISION_TIME" +%Y-%m-%d)" to="$(date -u +%Y-%m-%d)" \
-  --dataset-granularity None \
-  --dataset-aggregation '{"totalCost":{"name":"Cost","function":"Sum"}}' \
-  --dataset-grouping name=ServiceName type=Dimension \
-  --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}" \
-  2>&1) || { warn "costmanagement query failed"; FULL_COST_JSON=""; }
+# Same az rest fix as Stage 1 / 03-cost-check-24h.sh -- `az costmanagement query` doesn't exist in
+# the installable costmanagement extension (v1.0.0 -- confirmed 2026-08-22).
+FULL_QUERY_BODY=$(printf '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"%s","to":"%s"},"dataset":{"granularity":"None","aggregation":{"totalCost":{"name":"Cost","function":"Sum"}},"grouping":[{"type":"Dimension","name":"ServiceName"}]}}' \
+  "$(date -u -d "$PROVISION_TIME" +%Y-%m-%d 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$PROVISION_TIME" +%Y-%m-%d)" \
+  "$(date -u +%Y-%m-%d)")
+FULL_COST_JSON=$(az rest --method post \
+  --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --body "$FULL_QUERY_BODY" \
+  2>&1) || { warn "Cost Management query failed"; FULL_COST_JSON=""; }
 
 say "Total cost by service, provisioning to now:"
 printf '%s\n' "$FULL_COST_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$FULL_COST_JSON" | sed 's/^/    /'
@@ -133,8 +281,15 @@ stage "R-08 — compute demo runs/month from MEASURED meters (not the estimate)"
 say "docs/PLAN.md: if this comes in under 5, STOP — do not proceed into Phase 1 — and go back to Marco"
 say "about reducing fixed cost or raising the \$25/month ceiling."
 
+SUGGESTED_FIXED_MONTHLY=$(python3 -c "print(round(${R04_MONTHLY_NET_OF_GRANT:-0} + 1.00, 2))")
+say "Suggested fixed-monthly input, from Stage 1's telemetry-based R-04 verdict ($R04_VERDICT):"
+say "  Container Apps net of the free grant (\$${R04_MONTHLY_NET_OF_GRANT:-0}) + \$1.00 number = \$${SUGGESTED_FIXED_MONTHLY}"
+note "Press Enter at the fixed-monthly prompt below to accept this suggestion, or type a different"
+note "number if you have a better one (e.g. from Stage 2's full meter roundup above)."
+
 ask MEASURED_PER_MIN_COST "Measured \$/minute (PSTN + ACS streaming + model, from the meter roundup above; use the plan's \$0.0215-0.031/min floor/realistic range if the exact per-minute breakout isn't separable from the totals):"
-ask MEASURED_FIXED_MONTHLY "Measured fixed monthly total so far, extrapolated to a full month (Container Apps [idle or active per R-04 above] + \$1 number + ~\$0 for Table Storage/App Insights/Static Web Apps):"
+ask MEASURED_FIXED_MONTHLY_INPUT "Measured fixed monthly total, extrapolated to a full month [Enter for suggested \$${SUGGESTED_FIXED_MONTHLY}]:"
+MEASURED_FIXED_MONTHLY="${MEASURED_FIXED_MONTHLY_INPUT:-$SUGGESTED_FIXED_MONTHLY}"
 
 R08_RESULT=$(python3 - "$MEASURED_PER_MIN_COST" "$MEASURED_FIXED_MONTHLY" <<'PYEOF'
 import sys

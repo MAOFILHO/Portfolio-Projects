@@ -2599,11 +2599,27 @@ record doesn't read as if Marco reviewed and confirmed it himself. Not re-run/re
 writing — Marco can override `COST_SANITY_CHECK` by hand if the assistant's read of "not 10x+ off"
 doesn't hold up on his own look.
 
-## R-04 — idle-vs-active Container Apps billing verdict, measured from Azure Monitor metrics (2026-08-22)
+## R-04 — Container Apps compute cost, measured from Azure Monitor metrics and the Retail Prices API (2026-08-22)
 
-**Verdict: IDLE**, computed from the Container App's own telemetry — Cost Management is a cross-check
-here, not the source, per the discovery above that its dollar figures can't currently be trusted for
-this meter either way (absent, and ambiguously so).
+**Headline answer: the free compute grant, not the idle-vs-active swing, is what actually bounds this
+project's Container Apps cost.** Container Apps carries a standing monthly free grant of 180,000
+vCPU-seconds / 360,000 GiB-seconds (confirmed via the Retail Prices API — see below), independent of
+any subscription-level "freetier" promotion. At this app's fixed size (0.25 vCPU / 0.5 GiB), that
+grant covers **~200 hours (~8.3 days, ~27.6% of a 730-hour month) of continuous runtime every month,
+regardless of idle-vs-active classification.**
+
+**Correction to an earlier framing in this same investigation**: that does *not* mean Container Apps
+compute is free for the whole month. `min-replicas=1` is required for inbound telephony (no cold-start
+tolerance), so this app runs continuously essentially all month, not just for ~8.3 days. The grant
+offsets only the *first* ~8.3 days of each month's continuous usage; the remaining **~21.7 days still
+bill at whichever rate applies** — which is exactly why the idle-vs-active question below still
+matters, just as a smaller swing than the naive $4.29–$14.31/mo range implied before netting the grant
+out precisely.
+
+**Idle-vs-active verdict (supporting detail): IDLE**, computed from the Container App's own telemetry
+— Cost Management is kept as a labeled cross-check, not the source, since its dollar figure is
+expected to read ~$0 for this exact reason (the grant) regardless of which classification actually
+applies, so it cannot carry this verdict by itself.
 
 **Window measured**: `CALL3_TIME` (2026-08-21T22:54:09Z, last test call) to now
 (2026-08-23T00:38:20Z) — 92,651s / 25.736h. This is script 4's own definition of the idle window
@@ -2623,36 +2639,70 @@ this meter either way (absent, and ambiguously so).
    very first bucket, timestamped 22:54:00Z — the tail of test call 3 itself (call placed 22:54:09Z),
    not a contradiction of "idle since the last call ended." This is a direct, non-dollar signal for
    the billing-state question R-04 actually asks, independent of both Cost Management and the
-   replica-hours × rate arithmetic below.
+   grant arithmetic above.
 3. **Cost computed from officially-published per-second retail rates** (Azure Retail Prices API,
    `serviceName eq 'Azure Container Apps' and armRegionName eq 'canadacentral' and skuName eq
    'Standard'`, confirmed 2026-08-22): vCPU Active $0.000034/vCPU-s, vCPU Idle $0.000004/vCPU-s,
-   Memory Active/Idle both $0.000004/GiB-s. At 0.25 vCPU / 0.5 GiB (Stage 12's config): the measured
-   window (900s Active tail + 91,751s Idle) costs **~$0.28** pre-free-grant, against a **~$0.97**
-   counterfactual if the whole window had billed Active — the measured figure sits far closer to the
-   idle bound, consistent with points 1–2.
-4. **Free compute grant coverage** — cumulative usage to date (23,163 vCPU-s, 46,326 GiB-s; this
-   Container App has run continuously since creation at 22:49:27Z) is **~12.9%** of the standing
-   monthly free grant (180,000 vCPU-s / 360,000 GiB-s — confirmed via `az containerapp list` that
-   this is the *only* Container App in the subscription, so the full grant is available to it alone).
-   **The true billed amount is $0.00 regardless of active/idle classification at this stage** — a
-   mundane, structural reason for Cost Management's absent Container Apps line, entirely separate
-   from the "freetier" subscription promotion investigated in Stage 1 above. Updated 2026-08-22:
-   Marco's live check of the replacement Free Services path confirmed Container Apps isn't in that
-   promotion's covered-meter list at all, so this free grant is now the *only* live "genuinely $0"
-   mechanism at play for this meter — not one of two live hypotheses stacked on top of each other.
+   Memory Active/Idle both $0.000004/GiB-s.
+   - **Measured window** (900s Active tail + 91,751s Idle): **~$0.28** pre-free-grant, against a
+     **~$0.97** counterfactual if the whole window had billed Active — sits far closer to the idle
+     bound, consistent with points 1–2.
+   - **Full month, net of the grant, at the IDLE rate (this verdict)**: **$5.72/mo.**
+     (Full month, net of grant, at the ACTIVE rate would be $20.03/mo — not what applies here, per
+     the verdict above, but kept as the conservative bound script 4 falls back to if a future run's
+     telemetry reads MIXED or a metrics query fails.)
+4. **Free compute grant coverage today** — cumulative usage to date (23,163 vCPU-s, 46,326 GiB-s;
+   this Container App has run continuously since creation at 22:49:27Z) is **~12.9%** of the standing
+   monthly grant (confirmed via `az containerapp list` that this is the *only* Container App in the
+   subscription, so the full grant is available to it alone) — consistent with the ~8.3-day/month
+   coverage window stated above (12.9% of a month ≈ 3.9 days elapsed of the ~8.3 free).
+5. **Subscription-level "freetier" promotion, separately, is ruled out for this meter**: Marco's live
+   check of the replacement Free Services path (Stage 1 above) confirmed Container Apps is not in that
+   promotion's 57-row covered-meter list at all — structurally ineligible, not just zero usage. The
+   free-grant math in this section is a completely separate mechanism from that promotion.
 
 **Honest discrepancy, not reconciled here**: PLAN.md's stated hourly-equivalents (COSTS.md: idle
-~$0.00588/hr, active ~$0.0196/hr, derived from PLAN.md's $4.29/mo–$14.31/mo figures) imply a full-month
-pre-grant cost of ~$4.29–$14.31; the just-fetched live retail rates imply ~$7.78–$27.22/mo pre-grant
-for the same 0.25 vCPU/0.5 GiB config — roughly 1.8–1.9× PLAN.md's figures. Not reconciled here
-(could be a stale calculator snapshot, a different free-grant application, or a genuine rate change
-since PLAN.md's original pricing-calculator-API pull); flagged rather than silently picked one. The
-live Retail Prices API pull was used as primary for this measurement since it's dated today and
-directly queryable, not because PLAN.md's figure is assumed wrong.
+~$0.00588/hr, active ~$0.0196/hr, derived from PLAN.md's $4.29/mo–$14.31/mo figures) are lower than
+this section's grant-corrected figures ($5.72/mo idle, $20.03/mo active) by roughly 33%. Not reconciled
+here (could be a stale calculator snapshot, a different free-grant application in PLAN.md's original
+pull, or a genuine rate change since then); flagged rather than silently picked one. The live Retail
+Prices API pull was used as primary for this measurement and for the R-08 recomputation below since
+it's dated today and directly queryable, not because PLAN.md's figure is assumed wrong.
 
-**Answers R-04 without waiting for script 4 / Monday**: the ~$10/mo swing question (open-but-silent
-WebSocket keeping a replica active-billed) reads as resolved — decision 15's WebSocket-close-on-call-end
-design is holding, per the network-threshold evidence in point 2, which is the one part of this
-measurement that doesn't depend on reconciling the rate discrepancy above.
+## R-08 — demo runs/month, recomputed on the corrected R-04 basis (2026-08-22)
+
+The original PLAN.md estimate ("2 to 10.6 hours/month," ~30–160 demo runs depending on idle/active)
+was built on the *naive* $4.29–$14.31/mo Container Apps range, with no free-grant netting. That
+assumption no longer holds now that R-04 has both (a) a real verdict (IDLE, not a range) and (b) a
+grant-corrected dollar figure. Recomputed here rather than left for Monday:
+
+| Input | Value |
+|---|---|
+| Container Apps, net of free grant, IDLE rate (measured, this section) | $5.72/mo |
+| Phone number | $1.00/mo |
+| **Fixed monthly subtotal** | **$6.72/mo** |
+| Eval-budget ceiling (hard cap, PLAN.md) | $6.00/mo |
+| **Fixed + eval** | **$12.72/mo** |
+| **Left for manual/demo calls** (of the $25/mo ceiling) | **$12.28/mo** |
+
+| Per-minute rate | Minutes/mo | **Demo runs/mo** (B4's 5-min cap per run) |
+|---|---|---|
+| Floor ($0.0215/min) | 571.2 | **114.2** |
+| Realistic ($0.031/min) | 396.1 | **79.2** |
+
+**R-08: ~79–114 demo runs/month. Gate PASSES** (comfortably above the 5-run floor) — computed, verified
+against the extracted computation in `04-teardown-and-r08.sh` itself (both the grant-cost and R-08
+arithmetic blocks were pulled out of the script and run against this session's real measured data
+before being trusted here).
+
+**This is not the dramatic reframing it might sound like.** The free grant is real and matters (it's
+the difference between $5.72/mo and the $7.78/mo pre-grant idle figure this section's rates would
+otherwise imply for a full month) — but because this app must run continuously all month for real
+telephony service, the grant only ever offsets ~27.6% of a month's compute, not all of it. The
+corrected R-08 range (~79–114 runs/mo) is *similar in order of magnitude* to PLAN.md's original naive
+idle-scenario figures (~128–160 runs off its $13.71/mo left-for-calls), modestly lower because this
+section's measured per-second rates run ~33% above PLAN.md's original estimate (see the flagged
+discrepancy above) — not because compute turned out to be free. R-08 remains meaningfully bounded by
+Container Apps' (now precisely measured) idle cost plus the eval budget, same as originally designed,
+just with a verdict and a number instead of a range and an assumption.
 
