@@ -142,3 +142,20 @@ same free-tier-suppression caveat as the rest of this document applies).
 This is the first billable-capable resource this project has actually purchased. Everything before it
 (AOAI resource + deployment, ACS resource) is consumption-only at $0 fixed cost; the Container App
 (Stage 12, not yet run) is the next one that will bill just for existing.
+
+## Free Services portal check (Stage 1, 03-cost-check-24h.sh, 2026-08-23T00:25:54Z)
+
+Confirmed clean (no ACS/Azure OpenAI/Container Apps free-tier coverage): could-not-verify — the Free Services blade could not be checked
+
+**Superseded same day (2026-08-22), by Marco directly, not via the wizard**: the blade above is
+retired; the replacement path (Subscriptions → this subscription → Overview → "Top free services by
+usage" → "View all free services") **does** work for this PayAsYouGo subscription. Result:
+**Confirmed clean — yes.** Container Apps does not appear anywhere in the 57-row covered-meter table
+(structurally ineligible, not just showing zero usage); only one meter (Networking Data Transfer Out)
+shows any usage at all, and no Cognitive Services row shows usage either. Caveat: the table's own
+banner warns of inaccuracy in the last 24h, and the full row list wasn't scrolled exhaustively, so a
+Communication Services (ACS) entry can't be ruled out with total certainty — none was seen. Full
+writeup and the corrected discrimination-at-72h analysis: `docs/phase0/findings.md`, "Free Services
+blade retirement and the free-tier suppression question." `FREETIER_CLEAN=yes` in `.env.phase0`
+reflects this, not the wizard's own re-run.
+

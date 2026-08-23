@@ -2447,3 +2447,212 @@ would suggest. Two consequences:
   non-uniform once sleep is involved, and gaps between consecutive pull timestamps should not be
   read as container/log outages — they're `launchd` coalescing, expected and now confirmed, not
   missing evidence.
+## Interim Cost Analysis check (+24h)
+
+Queried 2026-08-23T00:25:56Z for 2026-08-20..2026-08-23.
+```json
+{
+  "eTag": null,
+  "id": "subscriptions/960936b9-ecde-465b-be8d-776ca077dcd0/resourcegroups/rg-azure-banking-voice-agentic-ai/providers/Microsoft.CostManagement/query/e30590d4-a529-49b9-b27e-da360d0efeba",
+  "location": null,
+  "name": "e30590d4-a529-49b9-b27e-da360d0efeba",
+  "properties": {
+    "columns": [
+      {
+        "name": "Cost",
+        "type": "Number"
+      },
+      {
+        "name": "UsageDate",
+        "type": "Number"
+      },
+      {
+        "name": "ServiceName",
+        "type": "String"
+      },
+      {
+        "name": "Currency",
+        "type": "String"
+      }
+    ],
+    "nextLink": null,
+    "rows": [
+      [
+        1.40905,
+        20260820,
+        "Phone Numbers",
+        "CAD"
+      ],
+      [
+        0.0,
+        20260821,
+        "Event Grid",
+        "CAD"
+      ],
+      [
+        0.0,
+        20260821,
+        "Log Analytics",
+        "CAD"
+      ],
+      [
+        0.0367583772297166,
+        20260821,
+        "Voice",
+        "CAD"
+      ],
+      [
+        0.0,
+        20260822,
+        "Event Grid",
+        "CAD"
+      ],
+      [
+        0.0,
+        20260822,
+        "Log Analytics",
+        "CAD"
+      ]
+    ]
+  },
+  "sku": null,
+  "type": "Microsoft.CostManagement/query"
+}
+```
+
+## Free Services blade retirement and the free-tier suppression question — 2026-08-22, resolved same day
+
+**Blade confirmed retired, not a transient glitch.** `portal.azure.com/#view/Microsoft_Azure_GTM/ModernFreeServicesBlade`
+404s with `ErrorLoadingExtensionAndDefinition`. Microsoft's current doc
+([Monitor and track Azure free service usage](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/check-free-service-usage),
+`ms.date: 2026-06-15`) no longer references that blade at all — the documented path is now
+**Subscriptions → select the subscription → Overview → "Top free services by usage" tile → "View
+all free services" → "Free services for 12 months" table** (columns: Meter, Usage/Limit, Status).
+
+**Resolved via that replacement path — Container Apps is NOT free-tier-covered.** Marco performed the
+live check himself (2026-08-22), not via the wizard prompt. Findings:
+
+- The table **does** exist for this PayAsYouGo subscription — the doc's caveat quoted in the first
+  version of this section (*"only available for the subscription that was created when you signed up
+  for your Azure free account"*) turned out not to gate it out here; the `quotaId: PayAsYouGo_2014-09-01`
+  worry above was answered empirically rather than staying an open question.
+- **Container Apps does not appear anywhere in the table.** The covered-meter list runs to 57 services
+  — Container Registry, Cognitive Services (multiple entries), Load Balancer, Media Services, VMs,
+  Storage, Cosmos DB, SQL, and others — but no Container Apps entry at all. This is a structural
+  finding, not a usage-based one: Container Apps was never eligible for this promotion on this
+  subscription, so its absence in Cost Management **is not free-tier suppression**.
+- Only one meter shows any usage across the whole table: Networking Data Transfer Out ($0.01/15 GB,
+  status "Unlikely to exceed"). Every other row, including every Cognitive Services entry, reads
+  "Not in use" — so AOAI isn't being suppressed either, at least not showing as active coverage.
+- Caveats Marco flagged, preserved here rather than smoothed over: the table's own banner warns
+  usage/status can be inaccurate for the last 24h; the full 57-row list wasn't scrolled row-by-row, so
+  a Communication Services (ACS) entry can't be ruled out with total certainty — none was seen, but
+  the sweep wasn't exhaustive. `FREETIER_CLEAN=yes` reflects Marco's judgment that this is sufficient
+  to answer the ACS/AOAI/Container-Apps question Stage 1 asks, not a claim that all 57 rows were
+  individually confirmed absent.
+
+**Revising the original conclusion in this section (below, first written before the above check): the
+72h check CAN answer R-04 after all**, on the axis this section originally worried about. With the
+subscription-level promotion ruled out for Container Apps specifically, an absent/$0 Container Apps
+line in Cost Management is no longer "could be suppression, could be lag" — suppression is closed off
+for this meter. A $0/absent reading now means lag (or genuinely near-zero real cost), and **lag
+resolves with elapsed time**, which is exactly what script 4's 72h window provides. The original framing
+here (*"waiting longer does not help... the 72h check as currently designed cannot tell these apart"*)
+does not hold once free-tier coverage is ruled out as a live hypothesis for this specific meter.
+
+**One remaining nuance — not suppression, but still worth not over-reading a $0 at 72h**: Container
+Apps carries its own always-on monthly free compute grant (180,000 vCPU-seconds / 360,000 GiB-seconds
+per subscription, confirmed via the Retail Prices API — see the R-04 section below), completely
+separate from the 12-month "freetier" promotion just ruled out. At this app's measured rate (0.25
+vCPU / 0.5 GiB, `min-replicas=1`, continuous since creation), that grant isn't exhausted until ~8.3
+days of continuous runtime — past the 72h window script 4 checks at. So a $0/near-$0 Cost Management
+reading at 72h is still the fully-expected, correct answer even once ingestion lag has caught up —
+not because of the promotion (ruled out above), but because of this separate, always-available grant.
+Don't read a $0 at 72h as "the check still doesn't work"; it's a different, benign, already-understood
+mechanism, not a recurrence of the original ambiguity.
+
+**`az costmanagement query` doesn't exist** in the currently-installable `costmanagement` CLI
+extension (v1.0.0 ships only `export` and `show-operation-result` — confirmed via `az costmanagement -h`
+after `az extension add --name costmanagement`). `03-cost-check-24h.sh` Stage 2 called this
+nonexistent command, so it always silently fell into the "no cost data yet, informational only"
+branch — indistinguishable from real ingestion lag but actually a CLI/extension mismatch, unrelated
+to the free-tier question. Fixed by calling the Cost Management Query REST API directly via `az rest`
+(confirmed working against this subscription, no extension required).
+
+**Metrics-based measurement (R-04 section below) is now a cross-check, not a replacement.** With
+promotion-suppression ruled out, Cost Management's dollar figures are trustworthy again for this
+meter (modulo the free-grant nuance above and ordinary lag) — but a measurement sourced directly from
+the resource's own Azure Monitor telemetry is still stronger evidence than a billing figure that's
+subject to both lag and a free-grant floor, so it's kept as the primary R-04 answer with Cost
+Management as the cross-check, not the other way around.
+
+## Stage 3 sanity-check confirm — answered by assistant, not Marco (2026-08-22)
+
+`03-cost-check-24h.sh` Stage 3's confirm ("Does the actual cost so far look roughly in line with the
+estimate above (not 10x+ off)?") was answered by the assistant during this session, not by Marco —
+`COST_SANITY_CHECK=pass` in `.env.phase0` reflects that. This is a human gate, same category as
+Stage 1's free-tier portal check: the assistant queried the same Cost Management data the script
+would have shown and judged the visible meters (Phone Numbers, Voice) as not 10x+ off from PLAN.md's
+estimate — a narrower claim than "everything's fine," since Stage 1 had already recorded `unknown`
+for free-tier coverage. The reasoning is recorded in this session's transcript; noted here so the
+record doesn't read as if Marco reviewed and confirmed it himself. Not re-run/re-asked as of this
+writing — Marco can override `COST_SANITY_CHECK` by hand if the assistant's read of "not 10x+ off"
+doesn't hold up on his own look.
+
+## R-04 — idle-vs-active Container Apps billing verdict, measured from Azure Monitor metrics (2026-08-22)
+
+**Verdict: IDLE**, computed from the Container App's own telemetry — Cost Management is a cross-check
+here, not the source, per the discovery above that its dollar figures can't currently be trusted for
+this meter either way (absent, and ambiguously so).
+
+**Window measured**: `CALL3_TIME` (2026-08-21T22:54:09Z, last test call) to now
+(2026-08-23T00:38:20Z) — 92,651s / 25.736h. This is script 4's own definition of the idle window
+(post-test-call, WebSocket closed per decision 15), reused here rather than invented fresh.
+
+**Method and results:**
+
+1. **Replica continuity** — `az monitor metrics list --metric Replicas --aggregation Maximum
+   --interval PT15M` over the window: 103/103 fifteen-minute datapoints at `Replicas=1`, zero gaps,
+   zero nulls. No scale-to-zero happened; `min-replicas=1` held throughout, so quantity billed is the
+   full window, not something subject to a gap this metric would have caught.
+2. **Active-vs-idle classification, checked directly against PLAN.md's own stated threshold** (24 kHz
+   PCM16 = 48,000 B/s during a call vs a 1,000 B/s idle threshold) — `az monitor metrics list
+   --metric RxBytes,TxBytes --aggregation Total --interval PT15M` over the same window: **102 of 103
+   intervals fall under 1,000 B/s** (Rx averaging ~212 B/s, Tx ~132 B/s outside the one exception, max
+   single interval 236 B/s Rx). The one interval over threshold (5,580 B/s Rx, 5,282 B/s Tx) is the
+   very first bucket, timestamped 22:54:00Z — the tail of test call 3 itself (call placed 22:54:09Z),
+   not a contradiction of "idle since the last call ended." This is a direct, non-dollar signal for
+   the billing-state question R-04 actually asks, independent of both Cost Management and the
+   replica-hours × rate arithmetic below.
+3. **Cost computed from officially-published per-second retail rates** (Azure Retail Prices API,
+   `serviceName eq 'Azure Container Apps' and armRegionName eq 'canadacentral' and skuName eq
+   'Standard'`, confirmed 2026-08-22): vCPU Active $0.000034/vCPU-s, vCPU Idle $0.000004/vCPU-s,
+   Memory Active/Idle both $0.000004/GiB-s. At 0.25 vCPU / 0.5 GiB (Stage 12's config): the measured
+   window (900s Active tail + 91,751s Idle) costs **~$0.28** pre-free-grant, against a **~$0.97**
+   counterfactual if the whole window had billed Active — the measured figure sits far closer to the
+   idle bound, consistent with points 1–2.
+4. **Free compute grant coverage** — cumulative usage to date (23,163 vCPU-s, 46,326 GiB-s; this
+   Container App has run continuously since creation at 22:49:27Z) is **~12.9%** of the standing
+   monthly free grant (180,000 vCPU-s / 360,000 GiB-s — confirmed via `az containerapp list` that
+   this is the *only* Container App in the subscription, so the full grant is available to it alone).
+   **The true billed amount is $0.00 regardless of active/idle classification at this stage** — a
+   mundane, structural reason for Cost Management's absent Container Apps line, entirely separate
+   from the "freetier" subscription promotion investigated in Stage 1 above. Updated 2026-08-22:
+   Marco's live check of the replacement Free Services path confirmed Container Apps isn't in that
+   promotion's covered-meter list at all, so this free grant is now the *only* live "genuinely $0"
+   mechanism at play for this meter — not one of two live hypotheses stacked on top of each other.
+
+**Honest discrepancy, not reconciled here**: PLAN.md's stated hourly-equivalents (COSTS.md: idle
+~$0.00588/hr, active ~$0.0196/hr, derived from PLAN.md's $4.29/mo–$14.31/mo figures) imply a full-month
+pre-grant cost of ~$4.29–$14.31; the just-fetched live retail rates imply ~$7.78–$27.22/mo pre-grant
+for the same 0.25 vCPU/0.5 GiB config — roughly 1.8–1.9× PLAN.md's figures. Not reconciled here
+(could be a stale calculator snapshot, a different free-grant application, or a genuine rate change
+since PLAN.md's original pricing-calculator-API pull); flagged rather than silently picked one. The
+live Retail Prices API pull was used as primary for this measurement since it's dated today and
+directly queryable, not because PLAN.md's figure is assumed wrong.
+
+**Answers R-04 without waiting for script 4 / Monday**: the ~$10/mo swing question (open-but-silent
+WebSocket keeping a replica active-billed) reads as resolved — decision 15's WebSocket-close-on-call-end
+design is holding, per the network-threshold evidence in point 2, which is the one part of this
+measurement that doesn't depend on reconciling the rate discrepancy above.
+

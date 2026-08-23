@@ -41,6 +41,28 @@ open_url() {
   } >/dev/null 2>&1 || warn "couldn't open a browser — visit it manually: $url"
 }
 confirm() { local reply=""; printf '  %s? %s [y/N] ' "$YELLOW" "$1"; read -r reply || true; [[ "$reply" =~ ^[Yy] ]]; }
+# Three-way prompt for the free-tier portal check. Sets FREETIER_CLEAN directly as a real shell
+# variable (to "yes" / "no" / "unknown") -- NOT only via write_env, which only persists to
+# $ENV_FILE and does not populate the running process's variable. Same shape as the DATAZONE_OK
+# bug in 01-provision.sh: a value that's only ever written to the env file is unbound under
+# `set -u` for the rest of *this* run, and crashes the first time something reads it directly.
+ask_freetier_state() {
+  local reply=""
+  while true; do
+    printf '  %s? Free-tier coverage check%s — was the portal check performed, and what did it show?\n' "$YELLOW" "$RESET"
+    printf '      [c] clean       — confirmed: none of ACS / Azure OpenAI / Container Apps are covered\n'
+    printf '      [v] covered     — confirmed: at least one of them IS free-tier-covered\n'
+    printf '      [u] unverifiable — could not perform the check at all (e.g. blade broken/404)\n'
+    printf '  > '
+    read -r reply || reply=""
+    case "$reply" in
+      [Cc]*) FREETIER_CLEAN="yes"; return 0 ;;
+      [Vv]*) FREETIER_CLEAN="no"; return 0 ;;
+      [Uu]*) FREETIER_CLEAN="unknown"; return 0 ;;
+      *) printf '  %splease answer c, v, or u%s\n' "$YELLOW" "$RESET" ;;
+    esac
+  done
+}
 write_env() { local key="$1" value="$2" tmp; touch "$ENV_FILE"; tmp=$(mktemp); grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$value" >> "$tmp"; mv "$tmp" "$ENV_FILE"; WRITTEN_ENV+=("$key"); printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"; }
 finish() { _clear; printf '\n%s%s  ✓ Script complete%s\n' "$BOLD" "$GREEN" "$RESET"; (( ${#WRITTEN_ENV[@]} )) && note "wrote ${#WRITTEN_ENV[@]} value(s) to $ENV_FILE: ${WRITTEN_ENV[*]}"; printf '\n'; }
 
@@ -77,23 +99,46 @@ say "Management won't discount their cost — it OMITS unbilled usage entirely (
 say "quoted in COSTS.md), so the numbers below could read as \$0 or low for a reason that has nothing"
 say "to do with the real rate. This is portal-only — no documented REST API exposes it, so it can't"
 say "be scripted; this is a genuine human-only check, not laziness."
-open_url "https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernFreeServicesBlade"
+# The old direct blade (#view/Microsoft_Azure_GTM/ModernFreeServicesBlade) 404s --
+# "ErrorLoadingExtensionAndDefinition", confirmed retired 2026-08-22, not a transient glitch. Current
+# Microsoft doc (https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/check-free-service-usage)
+# no longer references that blade at all. Opening the Subscriptions list instead -- a stable,
+# well-known blade ID -- rather than guessing at an unverified direct deep-link to the Overview page's
+# "Top free services by usage" tile itself.
+open_url "https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade"
+step "Select this subscription, then on its Overview page find the \"Top free services by usage\""
+step "tile and click \"View all free services\" -- this opens the \"Free services for 12 months\""
+step "table. Confirmed 2026-08-22 that this table DOES show up for this PayAsYouGo subscription"
+step "(the doc's \"only for Free-Account subscriptions\" caveat did not gate it out here)."
 step "Look for Azure Communication Services, Azure OpenAI / Cognitive Services, or Container Apps"
-step "anywhere in the free-tier-covered list. Note the resource name if you see any of them."
-if confirm "Confirmed: none of ACS / Azure OpenAI / Container Apps appear as free-tier-covered?"; then
-  ok "confirmed clean — Cost Analysis numbers below can be trusted at face value"
-  write_env "FREETIER_CLEAN" "yes"
-else
-  warn "at least one is covered — the dollar figures below are NOT reliable for that meter."
-  warn "Use the fallback in COSTS.md: measured usage quantity × PLAN.md's list rate, not this"
-  warn "script's dollar total, for whichever meter you found covered."
-  write_env "FREETIER_CLEAN" "no"
-fi
+step "anywhere in that table with a status other than \"Not in use\". Note the meter name if so."
+ask_freetier_state
+case "$FREETIER_CLEAN" in
+  yes)
+    ok "confirmed clean — Cost Analysis numbers below can be trusted at face value"
+    ;;
+  no)
+    warn "at least one is covered — the dollar figures below are NOT reliable for that meter."
+    warn "Use the fallback in COSTS.md: measured usage quantity × PLAN.md's list rate, not this"
+    warn "script's dollar total, for whichever meter you found covered."
+    ;;
+  unknown)
+    warn "could not verify — the portal check itself did not run (blade unreachable/broken)."
+    warn "This is NOT the same as \"clean\": an absent/suppressed meter below is indistinguishable"
+    warn "from free-tier coverage until this check can actually run. Treat the numbers with the"
+    warn "same suspicion as the \"covered\" case, not as reassurance."
+    ;;
+esac
+write_env "FREETIER_CLEAN" "$FREETIER_CLEAN"
 {
   echo ""
   echo "## Free Services portal check (Stage 1, 03-cost-check-24h.sh, $(date -u +%Y-%m-%dT%H:%M:%SZ))"
   echo ""
-  echo "Confirmed clean (no ACS/Azure OpenAI/Container Apps free-tier coverage): ${FREETIER_CLEAN}"
+  case "$FREETIER_CLEAN" in
+    yes)     echo "Confirmed clean (no ACS/Azure OpenAI/Container Apps free-tier coverage): yes" ;;
+    no)      echo "Confirmed clean (no ACS/Azure OpenAI/Container Apps free-tier coverage): no — at least one resource is free-tier-covered" ;;
+    unknown) echo "Confirmed clean (no ACS/Azure OpenAI/Container Apps free-tier coverage): could-not-verify — the Free Services blade could not be checked" ;;
+  esac
   echo ""
 } >> "$COSTS_FILE"
 
@@ -104,15 +149,17 @@ say "Reading real per-service cost for $RESOURCE_GROUP since provisioning — no
 TODAY=$(date -u +%Y-%m-%d)
 START=$(date -u -d '3 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-3d +%Y-%m-%d)
 
-COST_JSON=$(az costmanagement query \
-  --type ActualCost \
-  --timeframe Custom \
-  --time-period from="${START}" to="${TODAY}" \
-  --dataset-granularity Daily \
-  --dataset-aggregation '{"totalCost":{"name":"Cost","function":"Sum"}}' \
-  --dataset-grouping name=ServiceName type=Dimension \
-  --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}" \
-  2>&1) || { warn "costmanagement query failed — Cost Analysis can lag >24h for very new resource groups."; COST_JSON=""; }
+# `az costmanagement query` (the CLI subcommand) does not exist in the currently-installable
+# `costmanagement` extension (v1.0.0 ships only `export` and `show-operation-result` -- confirmed
+# 2026-08-22, `az costmanagement -h`). That command always failed here, silently, into the "no cost
+# data yet" branch below -- indistinguishable from real ingestion lag but actually a CLI/extension
+# mismatch. Calling the same Cost Management Query REST API directly via `az rest` instead, which
+# needs no extension and is confirmed working against this subscription.
+QUERY_BODY=$(printf '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"%s","to":"%s"},"dataset":{"granularity":"Daily","aggregation":{"totalCost":{"name":"Cost","function":"Sum"}},"grouping":[{"type":"Dimension","name":"ServiceName"}]}}' "$START" "$TODAY")
+COST_JSON=$(az rest --method post \
+  --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --body "$QUERY_BODY" \
+  2>&1) || { warn "Cost Management query failed — Cost Analysis can lag >24h for very new resource groups."; COST_JSON=""; }
 
 if [[ -n "$COST_JSON" ]]; then
   say "Raw per-service daily cost, $START to $TODAY:"
@@ -139,10 +186,17 @@ say "Plan's fixed monthly subtotal: \$5.29 (idle) to \$15.31 (active) Container 
 note "This is a sanity check, not the final verdict — R-04 (idle-vs-active Container Apps billing) and"
 note "R-08 (demo-runs/month) both need the fuller 72h window script 4 observes. Don't treat a mismatch"
 note "here as final; do treat a WILDLY off number (10x+) as worth investigating before script 4."
-if [[ "${FREETIER_CLEAN:-yes}" == "no" ]]; then
-  warn "Stage 1 flagged free-tier coverage — a number reading as much LOWER than the estimate (not"
-  warn "higher) is exactly the suppression pattern to expect, not reassurance that costs are low."
-fi
+case "${FREETIER_CLEAN:-unknown}" in
+  no)
+    warn "Stage 1 flagged free-tier coverage — a number reading as much LOWER than the estimate (not"
+    warn "higher) is exactly the suppression pattern to expect, not reassurance that costs are low."
+    ;;
+  unknown)
+    warn "Stage 1 could not verify free-tier coverage at all — a number reading much LOWER than the"
+    warn "estimate is exactly what unverified/suppressed coverage would also look like. Don't read a"
+    warn "low number here as reassurance; it's as consistent with \"we don't know\" as with \"it's clean\"."
+    ;;
+esac
 
 if confirm "Does the actual cost so far look roughly in line with the estimate above (not 10x+ off)?"; then
   ok "sanity check passed — recorded"

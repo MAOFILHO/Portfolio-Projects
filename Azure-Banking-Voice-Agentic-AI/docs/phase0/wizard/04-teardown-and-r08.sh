@@ -51,7 +51,7 @@ FINDINGS_FILE="$SCRIPT_DIR/../findings.md"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 COSTS_FILE="$REPO_ROOT/COSTS.md"
 
-TOTAL_STAGES=5
+TOTAL_STAGES=6
 banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 4/4: Idle verdict, R-08, teardown"
 
 if [[ -z "${PROVISION_TIME:-}" ]]; then
@@ -241,6 +241,24 @@ if ! confirm "Confirm teardown of compute now (number and ACS resource are kept 
   exit 0
 fi
 
+# Stop the log-snapshot LaunchAgent FIRST, before anything below deletes the Container App it polls —
+# docs/phase0/evidence/README.md: it fires every ~15 min and appends its output to the evidence file;
+# left running past teardown it keeps polling a now-deleted Container App and appends error output
+# into that file instead of quietly doing nothing.
+say "Stopping the phase0 log-snapshot LaunchAgent (docs/phase0/evidence/README.md) before deleting the"
+say "Container App it polls, so it doesn't keep firing against a resource that's gone:"
+LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist"
+if [[ -f "$LAUNCHAGENT_PLIST" ]]; then
+  launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
+  if launchctl list 2>/dev/null | grep -q "com.azbank.phase0.logsnapshot"; then
+    warn "LaunchAgent still listed after unload — check manually: launchctl list | grep azbank"
+  else
+    ok "LaunchAgent unloaded — no more log-snapshot polling"
+  fi
+else
+  ok "LaunchAgent plist not found at $LAUNCHAGENT_PLIST — already removed or never installed"
+fi
+
 # Each delete is followed by a re-query, not trusted from the command's own exit code alone: az's
 # delete commands can report success on things that are "already gone" (fine) but can also swallow a
 # real, retryable failure behind a generic error that a bare `|| warn` would silently paper over as
@@ -335,6 +353,41 @@ if [[ "$TEARDOWN_OK" != "1" ]]; then
   say "succeeded. If the same thing fails twice, check manually:"
   say "  az containerapp show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP"
   exit 1
+fi
+
+# ── Stage 6: dedup evidence files and commit — standing instruction, teardown only ─────────────────
+stage "Dedup evidence files and commit (standing instruction: commit once, at teardown)"
+say "docs/phase0/evidence/README.md: both evidence files can carry duplicate lines (each 15-min"
+say "--tail 300 pull overlaps the previous one at idle rates). Exact-line dedup is safe — each line"
+say "is a self-contained JSON object with its own TimeStamp."
+
+EVIDENCE_DIR="$REPO_ROOT/docs/phase0/evidence"
+for f in "containerapp-logs-follow-2026-08-21.jsonl" "containerapp-logs-snapshot-2026-08-21.jsonl"; do
+  SRC="$EVIDENCE_DIR/$f"
+  if [[ -f "$SRC" ]]; then
+    BEFORE=$(wc -l < "$SRC" | tr -d ' ')
+    awk '!seen[$0]++' "$SRC" > "$SRC.dedup.tmp" && mv "$SRC.dedup.tmp" "$SRC"
+    AFTER=$(wc -l < "$SRC" | tr -d ' ')
+    ok "deduped $f: $BEFORE -> $AFTER lines"
+  else
+    warn "$f not found in $EVIDENCE_DIR — skipping"
+  fi
+done
+
+# PROJECT_STATE.md's explicit instruction: "Do not commit either evidence file periodically — commit
+# once, at teardown, after the dedup pass." This is that one commit, not a periodic one.
+say "Committing both evidence files now, per that standing instruction — this is their one commit,"
+say "not a periodic one."
+git -C "$REPO_ROOT" add \
+  "docs/phase0/evidence/containerapp-logs-follow-2026-08-21.jsonl" \
+  "docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl" 2>/dev/null || true
+if git -C "$REPO_ROOT" diff --cached --quiet -- docs/phase0/evidence/ 2>/dev/null; then
+  ok "nothing to commit — evidence files already committed or unchanged after dedup"
+else
+  git -C "$REPO_ROOT" commit --quiet -m "docs(phase0-evidence): dedup and commit Container App log evidence at teardown
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+  ok "committed deduped evidence files"
 fi
 
 finish
