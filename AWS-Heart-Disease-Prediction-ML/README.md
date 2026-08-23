@@ -58,6 +58,7 @@ These are grounded in published healthcare ML benchmarks and AWS case studies:
 
 ## 🏗️ Architecture
 
+```
 Local CSV Dataset
 │
 ▼
@@ -75,7 +76,7 @@ SageMaker Canvas (No-Code ML)
 │
 ▼
 SageMaker Endpoint (Real-Time Predictions)
-
+```
 
 
 ## 📊 Dataset
