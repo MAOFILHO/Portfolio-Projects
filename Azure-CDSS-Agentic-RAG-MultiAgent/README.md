@@ -159,6 +159,34 @@ The **deployment pipeline** wraps battle-tested infrastructure scripts with a **
 
 
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Deployment CLI** | Python 3.12, Typer, Rich, Pydantic / Pydantic Settings, httpx |
+| **Backend framework** | FastAPI (Python 3.12), Uvicorn |
+| **Agent orchestration** | 5 specialized agents (Patient History, Medical Literature, Protocol, Drug Safety, Guardrails) coordinated by a GPT-5 orchestrator |
+| **LLM** | Azure OpenAI — GPT-5 (orchestration + synthesis), GPT-5-mini (lightweight agent tasks) |
+| **Embeddings** | Azure OpenAI `text-embedding-3-large` |
+| **Retrieval** | Azure AI Search — hybrid BM25 + vector + semantic reranking across 3 indexes (patient-records, treatment-protocols, medical-literature-cache), Reciprocal Rank Fusion for cross-source dedup |
+| **Database** | Azure Cosmos DB — 5 containers (patient-profiles, conversation-history, embedding-cache, audit-log, agent-state) |
+| **Document parsing** | Azure AI Document Intelligence (PDF/DOCX ingestion) |
+| **Caching** | Azure Managed Redis (`redisEnterprise`, Balanced B0/B1 SKU) |
+| **Object storage** | Azure Blob Storage (staging-documents, treatment-protocols, processed containers) |
+| **Frontend** | React 18, deployed to Azure Static Web Apps |
+| **Auth** | Microsoft Entra ID (OAuth 2.0), separate SPA + API app registrations |
+| **Secrets management** | Azure Key Vault |
+| **Compute** | Azure Container Apps (FastAPI backend container) |
+| **Container registry** | Azure Container Registry (ACR), cloud-native (non-local) image builds |
+| **Networking** | VNet with 4 subnets, private endpoints, 4 network security groups |
+| **Infrastructure as code** | Azure Bicep (56+ resources) |
+| **Observability** | OpenTelemetry + Azure Application Insights, Log Analytics Workspace |
+| **External APIs** | PubMed E-utilities, OpenFDA, RxNorm, DrugBank (optional) |
+| **Streaming transport** | Server-Sent Events (SSE) |
+| **Testing / lint** | pytest, pytest-asyncio, pytest-cov, ruff |
+
+
+
 ## Prerequisites
 
 | Tool | Version | Install (macOS) |
