@@ -34,10 +34,12 @@ Customer query
       ▼
 get_technical_support(issue_description)
       │
-      ▼  embed query with Titan Embed Text v2 (1024 dims)
+      | embed query with Titan Embed Text v2 (1024 dims)
+      ▼  
 Amazon Bedrock Knowledge Base
       │
-      ▼  cosine similarity search against S3 Vectors index
+      | cosine similarity search against S3 Vectors index
+      ▼  
 Top-3 passages  (score threshold: 0.4 minimum relevance)
       │
       ▼
