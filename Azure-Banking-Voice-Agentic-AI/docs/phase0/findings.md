@@ -2661,13 +2661,38 @@ applies, so it cannot carry this verdict by itself.
    promotion's 57-row covered-meter list at all — structurally ineligible, not just zero usage. The
    free-grant math in this section is a completely separate mechanism from that promotion.
 
-**Honest discrepancy, not reconciled here**: PLAN.md's stated hourly-equivalents (COSTS.md: idle
-~$0.00588/hr, active ~$0.0196/hr, derived from PLAN.md's $4.29/mo–$14.31/mo figures) are lower than
-this section's grant-corrected figures ($5.72/mo idle, $20.03/mo active) by roughly 33%. Not reconciled
-here (could be a stale calculator snapshot, a different free-grant application in PLAN.md's original
-pull, or a genuine rate change since then); flagged rather than silently picked one. The live Retail
-Prices API pull was used as primary for this measurement and for the R-08 recomputation below since
-it's dated today and directly queryable, not because PLAN.md's figure is assumed wrong.
+**Discrepancy settled, 2026-08-22: PLAN.md's original $4.29/$14.31 used US East rates, not Canada
+Central.** Checked whether PLAN.md records its derivation (pricing calculator, Retail Prices API, a
+date) for these two figures specifically — it doesn't: the Budget section's "All meters verified from
+official sources" line cites an explicit calculator-API URL and date for ACS only; the Container Apps
+row carries no equivalent citation. Git history confirms both numbers were introduced in the single
+original scoping commit (`2b577e1`, 2026-08-19) with no derivation recorded in that commit message
+either — so "re-run the same derivation" wasn't literally possible; reverse-engineering it was.
+
+Reproducing PLAN.md's exact grant-netting method (730h/month, 180,000 vCPU-s / 360,000 GiB-s free
+grant, 0.25 vCPU / 0.5 GiB) against the Retail Prices API's **`armRegionName eq 'eastus'`** rates
+(vCPU Active $0.000024, vCPU Idle $0.000003, Memory Active/Idle both $0.000003 — all effective since
+2022-06-01, i.e. not a recent change) reproduces **$4.29 idle and $14.31 active exactly, to the cent**.
+Canada Central's own rates (armRegionName eq 'canadacentral', confirmed 2026-08-22, also effective
+since 2022-06-01 — so not a rate change over the 3 days since PLAN.md was written either) are
+genuinely higher across the board: $0.000004 idle vCPU/memory (vs US East's $0.000003) and $0.000034
+active vCPU (vs US East's $0.000024). Checked the regional spread directly: 26 of 61 regions,
+including US East, sit at the $0.000003 idle-vCPU floor; Canada Central is one of the higher-priced
+regions at $0.000004 — a genuine, stable regional difference, not noise.
+
+**This project's resources all live in Canada Central** (ADR-001, decision 12 — data residency). The
+$4.29/$14.31 figures were computed against the wrong region from the start; **Canada Central's rates
+($5.72/mo idle, $20.03/mo active, this section) are the ones that actually apply and should be treated
+as correct.** Not a rate change, not a stale calculator snapshot with a since-corrected number — a
+region mismatch present since the original estimate (2026-08-19), just never checked against a live,
+region-scoped source until this session.
+
+**Consequence for PLAN.md**: its Budget section (the $4.29/$14.31 row, the derived $0.00588/$0.0196
+hourly-equivalents in COSTS.md, and the "honest result including evals" table's $11.29/$21.31/$13.71/
+$3.69 figures, all of which chain from the same US-East-derived numbers) is stale and should be
+corrected to the Canada Central figures in a future approved PLAN.md edit — not done here, since
+`docs/PLAN.md` stays out of scope for this session per Marco's own standing instruction this round.
+Flagging it here is what makes that correction findable rather than rediscovered from scratch.
 
 ## R-08 — demo runs/month, recomputed on the corrected R-04 basis (2026-08-22)
 
@@ -2700,9 +2725,9 @@ the difference between $5.72/mo and the $7.78/mo pre-grant idle figure this sect
 otherwise imply for a full month) — but because this app must run continuously all month for real
 telephony service, the grant only ever offsets ~27.6% of a month's compute, not all of it. The
 corrected R-08 range (~79–114 runs/mo) is *similar in order of magnitude* to PLAN.md's original naive
-idle-scenario figures (~128–160 runs off its $13.71/mo left-for-calls), modestly lower because this
-section's measured per-second rates run ~33% above PLAN.md's original estimate (see the flagged
-discrepancy above) — not because compute turned out to be free. R-08 remains meaningfully bounded by
+idle-scenario figures (~128–160 runs off its $13.71/mo left-for-calls), modestly lower because
+PLAN.md's original estimate used US East rates rather than Canada Central (settled, not just flagged,
+above) — not because compute turned out to be free. R-08 remains meaningfully bounded by
 Container Apps' (now precisely measured) idle cost plus the eval budget, same as originally designed,
 just with a verdict and a number instead of a range and an assumption.
 

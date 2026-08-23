@@ -13,12 +13,26 @@ of 3. Full session narrative: `docs/handoffs/2026-08-21-phase0-first-successful-
 `docs/phase0/findings.md` (everything from Stage 7 onward, including all bugs found/fixed this
 session, is there — not duplicated here).
 
-**R-04's 72h idle-billing window is OPEN**, anchored to `PROVISION_TIME=2026-08-21T22:49:35Z`
-(closes ~2026-08-24T22:49:35Z). **This value is manual, not written by either wizard script's normal
-path** — `02-test-calls.sh`'s intended `CallConnected`-gated auto-write never got the chance to fire
-against tonight's real calls (a since-fixed `--tail 500` bug silently emptied its log pull every
-run). Anchored to the Container App's actual revision `createdTime` — the moment it started billing
-— not `CALL1_TIME`. Do not touch it; do not re-run `02-test-calls.sh` (see open item 8).
+**R-04's 72h idle-billing window is still open** (wall-clock), anchored to
+`PROVISION_TIME=2026-08-21T22:49:35Z` (closes ~2026-08-24T22:49:35Z) — but **R-04 and R-08 are both
+already ANSWERED ahead of that close**, measured directly from Azure Monitor telemetry and the Retail
+Prices API on 2026-08-22, not left for Monday's script 04 run to discover. That run is now
+**confirmation + teardown, not discovery**. Full method and numbers: `docs/phase0/findings.md`, "R-04
+— Container Apps compute cost..." and "R-08 — demo runs/month, recomputed...".
+
+- **R-04: IDLE** (Replicas metric shows zero scale-to-zero gaps; RxBytes/TxBytes stay under PLAN.md's
+  own 1,000 B/s active threshold for every interval except the prior test call's expected tail). The
+  bigger finding: Container Apps' standing free compute grant (180,000 vCPU-s/360,000 GiB-s per
+  month) covers only ~8.3 days (~27.6%) of this app's continuous runtime each month — it is *not*
+  "compute is free," since `min-replicas=1` runs all month for real telephony. Net-of-grant monthly
+  cost at the IDLE rate: **$5.72/mo** (Canada Central Retail Prices API rates, confirmed 2026-08-22).
+- **R-08: ~79–114 demo runs/month, gate PASSES.** Recomputed on the corrected R-04 basis (fixed
+  $6.72/mo [Container Apps + number] + $6/mo eval ceiling, $12.28/mo left for calls).
+- **PLAN.md's Budget section is now confirmed stale** (not just estimated vs. measured): its
+  $4.29/mo–$14.31/mo Container Apps figures reproduce exactly against **US East** retail rates, not
+  Canada Central where every resource in this project actually lives (ADR-001/decision 12) — a
+  region mismatch present since the 2026-08-19 scoping commit, not a rate change since. Correcting
+  PLAN.md itself is a future approved edit (out of scope this session) — see open item 4 below.
 
 Resources live: resource group `rg-azure-banking-voice-agentic-ai`; AOAI
 `aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
@@ -27,8 +41,20 @@ Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azban
 (min-replicas=1, **billing now, this is the R-04 measurement subject**); two Log Analytics
 workspaces (`...aiCS` is the real one, linked; `...aixC` is an orphan, left in place).
 
-**Next action**: `03-cost-check-24h.sh`, ~24h after provisioning — Stage 1 is a human-only Portal
-Free Services check (open item 4), then a Cost Analysis sanity check.
+**Next action**: `04-teardown-and-r08.sh`, ~72h after provisioning (~2026-08-24 afternoon) — R-04/R-08
+confirmation, teardown of compute (keeping the number, R-09), dedup + one-time commit of both
+evidence files. `03-cost-check-24h.sh` already ran 2026-08-22: `FREETIER_CLEAN=yes` (Container Apps
+confirmed structurally absent from the subscription's free-services table, not just zero usage —
+open item 4 below, closed), `COST_SANITY_CHECK=pass` (answered by the assistant this session, not
+Marco — flagged in `docs/phase0/findings.md`).
+
+**Three latent bugs found and fixed this session, all in the wizard scripts, none yet exercised
+live**: `03-cost-check-24h.sh`'s `FREETIER_CLEAN` was read before ever being assigned as a real shell
+variable (crash under `set -u`, same shape as the earlier `DATAZONE_OK` bug); both `03-` and
+`04-teardown-and-r08.sh` called `az costmanagement query`, which doesn't exist in the installable
+`costmanagement` CLI extension (fixed via `az rest` against the Cost Management Query REST API
+directly); `04-teardown-and-r08.sh` called `ask()` three times without ever defining it (guaranteed
+crash the moment Stage 1 ran, caught before Monday's one live run, not during it).
 
 ## Open items
 
@@ -68,10 +94,14 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
    Call 1 registered zero despite Marco pressing keys during it too — nothing in the logs (duration,
    frame count, event ordering) explains the miss. Recorded as genuinely unresolved in
    `docs/phase0/findings.md`, not reasoned away (an earlier draft incorrectly did so; corrected).
-4. **Free-tier suppression risk, not yet closed out** — the subscription has an active `freetier`
-   promotion (until 2027-02-28). `03-cost-check-24h.sh` Stage 1 (Portal Free Services blade check,
-   human-only, no API exists for it) must run and confirm clean **before** any Cost Analysis dollar
-   figure from this project is trusted.
+4. **PLAN.md's Budget section is stale — needs an approved edit.** The Container Apps
+   $4.29/mo–$14.31/mo figures (and everything chained from them: COSTS.md's hourly-equivalents, the
+   "honest result including evals" table's $11.29/$21.31/$13.71/$3.69) were computed against US East
+   retail rates, not Canada Central where this project's resources actually live. Confirmed
+   2026-08-22 by reproducing PLAN.md's own grant-netting method against both regions' live Retail
+   Prices API rates — US East reproduces $4.29/$14.31 to the cent, Canada Central gives $5.72/$20.03.
+   Not done here (`docs/PLAN.md` stayed out of scope this session); full derivation in
+   `docs/phase0/findings.md`, "R-04 — Container Apps compute cost...".
 5. **Docker Hub vs ACR — decided for Phase 0 only.** Private repo, free tier, avoids `az containerapp
    up`'s auto-provisioned ~$5/mo ACR. **Still due at Phase 1 kickoff**: decide deliberately whether
    the real `voice-agent` image stays on Docker Hub or moves to ACR with managed-identity pull (the
@@ -96,17 +126,18 @@ Free Services check (open item 4), then a Cost Analysis sanity check.
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-02 and R-03 confirmed** 2026-08-21 (real calls, real echo, DTMF on 2/3 — see open item 3 for the
-one gap). **R-04 in progress** — 72h window open, closes ~2026-08-24T22:49:35Z; first overnight idle stretch
-confirmed clean 2026-08-22 (no unexpected inbound calls, `docs/phase0/findings.md` "Overnight idle
-window..."). **R-08** still
-pending — needs Cost Analysis data from script 3. **R-01, R-05, R-06 resolved** (2026-08-20). **R-09**
-(number irreplaceability) is a standing hard rule, not something to resolve. **R-07** is a standing
-fact (`spendingLimit: Off`), not something to resolve.
+one gap). **R-04 ANSWERED 2026-08-22 (IDLE), ahead of the 72h window's wall-clock close** — measured
+from telemetry, not Cost Analysis dollars; see Current phase above. **R-08 ANSWERED 2026-08-22:
+~79–114 demo runs/month, gate PASSES** — recomputed from measured meters, not the naive estimate.
+**R-01, R-05, R-06 resolved** (2026-08-20). **R-09** (number irreplaceability) is a standing hard
+rule, not something to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
+resolve.
 
 ## Next actions (in order)
 
-1. `03-cost-check-24h.sh`, ~24h after provisioning: Free Services portal check (open item 4), Cost
-   Analysis sanity check — including confirming the number's actual first bill date/amount.
-2. `04-teardown-and-r08.sh`, ~72h after `PROVISION_TIME` (2026-08-21T22:49:35Z, i.e. ~2026-08-24
-   afternoon): R-04 verdict, R-08 computation, teardown (keep the number — R-09, never released).
-   Commit both evidence files (deduped) as part of this script's work, per open item 1.
+1. `04-teardown-and-r08.sh`, ~72h after `PROVISION_TIME` (2026-08-21T22:49:35Z, i.e. ~2026-08-24
+   afternoon): confirmation of the R-04/R-08 answers already measured above (not discovery), teardown
+   of compute (keep the number — R-09, never released), dedup + one-time commit of both evidence
+   files (per open item 1).
+2. A future approved session: correct `docs/PLAN.md`'s Budget section per open item 4 (US East →
+   Canada Central).
