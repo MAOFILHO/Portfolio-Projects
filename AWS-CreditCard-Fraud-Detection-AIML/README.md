@@ -106,10 +106,10 @@ Transaction Input
        │
   ┌────┴────┐
   ▼         ▼
-XGBoost   Random Cut
+XGBoost    Random Cut
 Endpoint   Forest Endpoint
 (Known     (Novel
- Fraud)     Anomalies)
+Fraud)     Anomalies)
   └────┬────┘
        │
        ▼
