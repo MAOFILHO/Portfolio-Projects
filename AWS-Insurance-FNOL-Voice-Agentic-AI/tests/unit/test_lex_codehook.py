@@ -35,6 +35,16 @@ from fnol_voice_agent.agents.testing.fake_llm import (
     converse_tool_use_response,
 )
 from fnol_voice_agent.api import lex_codehook
+
+# `D162`/`OI80` rows 1/2 (`PROJECT_STATE.md` exit-criteria table). Does NOT exist yet as of this
+# import -- deliberately the first thing this test file fails on, before any test body runs. Per the
+# approved shape (Step 0 of this row's own TDD cycle): a hand-maintained constant in `src/` alongside
+# `_SLOT_BEARING_INTENTS` (`lex_codehook.py:372-380`), never a runtime import of
+# `scripts/verify_slot_legality_mapping.py` -- that module and the `bot.yaml.tftpl` it parses are both
+# outside `infra/terraform/stacks/main/lambda.tf:44-54`'s `source_dir = ".../src"` packaging root and
+# never reach the deployed Lambda. Criterion 3's lint is what will assert this constant matches the
+# tftpl-derived map once it exists; this file does not duplicate that check.
+from fnol_voice_agent.api.lex_codehook import _LEGAL_SLOTS_BY_INTENT
 from fnol_voice_agent.aws.checkpointer import build_test_checkpointer
 from fnol_voice_agent.guardrails.client import MockGuardrailClient
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, MockEmbedder
@@ -720,6 +730,125 @@ def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
 
     assert response["sessionState"]["dialogAction"]["type"] == "Delegate"
     assert "messages" not in response
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D162`/`OI80` rows 1/2 -- `_elicit_slot` raising on an illegal `slot_name` (row 2) and filtering
+# `lex_slots` to `graph_intent`'s legal set (row 1), both against `_LEGAL_SLOTS_BY_INTENT`. RED-first:
+# no implementation exists yet. Both use `CoverageQuestion`'s single-slot set (`{"coverage_topic"}`) and
+# `FileAutoClaim`'s/`UpdateContactInfo`'s larger sets as the legal/illegal contrast, matching the exact
+# `repair.py:43-72` stale-`active_slot` trigger row 2 exists to close: `handle_no_match_or_barge_in`
+# never clears `active_slot`, so a slot legal under a PRIOR intent can survive into a turn the graph has
+# freshly, validly classified under a different, unrelated intent.
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_an_illegal_slot_name_for_the_graph_intent_raises() -> None:
+    """`policy_number` is legal for `FileAutoClaim`/`UpdateContactInfo` but not `CoverageQuestion` --
+    a stale `active_slot` left over from a prior intent, surviving into a turn the graph has freshly
+    classified as `CoverageQuestion`. Must raise, not silently elicit a combination Lex's own dialog
+    manager would reject with `DependencyFailedException`.
+    """
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+    event = _event(intent_name="CoverageQuestion")
+    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+def test_an_illegal_slot_name_yields_no_response_regardless_of_lex_slots_filterability() -> None:
+    """NOT an ordering claim between row 2's raise and row 1's filter -- whether the implementation
+    checks legality before or after building a filtered `lex_slots` map is an internal detail with no
+    caller-visible difference (both orderings produce the same observable outcome: no response, an
+    exception instead), and this test does not and cannot distinguish them. What it does pin: an illegal
+    `slot_name` yields no response at all, even when `lex_slots` itself is filterable (carries a legal
+    key for the intent in scope) rather than trivially all-illegal -- a filter-only implementation that
+    silently degraded the raise to "filter and return" on this input would fail this test.
+    """
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+    event = _event(
+        intent_name="UpdateContactInfo",
+        slots={
+            "field": _slot("phone"),
+            "new_value": _slot("555-0100"),
+            "policy_number": _slot("PY9001"),
+        },
+    )
+    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+def test_the_illegal_slot_name_error_message_embeds_slot_name_and_graph_intent() -> None:
+    """Row 4's raised-turn evidence on the live 6-turn run is this exception's own traceback and nothing
+    else -- `_log_turn_observability` never runs on the raise path (it fires at `lex_codehook.py:651-652`,
+    after the `active_slot`/`_elicit_slot` branch; a raise there exits before that line is reached, caught
+    only by `handler`'s blanket `except Exception` and `logger.exception("codehook failed")` at `:765`).
+
+    Event intent (`UpdateContactInfo`) and graph intent (`result["intent"]`, `CoverageQuestion`) are
+    deliberately DIFFERENT here -- with them equal, an assertion that the message contains
+    "CoverageQuestion" cannot tell whether the implementation embedded the graph's own intent or simply
+    echoed Lex's. Row 4's evidence needs the REJECTING (graph) intent specifically, not whatever Lex
+    happened to send that turn, so this test can only prove the right thing when the two differ. Message
+    format otherwise matches the existing 3-part guard's own convention (`lex_codehook.py:400-402`/
+    `:406-408`/`:410-412`, each embedding `slot_name`/`active_slot` alongside the intent value).
+    """
+    event = _event(intent_name="UpdateContactInfo")
+    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+
+    with pytest.raises(lex_codehook._UnroutableIntentError) as exc_info:
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+    message = str(exc_info.value)
+    assert "policy_number" in message
+    assert "CoverageQuestion" in message
+
+
+def test_lex_slots_are_filtered_to_the_graph_intents_legal_set() -> None:
+    """Row 1's own trigger: the router-drift shape (`OI80`'s live turn-1->2 observation) -- Lex still
+    carries `UpdateContactInfo`'s slot keys from a prior turn while the graph has moved to
+    `FileAutoClaim`. The response's `intent.slots` keys must be a subset of
+    `_LEGAL_SLOTS_BY_INTENT["FileAutoClaim"]` -- asserted against the constant itself, never a literal
+    slot name, so this test does not silently pass if the constant's own contents drift.
+    """
+    lex_slots = {
+        "field": _slot("phone"),
+        "new_value": _slot("555-0100"),
+        "confirm_update_contact_info": _slot("Yes"),
+        "policy_number": _slot("PY9001"),  # legal for FileAutoClaim too -- ambiguous by design
+    }
+    event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
+    result = {"intent": "FileAutoClaim"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    response = lex_codehook._elicit_slot(event, result, "loss_datetime", "When did this happen?")
+
+    returned_keys = set(response["sessionState"]["intent"]["slots"].keys())
+    assert returned_keys <= _LEGAL_SLOTS_BY_INTENT["FileAutoClaim"]
+
+
+def test_every_lex_slot_illegal_for_the_graph_intent_filters_to_an_empty_dict() -> None:
+    """Shape-only assertion. Whether Lex's own dialog manager ACCEPTS an `ElicitSlot` response whose
+    `intent.slots` is `{}` is a live question this unit test cannot answer -- it exercises this
+    function's own return value, not a real Lex turn. Row 4's live 6-turn run is where that question
+    gets an actual answer, not here.
+    """
+    lex_slots = {
+        "field": _slot("phone"),
+        "new_value": _slot("555-0100"),
+        "confirm_update_contact_info": _slot("Yes"),
+    }
+    assert not (set(lex_slots) & _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"])
+    event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
+    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    response = lex_codehook._elicit_slot(event, result, "coverage_topic", "What coverage question?")
+
+    assert response["sessionState"]["intent"]["slots"] == {}
+    assert response["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "coverage_topic"
 
 
 # ---------------------------------------------------------------------------------------------------
