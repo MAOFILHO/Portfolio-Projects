@@ -19,7 +19,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.verify_slot_legality_mapping import SlotLegalityParseError, legal_slots_by_intent
+from scripts.verify_slot_legality_mapping import (
+    SlotLegalityDriftError,
+    SlotLegalityParseError,
+    assert_matches_src_constant,
+    legal_slots_by_intent,
+)
 
 _BOT_TFTPL = Path("infra/terraform/stacks/main/bot.yaml.tftpl")
 
@@ -159,3 +164,34 @@ Outputs:
     result = legal_slots_by_intent(template)
 
     assert result == {"CheckClaimStatus": frozenset({"claim_number"})}
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D162`/`OI80` criterion 3's equality assert -- `assert_matches_src_constant` compares the
+# tftpl-derived mapping above against `_LEGAL_SLOTS_BY_INTENT` (`src/fnol_voice_agent/api/
+# lex_codehook.py`, rows 1/2's own hand-maintained constant). Equality, not subset: a subset assert
+# over a partial constant would pass vacuously -- the exact `D126` shape `legal_slots_by_intent`'s own
+# raise-on-malformed already guards against one level up. RED-first, standalone: this test exercises
+# the comparison function directly, on two small hand-built mappings, not the real files -- the real
+# `bot.yaml.tftpl` vs. the real `_LEGAL_SLOTS_BY_INTENT` is a separate, standalone script run (this
+# row's own step 3), not a unit test assertion.
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_assert_matches_src_constant_raises_on_a_mismatched_mapping() -> None:
+    """One missing slot name (`"claim_number"`, declared by the tftpl-shaped mapping but absent from
+    the src-constant-shaped one) and one extra slot name (`"claim_id"`, present in the src-constant-
+    shaped mapping but never declared by the tftpl-shaped one) -- both directions of drift, in the same
+    intent, so this proves the check catches either, not only one.
+    """
+    tftpl_mapping = {
+        "CheckClaimStatus": frozenset({"claim_number"}),
+        "CoverageQuestion": frozenset({"coverage_topic"}),
+    }
+    mismatched_src_constant = {
+        "CheckClaimStatus": frozenset({"claim_id"}),  # missing "claim_number", extra "claim_id"
+        "CoverageQuestion": frozenset({"coverage_topic"}),
+    }
+
+    with pytest.raises(SlotLegalityDriftError):
+        assert_matches_src_constant(tftpl_mapping, mismatched_src_constant)

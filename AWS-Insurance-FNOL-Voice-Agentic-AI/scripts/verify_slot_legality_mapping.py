@@ -54,10 +54,30 @@ from typing import Any
 
 import yaml
 
+# LINT-TIME ONLY -- never reaches the Lambda package. `infra/terraform/stacks/main/lambda.tf:44-54`
+# packages only `source_dir = ".../src"`; this script lives in `scripts/`, entirely outside that root,
+# and is never zipped up or invoked at runtime. Importing `fnol_voice_agent.api.lex_codehook` here is
+# therefore safe from the circularity/runtime-availability concern rows 1/2's own module docstring
+# raised (`_LEGAL_SLOTS_BY_INTENT` cannot import this module or its tftpl parse at runtime; the reverse
+# -- this script importing that module, at lint time only -- has no such constraint) and is exactly
+# what criterion 3's equality assert needs: the actual, currently-shipping constant, not a second
+# hand-transcription of it.
+from fnol_voice_agent.api.lex_codehook import _LEGAL_SLOTS_BY_INTENT
+
 
 class SlotLegalityParseError(Exception):
     """The tftpl's `Intents:`/`Slots:` structure could not be read cleanly. Raised, never swallowed into
     an empty result -- see the module docstring's "malformed" section for why."""
+
+
+class SlotLegalityDriftError(Exception):
+    """`_LEGAL_SLOTS_BY_INTENT` (`src/fnol_voice_agent/api/lex_codehook.py`) has drifted from what
+    `bot.yaml.tftpl` actually declares. Equality, not subset -- a subset assert over a partial constant
+    would pass vacuously, the same `D126` shape (a check that exists, finds nothing, and reads as clean)
+    `legal_slots_by_intent`'s own raise-on-malformed already guards against one level up: a constant
+    missing an intent, or missing a legal slot name within an intent it does have, would make
+    `_elicit_slot`'s row-1 filter drop, or row-2 raise on, a real, Lex-legal slot -- exactly the defect
+    this equality check exists to catch."""
 
 
 class _CfnSafeLoader(yaml.SafeLoader):
@@ -133,6 +153,48 @@ def legal_slots_by_intent(text: str) -> dict[str, frozenset[str]]:
     return mapping
 
 
+def assert_matches_src_constant(
+    tftpl_mapping: dict[str, frozenset[str]], src_constant: dict[str, frozenset[str]]
+) -> None:
+    """Raise `SlotLegalityDriftError`, naming exactly what differs, unless `tftpl_mapping` (the parsed
+    ground truth, `legal_slots_by_intent`'s own output) and `src_constant` (`_LEGAL_SLOTS_BY_INTENT`)
+    are EQUAL -- same intent keys, same slot-name set per key. See `SlotLegalityDriftError`'s own
+    docstring for why equality, not subset.
+    """
+    if tftpl_mapping == src_constant:
+        return
+
+    lines: list[str] = []
+    tftpl_only_intents = sorted(set(tftpl_mapping) - set(src_constant))
+    constant_only_intents = sorted(set(src_constant) - set(tftpl_mapping))
+    if tftpl_only_intents:
+        lines.append(
+            f"intent(s) in bot.yaml.tftpl but missing from _LEGAL_SLOTS_BY_INTENT: {tftpl_only_intents}"
+        )
+    if constant_only_intents:
+        lines.append(
+            "intent(s) in _LEGAL_SLOTS_BY_INTENT but not declared in bot.yaml.tftpl: "
+            f"{constant_only_intents}"
+        )
+    for intent in sorted(set(tftpl_mapping) & set(src_constant)):
+        tftpl_slots = tftpl_mapping[intent]
+        constant_slots = src_constant[intent]
+        if tftpl_slots == constant_slots:
+            continue
+        missing = sorted(tftpl_slots - constant_slots)
+        extra = sorted(constant_slots - tftpl_slots)
+        detail = f"{intent!r}:"
+        if missing:
+            detail += f" missing from _LEGAL_SLOTS_BY_INTENT={missing}"
+        if extra:
+            detail += f" extra in _LEGAL_SLOTS_BY_INTENT (not declared in bot.yaml.tftpl)={extra}"
+        lines.append(detail)
+
+    raise SlotLegalityDriftError(
+        "_LEGAL_SLOTS_BY_INTENT has drifted from bot.yaml.tftpl:\n" + "\n".join(lines)
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Extract and sanity-check the {intent: {slot names}} map bot.yaml.tftpl declares."
@@ -169,6 +231,18 @@ def main(argv: list[str] | None = None) -> int:
     for name in sorted(mapping):
         print(f"{name}: {','.join(sorted(mapping[name]))}")
     print(f"OK: {len(mapping)} slot-bearing intent(s) extracted from {args.path}")
+
+    # `D162`/`OI80` criterion 3's equality assert. `_LEGAL_SLOTS_BY_INTENT` is what `_elicit_slot`
+    # actually runs against (rows 1/2) -- this is what keeps it from silently drifting from what
+    # bot.yaml.tftpl declares now that both exist.
+    try:
+        assert_matches_src_constant(mapping, _LEGAL_SLOTS_BY_INTENT)
+    except SlotLegalityDriftError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+    print(
+        "OK: _LEGAL_SLOTS_BY_INTENT (src/fnol_voice_agent/api/lex_codehook.py) matches bot.yaml.tftpl"
+    )
     return 0
 
 
