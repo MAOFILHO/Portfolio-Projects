@@ -379,6 +379,44 @@ _SLOT_BEARING_INTENTS = frozenset(
     }
 )
 
+# `D162`/`OI80` rows 1/2 (`PROJECT_STATE.md` exit-criteria table). HAND-MAINTAINED, mirroring
+# `_SLOT_BEARING_INTENTS`'s own accepted duplication risk one level down: each intent's legal Lex slot
+# NAMES, not just membership. The runtime source of truth cannot be `scripts/verify_slot_legality_
+# mapping.py`'s `legal_slots_by_intent` (which parses `bot.yaml.tftpl` directly) -- neither that script
+# nor the tftpl ship in the Lambda package (`infra/terraform/stacks/main/lambda.tf:44-54`, `source_dir
+# = ".../src"`), so this constant is what actually runs. Criterion 3's lint
+# (`scripts/verify_slot_legality_mapping.py`, wired into `make lint`) is what keeps it in sync with
+# `bot.yaml.tftpl` -- it does not (yet) assert equality against this constant; that extension is its own
+# separate change, not made here. Transcribed by hand from `bot.yaml.tftpl`'s own `Slots:` blocks:
+# `FileAutoClaim` `:187`, `CheckClaimStatus` `:516`, `CoverageQuestion` `:599`,
+# `RentalTowingEntitlement` `:641`, `UpdateContactInfo` `:710`. All five keys present is load-bearing --
+# `_elicit_slot` below indexes this dict by `graph_intent.value` unconditionally; an absent key raises
+# `KeyError`, not the intended `_UnroutableIntentError`, for any of the five slot-bearing intents.
+_LEGAL_SLOTS_BY_INTENT: dict[str, frozenset[str]] = {
+    Intent.FILE_AUTO_CLAIM.value: frozenset(
+        {
+            "policy_number",
+            "loss_datetime",
+            "loss_location",
+            "loss_type",
+            "damage_description",
+            "insured_vehicle_vin",
+            "injuries_present",
+            "other_party_involved",
+            "police_report_filed",
+            "police_report_number",
+            "driver_name",
+            "confirm_file_claim",
+        }
+    ),
+    Intent.CHECK_CLAIM_STATUS.value: frozenset({"claim_number"}),
+    Intent.COVERAGE_QUESTION.value: frozenset({"coverage_topic"}),
+    Intent.RENTAL_TOWING_ENTITLEMENT.value: frozenset({"entitlement_type", "claim_number"}),
+    Intent.UPDATE_CONTACT_INFO.value: frozenset(
+        {"policy_number", "field", "new_value", "confirm_update_contact_info"}
+    ),
+}
+
 
 def _elicit_slot(
     event: dict[str, Any], result: dict[str, Any], slot_name: str, message: str
@@ -392,8 +430,11 @@ def _elicit_slot(
     by construction, for every turn that reaches this function.
 
     Raises `_UnroutableIntentError` -- never falls back to `_intent_from(event)` -- if `result["intent"]`
-    is absent, not a valid `Intent` value, or not one of `_SLOT_BEARING_INTENTS`. See the module docstring's
-    `D84` entry for why silently falling back would reintroduce the defect this function exists to fix.
+    is absent, not a valid `Intent` value, not one of `_SLOT_BEARING_INTENTS`, or (`D162`/`OI80` row 2)
+    `slot_name` itself is not legal for `graph_intent`. See the module docstring's `D84` entry for why
+    silently falling back would reintroduce the defect this function exists to fix; row 2's own trigger
+    is `repair.py`'s stale-`active_slot` shape, where a slot legal under a PRIOR intent survives into a
+    turn the graph has freshly, validly classified under a different one.
     """
     raw_intent = result.get("intent")
     if not isinstance(raw_intent, str):
@@ -410,11 +451,23 @@ def _elicit_slot(
         raise _UnroutableIntentError(
             f"active_slot={slot_name!r} but result['intent']={graph_intent!r} declares no Lex slots"
         )
+    if slot_name not in _LEGAL_SLOTS_BY_INTENT[graph_intent.value]:
+        raise _UnroutableIntentError(
+            f"active_slot={slot_name!r} but result['intent']={graph_intent!r} does not declare that slot"
+        )
 
-    # The `slots` map is still Lex's own -- only `name` changes. Rebuilding `slots` from scratch is exactly
-    # the mistake `_intent_from`'s own docstring warns against (it drops every value collected so far); the
-    # graph has no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
-    lex_slots = _intent_from(event).get("slots") or {}
+    # The `slots` map is still Lex's own -- only `name` changes, and (`D162`/`OI80` row 1) only the keys
+    # legal for `graph_intent` survive: Lex may still be carrying keys from whatever intent it last had in
+    # progress (the router-drift trigger this row closes), and embedding those illegal keys alongside a
+    # legal `graph_intent` is the residual `DependencyFailedException` shape row 2's own raise does not
+    # cover -- row 2 guards `slot_name` (the one slot being elicited THIS turn), not every key already
+    # sitting in `lex_slots`. Dropped silently, not raised: an illegal leftover key is expected drift, not
+    # a malformed turn. Rebuilding `slots` from scratch instead of filtering is exactly the mistake
+    # `_intent_from`'s own docstring warns against (it drops every value collected so far); the graph has
+    # no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
+    raw_lex_slots = _intent_from(event).get("slots") or {}
+    legal_slot_names = _LEGAL_SLOTS_BY_INTENT[graph_intent.value]
+    lex_slots = {name: value for name, value in raw_lex_slots.items() if name in legal_slot_names}
     # `D90` part 2 (`RESULTS.md` §34, option B). Corroborating, not corrective, here -- the `D84` guard
     # above already makes `intent.name` agree with the graph's own decision on every `ElicitSlot` response,
     # so this field and `intent.name` are always equal at this point. Set anyway, for the same reason a
