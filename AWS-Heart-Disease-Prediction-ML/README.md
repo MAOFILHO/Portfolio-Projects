@@ -78,6 +78,21 @@ SageMaker Endpoint (Real-Time Predictions)
 
 
 
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **No-code ML platform** | Amazon SageMaker Canvas |
+| **Data preparation** | SageMaker Data Wrangler (profiling, quality & insights report) |
+| **Model training** | SageMaker Autopilot (AutoML, Quick Build) |
+| **Model type** | 3+ Category Prediction (multi-class classification) |
+| **Dataset storage** | Amazon S3 |
+| **Real-time inference** | SageMaker Endpoints (`ml.t2.medium` ×2) |
+| **Dataset format** | CSV (303 records, 14 clinical features) |
+| **Tooling** | AWS Console — no Python, no notebooks, no ML code |
+
+
+
 ## 📊 Dataset
 
 - **Source:** Public Heart Disease Dataset
