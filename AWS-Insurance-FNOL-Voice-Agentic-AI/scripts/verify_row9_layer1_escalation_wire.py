@@ -63,7 +63,9 @@ class WireClassification:
 
 
 def _malformed(detail: str) -> WireClassification:
-    return WireClassification(status="malformed", escalate_raw=None, escalation_reason=None, detail=detail)
+    return WireClassification(
+        status="malformed", escalate_raw=None, escalation_reason=None, detail=detail
+    )
 
 
 def classify_escalation_wire(response: dict[str, Any]) -> WireClassification:
@@ -73,7 +75,9 @@ def classify_escalation_wire(response: dict[str, Any]) -> WireClassification:
 
     session_state = response.get("sessionState")
     if not isinstance(session_state, dict):
-        return _malformed(f"sessionState missing or not an object (got {type(session_state).__name__})")
+        return _malformed(
+            f"sessionState missing or not an object (got {type(session_state).__name__})"
+        )
 
     session_attributes = session_state.get("sessionAttributes")
     if not isinstance(session_attributes, dict):
@@ -114,6 +118,7 @@ def recognize_live(
     the caller on this function's return value.
     """
     import boto3  # local import: this module must stay importable, and its assertion logic testable, with
+
     # no AWS SDK dependency at collection time — the same reason `ADR-009` keeps `boto3` out of
     # `lex_codehook.py`'s module scope.
 

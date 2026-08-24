@@ -88,9 +88,7 @@ def scope_violations(
     directly, so the logic is checkable without staging anything for real.
     """
     return [
-        path
-        for path in staged_paths
-        if not path.startswith(project_root) and path not in allowlist
+        path for path in staged_paths if not path.startswith(project_root) and path not in allowlist
     ]
 
 
@@ -132,7 +130,10 @@ def main(argv: list[str] | None = None) -> int:
     violations = scope_violations(staged)
 
     if violations:
-        print("check-project-root-scope: FAILED — staged path(s) outside PROJECT_ROOT:", file=sys.stderr)
+        print(
+            "check-project-root-scope: FAILED — staged path(s) outside PROJECT_ROOT:",
+            file=sys.stderr,
+        )
         for path in violations:
             print(f"  {path}", file=sys.stderr)
         print(
@@ -144,7 +145,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    print("check-project-root-scope: ok — every staged path is inside PROJECT_ROOT or explicitly allowlisted")
+    print(
+        "check-project-root-scope: ok — every staged path is inside PROJECT_ROOT or explicitly allowlisted"
+    )
     return 0
 
 

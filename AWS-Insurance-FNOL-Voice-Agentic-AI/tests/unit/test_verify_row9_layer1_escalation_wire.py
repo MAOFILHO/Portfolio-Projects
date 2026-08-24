@@ -63,7 +63,9 @@ def test_escalate_key_absent_is_classified_not_escalated() -> None:
     assert result.escalation_reason is None
 
 
-def test_escalate_present_but_falsy_is_classified_not_escalated_and_distinguished_from_absent() -> None:
+def test_escalate_present_but_falsy_is_classified_not_escalated_and_distinguished_from_absent() -> (
+    None
+):
     response = _response(
         {
             "dialogAction": {"type": "Close"},

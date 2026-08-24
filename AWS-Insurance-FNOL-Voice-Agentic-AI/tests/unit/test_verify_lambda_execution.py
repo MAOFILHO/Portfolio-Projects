@@ -88,7 +88,8 @@ def test_expect_detection_escalation_passes_on_a_genuine_pregraph_detection() ->
 
 def test_expect_detection_escalation_fails_on_fail_closed_provenance() -> None:
     """The deploy gate must not accept a fail-closed escalation on a deliberately-clean synthetic event
-    as a pass -- that would mean the pre-graph path itself is degraded, not merely differently-provenanced."""
+    as a pass -- that would mean the pre-graph path itself is degraded, not merely differently-provenanced.
+    """
     check = _expect_detection_escalation(must_contain_911=True)
     payload = _payload(
         dialog_type="Close",
@@ -103,7 +104,8 @@ def test_expect_detection_escalation_fails_on_fail_closed_provenance() -> None:
 def test_expect_detection_escalation_fails_on_graph_provenance() -> None:
     """These three events (L1/L3/D79) are engineered to hit the PRE-GRAPH path directly. A
     `detection-graph` reading means the pre-graph check didn't fire and the turn fell through to the
-    graph instead -- a real regression on this synthetic event, not an acceptable alternate provenance."""
+    graph instead -- a real regression on this synthetic event, not an acceptable alternate provenance.
+    """
     check = _expect_detection_escalation(must_contain_911=True)
     payload = _payload(
         dialog_type="Close",
@@ -189,7 +191,9 @@ class _FakeLambdaClient:
 def test_invoke_fails_on_a_present_function_error_even_with_statuscode_200() -> None:
     """`D80`'s own lesson, one layer down: `StatusCode: 200` is returned for both success and an
     unhandled exception. `FunctionError` is the real signal, checked first."""
-    body = json.dumps({"errorMessage": "No module named 'pydantic'", "errorType": "Runtime.ImportModuleError"})
+    body = json.dumps(
+        {"errorMessage": "No module named 'pydantic'", "errorType": "Runtime.ImportModuleError"}
+    )
     response = {
         "StatusCode": 200,
         "FunctionError": "Unhandled",

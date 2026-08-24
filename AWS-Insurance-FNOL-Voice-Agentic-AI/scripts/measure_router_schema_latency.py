@@ -63,7 +63,8 @@ SEED = 20260814  # the date of Marco's approval -- fixed, not re-rolled between 
 def strip_schema(tool_spec: dict[str, Any]) -> dict[str, Any]:
     """RESULTS.md §11.17 Item 2's stripped variant: removes pydantic's auto-generated `title` fields and
     the two enum classes' docstrings-as-`description`, keeps the one legitimate `toolSpec`-level
-    description and every field the model actually needs (types, enums, required list, $ref structure)."""
+    description and every field the model actually needs (types, enums, required list, $ref structure).
+    """
 
     def _strip(node: Any) -> Any:
         if isinstance(node, dict):
@@ -82,7 +83,9 @@ def load_corpus() -> list[str]:
     runs on every turn a real call reaches, not only conversation openers."""
     turns = [turn.caller for conv in load_golden_set() for turn in conv.turns]
     if not turns:
-        raise RuntimeError("evals/golden produced zero turns -- corpus load is broken, not just empty")
+        raise RuntimeError(
+            "evals/golden produced zero turns -- corpus load is broken, not just empty"
+        )
     return turns
 
 
@@ -180,7 +183,9 @@ def summarize(records: list[dict[str, Any]], *, cost: dict[str, Any]) -> dict[st
             "min": sv[0],
             "p50": statistics.median(sv),
             "mean": statistics.fmean(sv),
-            "p95": statistics.quantiles(sv, n=100, method="inclusive")[94] if len(sv) >= 2 else sv[0],
+            "p95": (
+                statistics.quantiles(sv, n=100, method="inclusive")[94] if len(sv) >= 2 else sv[0]
+            ),
             "max": sv[-1],
         }
 
@@ -207,7 +212,9 @@ def summarize(records: list[dict[str, Any]], *, cost: dict[str, Any]) -> dict[st
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n-pairs", type=int, required=True, help="number of pairs to run")
-    parser.add_argument("--out", type=str, required=True, help="output JSON filename under evals/baselines/")
+    parser.add_argument(
+        "--out", type=str, required=True, help="output JSON filename under evals/baselines/"
+    )
     args = parser.parse_args(argv)
 
     rng = random.Random(SEED)
@@ -215,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
     shuffled = corpus[:]
     rng.shuffle(shuffled)
     utterances = [shuffled[i % len(shuffled)] for i in range(args.n_pairs)]
-    print(f"corpus: {len(corpus)} real turns from evals/golden/*.yaml, sampling {args.n_pairs} pairs")
+    print(
+        f"corpus: {len(corpus)} real turns from evals/golden/*.yaml, sampling {args.n_pairs} pairs"
+    )
 
     unstripped_spec = build_classify_turn_tool_spec()
     stripped_spec = strip_schema(unstripped_spec)
@@ -226,7 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     caller = LoggingCaller(BotoBedrockConverseClient(region="us-west-2"), log)
 
     records = run_pairs(
-        utterances, caller=caller, unstripped_spec=unstripped_spec, stripped_spec=stripped_spec, rng=rng
+        utterances,
+        caller=caller,
+        unstripped_spec=unstripped_spec,
+        stripped_spec=stripped_spec,
+        rng=rng,
     )
 
     summary = summarize(records, cost=log.summary())
@@ -239,7 +252,9 @@ def main(argv: list[str] | None = None) -> int:
     dp = summary["delta_p95"]
     print("\n" + "=" * 78)
     print(f"n_pairs={summary['n_pairs']}")
-    print(f"agreement: {a['n_agree']}/{summary['n_pairs']} ({a['rate']:.4f})  disagreements={a['n_disagree']}")
+    print(
+        f"agreement: {a['n_agree']}/{summary['n_pairs']} ({a['rate']:.4f})  disagreements={a['n_disagree']}"
+    )
     print(f"U: p50={lat['U']['p50']:.1f}ms p95={lat['U']['p95']:.1f}ms max={lat['U']['max']:.1f}ms")
     print(f"S: p50={lat['S']['p50']:.1f}ms p95={lat['S']['p95']:.1f}ms max={lat['S']['max']:.1f}ms")
     print(

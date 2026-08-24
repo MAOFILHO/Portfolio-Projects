@@ -203,7 +203,9 @@ def load_d52_verdicts(path: Path = D52_BASELINE_PATH) -> dict[str, bool]:
     return {item["text"]: bool(item["composed_worst_case"]) for item in baseline["items"]}
 
 
-def _classify_invocation(response: dict[str, Any]) -> tuple[InvocationStatus, EscalationReason | None]:
+def _classify_invocation(
+    response: dict[str, Any],
+) -> tuple[InvocationStatus, EscalationReason | None]:
     """`D81` items 1 and 4. Reads exactly two signals from the raw `RecognizeText` response:
 
     1. Lex's own native-fallback shape, verified against `RESULTS.md` §11.4's real 79/79-error run
@@ -258,9 +260,7 @@ def recognize(runtime: Any, *, bot_id: str, bot_alias_id: str, text: str) -> dic
     invalid_detail = None
     if status == "invalid":
         intent = (response.get("sessionState") or {}).get("intent") or {}
-        invalid_detail = (
-            f"Lex native fallback: intent.name={intent.get('name')!r} intent.state={intent.get('state')!r}"
-        )
+        invalid_detail = f"Lex native fallback: intent.name={intent.get('name')!r} intent.state={intent.get('state')!r}"
     return {
         "session_id": session_id,
         "status": status,
@@ -342,7 +342,8 @@ def measure_positives(
                 "contingency_used": contingency_used,
                 "escalated_flags": escalated_flags,
                 "escalation_reasons": reasons,
-                "unstable": not unanimous and not (contingency_used and len(set(escalated_flags)) == 1),
+                "unstable": not unanimous
+                and not (contingency_used and len(set(escalated_flags)) == 1),
                 "deployed_worst_case": worst_case,
                 "d52_worst_case": d52_verdict,
                 "diverges_from_d52": (d52_verdict is not None) and (worst_case != d52_verdict),
@@ -486,7 +487,8 @@ def measure(
         ],
         "false_escalation_count": len(false_escalations),
         "false_escalation_items": [
-            {"text": i["text"], "escalation_reason": i["escalation_reason"]} for i in false_escalations
+            {"text": i["text"], "escalation_reason": i["escalation_reason"]}
+            for i in false_escalations
         ],
         "provenance_breakdown": provenance_breakdown(positive_items, negative_items),
         "total_recognize_text_calls": total_calls,
@@ -632,7 +634,9 @@ def main(argv: list[str] | None = None) -> int:
             return _run(args, run, bot_id, bot_alias_id, positive_phrasings, negative_phrasings)
     except RunInvalidError as exc:
         print(f"\n  *** RUN INVALID (D81): {exc} ***")
-        print("  No composed_recall_deployed emitted. Not a C1 breach -- an instrument/infra defect.")
+        print(
+            "  No composed_recall_deployed emitted. Not a C1 breach -- an instrument/infra defect."
+        )
         return 2
 
 
@@ -661,8 +665,10 @@ def _run(
     )
     print(f"  contingency items used {result['protocol']['contingency_items_used']}")
     print(f"  unstable items {result['unstable_item_count']}")
-    print(f"  provenance breakdown (all escalate=true samples, positives+negatives): "
-          f"{result['provenance_breakdown']}")
+    print(
+        f"  provenance breakdown (all escalate=true samples, positives+negatives): "
+        f"{result['provenance_breakdown']}"
+    )
     print(
         f"  false escalations on the {result['negatives']} negatives: {result['false_escalation_count']}"
     )
@@ -721,7 +727,9 @@ def _run(
         run.note("C1 BREACH: deployed composed recall below 1.000 on the must-escalate items.")
         return 1
     if result["divergences_from_d52"]:
-        run.note("Deployed result diverges from D52 on at least one item despite recall holding at 1.000.")
+        run.note(
+            "Deployed result diverges from D52 on at least one item despite recall holding at 1.000."
+        )
     if result["false_escalation_count"]:
         run.note(
             f"{result['false_escalation_count']}/{result['negatives']} negatives falsely escalated -- "

@@ -17,7 +17,9 @@ import os
 
 import boto3
 
-CE_REGION = "us-east-1"  # Cost Explorer platform constraint -- see module docstring. Not var.region.
+CE_REGION = (
+    "us-east-1"  # Cost Explorer platform constraint -- see module docstring. Not var.region.
+)
 
 
 def _mtd_range(today: dt.date) -> tuple[str, str]:

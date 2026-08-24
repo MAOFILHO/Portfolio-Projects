@@ -973,7 +973,8 @@ def test_an_escalating_turn_logs_both_its_own_escalation_line_and_the_per_turn_l
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The new unconditional line is additional to, not a replacement for, the existing `:566` escalation
-    line -- an escalating turn must produce both, so a CloudWatch query over either one still finds it."""
+    line -- an escalating turn must produce both, so a CloudWatch query over either one still finds it.
+    """
     event = _event(intent_name="FileAutoClaim")
     result = {
         "escalation": {"contact_id": "c-d162-escalation", "triggering_layer": "L2", "route": 1},
@@ -1009,7 +1010,11 @@ def test_a_raising_observability_log_does_not_replace_an_escalation_response(
     )
     event = _event(intent_name="FileAutoClaim")
     result = {
-        "escalation": {"contact_id": "c-observability-failure", "triggering_layer": "L2", "route": 1},
+        "escalation": {
+            "contact_id": "c-observability-failure",
+            "triggering_layer": "L2",
+            "route": 1,
+        },
         "response_text": "connecting you now",
         "intent": "FileAutoClaim",
         "active_slot": None,

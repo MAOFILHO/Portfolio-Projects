@@ -151,7 +151,8 @@ def test_list_arg_non_pii_elements_pass_through_unchanged(
     logger_and_handler: tuple[logging.Logger, _CapturingHandler],
 ) -> None:
     """The negative case paired with the test above: ordinary slot-key-shaped strings in a list must not
-    be altered -- a redactor that mangles non-PII list contents fails differently but still fails."""
+    be altered -- a redactor that mangles non-PII list contents fails differently but still fails.
+    """
     logger, handler = logger_and_handler
     install_pii_log_filter(logger)
 
