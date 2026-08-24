@@ -751,7 +751,9 @@ def test_an_illegal_slot_name_for_the_graph_intent_raises() -> None:
     """
     assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
     event = _event(intent_name="CoverageQuestion")
-    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
 
     with pytest.raises(lex_codehook._UnroutableIntentError):
         lex_codehook._elicit_slot(event, result, "policy_number", "unused")
@@ -775,7 +777,9 @@ def test_an_illegal_slot_name_yields_no_response_regardless_of_lex_slots_filtera
             "policy_number": _slot("PY9001"),
         },
     )
-    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
 
     with pytest.raises(lex_codehook._UnroutableIntentError):
         lex_codehook._elicit_slot(event, result, "policy_number", "unused")
@@ -796,7 +800,9 @@ def test_the_illegal_slot_name_error_message_embeds_slot_name_and_graph_intent()
     `:406-408`/`:410-412`, each embedding `slot_name`/`active_slot` alongside the intent value).
     """
     event = _event(intent_name="UpdateContactInfo")
-    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
     assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
 
     with pytest.raises(lex_codehook._UnroutableIntentError) as exc_info:
@@ -821,7 +827,9 @@ def test_lex_slots_are_filtered_to_the_graph_intents_legal_set() -> None:
         "policy_number": _slot("PY9001"),  # legal for FileAutoClaim too -- ambiguous by design
     }
     event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
-    result = {"intent": "FileAutoClaim"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    result = {
+        "intent": "FileAutoClaim"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
 
     response = lex_codehook._elicit_slot(event, result, "loss_datetime", "When did this happen?")
 
@@ -842,7 +850,9 @@ def test_every_lex_slot_illegal_for_the_graph_intent_filters_to_an_empty_dict() 
     }
     assert not (set(lex_slots) & _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"])
     event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
-    result = {"intent": "CoverageQuestion"}  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
 
     response = lex_codehook._elicit_slot(event, result, "coverage_topic", "What coverage question?")
 
