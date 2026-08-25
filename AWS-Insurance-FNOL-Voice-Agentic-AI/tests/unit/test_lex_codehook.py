@@ -74,12 +74,20 @@ def _install_fake_graph(
     monkeypatch: pytest.MonkeyPatch,
     *,
     by_model: dict[str, Any],
+    responses: list[dict[str, Any]] | None = None,
     table_suffix: str = "default",
 ) -> Any:
     """Builds a real, locally-backed graph and patches `_get_graph` to return it -- the seam
     `lex_codehook.py` was written with exactly this purpose. Must be called inside a `mock_aws()` block
     that stays open for the duration of the test, since `graph.get_state`/`graph.invoke` make real boto3
     calls against the moto-mocked DynamoDB, not just at construction.
+
+    `responses`, when given, scripts the router turn-by-turn (FIFO, one per `.converse()` call) rather
+    than by `modelId` -- `FakeBedrockConverseClient`'s queue is consulted before `by_model`
+    (`agents/testing/fake_llm.py:58-59`). `D162`/`OI80` row 2's Layer 0 test is the first caller that
+    needs this: it drives the SAME model through a scripted low-confidence sequence across several
+    turns, which `by_model`'s one-fixed-response-per-model-id shape cannot express. Default `None`
+    leaves every existing caller unaffected.
     """
     store = DynamoVectorStore(
         table_name=f"fnol-codehook-test-kb-{table_suffix}", region="us-west-2"
@@ -87,7 +95,7 @@ def _install_fake_graph(
     store.ensure_table()
     embedder = MockEmbedder()
     checkpointer = build_test_checkpointer(f"fnol-codehook-test-checkpoints-{table_suffix}")
-    caller = FakeBedrockConverseClient(by_model=by_model)
+    caller = FakeBedrockConverseClient(responses=responses, by_model=by_model)
     graph = build_graph(
         vector_store=store,
         embedder=embedder,
@@ -859,6 +867,107 @@ def test_every_lex_slot_illegal_for_the_graph_intent_filters_to_an_empty_dict() 
     assert response["sessionState"]["intent"]["slots"] == {}
     assert response["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
     assert response["sessionState"]["dialogAction"]["slotToElicit"] == "coverage_topic"
+
+
+def test_row2_layer0_branch_i_ceiling_reached_via_a_stale_active_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D162`/`OI80` row 2's own closing condition, Layer 0 half: an in-process test proving the
+    branch-(i) retry-ceiling chain end to end -- a stale `active_slot` surviving from
+    `UpdateContactInfo` into two consecutive turns the graph freshly, validly classifies as
+    `FileAutoClaim` at low confidence.
+
+    Deliberately NOT the `Ambiguous`/low-confidence shape `test_graph_integration.py`'s own
+    `test_retry_ceiling_reached_via_mixed_normal_and_barge_in_triggers` already covers -- that shape
+    (`state["intent"] == "Ambiguous"`) trips `_elicit_slot`'s PRE-EXISTING check 3 ("declares no Lex
+    slots"), never row 2's new check 4. `route_and_classify` (`agents/nodes/routing.py:52-57`) writes
+    `intent` into state unconditionally, regardless of confidence -- a low-confidence turn that names a
+    real, slot-bearing intent (`FileAutoClaim` @ 0.3) still routes to repair (`graph.py:145`,
+    `confidence < LOW_CONFIDENCE_THRESHOLD`) while leaving `state["intent"] == "FileAutoClaim"`, which
+    is exactly the shape check 4 exists for. Copying the `Ambiguous` precedent here would have passed
+    while testing the wrong guard entirely -- the same `D126` shape (a check that exists, finds
+    nothing, and reads as clean), one level up.
+
+    Turn-by-turn, one session:
+      1: fresh `UpdateContactInfo` turn -> elicits `policy_number`.
+      2: answers `policy_number` -> elicits `field`; `active_slot="field"` checkpointed.
+      3: drift turn 1, `FileAutoClaim` @ 0.3 -- the stale `active_slot="field"` is illegal under
+         `FileAutoClaim` (check 4) -> `_elicit_slot` raises -> `handler` fails open -> silent
+         `Delegate`. `retry_counts["field"]` reaches 1 (`repair.py:44` keys the ladder on the SAME
+         stale slot the raise flags) and is checkpointed BEFORE the raise -- `graph.invoke()` commits
+         internally; the raise happens one call up the stack, in `_respond_from_graph_result`.
+      4: drift turn 2, same shape -- `retry_counts["field"]` reaches `RETRY_CEILING` (2) ->
+         `ceiling_reached` fires -> repair returns an `escalation` record, route 3 -> `Close`,
+         `escalated=True`, `escalation_reason="detection-graph"`. `_elicit_slot` is NEVER called this
+         turn: `_respond_from_graph_result` checks `escalation` before the `active_slot` branch
+         (`lex_codehook.py:670-671` precedes `:688-689`) -- the load-bearing assertion below.
+    """
+    real_elicit_slot = lex_codehook._elicit_slot
+    elicit_slot_calls: list[Any] = []
+
+    def _spy_elicit_slot(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        elicit_slot_calls.append((args, kwargs))
+        return real_elicit_slot(*args, **kwargs)
+
+    monkeypatch.setattr(lex_codehook, "_elicit_slot", _spy_elicit_slot)
+
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={},  # unused: every call this test drives is scripted via `responses` below
+            responses=[
+                _classification("UpdateContactInfo"),
+                _classification("UpdateContactInfo"),
+                _classification("FileAutoClaim", confidence=0.3),
+                _classification("FileAutoClaim", confidence=0.3),
+            ],
+            table_suffix="row2-layer0",
+        )
+        contact = {"contactId": "c-row2-layer0"}
+
+        r1 = lex_codehook.handler(
+            _event(intent_name="UpdateContactInfo", session_attributes=contact), None
+        )
+        assert r1["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+        assert len(elicit_slot_calls) == 1
+
+        r2 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                slots={"policy_number": _slot("PY1103")},
+                transcript="PY1103",
+            ),
+            None,
+        )
+        assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "field"
+        assert len(elicit_slot_calls) == 2
+
+        r3 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                transcript="actually, never mind, tell me about my rental coverage",
+            ),
+            None,
+        )
+        assert r3["sessionState"]["dialogAction"]["type"] == "Delegate"
+        assert len(elicit_slot_calls) == 3  # called this turn, and it raised
+
+        r4 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                transcript="hello? is anyone there",
+            ),
+            None,
+        )
+
+    assert r4["sessionState"]["dialogAction"]["type"] == "Close"
+    assert r4["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert r4["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
+    # The load-bearing assertion: unchanged from turn 3 -- `_elicit_slot` was never called this turn.
+    assert len(elicit_slot_calls) == 3
 
 
 # ---------------------------------------------------------------------------------------------------
