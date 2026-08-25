@@ -96,8 +96,8 @@ specialists via `handoff(...)` (`main.py:98-150`).
 | 10 | **Agent shape** | Explicit FSM + declarative `AgentSpec` table |
 | 11 | **Fixtures** | TTS-synthesized from YAML text scripts + telephony degradation |
 | 12 | **Region** | **Canada Central** (revised from East US 2 — Canada Central is physically Toronto, confirmed via the Azure regions page, same metro as the caller; East US 2 is Virginia, a cross-border hop. Also unifies the ACS/OpenAI footprint into one geography). **No fallback chain.** If Canada Central cannot serve a realtime deployment: **stop and report**, do not relocate |
-| 13 | **Number** | **Canada local geographic**, Toronto area (416/647/437/905/289) |
-| 14 | **Model pin** | `gpt-realtime-mini` **2025-12-15 (GA)**, GlobalStandard, `versionUpgradeOption: NoAutoUpgrade` |
+| 13 | **Number** | **Canada local geographic, 705** (North Bay, ON — Barrie itself isn't an ACS-recognized locality name, but shares the 705 numbering plan area; the area code is what matters, not the specific city). **Revised 2026-08-20** from Toronto area (416/647/437/905/289) after Phase 0 (R-05) found Toronto entirely absent from ACS's Canadian geographic-locality inventory — not filtered out, not sold out, genuinely not present in a country-wide, unfiltered query. The Toronto-area assumption was never load-bearing: what "Canada local" actually bought was free-to-dial-from-an-Ontario-mobile, low-friction verification, and a unified Canadian jurisdiction — all three hold for any Canadian geographic number, since Canada-wide calling is standard on Canadian mobile plans and no reviewer checks an area code. Canada toll-free rejected explicitly: 2.6x the per-minute inbound rate ($0.0220 vs $0.0085) and 2x the monthly lease ($2 vs $1) — a real cut against R-08's already-tight demo-runs/month budget for a line the builder dials himself. Confirmed via a live `Search Available Phone Numbers` call, not just a locality/area-code lookup (`+17054829832`, geographic, application-assigned, inbound-only, $1.00/mo held ~15min). Per-minute inbound rate confirmed unchanged at $0.0085/min: Microsoft's Canada PSTN pricing is a single national rate with no regional/area-code breakdown. Full evidence, including a real-time inventory-volatility finding (a locality that was available minutes earlier vanished before purchase), in `docs/phase0/findings.md`. |
+| 14 | **Model pin** | `gpt-realtime-mini` **2025-10-06 (GA)**, GlobalStandard, `versionUpgradeOption: NoAutoUpgrade`. **Revised 2026-08-20** from `2025-12-15` (the `isDefaultVersion`) after the full Models API catalog was pulled live in Phase 0, mid-gate: `2025-12-15` retires 2026-12-15 — ~4 months out, not a distant fallback. `2025-10-06` retires 2027-04-06 (~7.5 months out) at **identical audio-token pricing** ($10/$20 per 1M in/out, flat across every mini-tier snapshot checked), with a *better* request-rate limit (10/60s vs 3/60s) and still ample token-rate headroom (5000/60s vs the ~1200/min this project's own turn-rate estimate needs). Not the default version, so the deployment must name it explicitly — no other trade-off found. Documented successor for B3, not today's pin: `gpt-realtime-1.5` (2026-02-23, GA, full tier, retires 2027-08-24) — ~3.2x the per-token audio cost (full tier vs mini tier is the reason, not the version), held in reserve for if nothing with longer mini-tier runway has reached GA by the time `2025-10-06` approaches retirement. See `docs/phase0/findings.md` "Model pin reconsideration" for the full comparison table. |
 | 15 | **WS lifecycle** | Close both WebSockets on call end; measure replica billing state empirically |
 | 16 | **Non-functionals** | IaC, CI/CD, tests, OTel+redaction, managed identity, guardrails, docs/ADRs. API auth = shared-secret only |
 | 17 | **`escalate_to_human`** | **Graceful apology + call termination**, with a logged escalation record (call correlation ID, reason code, timestamp) persisted to Table Storage. **No outbound transfer leg.** A real transfer needs a real second number and a real human on the other end — neither exists in this prototype, and simulating one (transferring to a personal number, a voicemail box) wouldn't demonstrate a real capability, only add ACS transfer-API complexity and an outbound $0.013/min cost for a feature that can't be meaningfully tested end-to-end. Named test case: `T-ESCALATION-LOGGED` |
@@ -134,15 +134,47 @@ IVR **refuses calls** and plays the closed path. It must never fail open. `spend
 confirmed on the subscription — **Azure will not stop spend at any threshold. B4 is the only brake
 that exists.** Named test case: `T-B4-FAILCLOSED`.
 
-**B3's startup guard** is one function, refusing to boot on either violation:
+**B3's startup guard**, restructured 2026-08-20 to carry a named successor rather than a single frozen
+constant — model retirement is a scheduled decision now, reviewed at every phase gate (`CLAUDE.md`),
+not something that surprises Phase 6 or 7 when the pin's clock runs out:
 ```python
-ALLOWED_REALTIME_MODELS = frozenset({"gpt-realtime-mini"})  # 2025-12-15, GA
+# Reviewed at every phase gate (CLAUDE.md, "Model pin review"). Each entry's retirement date is
+# verified live via the Models API (docs/phase0/findings.md "Model pin reconsideration"), never
+# assumed from isDefaultVersion -- that assumption is exactly what R-01 caught being wrong.
+#
+# Keyed on (name, version), not name alone -- promoted from a Phase 0 design note to a hard Phase 2
+# requirement, 2026-08-20 (docs/phase0/findings.md "B3 end-to-end check"). R-01's own evidence
+# undermines a name-only guard: gpt-realtime-mini already has >=2 live versions with different
+# retirement dates and rate limits, so a name-only allowlist would not catch a same-name deployment
+# silently redeployed onto a different (wrong) version.
+
+# The pin actually in service. Only this exact (name, version) pair may run without a WARNING at boot.
+ACTIVE_REALTIME_MODEL = ("gpt-realtime-mini", "2025-10-06")  # GA, retires 2027-04-06
+
+# Pre-vetted fallback, not live today. Named here so migrating, when it's needed, is swapping
+# ACTIVE_REALTIME_MODEL's value plus a deployment-name change in infra -- not a from-scratch model
+# evaluation done under time pressure as 2027-04-06 approaches.
+SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1-5", "2026-02-23")  # GA, retires 2027-08-24, ~3.2x cost
+
+ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 
 def assert_boot_safety() -> None:
     if "AZURE_OPENAI_API_KEY" in os.environ:
         raise SystemExit("keyless auth breaks when AZURE_OPENAI_API_KEY is set")
-    if settings.realtime_deployment not in ALLOWED_REALTIME_MODELS:
-        raise SystemExit(f"model {settings.realtime_deployment!r} not in B3 allowlist")
+    # Read the live deployment's actual modelVersion via the AOAI API at boot -- config alone is not
+    # trusted, since config can drift from what's actually deployed (exactly the class of bug Phase
+    # 0's Stage 7 NoAutoUpgrade check caught live during provisioning: create-time returned
+    # OnceNewDefaultVersionAvailable despite config/IaC asking for NoAutoUpgrade).
+    live = (settings.realtime_deployment, get_live_deployed_model_version(settings.realtime_deployment))
+    if live not in ALLOWED_REALTIME_MODELS:
+        raise SystemExit(f"deployed model {live!r} not in B3 allowlist {ALLOWED_REALTIME_MODELS!r}")
+    if live != ACTIVE_REALTIME_MODEL:
+        # Booting on the successor is allowed (so a migration can be tested) but must never be
+        # silent -- this is the "scheduled decision, not a surprise" requirement, mechanically enforced.
+        log.warning(
+            "booting on %r, not the active pin %r -- confirm this is a deliberate migration",
+            live, ACTIVE_REALTIME_MODEL,
+        )
 ```
 
 **B5 budget legs** (provisional after Phase 2, frozen after Phase 5):
@@ -391,7 +423,13 @@ note F0 allows only **1 concurrent** request).
 explicitly not repo 2's `$1,000.00` bug; caller-facing path handles it gracefully),
 `T-B4-FAILCLOSED` (cost store unreachable → refuse calls), `T-ESCALATION-LOGGED` (escalation record
 persisted with call correlation ID + reason code; call terminates gracefully; no outbound leg ever
-attempted).
+attempted), `T-B3-SUCCESSOR-BOOT` (added Phase 2, added 2026-08-20 alongside B3's active-pin/successor
+restructure — see decision 14: boots `SUCCESSOR_REALTIME_MODEL` against `FakeRealtimeServer` and
+completes one turn. **Skip-by-default** — not part of normal CI, gated behind an env flag or marked
+`xfail` — because it exercises a model that isn't live yet. Exists so that migrating to the named
+successor when the active pin's retirement approaches is a five-minute check against something already
+proven to boot, not a discovery made under deadline pressure. Whoever runs Phase 2 kickoff owns writing
+it; it cannot exist before `FakeRealtimeServer` does).
 
 ---
 
@@ -406,10 +444,12 @@ Everything that must be true before building. One trip, all unknowns folded in s
 2. Verify realtime SKU `deprecationDate` via the Models API — docs conflict (see R-01).
 3. Attempt a `DataZoneStandard` realtime deployment → confirm/deny for ADR-001.
 4. Create ACS resource (`location: 'global'`, `dataLocation: 'Canada'`). Run `List Area Codes`
-   (`locality=Toronto`, `administrativeDivision=ON`) to determine live inventory — 416/647/437 vs the
-   905/289 belt (different rate centre, likely a separate locality query) is genuinely undocumented
-   and resolved only by this live call.
-5. Purchase a Canada local geographic number from confirmed available area codes.
+   (`locality=Toronto`, `administrativeDivision=ON`) to determine live inventory. **Result (2026-08-20,
+   R-05): 404 — Toronto is absent from ACS's entire Canadian geographic-locality inventory, confirmed
+   via an unfiltered country-wide query. Not a 416/647/437-vs-905/289 question — the whole city is
+   unavailable.** See decision 13 (revised) and `docs/phase0/findings.md`.
+5. Purchase a Canada local geographic number from confirmed available area codes — **705 (North Bay,
+   ON), per decision 13's revision, live-confirmed purchasable via `Search Available Phone Numbers`.**
 6. Minimal echo WebSocket; **3 test calls**.
 7. Measure, in the same calls:
    - real ACS Audio Streaming meter vs $0.004 list
@@ -439,7 +479,11 @@ billable compute.
 
 ### Phase 2 — Realtime session + agent core + gate + test harness ⛔ *control ships here*
 `RealtimeSession` against Azure via `model_config` override; `AgentSpec` table; `session.update`
-agent swap; `FakeTransport` + `FakeRealtimeServer`; L0/L1 suites; **B3 startup guard**.
+agent swap; `FakeTransport` + `FakeRealtimeServer`; L0/L1 suites; **B3 startup guard — must validate
+(deployment name, model version) together, reading the live deployment's actual model version via the
+AOAI API at boot rather than trusting config alone; a name-only check is insufficient (promoted from a
+Phase 0 design note to a hard requirement, 2026-08-20 — see the B3 code block above and
+`docs/phase0/findings.md` "B3 end-to-end check").**
 **`dispatch/gate.py` ships now, deny-all-by-default** — every tool call is refused unless explicitly
 allowlisted for the current `(agent, auth_state)` pair. This is deliberate sequencing: Phase 3 adds a
 real network path to `mock-core-banking`, and no phase may exist where that path is reachable without
@@ -447,7 +491,11 @@ a gate already in front of it. Phase 4 only *adds permissions* to an existing co
 introduces one.
 **Exit:** full app runs end-to-end between two fakes in CI with zero Azure dependency; gate defaults
 closed and is provably in front of every tool, even stub ones. **B5 provisional** after N≥100 real
-turns through a live `RealtimeSession`, turn count stated.
+turns through a live `RealtimeSession`, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
+2026-08-20, decision 14): boots `SUCCESSOR_REALTIME_MODEL` (`gpt-realtime-1.5` as of Phase 0) against
+`FakeRealtimeServer` and completes one turn, skip-by-default so it never runs in normal CI — it's Phase
+2's own deliverable because it's the first phase where `FakeRealtimeServer` exists to boot anything
+against.
 
 ### Phase 3 — mock-core-banking
 FastAPI + SQLite, own Container App, own Dockerfile. Timeouts, retries, circuit-breaking in the
@@ -496,14 +544,15 @@ suites at their weekly/on-demand cadence. Any ADRs not already written during th
 
 | ID | Risk | Fallback |
 |---|---|---|
-| **R-01** | `gpt-realtime-mini` listed **twice with conflicting retirement dates** — 2025-10-06 as both `2027-04-06` and `2026-09-21` (~1 month out); 2025-12-15 as both `2027-06-15` and `2026-12-15` | Plan against the pessimistic date; verify per-SKU via Models API in Phase 0; `NoAutoUpgrade` |
+| **R-01** | ~~`gpt-realtime-mini` listed twice with conflicting retirement dates~~ — **resolved 2026-08-20**, live Models API query: `2025-10-06` retires `2027-04-06`, `2025-12-15` retires `2026-12-15` (the pessimistic case in both, confirmed real). Triggered a decision 14 revision — see there and `docs/phase0/findings.md` "Model pin reconsideration" | Closed. `NoAutoUpgrade`; B3 now carries a documented successor (`gpt-realtime-1.5`) reviewed at every phase gate rather than a single frozen date |
 | **R-02** | `Pcm24KMono` behaviour is a **documentation-based assumption**, and the resampler was deleted on that basis | If ACS misbehaves, resampler returns and B5's breakdown changes. Phase 0 verifies by measurement |
 | **R-03** | `DtmfData` during active bidirectional streaming | Documented and used in all four language pivots; narrowed but unproven. If it fails: pause-stream-and-`recognize`, which changes the auth flow and B5 |
 | **R-04** | Open-but-silent WebSocket may keep a Container App replica **active**-billed (~$10/mo swing) | Decision 15 closes WS between calls; measured over 72h in Phase 0 |
-| **R-05** | ~~ACS data location coupled to purchasable number country~~ — **resolved, no coupling found**; remaining unknown is narrower: live 416/647/437 vs 905/289 area-code inventory under `locality=Toronto` | Query `List Area Codes` in Phase 0 step 4 |
+| **R-05** | ~~ACS data location coupled to purchasable number country~~ — **resolved, no coupling found**. Remaining question (live Toronto-area inventory) **resolved 2026-08-20, surprising result**: Toronto is absent from ACS's entire Canadian geographic-locality inventory, not just from an ON-filtered list — confirmed via an unfiltered, country-wide query (10 localities total at first check, 8 at a re-check ~20min later; none GTA-adjacent at either point) and cross-checked that the endpoint itself works via a control query against a locality that *is* listed. Triggered the decision 13 revision above. **Also surfaced real-time inventory volatility**: Guelph, ON returned a live purchasable area code on the first check, then a 404 roughly 20 minutes later — the locality itself had left the inventory in between, not just its numbers. Confirm actual purchasable inventory (via `Search Available Phone Numbers`, not just `List Area Codes`/`List Localities`) immediately before any purchase, every time — a check even 20 minutes old is not reliable. Full evidence: `docs/phase0/findings.md`. | Closed for the coupling question. Number choice revised to 705 (North Bay, ON) per decision 13, live-confirmed purchasable |
 | **R-06** | DataZone realtime meters exist but availability tables show Global Standard only | Phase 0 attempts a real DataZone deployment; ADR states the confirmed answer |
 | **R-07** | `spendingLimit: Off` — Azure will not stop spend | B4 fail-closed is the only brake; Budget alert at $20 is notification only |
 | **R-08** | **Demonstrability** — at the low end of the recomputed budget there may not be enough call-minutes left for repeated Phase 8 portfolio walkthroughs (authenticate + balance + block card + escalate, run repeatedly for demos). The project's value is that someone can dial it. Back-of-envelope using this plan's own numbers: at ~4 min/demo run (near, not over, B4's 5-min cap) and "left for calls" of $3.69–$13.71/mo, that's **~30 runs/mo (worst case: active Container Apps, realistic per-min rate) to ~160 runs/mo (idle, floor rate)** — comfortably above a 5-run floor on paper, but every input (ACS streaming actual meter, Container Apps billing state, true per-turn token cost) is still an estimate | Phase 0 exit computes this **from measured meters**, not the estimate above. If the measured answer is under 5 runs/month, stop and discuss reducing fixed cost or raising the ceiling before Phase 1 — do not silently proceed on a demo budget that can't demo |
+| **R-09** | **Number irreplaceability.** Added 2026-08-20 after R-05 showed ACS's Canadian geographic-locality inventory is genuinely volatile, not just thin: Guelph, ON existed at one check and was gone ~20 minutes later; the nationwide locality count dropped from 10 to 8 within the same session (full evidence: `docs/phase0/findings.md`, "R-05 — inventory volatility"). If the number purchased for this project is ever released (accidentally or otherwise), **there is no guarantee an equivalent replacement — or any number in the same numbering plan area — will still be purchasable**, unlike almost every other resource in this project, which can be recreated identically from Bicep/the deploy CLI. This is qualitatively different from every other teardown consideration and upgrades "keep the number leased" (`docs/PLAN.md` Phase 0 step 11, decision-adjacent but never previously named as a risk) from a convenience to a hard rule | **The phone number is never released by any script, at any phase, for any reason.** No teardown path may include a number-release/delete call — verified for `04-teardown-and-r08.sh` on 2026-08-20 (only Event Grid subscription, Container App, and Container Apps environment are ever deleted; the number and its parent ACS resource are explicitly excluded and the verification step now checks the number's own existence via `GET /phoneNumbers`, not just the parent ACS resource's). Also a `CLAUDE.md` stop condition — see there |
 
 ---
 

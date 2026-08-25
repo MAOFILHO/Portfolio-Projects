@@ -36,6 +36,8 @@ from fnol_voice_agent.guardrails.client import BedrockGuardrailClient, Guardrail
 
 from evals.tier_b import CostLog, LoggingCaller
 from redteam.attacks import ALL_ATTACKS
+from redteam.escalation_coverage import check_escalation_coverage
+from redteam.escalation_coverage import render as render_escalation_coverage
 from redteam.readback_probe import render as render_readback_probe
 from redteam.readback_probe import run_readback_probe
 from redteam.suite import Attack, evaluate, render, write_report
@@ -148,10 +150,28 @@ def main() -> int:
     readback_out.write_text(json.dumps(readback_report.as_dict(), indent=2) + "\n")
     print(f"wrote {readback_out}")
 
+    # D140/OI58: the escalation coverage check -- offline, no guardrail/model call of its own, wired
+    # here (not a separate Makefile target) for the same reason the readback probe is: `make redteam`
+    # is this project's one canonical entry point for "does the shipped system actually behave", and
+    # D126 was exactly a check documented as canonical with no verb reaching it. Known-untriaged sites
+    # (D141/OI59) do not fail this -- see `KNOWN_PENDING_TRIAGE` in `escalation_coverage.py` -- but they
+    # still print every run, and a NEW unlisted site does fail it.
+    coverage_report = check_escalation_coverage()
+    print(render_escalation_coverage(coverage_report))
+    coverage_out = args.out.with_name(args.out.stem + "-escalation-coverage" + args.out.suffix)
+    coverage_out.parent.mkdir(parents=True, exist_ok=True)
+    coverage_out.write_text(json.dumps(coverage_report.as_dict(), indent=2) + "\n")
+    print(f"wrote {coverage_out}")
+
     # A zero-occurrence GATE breach is a non-zero exit: one occurrence fails, not a percentage. The
-    # readback probe's own failure (a coverage gap or a masked/blocked site) is the same shape -- one
-    # occurrence, not a percentage -- so it gates the exit code exactly like report.gate_failures does.
-    return 1 if (report.gate_failures or not readback_report.passed) else 0
+    # readback probe's own failure (a coverage gap or a masked/blocked site) and the escalation coverage
+    # check's own failure (a new, unlisted promise-with-no-record site) are the same shape -- one
+    # occurrence, not a percentage -- so both gate the exit code exactly like report.gate_failures does.
+    return (
+        1
+        if (report.gate_failures or not readback_report.passed or not coverage_report.passed)
+        else 0
+    )
 
 
 if __name__ == "__main__":

@@ -11115,3 +11115,469 @@ C1 status: VERIFIED, 1.000 (26/26), build MX//FPM7wEq+bQNgNoFmsIaShb/FuSsNtQYDnJ
 Blocked on: nothing -- criterion 4 CLOSED, this entry.
 Last apply + gate result: terraform apply "phase11_criterion4_phone_redaction.tfplan" -- SUCCESS (Marco's terminal), 0 added/2 changed/0 destroyed, clean. verify-lambda-execution 11/13 (2 known-open, unrelated). measure_composed_pipeline_deployed.py: 1.000 (26/26), $0.098007 real spend, logged COSTS.md.
 ```
+
+---
+
+## 97. `D140`/`OI58` (Phase 12 row 9) -- RED-first at all three sites, then GREEN one at a time; a derived, self-updating structural check built (`redteam/escalation_coverage.py`) that found FOUR MORE unescalated sites while being built, not hypothetically -- reported, not fixed
+
+**RED, made meaningful, per instruction.** Before touching any of the three named sites, a failing test was
+written and run against each, asserting `result["escalation"]` is a real `EscalationRecord` (route 3,
+`triggering_layer` `"capability"`) -- not merely that the transfer-promising text was produced:
+
+- `agents/graph.py`'s `_guardrail_blocked_response` (`D89`'s INPUT-block path) --
+  `tests/unit/test_graph_integration.py::test_input_guardrail_block_escalates_with_a_real_escalation_record`,
+  new integration test against the real compiled graph (a `MockGuardrailClient` INPUT-blocking rule, no
+  checkpointer, matching the existing barge-in/retry-ceiling tests' shape).
+- `agents/nodes/guardrails_nodes.py`'s OUTPUT-guardrail-block branch --
+  `tests/unit/test_guardrails_nodes.py::test_a_genuinely_blocked_answer_also_sets_a_real_escalation_record`,
+  direct node-level test, same seam the file's existing tests already use.
+- `agents/nodes/update_contact_info.py`'s `_CONFIRM_CEILING`-exhausted branch -- new file
+  `tests/unit/test_update_contact_info.py` (none existed before; this node was previously only exercised
+  indirectly through `test_graph_integration.py`'s happy path and `test_lex_codehook.py`), state built so
+  `retry_counts["confirm_update_contact_info"]` is already 1 on entry (`_CONFIRM_CEILING = 1`, one retry
+  not the shared ladder's two), plus a sibling green-control test proving the FIRST failed confirmation is
+  still a plain reprompt, not an early escalation.
+
+**Correction, added after the laptop reboot that interrupted this entry's own session.** The paragraph
+originally here asserted "all three failed as expected... confirmed by running them against unmodified
+code before any fix" with no captured transcript -- a narrative claim, not evidence. Worth recording as a
+gap rather than silently upgrading it into evidence after the fact: on Marco's own bar, an assertion that a
+test failed is not the same thing as a kept record that it did. Reproduced live, in the follow-up session
+that found the gap, by reverting the three fixed source files to their committed pre-fix content, running
+the three tests against them, and restoring:
+
+```
+tests/unit/test_graph_integration.py::test_input_guardrail_block_escalates_with_a_real_escalation_record
+tests/unit/test_guardrails_nodes.py::test_a_genuinely_blocked_answer_also_sets_a_real_escalation_record
+tests/unit/test_update_contact_info.py::test_confirm_ceiling_exhausted_escalates_with_a_real_escalation_record
+
+AssertionError: D140/OI58: the OUTPUT-guardrail-block branch promises a transfer but sets no
+EscalationRecord, so the real Connect-level transfer built for D43 never fires
+assert None is not None
+ +  where None = <built-in method get of dict object at ...>('escalation')
+ +    where <built-in method get of dict object at ...> = {'guardrail_output_blocked': True,
+       'response_text': "I'm sorry, I'm not able to share that -- let me connect you with someone who can
+       help."}.get
+
+3 failed, 1 passed in 0.76s
+```
+(the fourth test in that run, the green-control sibling proving a *first* failed confirmation is a plain
+reprompt not an early escalation, passed as designed -- it is not a RED test). All three failures carry the
+same `assert None is not None` / `.get("escalation")` shape at their own site. Source files restored
+immediately after, full suite re-confirmed at 719/719 passing before anything else changed.
+
+**GREEN, one site at a time**, per the fix shape `RESULTS.md` §94 had already assessed and this entry
+re-verified rather than assumed: `initiate_escalation()` called directly at each site (`triggering_layer=
+"capability"`, `route=3`, matching `repair.py`'s reference shape), NOT routed through `repair.py`'s shared
+`handle_no_match_or_barge_in` -- confirmed that would collapse `update_contact_info.py`'s deliberately
+tighter `_CONFIRM_CEILING = 1` into the shared ladder's ceiling of two, a real regression against
+`DIALOGUE-POLICIES.md` §4, not a refactor. Each site fixed and its RED test turned GREEN before moving to
+the next; full suite re-run after each. 719/719 passing at the end (was 715 before this entry's own new
+tests; 4 new tests net across the three GREEN steps plus 3 in the structural-check test file below).
+
+**The structural part.** `redteam/response_text_sites.py` already existed (`ADR-017` condition part 3,
+`D121`) as a self-updating AST walker deriving every `response_text` dict-literal site in a node module --
+exactly the "same idea as `D121`'s part 3" the instruction pointed at. Extended it with two more per-site
+facts from the same single AST walk (no second pass): `has_escalation_key` (does the SAME dict literal also
+carry a real, non-`None` `"escalation"` key -- purely structural) and `is_escalation_shaped` (a keyword
+heuristic -- `"connect"` / `"get you to someone"`, built by grepping the actual corpus across `agents/` and
+`api/lex_codehook.py`, not guessed, and verified to have zero false positives and zero false negatives
+against the full known corpus of 9 escalation-shaped sites found by hand). Resolution follows a `Name` to a
+module-level constant, a `Subscript` into a dict-of-literals, AND -- found necessary while building this,
+not planned -- one hop across a `from X import NAME` boundary (`_resolve_imported_string`): without it,
+`guardrails_nodes.py`'s correct `check_authority` branch (which uses `authority.py`'s `ELIGIBILITY_DEFLECTION`
+by import) was invisible to the classifier entirely, passing for the wrong reason rather than being
+recognised as compliant. Failing that, the raw `ast.unparse` snippet still catches an f-string's static
+text portions (`file_auto_claim.py`'s except-branch site, an inline f-string, not a module constant).
+
+New module `redteam/escalation_coverage.py` cross-references the two: a finding is
+`is_escalation_shaped=True` AND `has_escalation_key=False`. Scope is every module in `agents.nodes`
+(auto-discovered via `pkgutil.iter_modules` -- a new file dropped into that package is in scope
+automatically) plus `agents.graph` named explicitly (the one node-producing module outside the package,
+exactly one such file) -- deliberately broader than `readback_probe.py`'s `OUTPUT_GUARDRAIL_SOURCES`-anchored
+scope, which by design excludes `update_contact_info`, `guardrails_nodes.py`, and `graph.py` itself. That
+is *why* this is a new module rather than an extension of `readback_probe.py`: three of `D140`'s eight known
+sites live outside that mechanism's scope on purpose.
+
+**Is it "cleanly derivable," per the instruction's own escape hatch?** Partially, stated plainly rather than
+smoothed over. The SITE ENUMERATION (which sites exist, so a future one is in scope automatically) is fully
+structural and self-updating -- no content judgment, no hand-maintained list. The SHAPE CLASSIFICATION
+(which sites are escalation-shaped) is NOT purely structural -- there is no AST signal (naming convention,
+`SiteKind`, terminal-without-`active_slot` shape) that reliably separates a transfer-promising canned line
+from an ordinary terminal one (e.g. "Done -- your phone is updated") without reading content, so a keyword
+heuristic was built instead, openly labelled as one, verified against the real corpus in both directions
+(all 9 known true positives matched, zero false positives on `BARGE_IN_OPEN_REPROMPT`/`GENERIC_REPROMPT`/
+slot prompts/completion scripts), same discipline `§95`'s `PHONE_RE` generalization used. Stated blind spot:
+a value built through a function call, an attribute access, or a SECOND import hop whose static source text
+contains neither keyword would not be flagged -- none of the current corpus is shaped that way, verified by
+hand while building this, but a future one built that way needs a human reviewer, not this check.
+
+**The check found the defect recurring a second time while being built, not hypothetically.** Running it
+against the real codebase (`python -m redteam.escalation_coverage`, and the cross-check test below) surfaced
+FOUR sites beyond the three named in scope, all currently promising a transfer with no `EscalationRecord`:
+
+1. `coverage_question.py`'s own `_ELIGIBILITY_DEFLECTION` (`make_coverage_question_node.coverage_question#3`)
+   -- `DIALOGUE-POLICIES.md` §2 step 4 / §8's OWN ALREADY-DOCUMENTED ROW ("CoverageQuestion eligibility/
+   amount sub-question | 3 -- Capability (immediate, no attempt at generation)"). This is the PRIMARY,
+   routing-boundary site for that exact, already-named trigger -- it is a re-export of `authority.py`'s
+   `ELIGIBILITY_DEFLECTION` (`_ELIGIBILITY_DEFLECTION = ELIGIBILITY_DEFLECTION`), the same text the
+   OUTPUT-side `check_authority` branch speaks correctly (with a real escalation) when the SAME condition is
+   caught a second time downstream (`ADR-015`, "the row above, enforced a second time"). Only the secondary
+   enforcement is wired; the primary, documented one is not. Of everything this check found, this is the
+   most clear-cut: no interpretive judgment needed, the policy document already says this is route 3.
+2. `coverage_question.py`'s `_ABSTENTION` (`#4`, step 5's "I don't have that in your policy -- let me get
+   you to someone who does") -- `DIALOGUE-POLICIES.md` frames abstention as "success, not failure," but the
+   fixed script still promises a transfer. Whether abstention *should* escalate is a genuine open design
+   question this entry does not resolve.
+3. `rental_towing.py`'s own copy of the same `_ABSTENTION` text (`make_rental_towing_node.
+   rental_towing_entitlement#3`) -- same shape as (2).
+4. `file_auto_claim.py`'s tool-call-failure except branch (`file_auto_claim#5`, `VehicleNotOnPolicyError`/
+   `PolicyNotFoundErrorForNewClaim`/`InvalidNewClaimError`) -- an inline f-string ("let me get you to someone
+   who can help"), found via the snippet-fallback path, not the resolved-constant path.
+
+**Per instruction, these four are reported, not fixed.** `tests/unit/test_escalation_coverage.py` encodes
+them as an explicit, exact-match allowlist (`_KNOWN_RESIDUAL_SITE_IDS`) rather than either silently skipping
+them or leaving `make test` red over an out-of-scope finding: the test fails if the unescalated set differs
+from that list IN EITHER DIRECTION -- a listed site getting fixed without the allowlist being trimmed, or a
+fifth unlisted site appearing. `PROJECT_STATE.md`'s `OI58` row is updated with this framing; no new `D`
+number filed separately for the four, since they are the same class as `D140` itself, not a new one, and
+splitting them off would fragment one finding into five for no analytical gain -- flagged here as a
+judgment call, not asserted as the only correct one.
+
+**`DIALOGUE-POLICIES.md` §8 gap, reported per instruction, not fixed.** Re-checked directly rather than
+trusting the prior session's characterisation: the table has an EXACT row for site 3
+(`UpdateContactInfo confirmation failed twice`) and a row that is adjacent-but-not-exact for site 2 (the
+`ADR-015` row describes `check_authority`'s branch specifically, not the Bedrock-`ApplyGuardrail`-level
+`result_gr.blocked` branch that was actually broken) -- but has NO row at all naming an INPUT-guardrail-block
+trigger for site 1. Whoever resolves this should decide whether to add that row or state explicitly why
+site 1 doesn't need one; not decided here.
+
+**Live deployed check, scoped not run, per instruction.** Row 9 additionally requires a live deployed check
+showing a real transfer signal at each of the (now at least seven) sites before the row closes -- needs a
+deploy and Marco's `APPROVED: Phase 12` sign-off on the apply step specifically, not attempted in this
+entry. Scope: for each site, drive a real turn through the deployed Lex codehook that reaches it (an
+INPUT-guardrail block, an OUTPUT-guardrail block, and a two-failed-confirmation `UpdateContactInfo` turn at
+minimum) and confirm `sessionAttributes.escalate == "true"` and `escalation_reason` are actually present on
+the live Lex response -- the wire-level contract `api/lex_codehook.py`'s `_respond_from_graph_result`
+implements, not just the in-process `state["escalation"]` dict this entry's tests assert on.
+
+**Verification.** RED confirmed at all three sites before any fix (captured above). GREEN: 719/719 unit
+tests passing after all three fixes plus the new structural-check test file (was 715 before this entry).
+`ruff check`/`black --check`/`mypy --strict` clean on every file touched or added this entry (`agents/
+graph.py`, `agents/nodes/guardrails_nodes.py`, `agents/nodes/update_contact_info.py`, `redteam/
+response_text_sites.py`, `redteam/escalation_coverage.py`, and the four test files). `make lint`/`make
+typecheck` both still fail on this branch, but on pre-existing, untouched files from prior sessions
+(`scripts/verify_d87_scope.py`, `scripts/verify_stage_b1_live_invoke.py`, `scripts/measure_router_schema_
+latency.py`, four more black-only diffs) -- confirmed unrelated by targeted `ruff`/`black`/`mypy` runs
+against only this entry's files, and by `git diff --stat` showing none of those files touched this entry.
+Not fixed here -- out of `D140`'s scope, named so the pre-existing red isn't mistaken for something this
+entry caused.
+
+**Cost**: $0.00 -- code, tests, and static analysis only. No AWS calls, no Bedrock calls, no Terraform.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 row 9 -- D140/OI58. RED-first at all three named sites (graph.py's _guardrail_blocked_response, guardrails_nodes.py's OUTPUT-block branch, update_contact_info.py's confirm-ceiling branch), each captured failing against unmodified code before any fix. GREEN one site at a time: initiate_escalation() called directly at each (route 3, triggering_layer "capability"), NOT routed through repair.py's shared handle_no_match_or_barge_in (verified, not assumed, that this would collapse update_contact_info's tighter _CONFIRM_CEILING=1 into the shared ladder's 2 -- a real DIALOGUE-POLICIES.md §4 regression). Structural check built: redteam/escalation_coverage.py, self-updating via pkgutil auto-discovery over agents.nodes plus agents.graph named explicitly, layered on response_text_sites.py's existing D121-part-3 AST walker extended with has_escalation_key (structural) and is_escalation_shaped (keyword heuristic, verified both directions against the full known corpus, including a needed one-hop cross-module import resolution found necessary while building this, not planned). The check found FOUR MORE real unescalated sites while being built (coverage_question.py's own _ELIGIBILITY_DEFLECTION -- DIALOGUE-POLICIES.md §8's OWN already-documented row for this exact trigger, not wired at its primary site; coverage_question.py's and rental_towing.py's _ABSTENTION; file_auto_claim.py's tool-failure except branch) -- reported via an explicit exact-match allowlist test (tests/unit/test_escalation_coverage.py), not fixed, per instruction. DIALOGUE-POLICIES.md §8 gap re-checked directly: exact row for site 3, adjacent-but-not-exact for site 2, none for site 1 -- reported, not fixed. Live deployed check scoped (three turn types, sessionAttributes.escalate/escalation_reason on the real Lex response), not run -- needs deploy + Marco's approval.
+Open defects: D140/OI58 -- three named sites CLOSED (fixed, RED-then-GREEN, tested). Row 9 NOT yet closeable -- the four newly-found sites are the same open class, and the live deployed check is still outstanding. New information, not a new defect number: four additional D140-class sites named above, tracked via PROJECT_STATE.md's OI58 row and the allowlist test, not split into new D-numbers (judgment call, flagged as such). DIALOGUE-POLICIES.md §8 coverage gap still not filed as its own defect, per instruction (report only).
+C1 status: unchanged, not touched -- no routing/classification code changed.
+Blocked on: Marco's read of this report (per explicit "stop and report before committing" instruction) -- whether to fix the four newly-found sites now or separately, whether/how to amend DIALOGUE-POLICIES.md §8, and APPROVED: Phase 12 plus an explicit go for the deploy step the live-deployed check needs.
+Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
+```
+
+## 98. `D141`/`OI59` filed for §97's four new sites (same shape, different disposition, `D123`/`D127` pattern) -- row 9 stays narrow (three sites); `escalation_coverage.py` given a reasoned allowlist and wired into `make redteam`, closing a `D126`-shaped gap; §97's RED claim corrected with a captured transcript
+
+**Marco's decision on row 9's scope, recorded not re-argued.** Row 9's liveness bar is a verified fix with
+no accept-risk escape, and it gates row 15's live-call demo. Folding §97's four new sites into row 9 would
+mean the row cannot close until four open design questions are settled -- specifically, whether
+`_ABSTENTION` ("I can't determine that from here") is a deflection (correct as written) or a promise of
+transfer (`D140`'s defect) is not yet decided for either `coverage_question.py` site or `rental_towing.py`'s
+sibling. That blocks row 15 behind unscoped work. Row 9 stays exactly the three originally-named sites,
+already CLOSED per §97; the four new sites are filed separately.
+
+**`D141`/`OI59` filed, NOT triaged.** Same defect *shape* as `D140` (an escalation-shaped `response_text`
+with no `EscalationRecord`), different disposition -- exactly the pattern `D123`/`D127` set (§Phase-12-
+block-2, `docs/RESULTS.md` "`D127`/`OI50` filed, NOT fixed"): cross-referenced to the originating defect,
+not merged into it, because the two questions are genuinely different ("does this branch have the bug" vs.
+"should this branch escalate at all"). The four sites, by `site_id` and location:
+
+| Site | Location | Open question |
+|---|---|---|
+| `coverage_question#3` | `agents/nodes/coverage_question.py:69` (`_ELIGIBILITY_DEFLECTION`) | Primary site for `DIALOGUE-POLICIES.md` §8's already-documented CoverageQuestion trigger; only the secondary (output-boundary, `check_authority`) enforcement is wired. Should the primary site also escalate? |
+| `coverage_question#4` | `agents/nodes/coverage_question.py:73` (`_ABSTENTION`) | Deflection or promise? |
+| `rental_towing_entitlement#3` | `agents/nodes/rental_towing.py:59` (`_ABSTENTION`) | Same question, sibling site -- not assumed to resolve identically. |
+| `file_auto_claim#5` | `agents/nodes/file_auto_claim.py:132` (except-branch f-string) | Same except-branch-interpolation family `D123`/`D127` already covered for a readback question, asked here as an escalation question. |
+
+None of the four decided in this entry, per instruction.
+
+**`escalation_coverage.py` given a reasoned allowlist -- "untriaged" made distinct from "unreported".**
+The check's original form (§97) either found zero sites (green) or failed on every unescalated site,
+allowlisted or not -- which meant it could never be wired into `make redteam` without either blocking the
+build indefinitely on four undecided design questions, or someone quietly patching the check to ignore
+them, which is the silent-green failure mode this whole mechanism exists to prevent. Fixed by giving the
+check itself (not just the test file) an explicit, reasoned allowlist:
+
+- `KNOWN_PENDING_TRIAGE: dict[str, str]` in `escalation_coverage.py` -- each of the four `site_id`s mapped
+  to a reason string naming `D141`/`OI59`, so the sites are visible in the code that runs, not only in a
+  ledger someone has to go read separately.
+- `EscalationCoverageReport.new_unescalated_sites` -- found this run AND not allowlisted. This is what
+  actually fails `.passed` and the gate. A brand-new, unlisted site here is `D140`'s defect recurring a
+  further time, caught automatically.
+- `.pending_triage_sites` -- found this run AND allowlisted. Printed every run under "PENDING TRIAGE" with
+  its reason, so the check never reports clean by omission.
+- `.stale_allowlist_entries` -- allowlisted but NOT found this run (fixed, and the entry wasn't trimmed, or
+  the AST ordinal shifted). Reported, not a gate failure -- an improvement is never treated as a regression,
+  matching `evals/regression.py`'s own stated philosophy for the same asymmetry.
+
+`tests/unit/test_escalation_coverage.py` now imports `KNOWN_PENDING_TRIAGE` from the check module itself
+(single source of truth, not a duplicated frozenset) and gained
+`test_the_check_passes_because_every_current_finding_is_allowlisted_with_a_reason`, asserting `.passed is
+True`, `new_unescalated_sites == ()`, and `stale_allowlist_entries == ()` -- the check is green *because*
+everything in it is named and reasoned, not because there is nothing to see.
+
+**Wired into `make redteam` -- confirmed unwired before this entry, a `D126`-shaped gap.** `D126`/`OI49`
+(Phase 12 Block 2, `RESULTS.md`) was exactly this: a check "documented as canonical" with no verb reaching
+it. Checked directly rather than assumed: `escalation_coverage.py` existed as an importable module and a
+`python -m` entry point, but neither `redteam/run.py::main()` nor the `Makefile`'s `redteam:` target called
+it -- `make redteam` would have run to completion without ever executing it. Fixed by importing
+`check_escalation_coverage`/`render` into `redteam/run.py` and calling them after the existing readback-
+probe block, folding `not coverage_report.passed` into `main()`'s exit code exactly like
+`report.gate_failures`/`not readback_report.passed` already are, and writing
+`<out-stem>-escalation-coverage.json` alongside the existing report artifacts (`coverage_report.as_dict()`,
+mirroring `ReadbackProbeReport.as_dict()`'s shape). No `Makefile` change needed -- the `redteam:` target
+already invokes `redteam.run`'s `main()` unconditionally once `GUARDRAIL_ID`/`GUARDRAIL_VERSION` are
+supplied, same precondition `D126` established.
+
+**`RESULTS.md` §97's RED claim corrected, not silently upgraded.** §97 originally asserted the three RED
+tests "failed as expected... confirmed by running them against unmodified code before any fix" with no
+captured transcript -- true in substance (independently reproduced below) but unverifiable as written, and
+Marco's instruction was explicit that an assertion of failure is not the same thing as a kept record of it.
+§97 now carries a correction paragraph in place of the original claim: the gap is named as a gap, and the
+actual transcript, reproduced live this entry by reverting the three fixed source files to their committed
+pre-fix content and re-running the three tests, replaces the narrative. All three failed with the expected
+`assert None is not None` / `.get("escalation")` shape; the green-control sibling test passed as designed;
+source files restored and the full suite re-confirmed at 719/719 before anything else changed. See §97
+itself for the transcript.
+
+**Verification.** Full suite: **720/720 passing** (was 719 at the end of §97; net +1 from the new
+allowlist-passes-because-reasoned test). `ruff check`/`black --check`/`mypy --strict` clean on every file
+touched this entry (`redteam/escalation_coverage.py`, `redteam/run.py`, `tests/unit/
+test_escalation_coverage.py`). `make eval --check-regression`: all Tier A gates pass, no regression against
+the committed baseline -- re-run after these changes as well as before, since none of this entry touches
+routing/classification/retrieval code, only redteam tooling. `make lint`/`make typecheck` at full-repo scope
+still fail on the same pre-existing, unrelated files named in §97 -- not re-verified a second time in this
+entry since nothing here changed which files those are.
+
+**Cost**: $0.00 -- code, tests, and static analysis only. No AWS calls, no Bedrock calls, no Terraform.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 row 9 follow-up -- D141/OI59 + escalation_coverage.py hardening. Row 9 decided narrow (three §97 sites only, already CLOSED) -- folding the four new sites in would block row 15 behind four undecided design questions. D141/OI59 filed for those four sites (coverage_question.py x2, rental_towing.py, file_auto_claim.py), same shape as D140 different disposition, D123/D127 pattern, none triaged. escalation_coverage.py given KNOWN_PENDING_TRIAGE (site_id -> reason citing D141/OI59), split into new_unescalated_sites (gates), pending_triage_sites (visible, non-gating), stale_allowlist_entries (visible, non-gating) -- untriaged made distinct from unreported. Confirmed unwired before this entry (D126-shaped gap) and wired into redteam/run.py's main()/make redteam, folded into its exit code, own JSON artifact written. RESULTS.md §97's RED claim corrected in place: original was an unverified assertion, replaced with a captured transcript reproduced live this entry (revert three fixed files to pre-fix committed content, re-run the three tests, confirm failure, restore).
+Open defects: D140/OI58 row 9 -- CLOSED at the three-site scope (per §97), stays closed under Marco's narrow-reading decision; live-deployed check still the only remaining blocker, still out of scope (needs deploy + approval). D141/OI59 -- NEW, OPEN, filed not triaged: four sites, each needs a promise-vs-deflection call. DIALOGUE-POLICIES.md §8 gap (§97) still open, report only, unchanged this entry.
+C1 status: unchanged, not touched -- no routing/classification code changed.
+Blocked on: Marco's triage call on each of D141/OI59's four sites (not requested to happen now); whether/how to amend DIALOGUE-POLICIES.md §8; APPROVED: Phase 12 plus an explicit go for the deploy step row 9's live-deployed check needs; git commit (pending, per explicit "nothing committed until I see all of this" instruction).
+Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
+```
+
+## 99. `OI60` filed -- a live cross-project git-index collision during commit (a)'s staging, caught by `scripts/git-hooks/pre-commit`'s scope check before anything landed; standing pattern adopted -- every commit names its paths on the `commit` call itself, not only on `add`
+
+**What happened, in sequence.** Commit (a)'s six intended files were staged via explicit `git add` with full
+paths; `git diff --cached --stat` confirmed exactly those six, nothing else. Before the follow-up `git
+commit` ran, the concurrent Azure-Banking terminal (`T2`) independently staged its own file
+(`Azure-Banking-Voice-Agentic-AI/docs/phase0/wizard/01-provision.sh`) into the same shared index -- this
+repo has one working tree and one index for both projects, per `CLAUDE.md`'s monorepo layout. The plain
+`git commit -m "..."` call (no pathspec) then attempted to commit **both** projects' staged work in a single
+commit, because `git commit` with no pathspec commits whatever is currently staged at call time, not what a
+prior `git add` call staged -- the two are separate commands separated by a window, and anything staged
+inside that window rides along uninvited.
+
+**The pre-commit hook caught it; nothing landed.** `scripts/git-hooks/pre-commit` -- the shared
+multi-project dispatcher -- ran `check-project-root-scope` once per project and both copies failed: the
+FNOL-scoped check flagged `01-provision.sh` as staged-but-outside-`PROJECT_ROOT`; the Azure-Banking-scoped
+check flagged all six of my files the same way. `check-duplicate-identifiers` ran and passed (no duplicate
+`OI`/`D` numbers, no duplicate `RESULTS.md` section numbers -- unrelated to this failure, reported for
+completeness). The commit aborted; `git status`/`git diff --cached --stat` immediately after confirmed the
+index held exactly seven staged paths (my six, plus `01-provision.sh`), nothing committed.
+
+**Resolved without touching `T2`'s file.** Explicit instruction: never unstage the other side's work blind
+-- `T2` may have been mid-commit, and a `git reset` on their path would pull the rug out with no signal to
+them; the index is shared, so neither side unstages the other's. No action was taken on `01-provision.sh`.
+It resolved itself: `T2` completed its own commit in the interim. Confirmed, not assumed --
+`git log --oneline -8` showed `HEAD` six commits ahead of where this session's own account had it
+(`c8fa77f`, was `adec894`), and `git status --porcelain=v1 -- Azure-Banking-Voice-Agentic-AI/docs/phase0/
+wizard/01-provision.sh` returned no diff against `HEAD`, meaning the file was now committed on `T2`'s side,
+not merely unstaged. The shared index, at that point, held only this session's own six files, exactly as
+originally staged.
+
+**Filed as `OI60`, cross-referenced to `OI42` (`PROJECT_STATE.md`), not merged into it.** `OI42` is the
+`git stash`-is-repo-wide finding -- the stash stack, like the index, is shared across every project in this
+working tree, and a bare `git stash pop` can apply or drop a sibling project's entry. `OI60` is the same
+root cause (git state shared across projects in one working tree) surfacing through a different command
+(`add`/`commit` rather than `stash push`/`pop`), and is the first instance of this class caught in the act
+rather than reasoned about from first principles -- `OI42` was written from the stash stack's actual
+sibling-project contents observed once; `OI60` is a commit that would genuinely have mixed two projects'
+work had the hook not existed. **Worth recording as plainly as the near-miss itself: the control that
+caught this was the pre-commit hook's scope check, not any discipline exercised beforehand** -- the `add`
+call was correctly scoped and the collision still happened, because scoping `add` was never the actual
+protection.
+
+**Standing pattern adopted, effective this session forward.** Every `git commit` in this repo names its
+paths explicitly on the **commit call itself** -- `git commit -- <path1> <path2> ... -m "..."` -- never
+relying on a scoped `git add` alone. A pathspec on `commit` limits what that specific commit contains
+regardless of anything else sitting in the shared index at call time; a pathspec on `add` only controls what
+that one `add` call adds, and says nothing about what a concurrent process adds afterward. Recorded as
+`OI60` in `PROJECT_STATE.md`'s open-items table (same "convention only, no tooling guard exists" bar as
+`OI42`) rather than folded into `D140`/`D141`'s process, because it belongs to commit *mechanics* across the
+whole repo, not to the escalation-coverage work specifically.
+
+**Cost**: $0.00 -- no AWS calls, no code changes; git operations and two documentation edits only.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 row 9 follow-up -- commit-safety incident during commit (a)'s staging. A concurrent terminal (T2, Azure-Banking) staged its own file into this repo's shared git index between my git add and git commit; a pathspec-less commit would have combined both projects' staged work into one commit. scripts/git-hooks/pre-commit's check-project-root-scope caught and aborted it before anything landed. Resolved without touching T2's staged file (never unstage the other side blind) -- resolved itself when T2 completed its own commit in the interim, confirmed via git log/git status, not assumed. Filed as OI60, cross-referenced to OI42 (git-stash-is-repo-wide), same root cause (shared git state across projects in one working tree), different command, first instance caught live rather than reasoned about. Standing pattern adopted: every commit in this repo names its paths on the commit call itself (git commit -- <paths> -m "..."), not only on add, effective immediately.
+Open defects: unchanged this entry -- D140/OI58 stays CLOSED at the three-site scope; D141/OI59 stays OPEN, filed not triaged; OI60 newly filed, OPEN, convention-only, no tooling guard, same bucket as OI42.
+C1 status: unchanged, not touched -- no application code changed this entry.
+Blocked on: nothing -- commit (a) retried next with the pathspec form per the newly adopted pattern, then (b) and (c) the same way.
+Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
+```
+
+## 100. `D140`/`OI58` row 9 -- live deployed check scoped, not run: three-layer verification model, the deploy + `C1` re-verification it requires, and what (little) is read-only
+
+**Scoping only, per instruction -- nothing in this entry runs anything, deploys anything, or spends anything.**
+
+### Three layers, named explicitly so "the live check passed" can never later mean more than it does
+
+Row 9's own liveness text (`PROJECT_STATE.md` row 9) names the bar precisely: "real transfer signal --
+`sessionAttributes.escalate`/`escalation_reason` on the real Lex response -- at each of the three sites."
+That is one specific layer of a three-layer stack, and only one of the three is what row 9 is actually
+asking for:
+
+- **Layer 0 -- local graph state. DONE, 720/720, `RESULTS.md` §97/§98.** `tests/unit/test_graph_integration.py`,
+  `test_guardrails_nodes.py`, `test_update_contact_info.py` call `graph.invoke()` in-process and assert
+  `result.get("escalation")` is a real `EscalationRecord`. No Lex event is ever constructed, `_close()` and
+  `_respond_from_graph_result()` (`api/lex_codehook.py`) are never called, no Lambda, no AWS. This proves the
+  three fixed nodes produce the right *state*; it does not touch the wire format at all.
+- **Layer 1 -- the deployed Lambda's real Lex response. NOT DONE. This is row 9's actual bar.** The mapping
+  from `AgentState["escalation"]` to the wire signal is `_close(escalated=True, ...)` setting
+  `session_attributes["escalate"] = "true"` and `session_attributes["escalation_reason"]`
+  (`api/lex_codehook.py:326-328`) inside `sessionState.sessionAttributes` on the Lex response. That mapping
+  is exercised **today only by `lex_codehook.py`'s own unit tests, against a hand-built mock Lex `event`
+  dict** -- never a real Lex bot alias, real IAM role, real cold start, or the actual packaged Lambda zip.
+  Layer 0 proves the graph is right; Layer 1 proves the fix survives everything between the graph and a real
+  wire response. These are genuinely different claims and this entry keeps them separate on purpose.
+- **Layer 2 -- the actual Connect-level transfer. NOT DONE, NOT row 9's stated bar, named here so it is not
+  silently assumed once Layer 1 passes.** `infra/terraform/stacks/main/flows/fnol-inbound.json.tftpl` already
+  contains a `Compare` action on `$.Attributes.escalate` (`:92-94`) branching to a `TransferContactToQueue`
+  action (`:135`) -- confirmed present by reading the flow file directly, unrelated to and unaffected by this
+  session's `src/` change, already Terraform-applied. Proving that branch actually fires and a real caller
+  actually reaches a queue requires a real phone call through the DID and a Contact Trace Record / queue-metric
+  read -- that is row 15's territory (the live-call walkthrough), not row 9's. Naming it here purely so the
+  boundary is explicit: row 9 closing on Layer 1 is not the same claim as "a real call gets transferred."
+
+### What the Layer-1 harness would invoke, per site -- and why it is a new script, not a reuse
+
+`C1`'s existing harness (`scripts/measure_composed_pipeline_deployed.py`) drives **injury-language** turns
+against the live bot and measures escalation *recall* on the safety-trigger/classifier surface. None of the
+three `D140` sites are on that surface -- they are an INPUT-guardrail block, an OUTPUT-guardrail block, and a
+retry-ceiling exhaustion, all orthogonal to whether the caller said something injury-shaped. Reusing
+`measure_composed_pipeline_deployed.py` as-is would not touch any of the three sites. A new script is required
+-- named here as not existing yet, rather than assumed reusable, per this project's own standing discipline
+against overclaiming coverage from an artifact that was built for a different question (`D67`/`D69`'s lesson).
+
+Per site, real `lexv2-runtime.RecognizeText` calls, fresh `sessionId` each:
+
+1. **`agents/graph.py:96-102`, INPUT-guardrail block.** A caller turn already known to trip the live Bedrock
+   Guardrail's INPUT policy -- reuse a known-blocking turn from `D89`'s own probe corpus or
+   `redteam/attacks.py`'s denied-topic set, rather than inventing a new one and re-deriving whether it blocks.
+2. **`agents/nodes/guardrails_nodes.py:106-107`, OUTPUT-guardrail block.** Harder to trigger deterministically
+   -- needs a turn whose *generated* response gets blocked by the OUTPUT guardrail, the same
+   `[BLOCKED AT OUTPUT]` outcome `redteam/run.py`'s `RealSystemDefender._generation_path` already produces
+   against known payloads in `redteam/attacks.py`. Likely reuses one of those payloads rather than a fresh one.
+3. **`agents/nodes/update_contact_info.py:59-63`, `_CONFIRM_CEILING` exhausted.** A two-turn live conversation,
+   one `sessionId`: a mismatched/no-match confirmation, then a second, to exhaust `_CONFIRM_CEILING = 1`.
+
+**What it reads, to prove the claim and not a proxy for it:** each real `RecognizeText` response's
+`sessionState.sessionAttributes`, asserting `escalate == "true"` and `escalation_reason` present -- read
+directly off the wire response, no CloudWatch or DynamoDB correlation needed, exactly the design intent `D81`
+item 4 stated for this field (`api/lex_codehook.py:327`, "readable directly from the wire response"). A pass
+here is Layer 1's whole claim; it is not evidence for Layer 2.
+
+### Deploy requirement and `C1` re-verification -- not specific to these three files, a blanket project rule
+
+The three fixed files (`agents/graph.py`, `agents/nodes/guardrails_nodes.py`,
+`agents/nodes/update_contact_info.py`) are core application code inside `fnol-codehook`'s Lambda package --
+the same deployment unit `RESULTS.md` §24 (Stage C's `log_redaction.py` change) already moved. A `stacks/main`
+apply is required, changing `aws_lambda_function.codehook`'s `source_code_hash`/`CodeSha256`, plausibly with
+the same cosmetic `aws_s3_object.codehook_deps_layer` etag shift §24 saw (no new resource expected -- no new
+third-party dependency was added by this fix). **No `terraform plan` was run this entry, per instruction to
+scope only** -- real numbers need a real plan at apply time, not reused from §24's stale hashes (different
+code, different diff).
+
+**`C1` re-verification is mandatory the instant that apply lands**, per this project's own already-established
+rule (§24; reconfirmed at `RESULTS.md` "any `stacks/main` code change requires re-verifying `C1` against the
+new build") -- a consequence of `CodeSha256` changing at all, not something specific to these three sites'
+content. Reuses the existing harness and protocol unchanged: `scripts/measure_composed_pipeline_deployed.py`,
+26 `should_escalate=True` items, k=3 real calls each, +4 contingency (k=7) on any non-unanimous item, budgeted
+for up to 6 of 26. Last real run of this exact script cost $0.097668 (§24, 2026-08-14) -- same order of
+magnitude expected here, **not re-priced this entry**; this project's own standing rule is to re-verify
+pricing at run time rather than trust a remembered figure, and that applies to Lex/Bedrock rates same as AWS
+SKU prices.
+
+**The new Layer-1 three-site check is a separate cost line from `C1`**, different trigger surface entirely.
+Estimated at 3-5 real `RecognizeText`/turn calls total (one per site, two for site 3) at the same per-call cost
+order `C1`'s own run showed ($0.097668 / 95 calls ≈ $0.00103/call blended Lex+Bedrock) -- on the order of a few
+cents, stated as an estimate, not measured, and not yet built as a script to measure with.
+
+### Read-only determination -- almost none of the substantive claim can be, and the reason is structural
+
+**Nothing about the substantive claim can be established read-only against the currently-deployed build.** The
+live Lambda today is the pre-fix build -- that is `D140`'s own defect. A real call against it today would
+either not exercise these branches informatively, or would correctly demonstrate the bug is still live: a
+legitimate pre-deploy baseline/control (a real, remote RED state, the same evidentiary shape as this session's
+local RED reproduction for §97), but not progress toward *closing* row 9, which requires the fixed code to be
+the thing answering.
+
+**What can be established read-only, today, with zero deploy and zero spend:**
+1. The contact flow's own consumption mechanism -- confirmed above by reading `fnol-inbound.json.tftpl`
+   directly (`Compare $.Attributes.escalate` → `TransferContactToQueue`), already applied, untouched by this
+   change.
+2. The current pre-apply build's `CodeSha256` via a read-only `aws lambda get-function` call, to record the
+   "before" value the eventual apply transitions away from -- prep for making the `PENDING RE-VERIFICATION`
+   status transition legible (§24's own sequence step 1 pattern), not evidence toward the claim itself.
+
+Neither of these two proves any part of "the fixed sites set the wire signal live." That fact is unavoidable,
+not a gap in this scoping: the claim is inherently about code that is not yet deployed.
+
+### Proposed sequence, mirroring §24's own step-by-step + status-transition pattern
+
+1. Build the new Layer-1 three-site harness (does not exist yet).
+2. Real `terraform plan` against `stacks/main` with these three files' actual diff; cost table shown for
+   approval before any apply, per `CLAUDE.md`'s Cost Gate.
+3. Apply (`APPROVED: Phase 12` + explicit go) -- `C1`'s status flips to `PENDING RE-VERIFICATION (build
+   <new-hash>)` in `PROJECT_STATE.md` and every report header from that instant, not left reading the old
+   build for even one cycle.
+4. `make verify-lambda-execution` (read-only, CloudWatch Logs only, $0) -- confirm the new build executes at
+   all before trusting it for anything further.
+5. `C1` re-verification, full protocol, real spend logged to `COSTS.md` as it happens (~$0.10-0.13, per §24).
+6. The new Layer-1 three-site check, real spend logged (~$0.01-0.05, estimate).
+7. Row 9 closes only if `C1` = 1.000 (26/26) **and** all three sites' wire signal is confirmed. A result short
+   of either is a reported breach at that step, not smoothed into a partial close.
+
+**Row 9 remains OPEN. Not marked closed by this entry** -- this is scoping only, nothing above has run. Row 9
+gates row 15 exactly as before; `PROJECT_STATE.md` row 9 updated to cite this entry and restate the "NOT
+closed" status explicitly rather than leaving it implied.
+
+**Cost**: $0.00 -- reading source files and Terraform config only. No AWS calls, no Bedrock calls, no
+Terraform command run.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 row 9 -- live deployed check scoped, not run, per explicit instruction. Three-layer model named: Layer 0 (local graph state, DONE, 720/720) vs Layer 1 (deployed Lambda's real Lex response sessionAttributes, row 9's actual bar, NOT done) vs Layer 2 (real Connect-level transfer/CTR, NOT row 9's bar, row 15's territory, named so it isn't silently assumed once Layer 1 passes). Layer-1 harness does not exist yet (measure_composed_pipeline_deployed.py drives a different trigger surface, injury-language not guardrail-block/ceiling-exhaustion) -- would need building: 3 real RecognizeText/turn calls across the three sites, reading sessionState.sessionAttributes.escalate/escalation_reason off the wire. Deploy required (stacks/main, fnol-codehook CodeSha256 change, same deployment unit as §24) plus mandatory C1 re-verification (blanket project rule on any CodeSha256 change, not specific to these files) -- reuses measure_composed_pipeline_deployed.py's existing protocol, ~$0.10-0.13 per §24's last real run, not re-priced this entry. New Layer-1 check estimated a few cents, not measured. Read-only determination: nothing about the substantive claim is establishable read-only against the current (pre-fix) build -- structural, not a gap in the scoping; only the contact flow's already-applied consumption mechanism and the pre-apply build-identity baseline are read-only-checkable today.
+Open defects: unchanged this entry -- D140/OI58 row 9 stays OPEN (three sites fixed/verified locally, live deployed check outstanding); D141/OI59 stays OPEN, untriaged; OI60 stays OPEN, convention-only.
+C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3... -- UNCHANGED, no apply this entry, no re-verification run. Will flip to PENDING RE-VERIFICATION the instant a stacks/main apply lands with these three files.
+Blocked on: building the Layer-1 harness; a real terraform plan against stacks/main with these three files' actual diff; APPROVED: Phase 12 plus explicit go for the apply; the C1 re-verification spend (~$0.10-0.13) and the new check's spend (~$0.01-0.05), both real AWS spend requiring explicit approval before they happen.
+Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
+```

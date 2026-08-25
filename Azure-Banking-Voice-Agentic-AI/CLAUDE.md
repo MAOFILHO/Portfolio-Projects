@@ -1,5 +1,28 @@
 # CLAUDE.md — Azure-Banking-Voice-Agentic-AI
 
+**Canonical project path**: as of 2026-08-20, active work happens in the git worktree at
+`/Users/marco/K21/Real-world-worktrees/azure-banking/Azure-Banking-Voice-Agentic-AI`, branch
+`azure-banking-work`, inside the `Portfolio-Projects` monorepo
+(`git@github.com:MAOFILHO/Portfolio-Projects.git`). The original checkout at
+`/Users/marco/K21/Real-world/Azure-Banking-Voice-Agentic-AI` (branch `azure-banking-voice-agentic-ai`)
+still exists and shares this repo's history, but is not where sessions should work — the worktree
+split (`docs/handoffs/2026-08-20-phase0-stage10-done-stage11-pending-review.md`, addendum) moved work
+here mid-Phase-0. Recorded here because a session started from an unrelated directory has no other way
+to find it — added 2026-08-20 after exactly that happened, corrected same day after the worktree
+switch.
+
+**A session working correctly in the path above never writes into the old checkout either**, even to
+fix something discovered here (e.g., syncing this file's own content there) — that write is outside
+this worktree, on a different branch, and needs Marco's explicit approval by that exact absolute path
+before it happens, not an assumption that "same project" implies in scope. Ask; don't reach over.
+
+**A session that finds itself anywhere other than the path above stops and switches — it does not
+work there.** Don't trust this file's own text to have kept up (it's gone stale once already): run
+`git branch --show-current` and `git worktree list` at session start. If the current branch isn't
+`azure-banking-work`, or the working directory isn't the worktree path above, stop before making any
+change — including a change to this file — and tell Marco where the session actually landed rather
+than silently continuing or silently relocating.
+
 ### STOP CONDITIONS — absolute, no exceptions
 
 - No phase begins without written exit criteria from the prior phase and Marco's explicit approval.
@@ -7,6 +30,12 @@
 - **Never auto-accept a diff that provisions a billable resource, or that touches `dispatch/gate.py`
   (B1) or anything on the DTMF/PIN path (B2).** These always get a human look before they land, no
   matter how mechanical the change appears.
+- **The phone number is never released, by any script, at any phase, for any reason.** No teardown
+  path may include a number-release/delete call. Added 2026-08-20 (R-09, `docs/PLAN.md`): ACS's
+  Canadian geographic-number inventory has been observed to lose entire localities within ~20 minutes
+  — unlike every other resource in this project, an equivalent replacement may not be purchasable if
+  this number is ever lost. Qualitatively different from the general "no billable resource without
+  approval" rule above: this isn't about cost, it's about irreplaceability.
 - `PROJECT_STATE.md` is updated before any session ends, and never exceeds its size ceiling (below).
 - Restate these conditions verbatim at the top of every session summary and after every `/compact`.
 
@@ -35,7 +64,7 @@ a judgment call.
 |---|---|---|---|
 | **B1** | **Auth Gate Integrity** — zero authenticated-only tool invocations reach the core-banking client while `session.auth_state != Authenticated` | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the frozen allowlist | **0 violations** | startup guard + CI static check + Bicep |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist, keyed on **(deployment name, model version) together, not name alone** (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard (reads the live deployment's actual model version at boot, not config alone) + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
 | **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
 
@@ -45,6 +74,18 @@ threshold.** B4 is the only brake that exists. Any p95 latency figure quoted any
 
 Full detail (fail-closed test cases, the B3 startup guard, B5's staged measurement) lives in
 `docs/PLAN.md` — this table is the quick-reference, not the definition.
+
+**Model pin review**: B3's active pin (`docs/PLAN.md` decision 14) is checked against the live Models
+API at every phase gate — its retirement date is a scheduled decision to revisit on a known clock, not
+something that gets discovered as a surprise partway through a later phase. If the active pin's
+retirement is under 2 months out at any gate and no better-runway GA option exists yet, that's a
+stop-and-ask before the phase proceeds, same as any other named constraint here.
+
+Phase 0 also found (2026-08-20) that the startup guard's original design checked deployment *name*
+only, not name+version — promoted to a hard Phase 2 requirement after R-01's own evidence showed one
+name can span multiple versions with different retirement dates and rate limits, which a name-only
+allowlist would not catch on a silent redeploy. See `docs/PLAN.md`'s B3 code block and
+`docs/phase0/findings.md` "B3 end-to-end check".
 
 ---
 
@@ -59,6 +100,17 @@ biggest token cost. Check the file's size before every edit; if an addition woul
 ceiling, move the oldest closed material out to `docs/phaseN/` first, in the same commit.
 
 ---
+
+## Resume discipline
+
+**On resuming any session, verify live Azure state before acting on `PROJECT_STATE.md`.** At minimum:
+resource-provider registration state, resource-group existence, and any resources the doc claims
+exist. `PROJECT_STATE.md` is a snapshot and goes stale between sessions (a registration can finish, a
+manual action can happen outside any session) — the API is truth, the doc is not. Report any
+disagreement between the two rather than silently trusting either one and proceeding. Added 2026-08-20
+after a resume found `Microsoft.Communication` already `Registered` while the doc still said
+`Registering`, and separately found two real fixes sitting uncommitted in the working tree from a
+session that ended without closing them out.
 
 ## Hard exclusions
 
@@ -85,6 +137,12 @@ Reintroducing any of them is a regression, not a fresh judgment call.
 - **`/clear` at every phase boundary**, and only after `/handoff` has written a handoff doc under
   `docs/handoffs/` and the phase's work is committed. Never `/clear` with uncommitted work or an
   unwritten handoff outstanding.
+- **`/handoff` itself always writes to the OS temp directory, never into the repo** — that's the
+  skill's own fixed behavior (`~/.claude/skills/handoff/SKILL.md`: "Save to the temporary directory of
+  the user's OS"), not a mistake to fix per-invocation. macOS `/tmp` is periodically cleaned and gone on
+  reboot, so **every `/handoff` output must be copied to `docs/handoffs/` and committed before the
+  session ends** — this is the compensating step that actually makes "unwritten handoff outstanding"
+  above mean what it says. Added 2026-08-20 after a handoff nearly got lost this way.
 - **Never auto-accept a diff that provisions a billable resource, or that touches `dispatch/gate.py`
   (B1) or the DTMF/PIN path (B2).** Repeated from the stop conditions above deliberately — this is
   the one rule most likely to get skipped under time pressure.

@@ -104,7 +104,33 @@ def make_guardrails_output_node(*, client: GuardrailClient | None = None) -> Nod
             "OUTPUT", result_gr.usage, blocked=result_gr.blocked, masked=result_gr.masked
         )
         if result_gr.blocked:
-            return {"guardrail_output_blocked": True, "response_text": _OUTPUT_BLOCKED_FALLBACK}
+            # `D140`/`OI58`: this branch used to speak `_OUTPUT_BLOCKED_FALLBACK`'s transfer promise with
+            # no `EscalationRecord` at all -- the exact mistake the `violation` branch just above names
+            # `D43` by number to avoid. Same route-3/"capability" shape as that branch and as
+            # `repair.py`'s `handle_no_match_or_barge_in`, applied here instead of routed through either
+            # of them (this node already has everything `initiate_escalation` needs).
+            block_escalation_result = initiate_escalation(
+                contact_id=state.get("contact_id", "unknown"),
+                triggering_layer="capability",
+                context={
+                    "filled_slots": state.get("filled_slots", {}),
+                    "suppressed_response": candidate,
+                    "reason": "output_guardrail_blocked",
+                    "intervention_reasons": result_gr.intervention_reasons,
+                },
+            )
+            block_escalation: EscalationRecord = {
+                "contact_id": block_escalation_result.contact_id,
+                "triggering_layer": block_escalation_result.triggering_layer,
+                "route": 3,
+                "reason": "output_guardrail_blocked",
+                "context": block_escalation_result.context,
+            }
+            return {
+                "guardrail_output_blocked": True,
+                "response_text": _OUTPUT_BLOCKED_FALLBACK,
+                "escalation": block_escalation,
+            }
         if result_gr.masked:
             # A mask is not a refusal. Until Stage 8 this branch did not exist and `blocked` was true
             # for any intervention, so a masked line became `_OUTPUT_BLOCKED_FALLBACK` -- the agent

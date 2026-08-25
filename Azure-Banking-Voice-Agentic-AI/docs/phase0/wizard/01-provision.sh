@@ -207,8 +207,11 @@ ACS_NAME="acs-azure-banking-voice"
 CAE_NAME="cae-azure-banking-voice-p0"
 CONTAINERAPP_NAME="ca-azbank-echo-p0"
 MODEL_NAME="gpt-realtime-mini"
-MODEL_VERSION="2025-12-15"          # the GA version this project pins to (decision 14)
-MODEL_VERSION_OLD="2025-10-06"      # the other listed version, checked for R-01 comparison only
+MODEL_VERSION="2025-10-06"          # the GA version this project pins to (decision 14, revised
+                                     # 2026-08-20 from 2025-12-15/isDefaultVersion after the live
+                                     # Models API pull showed 2025-10-06 has ~3.7 more months of
+                                     # runway at identical audio-token pricing — see PLAN.md decision 14
+MODEL_VERSION_OLD="2025-12-15"      # the isDefaultVersion — retires 2026-12-15, ~4mo out; not pinned
 DEPLOYMENT_NAME="gpt-realtime-mini" # deployment name == model name, matching B3's allowlist string
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # docs/phase0/wizard -> project root
@@ -228,7 +231,10 @@ on_error() {
   printf '\n%s%s  ✗ 01-provision.sh failed at stage %s/%s (exit %s)%s\n\n' \
     "$BOLD" "$RED" "$_STAGE_INDEX" "$TOTAL_STAGES" "$exit_code" "$RESET"
   say "Resources that exist in $RESOURCE_GROUP right now:"
-  az resource list --resource-group "$RESOURCE_GROUP" --output table 2>/dev/null \
+  # --location "" overrides any stale `az config`/`~/.azure/config` defaults.location — without it,
+  # a machine with a non-canadacentral/global default silently returns an empty table here even
+  # while the Container App is billing. Found 2026-08-21; see docs/phase0/findings.md.
+  az resource list --resource-group "$RESOURCE_GROUP" --location "" --output table 2>/dev/null \
     || note "(resource group itself doesn't exist yet, or the query failed — nothing billable then)"
   printf '\n'
   note "Only two things here bill per-hour: a Container App (min-replicas=1) and its environment."
@@ -301,14 +307,21 @@ write_env "RESOURCE_GROUP" "$RESOURCE_GROUP"
 write_env "LOCATION" "$LOCATION"
 write_env "CONTAINERAPP_NAME" "$CONTAINERAPP_NAME"
 write_env "CAE_NAME" "$CAE_NAME"
-write_env "PROVISION_TIME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# PROVISION_TIME is deliberately NOT written here, and not by this script at all anymore.
+# 04-teardown-and-r08.sh uses it to anchor R-04's 72h idle-billing observation window; that window
+# is now anchored in 02-test-calls.sh, gated on a confirmed answered call rather than on this
+# script's healthz check -- see Stage 12's note and docs/phase0/findings.md,
+# "healthz-as-window-gate".
 
 # ── Stage 2: R-01 — Models API deprecationDate check (free, read-only) ─────
 stage "R-01 — verify gpt-realtime-mini retirement dates via the Models API"
-say "docs/PLAN.md records this model listed TWICE with conflicting retirement dates:"
-say "  ${MODEL_VERSION_OLD}: 2027-04-06 vs 2026-09-21"
-say "  ${MODEL_VERSION}: 2027-06-15 vs 2026-12-15"
-say "Querying the real per-region model catalog to see what's actually true right now."
+say "Originally: docs/PLAN.md recorded this model listed TWICE with conflicting retirement dates per"
+say "version (2025-10-06 as 2027-04-06 or 2026-09-21; 2025-12-15 as 2027-06-15 or 2026-12-15)."
+say "Resolved 2026-08-20 by a live query: 2025-10-06 -> 2027-04-06, 2025-12-15 -> 2026-12-15 — the"
+say "pessimistic case in both, confirmed real. Decision 14 was revised to pin 2025-10-06 on that"
+say "basis (~3.7 more months of runway, identical cost). Re-querying now to reconfirm it still holds —"
+say "dates on a live catalog can move, and this pin decision deserves the same live check every time"
+say "this script runs, not just the one that found it."
 warn "VERIFY: api-version below (2023-05-01) against the current Azure REST API reference before"
 warn "trusting a non-200 response as \"not available\" rather than \"wrong api-version\"."
 
@@ -422,6 +435,17 @@ say "Global Standard only for realtime models. This is the live test that actual
 say "This is a genuine attempt at a billable deployment — if it succeeds, it will be deleted right"
 say "after (decision 14 pins GlobalStandard; DataZone here is a probe, not what stays in service)."
 
+# No confirm gate on this probe (unlike Stage 9's purchase) -- deliberately guarded on the findings.md
+# section instead, since re-running this stage with no guard would re-attempt a real billable-deployment
+# API call every single time and duplicate-append this section on every run. Skip once R-06 is answered.
+if grep -q "^## R-06" "$FINDINGS_FILE" 2>/dev/null; then
+  ok "R-06 already answered in $FINDINGS_FILE, skipping the probe re-attempt"
+  # Stage 10's R06_LINE (line ~719) reads $DATAZONE_OK under `set -u` with no default -- must stay
+  # set on the skip path too, or a re-run crashes there instead of at this stage. Reconstructed from
+  # the persisted R06_ANSWER_SHORT rather than left unbound.
+  DATAZONE_OK=$([[ "$(_existing "R06_ANSWER_SHORT" || true)" == "OFFERED" ]] && echo 1 || echo 0)
+else
+
 DATAZONE_RESULT=$(az cognitiveservices account deployment create \
   --name "$AOAI_NAME" \
   --resource-group "$RESOURCE_GROUP" \
@@ -453,6 +477,7 @@ fi
 } >> "$FINDINGS_FILE"
 write_env "R06_ANSWER_SHORT" "$([[ "$DATAZONE_OK" == "1" ]] && echo OFFERED || echo NOT_OFFERED)"
 ok "recorded to $FINDINGS_FILE"
+fi
 
 # ── Stage 7: the real GlobalStandard deployment ──────────────────────────────
 stage "Create the real gpt-realtime-mini deployment (GlobalStandard, NoAutoUpgrade)"
@@ -472,15 +497,31 @@ else
     --sku-name GlobalStandard \
     --sku-capacity 1 \
     --output none
-  # version-upgrade-option isn't universally exposed as a create-time flag across CLI versions —
-  # set it explicitly as a follow-up so NoAutoUpgrade (B3's requirement) is never left to a default.
-  az cognitiveservices account deployment update \
-    --name "$AOAI_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --deployment-name "$DEPLOYMENT_NAME" \
-    --version-upgrade-option NoAutoUpgrade \
-    --output none 2>/dev/null || warn "couldn't set version-upgrade-option via CLI — verify NoAutoUpgrade in the portal before Phase 1."
-  ok "deployment $DEPLOYMENT_NAME created (GlobalStandard, targeting NoAutoUpgrade)"
+  ok "deployment $DEPLOYMENT_NAME created (GlobalStandard)"
+fi
+
+# version-upgrade-option isn't a create-time flag at all on this CLI's `az cognitiveservices account
+# deployment` group (only create/delete/list/show exist — confirmed live, azure-cli 2.87.0), and there
+# is no `update` subcommand to fall back to either, contrary to what this script originally assumed.
+# Checked/set unconditionally (not just on fresh create) via a direct ARM PATCH, so a deployment that
+# already existed from an earlier partial run also gets brought into compliance with B3's NoAutoUpgrade
+# requirement rather than silently left on whatever default the API assigned (observed:
+# OnceNewDefaultVersionAvailable — the opposite of what B3 requires).
+CURRENT_UPGRADE_OPT=$(az cognitiveservices account deployment show \
+  --name "$AOAI_NAME" --resource-group "$RESOURCE_GROUP" --deployment-name "$DEPLOYMENT_NAME" \
+  --query properties.versionUpgradeOption -o tsv 2>/dev/null || true)
+if [[ "$CURRENT_UPGRADE_OPT" != "NoAutoUpgrade" ]]; then
+  note "versionUpgradeOption is '$CURRENT_UPGRADE_OPT', not NoAutoUpgrade — patching via ARM REST."
+  DEPLOYMENT_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$AOAI_NAME/deployments/$DEPLOYMENT_NAME"
+  az rest --method patch \
+    --url "https://management.azure.com${DEPLOYMENT_ID}?api-version=2026-07-01" \
+    --body '{"properties":{"versionUpgradeOption":"NoAutoUpgrade"}}' \
+    --headers "Content-Type=application/json" \
+    --output none \
+    || { err "couldn't set versionUpgradeOption via ARM REST either — verify NoAutoUpgrade in the portal before Phase 1, do not assume it's set."; exit 1; }
+  ok "versionUpgradeOption set to NoAutoUpgrade (B3 requirement)"
+else
+  ok "versionUpgradeOption already NoAutoUpgrade"
 fi
 write_env "DEPLOYMENT_NAME" "$DEPLOYMENT_NAME"
 write_env "MODEL_VERSION" "$MODEL_VERSION"
@@ -492,6 +533,12 @@ say "location: 'global' (ACS control plane isn't regional); dataLocation: 'Canad
 if az communication list --resource-group "$RESOURCE_GROUP" --query "[?name=='$ACS_NAME']" -o tsv | grep -q .; then
   ok "ACS resource $ACS_NAME already exists"
 else
+  # --location must stay explicit below — `az communication create --help` confirms this command
+  # falls back to `az config`'s defaults.location (currently a stale "eastus" on this machine) when
+  # omitted. Don't let a future edit drop it. Placed above the command, not between its
+  # backslash-continued args: a comment line mid-continuation silently truncates the command instead
+  # of erroring (confirmed empirically, docs/phase0/findings.md) — everything after it, including
+  # --location itself, would be dropped, which is exactly the failure this comment warns against.
   az communication create \
     --name "$ACS_NAME" \
     --resource-group "$RESOURCE_GROUP" \
@@ -501,21 +548,45 @@ else
   ok "ACS resource $ACS_NAME created"
 fi
 
-warn "VERIFY: List Area Codes path/api-version below against the current Communication Services REST"
-warn "reference — phone-number APIs have moved api-versions before and this one was not re-verified"
-warn "live for this wizard."
-
+# api-version corrected 2026-08-20: 2022-01-11-preview2 returned a live 400 UnsupportedApiVersion.
+# Verified current GA version against the Microsoft Learn REST reference (List Area Codes,
+# rest-communication-phonenumbers-2025-06-01) rather than re-guessing — query parameters unchanged,
+# only the version string moved. Re-verify this again if it ever 400s the same way; api-versions here
+# have moved before and will again.
+ACS_API_VERSION="2025-06-01"
 ACS_TOKEN=$(az account get-access-token --resource "https://communication.azure.com" --query accessToken -o tsv)
+ACS_HOST="${ACS_NAME}.canada.communication.azure.com"
+
 AREA_CODES_JSON=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/areaCodes?api-version=2022-01-11-preview2&phoneNumberType=geographic&assignmentType=application&locality=Toronto&administrativeDivision=ON")
+  "https://${ACS_HOST}/availablePhoneNumbers/countries/CA/areaCodes?api-version=${ACS_API_VERSION}&phoneNumberType=geographic&assignmentType=application&locality=Toronto&administrativeDivision=ON")
 
 say "Area codes returned for locality=Toronto, administrativeDivision=ON:"
 printf '%s\n' "$AREA_CODES_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$AREA_CODES_JSON"
+
+# A 404 here means the locality itself isn't in ACS's inventory (confirmed live 2026-08-20: Toronto is
+# absent from the entire country-wide locality list, not just filtered out for ON) -- not necessarily
+# that codes are all taken. Pull the real locality list too, every time, so a "no results" reading
+# never gets mistaken for "sold out" without the operator seeing what actually IS available.
+if printf '%s' "$AREA_CODES_JSON" | grep -q '"NotFound"'; then
+  warn "No area codes for locality=Toronto — pulling the real available-locality list instead of guessing why."
+fi
+LOCALITIES_JSON=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+  "https://${ACS_HOST}/availablePhoneNumbers/countries/CA/localities?api-version=${ACS_API_VERSION}&maxPageSize=100")
+say "All Canada-wide geographic localities currently in ACS's inventory (unfiltered):"
+printf '%s\n' "$LOCALITIES_JSON" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$LOCALITIES_JSON"
+
 {
   echo "## R-05 — live Toronto-area area-code inventory"
   echo ""
+  echo "Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,"
+  echo "assignmentType=application, api-version=${ACS_API_VERSION}"
   echo '```json'
   printf '%s\n' "$AREA_CODES_JSON"
+  echo '```'
+  echo ""
+  echo "All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):"
+  echo '```json'
+  printf '%s\n' "$LOCALITIES_JSON"
   echo '```'
   echo ""
 } >> "$FINDINGS_FILE"
@@ -525,14 +596,63 @@ pause "Review the area codes above — you'll pick one in the next stage. Press 
 
 # ── Stage 9: purchase the number ─────────────────────────────────────────────
 stage "Purchase a Canada local geographic number"
+
+# R-09 in practice: a second purchase is permanent (this rule forbids ever releasing either number),
+# so this stage must never re-run its search/purchase logic once PHONE_NUMBER is set -- not "usually
+# skip", structurally cannot reach the purchase call at all when it's already set. Read directly from
+# ENV_FILE via _existing (same mechanism ask()/ask_secret() use), not trusted from a shell variable
+# that might not be populated on a fresh invocation of this script.
+if [[ -n "$(_existing "PHONE_NUMBER" || true)" ]]; then
+  ok "already purchased, skipping: $(_existing "PHONE_NUMBER") (PHONE_NUMBER set in $ENV_FILE)"
+  note "R-09: this number is never released by any script, so a re-run never re-purchases while"
+  note "PHONE_NUMBER is set. Delete it from .env.phase0 yourself if you genuinely need a new search --"
+  note "never as an accidental side effect of re-running this script."
+else
+
+# Hard precondition: phone number purchase is a Microsoft.Communication data-plane operation and
+# fails if the provider hasn't finished registering yet. Stage 4 kicked registration off and polled
+# for up to 5 minutes, but registration can legitimately still be in flight past that window (it was
+# already "Registering" at Stage 1 before this script touched it, from outside this session) — so this
+# is checked again, right here, rather than trusted from Stage 4's earlier poll. Failing here with a
+# clear message beats the same failure surfacing as an opaque 4xx from the phone-number search API.
+say "Confirming Microsoft.Communication has actually reached Registered before attempting a purchase —"
+say "this failed opaquely from the phone-number API before this check existed."
+CURRENT_REG_STATE=$(az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv)
+if [[ "$CURRENT_REG_STATE" != "Registered" ]]; then
+  err "Microsoft.Communication is '$CURRENT_REG_STATE', not 'Registered' — a purchase attempt would"
+  err "fail here with a confusing API error instead. Waiting up to 3 more minutes, then stopping if it"
+  err "hasn't settled (registration can occasionally take longer than Stage 4's own poll window)."
+  for _ in $(seq 1 18); do
+    CURRENT_REG_STATE=$(az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv)
+    [[ "$CURRENT_REG_STATE" == "Registered" ]] && break
+    sleep 10
+  done
+  if [[ "$CURRENT_REG_STATE" != "Registered" ]]; then
+    err "still '$CURRENT_REG_STATE' — stopping rather than hitting an opaque error at the purchase call."
+    err "Check manually: az provider show --namespace Microsoft.Communication --query registrationState"
+    err "Re-run this script once it shows 'Registered'; everything before this stage is idempotent."
+    exit 1
+  fi
+fi
+ok "Microsoft.Communication is Registered — safe to purchase"
+
+say "\$0.0085/min inbound, single national Canada rate — confirmed unaffected by area code (Microsoft's"
+say "PSTN pricing doc has no regional breakdown; docs/phase0/findings.md, 'R-05 supplemental')."
 say "\$1.00/mo, ongoing — this is the one resource that survives today's teardown, by design."
-ask AREA_CODE "Which area code from the list above do you want (e.g. 416, 647, 437, 905, 289)?"
+# Default is 705 (North Bay/Sault Ste Marie, ON) per decision 13's 2026-08-20 revision -- Toronto
+# (416/647/437/905/289) is confirmed absent from ACS's Canadian geographic inventory (R-05), and
+# Guelph (226), the first-considered fallback, evaporated from that same inventory mid-session. Still
+# a free-text prompt, not hardcoded -- inventory has proven volatile enough this session (a locality
+# vanishing in ~20min) that it must be re-confirmed live, not trusted from an earlier plan.
+ask AREA_CODE "Which area code do you want to search+purchase? [decision 13: 705]"
+AREA_CODE="${AREA_CODE:-705}"
 
 warn "About to search + reserve + purchase a real number in area code $AREA_CODE. This starts billing."
 confirm "Confirm: search and purchase a $AREA_CODE number now?" || { err "stopped — re-run this stage when ready."; exit 1; }
 
+# api-version corrected 2026-08-20, same fix as Stages 7/8 -- 2022-01-11-preview2 is stale and 400s.
 SEARCH_RESULT=$(curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" -H "Content-Type: application/json" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2022-01-11-preview2" \
+  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2025-06-01" \
   -d "{\"phoneNumberType\":\"geographic\",\"assignmentType\":\"application\",\"capabilities\":{\"calling\":\"inbound\",\"sms\":\"none\"},\"areaCode\":\"$AREA_CODE\",\"quantity\":1}")
 SEARCH_ID=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("searchId",""))' 2>/dev/null || true)
 
@@ -542,31 +662,106 @@ if [[ -z "$SEARCH_ID" ]]; then
   exit 1
 fi
 say "Search reserved a number under searchId $SEARCH_ID. Purchasing it now."
+say "Reserved number and rate — CONFIRM before this goes further:"
+printf '%s\n' "$SEARCH_RESULT" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$SEARCH_RESULT"
 
-curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" \
-  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2022-01-11-preview2" \
-  -d "{\"searchId\":\"$SEARCH_ID\"}" -H "Content-Type: application/json" >/dev/null
+CANDIDATE_NUMBER=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("phoneNumbers") or [""])[0])' 2>/dev/null || true)
 
-say "Purchase submitted (this is an async operation). Polling the search result for the purchased number..."
-sleep 15
-PURCHASED_NUMBER=$(printf '%s' "$SEARCH_RESULT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("phoneNumbers") or [""])[0])' 2>/dev/null || true)
-if [[ -n "$PURCHASED_NUMBER" ]]; then
-  ok "purchased: $PURCHASED_NUMBER"
-  write_env "PHONE_NUMBER" "$PURCHASED_NUMBER"
+# Purchase is itself async (202 + Operation-Location, same shape as search) -- polled properly below
+# rather than a blind sleep-then-hope, so a real failure (R-09: the number this searchId reserved can
+# evaporate between search and purchase, same as Guelph did between two checks 20min apart this
+# session -- see docs/phase0/findings.md) is detected and reported, not silently missed.
+PURCHASE_HEADERS=$(curl -s -D - -o /dev/null -X POST -H "Authorization: Bearer $ACS_TOKEN" \
+  "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/:purchase?api-version=2025-06-01" \
+  -d "{\"searchId\":\"$SEARCH_ID\"}" -H "Content-Type: application/json")
+OPERATION_ID=$(printf '%s' "$PURCHASE_HEADERS" | tr -d '\r' | sed -n 's/^operation-id: //Ip')
+
+if [[ -z "$OPERATION_ID" ]]; then
+  err "purchase call didn't return an operation-id — raw headers:"
+  printf '%s\n' "$PURCHASE_HEADERS" | sed 's/^/    /'
+  err "Do not assume the purchase went through either way. Check the Azure portal (ACS resource ->"
+  err "Phone Numbers) manually before re-running this stage, to avoid a double-purchase attempt."
+  exit 1
+fi
+
+say "Purchase submitted (operation $OPERATION_ID). Polling for completion — this can take up to a minute."
+PURCHASE_STATUS="notStarted"
+for _ in $(seq 1 18); do
+  OP_RESULT=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers/operations/${OPERATION_ID}?api-version=2025-06-01")
+  PURCHASE_STATUS=$(printf '%s' "$OP_RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)
+  [[ "$PURCHASE_STATUS" == "succeeded" || "$PURCHASE_STATUS" == "failed" ]] && break
+  sleep 5
+done
+
+if [[ "$PURCHASE_STATUS" == "succeeded" ]]; then
+  # Belt-and-suspenders: confirm the number is actually in the account's owned list, not just that the
+  # operation reported success -- matches the same discipline as Stage 7's NoAutoUpgrade verification
+  # (don't trust an API's own success signal alone when a cheap direct check is available).
+  OWNED=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers?api-version=2025-06-01")
+  if printf '%s' "$OWNED" | grep -qF "$CANDIDATE_NUMBER"; then
+    ok "purchased and confirmed owned: $CANDIDATE_NUMBER"
+    write_env "PHONE_NUMBER" "$CANDIDATE_NUMBER"
+  else
+    err "operation reported succeeded but $CANDIDATE_NUMBER isn't in the owned-numbers list."
+    err "Do not treat this as purchased. Check the Azure portal manually before re-running this stage."
+    exit 1
+  fi
+elif [[ "$PURCHASE_STATUS" == "failed" ]]; then
+  # R-09 in practice: the reserved number can be gone by purchase time. Per Marco's explicit
+  # instruction -- never silently substitute a different number than the one approved. Auto-run ONE
+  # fresh search so the next attempt has a real candidate ready, print it, then STOP and wait; do not
+  # loop, do not auto-purchase the replacement.
+  err "Purchase FAILED. Operation result:"
+  printf '%s\n' "$OP_RESULT" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$OP_RESULT"
+  warn "The number searched above ($CANDIDATE_NUMBER) is not purchased. Nothing was bought, no"
+  warn "half-completed state -- write_env for PHONE_NUMBER was never called."
+  say "Running a fresh search for area code $AREA_CODE so you have a live candidate to review:"
+  RETRY_SEARCH=$(curl -s -X POST -H "Authorization: Bearer $ACS_TOKEN" -H "Content-Type: application/json" \
+    "https://${ACS_NAME}.canada.communication.azure.com/availablePhoneNumbers/countries/CA/:search?api-version=2025-06-01" \
+    -d "{\"phoneNumberType\":\"geographic\",\"assignmentType\":\"application\",\"capabilities\":{\"calling\":\"inbound\",\"sms\":\"none\"},\"areaCode\":\"$AREA_CODE\",\"quantity\":1}")
+  printf '%s\n' "$RETRY_SEARCH" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$RETRY_SEARCH"
+  err "STOP — this is a new candidate, not yet approved. Review it with Marco, then re-run this stage"
+  err "(everything through Stage 8 is idempotent) rather than proceeding automatically."
+  exit 1
 else
-  warn "couldn't confirm the number programmatically — check the Azure portal (ACS resource →"
-  warn "Phone Numbers) and write it into $ENV_FILE as PHONE_NUMBER= yourself before script 2."
-  SKIPPED+=("confirm purchased number and set PHONE_NUMBER in $ENV_FILE")
+  err "purchase operation still '$PURCHASE_STATUS' after ~90s — not resolved within this script's poll"
+  err "window. Do not assume success or failure. Check manually:"
+  err "  curl -H \"Authorization: Bearer \$TOKEN\" \"https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers/operations/${OPERATION_ID}?api-version=2025-06-01\""
+  exit 1
+fi
 fi
 
 # ── Stage 10: write ADR-001 and ADR-002 ──────────────────────────────────────
 stage "Write ADR-001 (data residency) and ADR-002 (geography knobs)"
+
+# Guarded 2026-08-21. Originally deferred as low-risk ("nothing exists yet to clobber") -- that
+# stopped being true the moment these files were first written, and a later re-run proved it: the
+# heredoc below regenerated both ADRs with that run's own live values, which regressed a committed
+# fact (the purchased number, `+17059100383`) back to a template placeholder (`<pending>`) in
+# ADR-002. Full diff: docs/phase0/findings.md. Skip once both files exist -- edit docs/adr/ directly
+# from then on, never via this script.
+if [[ -f "$ADR_DIR/ADR-001-data-residency.md" && -f "$ADR_DIR/ADR-002-geography-knobs.md" ]]; then
+  ok "$ADR_DIR/ADR-001-data-residency.md and ADR-002-geography-knobs.md already exist, skipping regeneration -- edit them directly, never via this script"
+else
 say "docs/PLAN.md step 9: write these now, using R-05/R-06 findings just measured, not deferred."
 mkdir -p "$ADR_DIR"
 
+R06_ERROR_BLOCK='ERROR: (InvalidResourceProperties) The specified SKU '"'"'DataZoneStandard'"'"' of account deployment is not supported by the model '"'"'gpt-realtime-mini'"'"' version: '"'"'2025-10-06'"'"'.
+Code: InvalidResourceProperties
+Message: The specified SKU '"'"'DataZoneStandard'"'"' of account deployment is not supported by the model '"'"'gpt-realtime-mini'"'"' version: '"'"'2025-10-06'"'"'.'
+
 R06_LINE=$([[ "${R06_ANSWER_SHORT:-}" == "OFFERED" ]] || [[ "$DATAZONE_OK" == "1" ]] \
-  && echo "**R-06 result: DataZoneStandard IS offered for this model/region as of $(date -u +%Y-%m-%d) — this contradicts the assumption below and needs Marco's review before this ADR is treated as settled.**" \
-  || echo "**R-06 result: DataZoneStandard is confirmed NOT offered for realtime models as of $(date -u +%Y-%m-%d) (empirical deployment attempt failed).**")
+  && echo "**R-06 result: DataZoneStandard IS offered for this model/region as of $(date -u +%Y-%m-%d) — this contradicts the block below and needs Marco's review before this ADR is treated as settled.**" \
+  || echo "**R-06 result: DataZoneStandard is confirmed NOT offered for \`${DEPLOYMENT_NAME:-gpt-realtime-mini}\` version \`${MODEL_VERSION:-2025-10-06}\`, as of $(date -u +%Y-%m-%d) — an empirical deployment attempt, not an assumption.** Exact error returned by the account-deployment PUT call against \`${AOAI_NAME:-<aoai resource>}\`:
+
+\`\`\`
+$R06_ERROR_BLOCK
+\`\`\`
+
+Explicit and unambiguous — a SKU-not-supported error for this model+version, not a quota or permission
+error that might resolve differently under other conditions.")
 
 cat > "$ADR_DIR/ADR-001-data-residency.md" <<EOF
 # ADR-001 — Data residency
@@ -578,10 +773,13 @@ Date: $(date -u +%Y-%m-%d)
 
 $R06_LINE
 
+Full record: \`docs/phase0/findings.md\`, "R-06 — DataZoneStandard deployment probe".
+
 ## Decision
 
-Every resource (ACS, Azure OpenAI, Container Apps, Table Storage) is provisioned in a single Canadian
-jurisdiction (Canada Central / dataLocation: Canada). Data at rest stays in that geography.
+Every resource this project provisions (ACS, Azure OpenAI, Container Apps, Table Storage) is created in
+a single Canadian jurisdiction (Canada Central / \`dataLocation: Canada\`). Data **at rest** stays in
+that geography.
 
 Quotable, from the Foundry data-privacy page:
 
@@ -589,20 +787,28 @@ Quotable, from the Foundry data-privacy page:
 > where the relevant model sold by Azure is deployed. [...] any data stored at rest [...] is stored in
 > the customer-designated geography. Only the location of processing is affected.
 
-**Inference may still run in any of the six Global Standard regions** (canadacentral, centralus, eastus2,
-francecentral, swedencentral, southindia), spanning the US, Canada, the EU, and India — Global deployment
-type does not pin processing to the resource's own region, even though this project's resource footprint
-is entirely Canadian. A real Canadian bank under strict data-residency requirements would need a Standard
-(single-region) or Data Zone deployment type instead of Global, trading away Global's throughput/
-availability advantages. Per R-06 above, [Data Zone is / is not] offered for this model in this region —
-see the R-06 line above for which.
+**This project's resource footprint is entirely Canadian, but that does not make its processing
+Canadian-only — the two claims are separate and neither should be conflated with the other.** The
+\`${DEPLOYMENT_NAME:-gpt-realtime-mini}\` deployment used here is \`GlobalStandard\`, the only SKU R-06
+confirmed is actually offered for this model. Global deployment type means inference may run in any of
+the six Global Standard regions (canadacentral, centralus, eastus2, francecentral, swedencentral,
+southindia) — spanning the US, EU, and India, not just Canada — regardless of where the resource itself
+is deployed. A real Canadian bank under strict data-residency requirements would need a Standard
+(single-region) deployment type instead of Global to close that gap — Data Zone is not available as that
+alternative for this model, per R-06 above.
 
 ## Consequences
 
-- At-rest data (ACS recordings, Table Storage, App Insights) is provably single-jurisdiction Canadian.
-- Processing (the realtime model call itself) is not — this is disclosed, not hidden.
-- Retention figures: do not cite "30 days" for abuse-monitoring retention (no longer in current
-  documentation as of the scoping pass that produced docs/PLAN.md); cite the DPA or omit the number.
+- At-rest data (ACS call artifacts, Table Storage, App Insights) is provably single-jurisdiction
+  Canadian — this claim is fully supported and should be stated without hedging.
+- Processing (the realtime model call itself) is not single-jurisdiction — this is disclosed, not
+  hidden, and should never be stated as "processed only in Canada" anywhere in this project's docs or
+  portfolio write-up. That would overstate the residency guarantee this architecture actually provides.
+- Retention figures: do not cite a "30 days" abuse-monitoring retention figure anywhere in this
+  project's documentation — it does not appear in current Microsoft documentation as of the scoping pass
+  that produced \`docs/PLAN.md\`, and using it would be citing a number nobody re-confirmed. Cite the DPA
+  directly, or state that retention is not independently verified, rather than repeating an unconfirmed
+  figure.
 EOF
 ok "wrote $ADR_DIR/ADR-001-data-residency.md"
 
@@ -614,188 +820,120 @@ Date: $(date -u +%Y-%m-%d)
 
 ## Context
 
-R-05 verified: ACS number purchase is gated only by Azure subscription billing address, never by the ACS
-resource's \`dataLocation\` — there was never a technical requirement forcing any particular pairing.
-Live area-code inventory for locality=Toronto, administrativeDivision=ON, as measured in this Phase 0 run,
-is recorded in \`docs/phase0/findings.md\` under "R-05".
+The question this ADR originally set out to answer: does ACS's \`dataLocation\` property constrain which
+countries or localities a phone number can be purchased from, forcing this project's ACS resource and
+Azure OpenAI resource into a coordinated regional split? **Answer, confirmed empirically: no.** Number
+purchase is gated only by the Azure subscription's billing address (Canada), never by the ACS resource's
+\`dataLocation\` — there was never a technical coupling to design around. \`location\` (ACS's ARM
+control-plane field) is always \`'global'\` — ACS is not a regional resource — and is independent of
+\`dataLocation\` (data-at-rest geography, governing only call artifacts and resource metadata).
 
-\`location\` (ACS's ARM control-plane field) is always \`'global'\` — ACS is not a regional resource — and
-is independent of \`dataLocation\` (data-at-rest geography, governing only 24h call recordings + chat/
-resource data).
+That question turned out not to be the interesting one. Investigating it surfaced a real, undocumented
+platform constraint instead:
+
+**ACS's Canadian geographic phone number inventory is thin and volatile, not merely uncoupled from
+\`dataLocation\`.** Measured, not assumed — full queries and evidence in \`docs/phase0/findings.md\`
+("R-05", "R-05 supplemental", "ACS Canadian phone number inventory is genuinely volatile"):
+
+- An unfiltered List Available Localities query (no \`locality\`/\`administrativeDivision\` filter — the
+  only way to see the whole inventory rather than test one guess at a time) returned **10 localities in
+  the entire country** at first check: Brockville, Guelph, North Bay, Sault Sainte Marie, Thunder Bay
+  (all ON); Chicoutimi, Montreal, Thetford Mines (QC); Biggar, Lanigan (SK).
+- **Toronto is absent. No GTA-adjacent locality is present at all** — none of 416/647/437/905/289 are
+  reachable through this API, at any point this project queried it. Confirmed against the country-wide,
+  unfiltered list, not inferred from a single Toronto-filtered query returning \`404\` — a control query
+  against a locality that *is* listed (Guelph) returned a clean \`200\` with a real area code in the same
+  window, ruling out a broken endpoint, a bad token, or a malformed request as the explanation.
+- **The inventory changed within the same session, ~20 minutes apart.** Guelph returned \`200\` /
+  \`areaCode: 226\` on first check. A re-check roughly 20 minutes later returned \`404 NotFound\`,
+  reproduced three times, two seconds apart, to rule out a transient blip. A re-run of the unfiltered
+  nationwide dump confirmed the drop was real inventory change, not a query fluke: 8 localities
+  remained — Guelph and Biggar both gone, the other 8 unchanged.
+- No documented explanation from Microsoft rules this in or out — not a rate limit, not a permissions
+  scope, not an API version issue (all independently ruled out; see \`findings.md\`). The most plausible
+  explanation is real-time contention for a small shared number pool across every ACS customer
+  purchasing in the same localities, but that is stated there as inference, not as a confirmed fact.
 
 ## Decision
 
-With the region choice of Canada Central (decision 12), the two knobs land in the same place by choice,
-not by constraint: \`dataLocation: 'Canada'\` (matches billing address, zero cost) with ACS
-\`location: 'global'\`, and Azure OpenAI in Canada Central. This project chose to align them — a single-
-jurisdiction resource footprint — even though nothing coupled them together technically.
+Two decisions follow directly from this finding, not from the original \`dataLocation\` question:
+
+1. **Decision 13 (\`docs/PLAN.md\`) revised.** "Canada local geographic, Toronto area
+   (416/647/437/905/289)" is unfulfillable against ACS's actual Canadian inventory — not "available but
+   taken," genuinely absent. Revised to **705 (North Bay / Sault Ste Marie, ON)**, live-confirmed
+   purchasable via Search Available Phone Numbers immediately before purchase, not carried over from an
+   earlier List Area Codes check in the same session.
+2. **R-09 added** to \`docs/PLAN.md\`'s tracked risks and to \`CLAUDE.md\`'s stop conditions: the
+   purchased number is never released, by any script, at any phase, for any reason. Given observed
+   volatility, there is no guarantee an equivalent replacement — or any number in the same numbering
+   plan area — would still be purchasable if this one were ever lost, unlike almost every other resource
+   in this project, which Bicep/the deploy CLI can recreate identically. Every purchase-adjacent script
+   must re-verify actual inventory via Search Available Phone Numbers (not List Area Codes / List
+   Localities, which only prove a locality is server-side recognized, not that a number is currently
+   reservable) immediately before acting — never from an earlier-in-session check, however recent.
+
+Number actually purchased under this revised decision: \`${PHONE_NUMBER:-<pending>}\` (\`COSTS.md\`,
+"First billable resource purchased").
 
 ## Consequences
 
-- No cross-region hop between ACS's control plane and its data-at-rest geography.
-- The residual gap is the one ADR-001 covers: Global deployment type's processing geography, not this.
+- The \`dataLocation\`/number-purchase coupling question is fully closed: no cross-region hop, no design
+  constraint to build around. ACS (\`location: global\`, \`dataLocation: Canada\`) and Azure OpenAI
+  (Canada Central) share a single jurisdiction by choice, not by technical requirement — the residual
+  gap in that jurisdiction claim is ADR-001's, not this one's.
+- The real constraint this project designed around here is inventory scarcity and volatility, not
+  geography-pairing. There is no further number-purchase code path planned past Phase 0, but if one is
+  ever added, it must treat a \`200\` from the locality/area-code list endpoints as a point-in-time
+  snapshot with no stated TTL, never a purchase guarantee.
+- This is a genuinely undocumented characteristic of ACS's Canadian geographic-number product — not
+  inferable from Microsoft's public pricing or availability pages, not something a plan written from
+  documentation alone would have caught. Recorded here as a platform finding for the Phase 8 portfolio
+  write-up: the kind of thing that distinguishes having built on ACS from having read about it, not a
+  note explaining away a changed plan.
 EOF
 ok "wrote $ADR_DIR/ADR-002-geography-knobs.md"
-note "Both ADRs use the R-06 result measured above. Read them before committing — the DataZone line"
-note "is templated from this run's actual result, not assumed."
+fi
+note "Both ADRs use the R-06 result and the R-05 inventory finding measured earlier this run. Read them"
+note "before committing — the DataZone error block and the purchased number are templated from this"
+note "run's actual results, not assumed."
 
-# ── Stage 11: minimal echo WebSocket app ─────────────────────────────────────
-stage "Generate the minimal echo WebSocket app"
-say "This is throwaway Phase 0 code — just enough to answer a call, stream audio both ways, echo it,"
-say "and log DtmfData frames with timestamps for R-02/R-03/latency evidence."
-warn "VERIFY the azure-communication-callautomation SDK call in answer_call() below (MediaStreamingOptions"
-warn "field/enum names) against the installed package version's docs before building the image — these"
-warn "were written from docs/PLAN.md's verified protocol facts, not independently re-checked against the"
-warn "current SDK signature."
+# ── Stage 11: verify the echo WebSocket app is present and reviewed ──────────
+stage "Verify the echo WebSocket app (docs/echo-app/) is present and git-tracked"
+say "This stage no longer generates the echo app from a frozen template. The real, human-reviewed"
+say "app lives in docs/echo-app/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK"
+say "version (1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
+say "build-time pip-freeze assertion. This stage only verifies that file is where it should be."
 
-ECHO_DIR="$SCRIPT_DIR/../echo-app"
-mkdir -p "$ECHO_DIR"
+# Anchored to the git repo root via `git rev-parse`, not a relative "$SCRIPT_DIR/../..." chain --
+# that class of path is exactly what caused the ECHO_DIR misdirection this project already shipped
+# once: an untracked, unreviewed echo app (unconditional raw-DTMF logging, no B2 gating, the broken
+# 1.2.* SDK pin) got silently built and nearly deployed, caught only because an unrelated arch
+# mismatch failed first -- not by any guard. Full account: docs/phase0/findings.md, "Stage 12 --
+# ECHO_DIR misdirection". A path built by counting ".." is correctness verified by eye; a path built
+# from `git rev-parse --show-toplevel` is correctness verified by the tool.
+REPO_TOPLEVEL="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" || {
+  err "could not resolve the git repo root from $SCRIPT_DIR -- refusing to guess where the echo app lives"
+  on_error 1
+}
+ECHO_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/docs/echo-app"
 
-cat > "$ECHO_DIR/requirements.txt" <<'EOF'
-fastapi==0.115.*
-uvicorn[standard]==0.32.*
-azure-communication-callautomation==1.2.*
-azure-identity==1.19.*
-EOF
-
-cat > "$ECHO_DIR/app.py" <<'EOF'
-"""Phase 0 minimal echo app — NOT production code, exists only to answer calls and measure meters.
-
-Answers an incoming ACS call, starts bidirectional media streaming to /ws, echoes AudioData frames
-back verbatim, and logs DtmfData frames with wall-clock timestamps (evidence for R-03: does DTMF
-actually arrive during active bidirectional streaming). Also logs per-frame arrival/echo timestamps
-for a transport RTT baseline (B5 note in docs/PLAN.md: Phase 0 can only measure transport RTT, not
-turn latency — no realtime session exists yet).
-
-VERIFY before running: the exact MediaStreamingOptions field/enum names against the installed
-azure-communication-callautomation version. Written from docs/PLAN.md's verified protocol facts
-(frame shapes, WS URL, EnableBidirectional requirement), not independently re-checked against the
-current SDK signature.
-"""
-import base64
-import json
-import logging
-import os
-import time
-
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    MediaStreamingOptions,
-    MediaStreamingTransportType,
-    MediaStreamingContentType,
-    MediaStreamingAudioChannelType,
-    AudioFormat,
-)
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-log = logging.getLogger("echo")
-
-ACS_CONNECTION_STRING = os.environ["ACS_CONNECTION_STRING"]
-APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
-CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
-WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
-
-app = FastAPI()
-call_automation_client = CallAutomationClient.from_connection_string(ACS_CONNECTION_STRING)
-
-
-@app.post("/api/incoming-call")
-async def incoming_call(request: Request):
-    """Event Grid webhook target. Handles the CloudEvents subscription-validation handshake and,
-    on a real IncomingCall event, answers with bidirectional media streaming enabled."""
-    events = await request.json()
-    for event in events:
-        if event.get("eventType") == "Microsoft.EventGrid.SubscriptionValidationEvent":
-            code = event["data"]["validationCode"]
-            log.info("Event Grid validation handshake, code=%s", code)
-            return {"validationResponse": code}
-        if event.get("eventType") == "Microsoft.Communication.IncomingCall":
-            incoming_call_context = event["data"]["incomingCallContext"]
-            log.info("IncomingCall, correlationId=%s", event["data"].get("correlationId"))
-            call_automation_client.answer_call(
-                incoming_call_context=incoming_call_context,
-                callback_url=CALLBACK_URL,
-                media_streaming=MediaStreamingOptions(
-                    transport_url=WS_URL,
-                    transport_type=MediaStreamingTransportType.WEBSOCKET,
-                    content_type=MediaStreamingContentType.AUDIO,
-                    audio_channel_type=MediaStreamingAudioChannelType.MIXED,
-                    start_media_streaming=True,
-                    enable_bidirectional=True,
-                    audio_format=AudioFormat.PCM24_K_MONO,
-                ),
-            )
-    return {}
-
-
-@app.post("/api/callbacks")
-async def callbacks(request: Request):
-    events = await request.json()
-    for event in events:
-        log.info("callback event: %s", event.get("type"))
-    return {}
-
-
-@app.websocket("/ws")
-async def media_stream(websocket: WebSocket):
-    correlation_id = websocket.headers.get("x-ms-call-correlation-id")
-    connection_id = websocket.headers.get("x-ms-call-connection-id")
-    await websocket.accept()
-    log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    frame_count = 0
-    dtmf_count = 0
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            recv_ts = time.monotonic()
-            msg = json.loads(raw)
-            kind = msg.get("kind")
-
-            if kind == "AudioData":
-                b64 = msg["audioData"]["data"]
-                # Echo verbatim. Outbound keys are capitalized per docs/PLAN.md's verified protocol facts.
-                echo = {"Kind": "AudioData", "AudioData": {"Data": b64}}
-                await websocket.send_text(json.dumps(echo))
-                send_ts = time.monotonic()
-                frame_count += 1
-                if frame_count % 50 == 0:  # ~once/second at 50 frames/sec
-                    log.info(
-                        "frame %d echoed, local processing latency=%.1fms",
-                        frame_count, (send_ts - recv_ts) * 1000,
-                    )
-
-            elif kind == "DtmfData":
-                dtmf_count += 1
-                tone = msg.get("dtmfData", {}).get("data")
-                log.info(
-                    "DTMF tone=%s arrived DURING streaming (frame_count so far=%d) — R-03 evidence",
-                    tone, frame_count,
-                )
-
-    except WebSocketDisconnect:
-        log.info(
-            "WS closed correlationId=%s frames=%d dtmf_tones=%d",
-            correlation_id, frame_count, dtmf_count,
-        )
-
-
-@app.get("/healthz")
-async def healthz():
-    return {"status": "ok"}
-EOF
-
-cat > "$ECHO_DIR/Dockerfile" <<'EOF'
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
-
-ok "wrote $ECHO_DIR/{app.py,requirements.txt,Dockerfile}"
+# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked, or the script stops here.
+# This is the guard that would have caught the ECHO_DIR misdirection the moment it happened, instead
+# of silently building whatever sat at the wrong path. There is deliberately no "generate it if
+# missing" fallback left in this script -- a wrong path must stop the script, never regenerate from a
+# template.
+if [[ ! -f "$ECHO_DIR/app.py" ]]; then
+  err "ECHO_DIR=$ECHO_DIR has no app.py. Either this path is wrong or the file was moved/deleted --"
+  err "either way, refusing to proceed without it. Fix docs/echo-app/ directly, never via this script."
+  on_error 1
+fi
+if ! git -C "$ECHO_DIR" ls-files --error-unmatch app.py requirements.txt Dockerfile >/dev/null 2>&1; then
+  err "ECHO_DIR=$ECHO_DIR/{app.py,requirements.txt,Dockerfile} exist but aren't all git-tracked --"
+  err "refusing to build from an unreviewed file. This is exactly the failure mode that nearly shipped"
+  err "an unreviewed, B2-shaped image before (docs/phase0/findings.md, 'Stage 12 -- ECHO_DIR misdirection')."
+  on_error 1
+fi
+ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present and git-tracked"
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
@@ -803,14 +941,59 @@ say "Avoiding az containerapp up's auto-provisioned ACR (~\$5/mo, not in docs/PL
 say "Pushing to Docker Hub's free tier instead, then pointing Container Apps at that external image."
 
 ask DOCKERHUB_USERNAME "Docker Hub username:"
-ask_secret DOCKERHUB_TOKEN "Docker Hub access token (Account Settings → Security → New Access Token):"
+ask_secret DOCKERHUB_TOKEN "Docker Hub access token, Read & Write scope (Account Settings → Security → New Access Token; set the Access permissions dropdown to Read & Write — this same token both pushes the image below and is used as the Container App's pull credential later, so it needs both; do NOT grant Delete, which neither step uses):"
 write_env "DOCKERHUB_USERNAME" "$DOCKERHUB_USERNAME"
 
 IMAGE="docker.io/${DOCKERHUB_USERNAME}/azbank-echo-p0:latest"
-echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
-docker build -t "$IMAGE" "$ECHO_DIR"
-docker push "$IMAGE"
-ok "pushed $IMAGE"
+LOGIN_OUTPUT="$(echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin 2>&1)" || {
+  err "docker login to docker.io failed for user '$DOCKERHUB_USERNAME' -- most likely the token is"
+  err "wrong, expired, or doesn't have Read & Write scope (Account Settings → Security → the token's"
+  err "Access permissions dropdown). Generate a fresh Read & Write token and re-run this script --"
+  err "the username/token prompt above will ask again."
+  err "Raw docker login output:"
+  sed 's/^/    /' <<<"$LOGIN_OUTPUT"
+  on_error 1
+}
+ok "logged in to docker.io as $DOCKERHUB_USERNAME"
+
+# `docker buildx build --platform linux/amd64`, not plain `docker build`: a classic-builder build on
+# Apple Silicon defaults to arm64, which Container Apps rejects at `containerapp create` --
+# "no child with platform linux/amd64 in index ...". Found live 2026-08-21 (docs/phase0/findings.md,
+# "Stage 12 -- ECHO_DIR misdirection"). buildx build+push in one step also avoids a separate
+# build-then-push manifest-shape mismatch.
+#
+# --provenance=false --sbom=false: buildx attaches a provenance/SBOM attestation manifest to the
+# index by default, tagged Platform: unknown/unknown alongside the real linux/amd64 one. The original
+# failure here was Azure walking an image index looking for a platform child and not finding one --
+# Azure's resolver has never been shown to handle an index with an unknown/unknown entry cleanly, and
+# the one time it walked an index at all, it failed. Eliminating the variable is free; testing whether
+# Azure tolerates it costs a billable `containerapp create`. Verified manually 2026-08-21: with these
+# flags, `docker buildx imagetools inspect` shows a single linux/amd64 manifest, no second entry.
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false -t "$IMAGE" --push "$ECHO_DIR"
+ok "built for linux/amd64 and pushed $IMAGE"
+
+# Fail loudly here, before any Azure spend, if the pushed image isn't actually linux/amd64 --
+# Container Apps only rejects a mismatched image at `containerapp create`, after ARM has already
+# accepted the request. Same shape as the Dockerfile's own `pip freeze && test -s` build assertion:
+# verify before the billable step, not after.
+#
+# Queries the platform field structurally (`--format`), not by grepping `imagetools inspect`'s
+# display text. Verified empirically 2026-08-21: with --provenance=false --sbom=false, the pushed
+# image is a flat (non-index) manifest, and a flat manifest's default `imagetools inspect` output
+# never prints a "Platform:" line at all -- `grep -q "linux/amd64"` against it returns exit 1 even
+# for a correctly-built linux/amd64 image. That version of this gate would have failed closed, but
+# for the wrong reason, on every future correct build -- a gate that fails (or passes) for the wrong
+# reason is worse than no gate, so it's replaced rather than patched around.
+BUILT_PLATFORM="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Image.Platform.OS}}/{{.Image.Platform.Architecture}}' 2>&1)" || {
+  err "docker buildx imagetools inspect failed against $IMAGE -- can't confirm what actually got pushed"
+  err "$BUILT_PLATFORM"
+  on_error 1
+}
+if [[ "$BUILT_PLATFORM" != "linux/amd64" ]]; then
+  err "pushed image $IMAGE is platform '$BUILT_PLATFORM', not linux/amd64 -- Container Apps will reject it."
+  on_error 1
+fi
+ok "confirmed $IMAGE is linux/amd64 (queried structurally, not grepped from display text)"
 
 note "The image itself has no secrets baked in — ACS_CONNECTION_STRING and APP_BASE_URL are runtime"
 note "env vars set on the Container App below, never build args or COPY'd files, so docker history"
@@ -830,11 +1013,41 @@ else
   ok "Container Apps environment $CAE_NAME created"
 fi
 
+# Computed BEFORE create, not queried after: verified live 2026-08-21 that a Container App's FQDN is
+# fully deterministic from {app-name}.{environment's own defaultDomain}, and the environment already
+# exists by this point -- so the real APP_BASE_URL is knowable up front. This replaces a
+# create-with-a-placeholder-secret-then-patch-it-after design that shipped a container whose running
+# process started with APP_BASE_URL="placeholder" and never picked up the later fix: Container Apps
+# injects secretRef env vars as literal OS env vars at container start, not a live-refreshed value,
+# and no new revision was ever created by the later `secret set`/`update` calls (confirmed: exactly
+# one revision existed, from container start to failure). CALLBACK_URL built from "placeholder" is
+# exactly why ACS rejected answer_call() with "The field CallbackUri is invalid." Full account:
+# docs/phase0/findings.md, "APP_BASE_URL placeholder race".
+ENV_DEFAULT_DOMAIN=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.defaultDomain" -o tsv)
+APP_BASE_URL="https://${CONTAINERAPP_NAME}.${ENV_DEFAULT_DOMAIN}"
+
 if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
-  say "updating existing container app with the freshly-pushed image"
+  # `az containerapp update --image` alone does two things wrong on a retry: (1) it takes no --secrets
+  # flag at all, so an already-existing app keeps whatever secret value it already has -- for this
+  # project's currently-deployed app, that's the stale "placeholder" app-base-url from the race
+  # documented above; (2) --image is a mutable Docker Hub `:latest` tag, so if the tag string is
+  # byte-identical to what's already on the app, Azure may see no spec diff and skip creating a new
+  # revision at all -- meaning secretRef env vars, which are only read at container start, would never
+  # be re-read even if the secret's stored value were corrected first. Fixed by (1) setting secrets
+  # explicitly via the separate `secret set` verb before updating, and (2) forcing a distinct revision
+  # unconditionally via --revision-suffix, so a new container start (and therefore a fresh env-var
+  # read) happens regardless of whether Azure would have detected an image-string diff on its own.
+  say "updating existing container app: refreshing secrets, then forcing a new revision"
+  az containerapp secret set \
+    --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+    --output none
   az containerapp update \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-    --image "$IMAGE" --output none
+    --image "$IMAGE" \
+    --revision-suffix "p0$(date -u +%Y%m%d%H%M%S)" \
+    --output none
+  ok "container app $CONTAINERAPP_NAME updated: secrets refreshed, new revision forced"
 else
   az containerapp create \
     --name "$CONTAINERAPP_NAME" \
@@ -849,17 +1062,46 @@ else
     --min-replicas 1 --max-replicas 1 \
     --cpu 0.25 --memory 0.5Gi \
     --env-vars "ACS_CONNECTION_STRING=secretref:acs-conn" "APP_BASE_URL=secretref:app-base-url" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=placeholder" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
     --output none
   ok "container app $CONTAINERAPP_NAME created (min-replicas=1, 0.25 vCPU / 0.5 GiB per docs/PLAN.md)"
 fi
 
+# Sanity check, not blind trust in the formula above: confirm Azure actually assigned what was
+# computed, before Event Grid gets wired to a possibly-wrong URL and before healthz is even checked.
 APP_FQDN=$(az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv)
-APP_BASE_URL="https://${APP_FQDN}"
-az containerapp secret set --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-  --secrets "app-base-url=$APP_BASE_URL" --output none
-az containerapp update --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-  --set-env-vars "APP_BASE_URL=secretref:app-base-url" --output none
+if [[ "https://$APP_FQDN" != "$APP_BASE_URL" ]]; then
+  err "computed APP_BASE_URL ($APP_BASE_URL) doesn't match the live FQDN (https://$APP_FQDN) -- the"
+  err "defaultDomain assumption this fix relies on may not hold here. Investigate before proceeding."
+  on_error 1
+fi
+ok "confirmed APP_BASE_URL was correct from container start: $APP_BASE_URL"
+
+# Diagnostic setting, explicit: found live 2026-08-21 that the environment's built-in
+# appLogsConfiguration (auto-wired to a Log Analytics workspace at `containerapp env create` time)
+# was NOT actually delivering console logs to that workspace's ContainerAppConsoleLogs table --
+# confirmed empty after over an hour of a running, logging container. `az containerapp logs show`'s
+# own streaming buffer also doesn't retain back to container start, so a boot-time issue is currently
+# unrecoverable once the buffer scrolls past it. This adds the classic Diagnostic Settings resource
+# as a second, standard path to the same workspace -- whether it resolves the gap or the native path
+# was simply slow, confirm after this redeploy, don't assume either way. Full account:
+# docs/phase0/findings.md, "Log Analytics: two workspaces, neither delivering".
+CAE_ID=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)
+LOGS_WORKSPACE_ID=$(az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" -o tsv)
+LOGS_WORKSPACE_RESOURCE_ID=$(az monitor log-analytics workspace list --resource-group "$RESOURCE_GROUP" --query "[?customerId=='${LOGS_WORKSPACE_ID}'].id | [0]" -o tsv)
+if [[ -z "$LOGS_WORKSPACE_RESOURCE_ID" ]]; then
+  warn "couldn't resolve the environment's linked workspace to a resource ID -- skipping the explicit"
+  warn "diagnostic setting this run. Console logs still flow through the native appLogsConfiguration"
+  warn "path (unconfirmed whether it's actually delivering -- see findings.md)."
+else
+  az monitor diagnostic-settings create \
+    --name "azbank-p0-console-logs" \
+    --resource "$CAE_ID" \
+    --workspace "$LOGS_WORKSPACE_RESOURCE_ID" \
+    --logs '[{"category":"ContainerAppConsoleLogs","enabled":true},{"category":"ContainerAppSystemLogs","enabled":true}]' \
+    --output none
+  ok "diagnostic setting wired: environment console+system logs -> $LOGS_WORKSPACE_RESOURCE_ID"
+fi
 
 write_env "APP_BASE_URL" "$APP_BASE_URL"
 ok "app live at $APP_BASE_URL"
@@ -882,6 +1124,15 @@ if [[ "$HEALTHY" != "1" ]]; then
 fi
 ok "container is healthy (/healthz responding) — safe to wire Event Grid to it"
 
+# PROVISION_TIME is NOT written here anymore. Found live 2026-08-21: a healthy /healthz response
+# proves the container is up, not that it can answer a real call -- this app was healthy for over
+# an hour while every real call to it failed. R-04's window now opens in 02-test-calls.sh instead,
+# gated on a confirmed Microsoft.Communication.CallConnected event in the Container App logs, not
+# on this script reaching this line. Full account: docs/phase0/findings.md,
+# "healthz-as-window-gate -- the design flaw, more interesting than the bug that triggered it".
+note "R-04's 72h window does NOT open here. Run 02-test-calls.sh next -- it only writes PROVISION_TIME"
+note "once a real call is confirmed answered (a CallConnected event in the logs), not on healthz alone."
+
 say "Wiring the Event Grid subscription so ACS's IncomingCall event reaches the app."
 az eventgrid event-subscription create \
   --name "azbank-p0-incoming-call" \
@@ -894,5 +1145,6 @@ ok "Event Grid subscription wired"
 
 finish
 
-printf '\n%sNext:%s run %s02-test-calls.sh%s today — dial the number and let the wizard capture the meters.\n\n' \
+printf '\n%sNext:%s run %s02-test-calls.sh%s today — dial the number 3 times. R-04'"'"'s 72h window has NOT\n' \
   "$BOLD" "$RESET" "$BLUE" "$RESET"
+printf 'started yet; it opens inside that script, only once a call is confirmed answered.\n\n'

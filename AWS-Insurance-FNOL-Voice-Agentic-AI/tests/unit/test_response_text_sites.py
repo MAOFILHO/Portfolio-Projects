@@ -162,6 +162,13 @@ def test_every_real_node_module_has_at_least_one_dynamic_site(module_path: str) 
 def test_update_contact_info_py_79_the_erratum_site_is_found_and_marked_dynamic() -> None:
     # docs/audits/2026-08-16-d121-guardrail-mechanism-sweep.md's own erratum: the manual sweep's first
     # pass missed this exact site (an except-branch f-string). The walker must not repeat that miss.
+    #
+    # Line number moved to 104 (D140/OI58, 2026-08-20): the confirm-ceiling-exhausted branch above this
+    # one grew an initiate_escalation() call, shifting every line below it. `lineno` is documented on
+    # `ResponseTextSite` itself as "for diagnostics/error messages only -- never part of identity" --
+    # this test pinning to one anyway is this test's own pre-existing choice, not touched here beyond the
+    # mechanical update; the test NAME keeps the original "79" as a historical pointer to the erratum, not
+    # a live claim about today's line number.
     import importlib
 
     module = importlib.import_module("fnol_voice_agent.agents.nodes.update_contact_info")
@@ -169,4 +176,4 @@ def test_update_contact_info_py_79_the_erratum_site_is_found_and_marked_dynamic(
     except_sites = [s for s in sites if s.branch_kind == "except"]
     assert len(except_sites) == 1
     assert except_sites[0].kind == "dynamic"
-    assert except_sites[0].lineno == 79
+    assert except_sites[0].lineno == 104

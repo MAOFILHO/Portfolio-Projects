@@ -1,0 +1,706 @@
+{"TimeStamp": "2026-08-21T23:45:43.80538", "Log": "Connecting to the container 'ca-azbank-echo-p0'..."}
+{"TimeStamp": "2026-08-21T23:45:43.89647", "Log": "Successfully Connected to container: 'ca-azbank-echo-p0' [Revision: 'ca-azbank-echo-p0--kkp0zzb', Replica: 'ca-azbank-echo-p0--kkp0zzb-84b5446875-mbrq7']"}
+{"TimeStamp": "2026-08-21T22:49:51.9694923+00:00", "Log": "F python-dotenv==1.2.3"}
+{"TimeStamp": "2026-08-21T22:49:51.9694943+00:00", "Log": "F PyYAML==6.0.3"}
+{"TimeStamp": "2026-08-21T22:49:51.9694964+00:00", "Log": "F requests==2.34.2"}
+{"TimeStamp": "2026-08-21T22:49:51.9694984+00:00", "Log": "F requests-oauthlib==2.0.0"}
+{"TimeStamp": "2026-08-21T22:49:51.9695004+00:00", "Log": "F starlette==0.46.2"}
+{"TimeStamp": "2026-08-21T22:49:51.9695025+00:00", "Log": "F typing-inspection==0.4.4"}
+{"TimeStamp": "2026-08-21T22:49:51.9695045+00:00", "Log": "F typing_extensions==4.16.0"}
+{"TimeStamp": "2026-08-21T22:49:51.9695065+00:00", "Log": "F urllib3==2.7.0"}
+{"TimeStamp": "2026-08-21T22:49:51.9695085+00:00", "Log": "F uvicorn==0.32.1"}
+{"TimeStamp": "2026-08-21T22:49:51.9695104+00:00", "Log": "F uvloop==0.22.1"}
+{"TimeStamp": "2026-08-21T22:49:51.9695124+00:00", "Log": "F watchfiles==1.2.0"}
+{"TimeStamp": "2026-08-21T22:49:51.9695159+00:00", "Log": "F websockets==17.0.1"}
+{"TimeStamp": "2026-08-21T22:49:51.9695182+00:00", "Log": "F"}
+{"TimeStamp": "2026-08-21T22:49:52.0277747+00:00", "Log": "F INFO:     Started server process [1]"}
+{"TimeStamp": "2026-08-21T22:49:52.0278172+00:00", "Log": "F INFO:     Waiting for application startup."}
+{"TimeStamp": "2026-08-21T22:49:52.0279608+00:00", "Log": "F INFO:     Application startup complete."}
+{"TimeStamp": "2026-08-21T22:49:52.0288618+00:00", "Log": "F INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)"}
+{"TimeStamp": "2026-08-21T22:49:54.9621806+00:00", "Log": "F INFO:     100.100.0.76:53950 - \"GET /healthz HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:49:58.0978077+00:00", "Log": "F 2026-08-21 22:49:58,097 Event Grid validation handshake, code=13FC2E4D-5686-46F5-8CF9-8F13733F3C68"}
+{"TimeStamp": "2026-08-21T22:49:58.0978998+00:00", "Log": "F INFO:     100.100.0.147:41930 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:12.2116081+00:00", "Log": "F 2026-08-21 22:51:12,211 IncomingCall, correlationId=2d5e7f5c-39ae-46ef-b3d8-feadf93ec651"}
+{"TimeStamp": "2026-08-21T22:51:12.2128101+00:00", "Log": "F 2026-08-21 22:51:12,212 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128358+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128514+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T22:51:12.212854+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128562+00:00", "Log": "F     'Content-Length': '9619'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128585+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128607+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128628+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128648+00:00", "Log": "F     'x-ms-client-request-id': 'cea91336-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128669+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128692+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128713+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128732+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128752+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.2128771+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T22:51:12.3916275+00:00", "Log": "F 2026-08-21 22:51:12,391 Response status: 200"}
+{"TimeStamp": "2026-08-21T22:51:12.3916695+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T22:51:12.3916879+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 22:51:12 GMT'"}
+{"TimeStamp": "2026-08-21T22:51:12.391691+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T22:51:12.3916934+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T22:51:12.3916955+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T22:51:12.3916975+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3916997+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917021+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917044+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917065+00:00", "Log": "F     'x-ms-client-request-id': 'cea91336-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917088+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917109+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917184+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3917205+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:12.3938407+00:00", "Log": "F INFO:     100.100.0.67:43500 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:13.4262547+00:00", "Log": "F INFO:     ('100.100.0.67', 43500) - \"WebSocket /ws\" [accepted]"}
+{"TimeStamp": "2026-08-21T22:51:13.4264342+00:00", "Log": "F 2026-08-21 22:51:13,426 WS open correlationId=2d5e7f5c-39ae-46ef-b3d8-feadf93ec651 connectionId=05005780-8be8-4a70-8ec9-20662c785ce7"}
+{"TimeStamp": "2026-08-21T22:51:13.4265312+00:00", "Log": "F INFO:     connection open"}
+{"TimeStamp": "2026-08-21T22:51:13.5729952+00:00", "Log": "F 2026-08-21 22:51:13,572 callback event: Microsoft.Communication.MediaStreamingStarted"}
+{"TimeStamp": "2026-08-21T22:51:13.5729952+00:00", "Log": "F INFO:     100.100.0.147:50748 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:13.8637877+00:00", "Log": "F 2026-08-21 22:51:13,863 callback event: Microsoft.Communication.CallConnected"}
+{"TimeStamp": "2026-08-21T22:51:13.8640306+00:00", "Log": "F INFO:     100.100.0.147:50748 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:14.0861183+00:00", "Log": "F 2026-08-21 22:51:14,085 callback event: Microsoft.Communication.ParticipantsUpdated"}
+{"TimeStamp": "2026-08-21T22:51:14.0862541+00:00", "Log": "F INFO:     100.100.0.147:50748 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:14.4443815+00:00", "Log": "F 2026-08-21 22:51:14,444 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:15.4384785+00:00", "Log": "F 2026-08-21 22:51:15,438 frame 100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:16.4392616+00:00", "Log": "F 2026-08-21 22:51:16,439 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:17.4397658+00:00", "Log": "F 2026-08-21 22:51:17,439 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:18.43801+00:00", "Log": "F 2026-08-21 22:51:18,437 frame 250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:19.439011+00:00", "Log": "F 2026-08-21 22:51:19,438 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:20.4389716+00:00", "Log": "F 2026-08-21 22:51:20,438 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:21.4404781+00:00", "Log": "F 2026-08-21 22:51:21,440 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:22.4406821+00:00", "Log": "F 2026-08-21 22:51:22,440 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:23.4400808+00:00", "Log": "F 2026-08-21 22:51:23,439 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:24.4404916+00:00", "Log": "F 2026-08-21 22:51:24,440 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:25.4406254+00:00", "Log": "F 2026-08-21 22:51:25,440 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:26.4400246+00:00", "Log": "F 2026-08-21 22:51:26,439 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:27.4399702+00:00", "Log": "F 2026-08-21 22:51:27,439 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:28.4390585+00:00", "Log": "F 2026-08-21 22:51:28,438 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:29.4391806+00:00", "Log": "F 2026-08-21 22:51:29,438 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:30.4403278+00:00", "Log": "F 2026-08-21 22:51:30,440 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:31.4396402+00:00", "Log": "F 2026-08-21 22:51:31,439 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:32.4539727+00:00", "Log": "F 2026-08-21 22:51:32,453 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:33.4398723+00:00", "Log": "F 2026-08-21 22:51:33,439 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:34.4401414+00:00", "Log": "F 2026-08-21 22:51:34,439 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:35.4399135+00:00", "Log": "F 2026-08-21 22:51:35,439 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:36.4397965+00:00", "Log": "F 2026-08-21 22:51:36,439 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:37.4405771+00:00", "Log": "F 2026-08-21 22:51:37,440 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:37.7888134+00:00", "Log": "F 2026-08-21 22:51:37,788 callback event: Microsoft.Communication.MediaStreamingStopped"}
+{"TimeStamp": "2026-08-21T22:51:37.7889245+00:00", "Log": "F INFO:     100.100.0.147:41340 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:37.8605577+00:00", "Log": "F 2026-08-21 22:51:37,860 WS closed correlationId=2d5e7f5c-39ae-46ef-b3d8-feadf93ec651 frames=1218 dtmf_tones=0"}
+{"TimeStamp": "2026-08-21T22:51:37.8606982+00:00", "Log": "F INFO:     connection closed"}
+{"TimeStamp": "2026-08-21T22:51:38.2365403+00:00", "Log": "F 2026-08-21 22:51:38,236 callback event: Microsoft.Communication.CallDisconnected"}
+{"TimeStamp": "2026-08-21T22:51:38.2366618+00:00", "Log": "F INFO:     100.100.0.147:41340 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:51.9407808+00:00", "Log": "F 2026-08-21 22:51:51,940 IncomingCall, correlationId=00569086-54a1-4fdd-a74f-ce6446059e62"}
+{"TimeStamp": "2026-08-21T22:51:51.9416609+00:00", "Log": "F 2026-08-21 22:51:51,941 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416748+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416802+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T22:51:51.9416817+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416832+00:00", "Log": "F     'Content-Length': '9623'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416845+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416857+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416869+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416881+00:00", "Log": "F     'x-ms-client-request-id': 'e6573e5e-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416894+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416909+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416922+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416968+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T22:51:51.941698+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416994+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T22:51:51.9827423+00:00", "Log": "F 2026-08-21 22:51:51,982 Response status: 200"}
+{"TimeStamp": "2026-08-21T22:51:51.9827771+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T22:51:51.9827916+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 22:51:51 GMT'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827932+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827946+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827958+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827969+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828091+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828106+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828146+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.982816+00:00", "Log": "F     'x-ms-client-request-id': 'e6573e5e-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828174+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828187+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828198+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.982821+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9834341+00:00", "Log": "F INFO:     100.100.0.147:59312 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:52.922006+00:00", "Log": "F INFO:     ('100.100.0.147', 59312) - \"WebSocket /ws\" [accepted]"}
+{"TimeStamp": "2026-08-21T22:51:52.9220509+00:00", "Log": "F 2026-08-21 22:51:52,921 WS open correlationId=00569086-54a1-4fdd-a74f-ce6446059e62 connectionId=05005780-faf0-4fa5-801b-ecde3edaa9dd"}
+{"TimeStamp": "2026-08-21T22:51:52.9225466+00:00", "Log": "F INFO:     connection open"}
+{"TimeStamp": "2026-08-21T22:51:52.9979155+00:00", "Log": "F 2026-08-21 22:51:52,997 callback event: Microsoft.Communication.MediaStreamingStarted"}
+{"TimeStamp": "2026-08-21T22:51:52.9980228+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.0185578+00:00", "Log": "F 2026-08-21 22:51:53,018 callback event: Microsoft.Communication.CallConnected"}
+{"TimeStamp": "2026-08-21T22:51:53.0186657+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.0390553+00:00", "Log": "F 2026-08-21 22:51:53,038 callback event: Microsoft.Communication.ParticipantsUpdated"}
+{"TimeStamp": "2026-08-21T22:51:53.0392095+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.9345163+00:00", "Log": "F 2026-08-21 22:51:53,934 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:54.9337823+00:00", "Log": "F 2026-08-21 22:51:54,933 frame 100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:55.9341034+00:00", "Log": "F 2026-08-21 22:51:55,933 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:56.9351275+00:00", "Log": "F 2026-08-21 22:51:56,934 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:57.9343651+00:00", "Log": "F 2026-08-21 22:51:57,934 frame 250 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:51:58.9348079+00:00", "Log": "F 2026-08-21 22:51:58,934 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:59.9292581+00:00", "Log": "F 2026-08-21 22:51:59,929 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:00.9343031+00:00", "Log": "F 2026-08-21 22:52:00,934 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:01.9294131+00:00", "Log": "F 2026-08-21 22:52:01,929 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:02.929683+00:00", "Log": "F 2026-08-21 22:52:02,929 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:03.1486718+00:00", "Log": "F 2026-08-21 22:52:03,148 DTMF digit #1 arrived DURING streaming t=10.226s since stream start (frame_count so far=511) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:03.9335376+00:00", "Log": "F 2026-08-21 22:52:03,933 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:04.1148742+00:00", "Log": "F 2026-08-21 22:52:04,114 DTMF digit #2 arrived DURING streaming t=11.193s since stream start (frame_count so far=559) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:04.9345549+00:00", "Log": "F 2026-08-21 22:52:04,934 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:05.0938035+00:00", "Log": "F 2026-08-21 22:52:05,093 DTMF digit #3 arrived DURING streaming t=12.172s since stream start (frame_count so far=608) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:05.93384+00:00", "Log": "F 2026-08-21 22:52:05,933 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:06.9294888+00:00", "Log": "F 2026-08-21 22:52:06,929 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:07.9339099+00:00", "Log": "F 2026-08-21 22:52:07,933 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:08.9338506+00:00", "Log": "F 2026-08-21 22:52:08,933 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:09.9342229+00:00", "Log": "F 2026-08-21 22:52:09,933 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:10.9339785+00:00", "Log": "F 2026-08-21 22:52:10,933 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:11.9339159+00:00", "Log": "F 2026-08-21 22:52:11,933 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:12.934046+00:00", "Log": "F 2026-08-21 22:52:12,933 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:13.9339303+00:00", "Log": "F 2026-08-21 22:52:13,933 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:14.9333265+00:00", "Log": "F 2026-08-21 22:52:14,933 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:15.9340754+00:00", "Log": "F 2026-08-21 22:52:15,933 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:16.9340853+00:00", "Log": "F 2026-08-21 22:52:16,933 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:17.9341493+00:00", "Log": "F 2026-08-21 22:52:17,933 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:18.9305193+00:00", "Log": "F 2026-08-21 22:52:18,930 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:19.9311375+00:00", "Log": "F 2026-08-21 22:52:19,930 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:20.930395+00:00", "Log": "F 2026-08-21 22:52:20,930 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:21.0556528+00:00", "Log": "F 2026-08-21 22:52:21,055 DTMF digit #4 arrived DURING streaming t=28.133s since stream start (frame_count so far=1406) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.574832+00:00", "Log": "F 2026-08-21 22:52:21,574 DTMF digit #5 arrived DURING streaming t=28.653s since stream start (frame_count so far=1432) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.9321579+00:00", "Log": "F 2026-08-21 22:52:21,931 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:22.240715+00:00", "Log": "F 2026-08-21 22:52:22,240 DTMF digit #6 arrived DURING streaming t=29.319s since stream start (frame_count so far=1465) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:22.9307719+00:00", "Log": "F 2026-08-21 22:52:22,930 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:23.9320376+00:00", "Log": "F 2026-08-21 22:52:23,931 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:24.9324992+00:00", "Log": "F 2026-08-21 22:52:24,932 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:25.7519504+00:00", "Log": "F 2026-08-21 22:52:25,751 callback event: Microsoft.Communication.MediaStreamingStopped"}
+{"TimeStamp": "2026-08-21T22:52:25.7521653+00:00", "Log": "F INFO:     100.100.0.147:55724 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:25.7668654+00:00", "Log": "F 2026-08-21 22:52:25,766 WS closed correlationId=00569086-54a1-4fdd-a74f-ce6446059e62 frames=1641 dtmf_tones=6"}
+{"TimeStamp": "2026-08-21T22:52:25.7672289+00:00", "Log": "F INFO:     connection closed"}
+{"TimeStamp": "2026-08-21T22:52:25.8130087+00:00", "Log": "F 2026-08-21 22:52:25,812 callback event: Microsoft.Communication.CallDisconnected"}
+{"TimeStamp": "2026-08-21T22:52:25.8131148+00:00", "Log": "F INFO:     100.100.0.147:55724 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:49.2312494+00:00", "Log": "F 2026-08-21 22:52:49,230 IncomingCall, correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa"}
+{"TimeStamp": "2026-08-21T22:52:49.2321673+00:00", "Log": "F 2026-08-21 22:52:49,231 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T22:52:49.2321913+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322028+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T22:52:49.2322079+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:52:49.23221+00:00", "Log": "F     'Content-Length': '9624'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322123+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.232215+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.232222+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322241+00:00", "Log": "F     'x-ms-client-request-id': '087d13aa-9db3-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322263+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322286+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322308+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322329+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T22:52:49.232235+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322371+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T22:52:49.4357576+00:00", "Log": "F 2026-08-21 22:52:49,435 Response status: 200"}
+{"TimeStamp": "2026-08-21T22:52:49.435798+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T22:52:49.4358135+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 22:52:49 GMT'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358154+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358204+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358217+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358229+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358241+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358253+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358264+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358275+00:00", "Log": "F     'x-ms-client-request-id': '087d13aa-9db3-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358286+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358298+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358308+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.435832+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4364543+00:00", "Log": "F INFO:     100.100.0.67:42100 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.5140124+00:00", "Log": "F INFO:     ('100.100.0.147', 49304) - \"WebSocket /ws\" [accepted]"}
+{"TimeStamp": "2026-08-21T22:52:50.5141987+00:00", "Log": "F 2026-08-21 22:52:50,513 WS open correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa connectionId=00005c80-ef9f-4298-b588-b1d55a34f7fb"}
+{"TimeStamp": "2026-08-21T22:52:50.5163727+00:00", "Log": "F INFO:     connection open"}
+{"TimeStamp": "2026-08-21T22:52:50.7311868+00:00", "Log": "F 2026-08-21 22:52:50,730 callback event: Microsoft.Communication.MediaStreamingStarted"}
+{"TimeStamp": "2026-08-21T22:52:50.7314846+00:00", "Log": "F INFO:     100.100.0.147:49318 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.7559865+00:00", "Log": "F 2026-08-21 22:52:50,755 callback event: Microsoft.Communication.CallConnected"}
+{"TimeStamp": "2026-08-21T22:52:50.7561593+00:00", "Log": "F INFO:     100.100.0.147:49326 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.7896598+00:00", "Log": "F 2026-08-21 22:52:50,789 callback event: Microsoft.Communication.ParticipantsUpdated"}
+{"TimeStamp": "2026-08-21T22:52:50.7897595+00:00", "Log": "F INFO:     100.100.0.147:49326 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:51.5147543+00:00", "Log": "F 2026-08-21 22:52:51,514 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:52.5158194+00:00", "Log": "F 2026-08-21 22:52:52,515 frame 100 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:52:53.5197741+00:00", "Log": "F 2026-08-21 22:52:53,519 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:54.5202317+00:00", "Log": "F 2026-08-21 22:52:54,520 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:55.5153899+00:00", "Log": "F 2026-08-21 22:52:55,515 frame 250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:56.5148911+00:00", "Log": "F 2026-08-21 22:52:56,514 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:57.5204605+00:00", "Log": "F 2026-08-21 22:52:57,520 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:58.515876+00:00", "Log": "F 2026-08-21 22:52:58,515 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:59.5203161+00:00", "Log": "F 2026-08-21 22:52:59,519 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:00.5151024+00:00", "Log": "F 2026-08-21 22:53:00,514 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:01.5182072+00:00", "Log": "F 2026-08-21 22:53:01,517 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:02.5178134+00:00", "Log": "F 2026-08-21 22:53:02,517 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:03.5174064+00:00", "Log": "F 2026-08-21 22:53:03,517 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:04.5186392+00:00", "Log": "F 2026-08-21 22:53:04,518 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:05.517239+00:00", "Log": "F 2026-08-21 22:53:05,516 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:06.5187534+00:00", "Log": "F 2026-08-21 22:53:06,518 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:07.5173954+00:00", "Log": "F 2026-08-21 22:53:07,517 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:08.5190026+00:00", "Log": "F 2026-08-21 22:53:08,518 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:09.5155725+00:00", "Log": "F 2026-08-21 22:53:09,515 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:10.5205183+00:00", "Log": "F 2026-08-21 22:53:10,520 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:11.5199673+00:00", "Log": "F 2026-08-21 22:53:11,519 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:12.516817+00:00", "Log": "F 2026-08-21 22:53:12,516 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:13.51635+00:00", "Log": "F 2026-08-21 22:53:13,516 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:14.5161601+00:00", "Log": "F 2026-08-21 22:53:14,515 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:15.5165751+00:00", "Log": "F 2026-08-21 22:53:15,516 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:16.5168803+00:00", "Log": "F 2026-08-21 22:53:16,516 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:17.5176783+00:00", "Log": "F 2026-08-21 22:53:17,517 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:18.5187121+00:00", "Log": "F 2026-08-21 22:53:18,518 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:19.5189643+00:00", "Log": "F 2026-08-21 22:53:19,518 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:20.5198829+00:00", "Log": "F 2026-08-21 22:53:20,519 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:21.5201908+00:00", "Log": "F 2026-08-21 22:53:21,519 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:22.5195952+00:00", "Log": "F 2026-08-21 22:53:22,519 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:23.5194162+00:00", "Log": "F 2026-08-21 22:53:23,519 frame 1650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:24.458221+00:00", "Log": "F 2026-08-21 22:53:24,457 DTMF digit #1 arrived DURING streaming t=33.944s since stream start (frame_count so far=1697) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:24.5208725+00:00", "Log": "F 2026-08-21 22:53:24,520 frame 1700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:24.9806141+00:00", "Log": "F 2026-08-21 22:53:24,980 DTMF digit #2 arrived DURING streaming t=34.466s since stream start (frame_count so far=1723) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:25.5104563+00:00", "Log": "F 2026-08-21 22:53:25,510 DTMF digit #3 arrived DURING streaming t=34.996s since stream start (frame_count so far=1749) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:25.5203345+00:00", "Log": "F 2026-08-21 22:53:25,520 frame 1750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:26.1903539+00:00", "Log": "F 2026-08-21 22:53:26,190 DTMF digit #4 arrived DURING streaming t=35.676s since stream start (frame_count so far=1783) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:26.5202117+00:00", "Log": "F 2026-08-21 22:53:26,519 frame 1800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:26.7205134+00:00", "Log": "F 2026-08-21 22:53:26,720 DTMF digit #5 arrived DURING streaming t=36.206s since stream start (frame_count so far=1810) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:27.2812573+00:00", "Log": "F 2026-08-21 22:53:27,280 DTMF digit #6 arrived DURING streaming t=36.767s since stream start (frame_count so far=1838) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:27.5216159+00:00", "Log": "F 2026-08-21 22:53:27,521 frame 1850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:28.5196329+00:00", "Log": "F 2026-08-21 22:53:28,519 frame 1900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:29.5207952+00:00", "Log": "F 2026-08-21 22:53:29,520 frame 1950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:30.5210238+00:00", "Log": "F 2026-08-21 22:53:30,520 frame 2000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:31.5218186+00:00", "Log": "F 2026-08-21 22:53:31,521 frame 2050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:32.5222078+00:00", "Log": "F 2026-08-21 22:53:32,521 frame 2100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:33.5182775+00:00", "Log": "F 2026-08-21 22:53:33,518 frame 2150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:34.5177891+00:00", "Log": "F 2026-08-21 22:53:34,517 frame 2200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:35.5180087+00:00", "Log": "F 2026-08-21 22:53:35,517 frame 2250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:36.5190894+00:00", "Log": "F 2026-08-21 22:53:36,518 frame 2300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:37.5176099+00:00", "Log": "F 2026-08-21 22:53:37,517 frame 2350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:38.5186194+00:00", "Log": "F 2026-08-21 22:53:38,518 frame 2400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:39.5195976+00:00", "Log": "F 2026-08-21 22:53:39,519 frame 2450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:40.5212349+00:00", "Log": "F 2026-08-21 22:53:40,520 frame 2500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:41.5207848+00:00", "Log": "F 2026-08-21 22:53:41,520 frame 2550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:42.5199062+00:00", "Log": "F 2026-08-21 22:53:42,519 frame 2600 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:53:43.5167039+00:00", "Log": "F 2026-08-21 22:53:43,516 frame 2650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:44.5259311+00:00", "Log": "F 2026-08-21 22:53:44,525 frame 2700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:45.5191576+00:00", "Log": "F 2026-08-21 22:53:45,518 frame 2750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:46.5185822+00:00", "Log": "F 2026-08-21 22:53:46,518 frame 2800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:47.5184664+00:00", "Log": "F 2026-08-21 22:53:47,518 frame 2850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:48.5199423+00:00", "Log": "F 2026-08-21 22:53:48,519 frame 2900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:49.5187746+00:00", "Log": "F 2026-08-21 22:53:49,518 frame 2950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:50.518943+00:00", "Log": "F 2026-08-21 22:53:50,518 frame 3000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:51.5196928+00:00", "Log": "F 2026-08-21 22:53:51,519 frame 3050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:52.5196063+00:00", "Log": "F 2026-08-21 22:53:52,518 frame 3100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:53.5215552+00:00", "Log": "F 2026-08-21 22:53:53,521 frame 3150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:54.5222791+00:00", "Log": "F 2026-08-21 22:53:54,521 frame 3200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:55.518685+00:00", "Log": "F 2026-08-21 22:53:55,518 frame 3250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:56.517255+00:00", "Log": "F 2026-08-21 22:53:56,516 frame 3300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:57.3256235+00:00", "Log": "F 2026-08-21 22:53:57,325 callback event: Microsoft.Communication.MediaStreamingStopped"}
+{"TimeStamp": "2026-08-21T22:53:57.3257014+00:00", "Log": "F INFO:     100.100.0.147:59660 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:53:57.3438795+00:00", "Log": "F 2026-08-21 22:53:57,343 WS closed correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa frames=3341 dtmf_tones=6"}
+{"TimeStamp": "2026-08-21T22:53:57.3439979+00:00", "Log": "F INFO:     connection closed"}
+{"TimeStamp": "2026-08-21T22:53:57.5376025+00:00", "Log": "F 2026-08-21 22:53:57,537 callback event: Microsoft.Communication.CallDisconnected"}
+{"TimeStamp": "2026-08-21T22:53:57.5377604+00:00", "Log": "F INFO:     100.100.0.147:59660 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:54:12.4452763+00:00", "Log": "F INFO:     100.100.0.67:55448 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:03:38.0986005+00:00", "Log": "F INFO:     100.100.0.147:48984 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:03:59.9608806+00:00", "Log": "F INFO:     100.100.0.67:45648 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:05:38.1262859+00:00", "Log": "F INFO:     100.100.0.67:35872 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:45:38.7249237+00:00", "Log": "F INFO:     100.100.0.147:34628 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:46:13.1936064+00:00", "Log": "F 2026-08-21 23:46:13,193 IncomingCall, correlationId=977a7c0f-e073-4eb0-82a2-87620d53ec13"}
+{"TimeStamp": "2026-08-21T23:46:13.1942517+00:00", "Log": "F 2026-08-21 23:46:13,194 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942674+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942738+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T23:46:13.1942755+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942767+00:00", "Log": "F     'Content-Length': '9623'"}
+{"TimeStamp": "2026-08-21T23:46:13.194278+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942795+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942807+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942819+00:00", "Log": "F     'x-ms-client-request-id': '7e32e582-9dba-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942832+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942865+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942878+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942889+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T23:46:13.19429+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942913+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T23:46:13.4009536+00:00", "Log": "F 2026-08-21 23:46:13,400 Response status: 400"}
+{"TimeStamp": "2026-08-21T23:46:13.4009967+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T23:46:13.4010147+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 23:46:13 GMT'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010169+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010182+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010195+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010207+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010219+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.401027+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010284+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010296+00:00", "Log": "F     'x-ms-client-request-id': '7e32e582-9dba-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010309+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010321+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010333+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010344+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4014788+00:00", "Log": "F INFO:     100.100.0.147:59792 - \"POST /api/incoming-call HTTP/1.1\" 500 Internal Server Error"}
+{"TimeStamp": "2026-08-21T23:46:13.4059264+00:00", "Log": "F ERROR:    Exception in ASGI application"}
+{"TimeStamp": "2026-08-21T23:46:13.405953+00:00", "Log": "F Traceback (most recent call last):"}
+{"TimeStamp": "2026-08-21T23:46:13.4059652+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 409, in run_asgi"}
+{"TimeStamp": "2026-08-21T23:46:13.4059682+00:00", "Log": "F     result = await app(  # type: ignore[func-returns-value]"}
+{"TimeStamp": "2026-08-21T23:46:13.405975+00:00", "Log": "F              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4059776+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 60, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059797+00:00", "Log": "F     return await self.app(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.405982+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4059842+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1054, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059864+00:00", "Log": "F     await super().__call__(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4059884+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 112, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059903+00:00", "Log": "F     await self.middleware_stack(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4059922+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 187, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059943+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.4079351+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 165, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079553+00:00", "Log": "F     await self.app(scope, receive, _send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079653+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 62, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079671+00:00", "Log": "F     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079686+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079699+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.407971+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079752+00:00", "Log": "F     await app(scope, receive, sender)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079765+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 714, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079777+00:00", "Log": "F     await self.middleware_stack(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079789+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 734, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079801+00:00", "Log": "F     await route.handle(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079813+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 288, in handle"}
+{"TimeStamp": "2026-08-21T23:46:13.4079824+00:00", "Log": "F     await self.app(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079836+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 76, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080158+00:00", "Log": "F     await wrap_app_handling_exceptions(app, request)(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080182+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.408021+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.4080223+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080235+00:00", "Log": "F     await app(scope, receive, sender)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080246+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 73, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080259+00:00", "Log": "F     response = await f(request)"}
+{"TimeStamp": "2026-08-21T23:46:13.408027+00:00", "Log": "F                ^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080282+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 301, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080293+00:00", "Log": "F     raw_response = await run_endpoint_function("}
+{"TimeStamp": "2026-08-21T23:46:13.4080305+00:00", "Log": "F                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080316+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 212, in run_endpoint_function"}
+{"TimeStamp": "2026-08-21T23:46:13.4080328+00:00", "Log": "F     return await dependant.call(**values)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080339+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080359+00:00", "Log": "F   File \"/app/app.py\", line 86, in incoming_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4080371+00:00", "Log": "F     call_automation_client.answer_call("}
+{"TimeStamp": "2026-08-21T23:46:13.4080893+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/core/tracing/decorator.py\", line 119, in wrapper_use_tracer"}
+{"TimeStamp": "2026-08-21T23:46:13.4081068+00:00", "Log": "F     return func(*args, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081119+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081133+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/communication/callautomation/_call_automation_client.py\", line 472, in answer_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4081147+00:00", "Log": "F     result = self._client.answer_call(answer_call_request=answer_call_request, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081159+00:00", "Log": "F              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081172+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/core/tracing/decorator.py\", line 119, in wrapper_use_tracer"}
+{"TimeStamp": "2026-08-21T23:46:13.4081183+00:00", "Log": "F     return func(*args, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081884+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081943+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/communication/callautomation/_generated/operations/_operations.py\", line 1210, in answer_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4081987+00:00", "Log": "F     raise HttpResponseError(response=response, model=error)"}
+{"TimeStamp": "2026-08-21T23:46:13.4082008+00:00", "Log": "F azure.core.exceptions.HttpResponseError: (8523) Incoming Call Context is invalid."}
+{"TimeStamp": "2026-08-21T23:46:13.4082041+00:00", "Log": "F Code: 8523"}
+{"TimeStamp": "2026-08-21T23:46:13.4082054+00:00", "Log": "F Message: Incoming Call Context is invalid."}
+{"TimeStamp": "2026-08-21T23:46:13.4082066+00:00", "Log": "F Target: /calling/callConnections:answer"}
+{"TimeStamp": "2026-08-21T23:47:14.02894", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-21T23:48:14.10369", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-21T23:49:14.1898", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-21T23:50:14.28915", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-21T23:51:14.40001", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-22T00:01:29.1388", "Log": "Connecting to the container 'ca-azbank-echo-p0'..."}
+{"TimeStamp": "2026-08-22T00:01:29.23504", "Log": "Successfully Connected to container: 'ca-azbank-echo-p0' [Revision: 'ca-azbank-echo-p0--kkp0zzb', Replica: 'ca-azbank-echo-p0--kkp0zzb-84b5446875-mbrq7']"}
+{"TimeStamp": "2026-08-21T22:51:51.9416748+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416802+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T22:51:51.9416817+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416832+00:00", "Log": "F     'Content-Length': '9623'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416845+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416857+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416869+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416881+00:00", "Log": "F     'x-ms-client-request-id': 'e6573e5e-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416894+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416909+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416922+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416968+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T22:51:51.941698+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9416994+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T22:51:51.9827423+00:00", "Log": "F 2026-08-21 22:51:51,982 Response status: 200"}
+{"TimeStamp": "2026-08-21T22:51:51.9827771+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T22:51:51.9827916+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 22:51:51 GMT'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827932+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827946+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827958+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T22:51:51.9827969+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828091+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828106+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828146+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.982816+00:00", "Log": "F     'x-ms-client-request-id': 'e6573e5e-9db2-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828174+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828187+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9828198+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.982821+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:51:51.9834341+00:00", "Log": "F INFO:     100.100.0.147:59312 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:52.922006+00:00", "Log": "F INFO:     ('100.100.0.147', 59312) - \"WebSocket /ws\" [accepted]"}
+{"TimeStamp": "2026-08-21T22:51:52.9220509+00:00", "Log": "F 2026-08-21 22:51:52,921 WS open correlationId=00569086-54a1-4fdd-a74f-ce6446059e62 connectionId=05005780-faf0-4fa5-801b-ecde3edaa9dd"}
+{"TimeStamp": "2026-08-21T22:51:52.9225466+00:00", "Log": "F INFO:     connection open"}
+{"TimeStamp": "2026-08-21T22:51:52.9979155+00:00", "Log": "F 2026-08-21 22:51:52,997 callback event: Microsoft.Communication.MediaStreamingStarted"}
+{"TimeStamp": "2026-08-21T22:51:52.9980228+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.0185578+00:00", "Log": "F 2026-08-21 22:51:53,018 callback event: Microsoft.Communication.CallConnected"}
+{"TimeStamp": "2026-08-21T22:51:53.0186657+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.0390553+00:00", "Log": "F 2026-08-21 22:51:53,038 callback event: Microsoft.Communication.ParticipantsUpdated"}
+{"TimeStamp": "2026-08-21T22:51:53.0392095+00:00", "Log": "F INFO:     100.100.0.147:59324 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:51:53.9345163+00:00", "Log": "F 2026-08-21 22:51:53,934 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:54.9337823+00:00", "Log": "F 2026-08-21 22:51:54,933 frame 100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:55.9341034+00:00", "Log": "F 2026-08-21 22:51:55,933 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:56.9351275+00:00", "Log": "F 2026-08-21 22:51:56,934 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:57.9343651+00:00", "Log": "F 2026-08-21 22:51:57,934 frame 250 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:51:58.9348079+00:00", "Log": "F 2026-08-21 22:51:58,934 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:51:59.9292581+00:00", "Log": "F 2026-08-21 22:51:59,929 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:00.9343031+00:00", "Log": "F 2026-08-21 22:52:00,934 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:01.9294131+00:00", "Log": "F 2026-08-21 22:52:01,929 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:02.929683+00:00", "Log": "F 2026-08-21 22:52:02,929 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:03.1486718+00:00", "Log": "F 2026-08-21 22:52:03,148 DTMF digit #1 arrived DURING streaming t=10.226s since stream start (frame_count so far=511) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:03.9335376+00:00", "Log": "F 2026-08-21 22:52:03,933 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:04.1148742+00:00", "Log": "F 2026-08-21 22:52:04,114 DTMF digit #2 arrived DURING streaming t=11.193s since stream start (frame_count so far=559) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:04.9345549+00:00", "Log": "F 2026-08-21 22:52:04,934 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:05.0938035+00:00", "Log": "F 2026-08-21 22:52:05,093 DTMF digit #3 arrived DURING streaming t=12.172s since stream start (frame_count so far=608) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:05.93384+00:00", "Log": "F 2026-08-21 22:52:05,933 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:06.9294888+00:00", "Log": "F 2026-08-21 22:52:06,929 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:07.9339099+00:00", "Log": "F 2026-08-21 22:52:07,933 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:08.9338506+00:00", "Log": "F 2026-08-21 22:52:08,933 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:09.9342229+00:00", "Log": "F 2026-08-21 22:52:09,933 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:10.9339785+00:00", "Log": "F 2026-08-21 22:52:10,933 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:11.9339159+00:00", "Log": "F 2026-08-21 22:52:11,933 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:12.934046+00:00", "Log": "F 2026-08-21 22:52:12,933 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:13.9339303+00:00", "Log": "F 2026-08-21 22:52:13,933 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:14.9333265+00:00", "Log": "F 2026-08-21 22:52:14,933 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:15.9340754+00:00", "Log": "F 2026-08-21 22:52:15,933 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:16.9340853+00:00", "Log": "F 2026-08-21 22:52:16,933 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:17.9341493+00:00", "Log": "F 2026-08-21 22:52:17,933 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:18.9305193+00:00", "Log": "F 2026-08-21 22:52:18,930 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:19.9311375+00:00", "Log": "F 2026-08-21 22:52:19,930 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:20.930395+00:00", "Log": "F 2026-08-21 22:52:20,930 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:21.0556528+00:00", "Log": "F 2026-08-21 22:52:21,055 DTMF digit #4 arrived DURING streaming t=28.133s since stream start (frame_count so far=1406) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.574832+00:00", "Log": "F 2026-08-21 22:52:21,574 DTMF digit #5 arrived DURING streaming t=28.653s since stream start (frame_count so far=1432) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:21.9321579+00:00", "Log": "F 2026-08-21 22:52:21,931 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:22.240715+00:00", "Log": "F 2026-08-21 22:52:22,240 DTMF digit #6 arrived DURING streaming t=29.319s since stream start (frame_count so far=1465) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:52:22.9307719+00:00", "Log": "F 2026-08-21 22:52:22,930 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:23.9320376+00:00", "Log": "F 2026-08-21 22:52:23,931 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:24.9324992+00:00", "Log": "F 2026-08-21 22:52:24,932 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:25.7519504+00:00", "Log": "F 2026-08-21 22:52:25,751 callback event: Microsoft.Communication.MediaStreamingStopped"}
+{"TimeStamp": "2026-08-21T22:52:25.7521653+00:00", "Log": "F INFO:     100.100.0.147:55724 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:25.7668654+00:00", "Log": "F 2026-08-21 22:52:25,766 WS closed correlationId=00569086-54a1-4fdd-a74f-ce6446059e62 frames=1641 dtmf_tones=6"}
+{"TimeStamp": "2026-08-21T22:52:25.7672289+00:00", "Log": "F INFO:     connection closed"}
+{"TimeStamp": "2026-08-21T22:52:25.8130087+00:00", "Log": "F 2026-08-21 22:52:25,812 callback event: Microsoft.Communication.CallDisconnected"}
+{"TimeStamp": "2026-08-21T22:52:25.8131148+00:00", "Log": "F INFO:     100.100.0.147:55724 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:49.2312494+00:00", "Log": "F 2026-08-21 22:52:49,230 IncomingCall, correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa"}
+{"TimeStamp": "2026-08-21T22:52:49.2321673+00:00", "Log": "F 2026-08-21 22:52:49,231 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T22:52:49.2321913+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322028+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T22:52:49.2322079+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:52:49.23221+00:00", "Log": "F     'Content-Length': '9624'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322123+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.232215+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.232222+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322241+00:00", "Log": "F     'x-ms-client-request-id': '087d13aa-9db3-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322263+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322286+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322308+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322329+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T22:52:49.232235+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.2322371+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T22:52:49.4357576+00:00", "Log": "F 2026-08-21 22:52:49,435 Response status: 200"}
+{"TimeStamp": "2026-08-21T22:52:49.435798+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T22:52:49.4358135+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 22:52:49 GMT'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358154+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358204+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358217+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358229+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358241+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358253+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358264+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358275+00:00", "Log": "F     'x-ms-client-request-id': '087d13aa-9db3-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358286+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358298+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4358308+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.435832+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T22:52:49.4364543+00:00", "Log": "F INFO:     100.100.0.67:42100 - \"POST /api/incoming-call HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.5140124+00:00", "Log": "F INFO:     ('100.100.0.147', 49304) - \"WebSocket /ws\" [accepted]"}
+{"TimeStamp": "2026-08-21T22:52:50.5141987+00:00", "Log": "F 2026-08-21 22:52:50,513 WS open correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa connectionId=00005c80-ef9f-4298-b588-b1d55a34f7fb"}
+{"TimeStamp": "2026-08-21T22:52:50.5163727+00:00", "Log": "F INFO:     connection open"}
+{"TimeStamp": "2026-08-21T22:52:50.7311868+00:00", "Log": "F 2026-08-21 22:52:50,730 callback event: Microsoft.Communication.MediaStreamingStarted"}
+{"TimeStamp": "2026-08-21T22:52:50.7314846+00:00", "Log": "F INFO:     100.100.0.147:49318 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.7559865+00:00", "Log": "F 2026-08-21 22:52:50,755 callback event: Microsoft.Communication.CallConnected"}
+{"TimeStamp": "2026-08-21T22:52:50.7561593+00:00", "Log": "F INFO:     100.100.0.147:49326 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:50.7896598+00:00", "Log": "F 2026-08-21 22:52:50,789 callback event: Microsoft.Communication.ParticipantsUpdated"}
+{"TimeStamp": "2026-08-21T22:52:50.7897595+00:00", "Log": "F INFO:     100.100.0.147:49326 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:52:51.5147543+00:00", "Log": "F 2026-08-21 22:52:51,514 frame 50 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:52.5158194+00:00", "Log": "F 2026-08-21 22:52:52,515 frame 100 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:52:53.5197741+00:00", "Log": "F 2026-08-21 22:52:53,519 frame 150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:54.5202317+00:00", "Log": "F 2026-08-21 22:52:54,520 frame 200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:55.5153899+00:00", "Log": "F 2026-08-21 22:52:55,515 frame 250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:56.5148911+00:00", "Log": "F 2026-08-21 22:52:56,514 frame 300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:57.5204605+00:00", "Log": "F 2026-08-21 22:52:57,520 frame 350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:58.515876+00:00", "Log": "F 2026-08-21 22:52:58,515 frame 400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:52:59.5203161+00:00", "Log": "F 2026-08-21 22:52:59,519 frame 450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:00.5151024+00:00", "Log": "F 2026-08-21 22:53:00,514 frame 500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:01.5182072+00:00", "Log": "F 2026-08-21 22:53:01,517 frame 550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:02.5178134+00:00", "Log": "F 2026-08-21 22:53:02,517 frame 600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:03.5174064+00:00", "Log": "F 2026-08-21 22:53:03,517 frame 650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:04.5186392+00:00", "Log": "F 2026-08-21 22:53:04,518 frame 700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:05.517239+00:00", "Log": "F 2026-08-21 22:53:05,516 frame 750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:06.5187534+00:00", "Log": "F 2026-08-21 22:53:06,518 frame 800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:07.5173954+00:00", "Log": "F 2026-08-21 22:53:07,517 frame 850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:08.5190026+00:00", "Log": "F 2026-08-21 22:53:08,518 frame 900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:09.5155725+00:00", "Log": "F 2026-08-21 22:53:09,515 frame 950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:10.5205183+00:00", "Log": "F 2026-08-21 22:53:10,520 frame 1000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:11.5199673+00:00", "Log": "F 2026-08-21 22:53:11,519 frame 1050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:12.516817+00:00", "Log": "F 2026-08-21 22:53:12,516 frame 1100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:13.51635+00:00", "Log": "F 2026-08-21 22:53:13,516 frame 1150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:14.5161601+00:00", "Log": "F 2026-08-21 22:53:14,515 frame 1200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:15.5165751+00:00", "Log": "F 2026-08-21 22:53:15,516 frame 1250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:16.5168803+00:00", "Log": "F 2026-08-21 22:53:16,516 frame 1300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:17.5176783+00:00", "Log": "F 2026-08-21 22:53:17,517 frame 1350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:18.5187121+00:00", "Log": "F 2026-08-21 22:53:18,518 frame 1400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:19.5189643+00:00", "Log": "F 2026-08-21 22:53:19,518 frame 1450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:20.5198829+00:00", "Log": "F 2026-08-21 22:53:20,519 frame 1500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:21.5201908+00:00", "Log": "F 2026-08-21 22:53:21,519 frame 1550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:22.5195952+00:00", "Log": "F 2026-08-21 22:53:22,519 frame 1600 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:23.5194162+00:00", "Log": "F 2026-08-21 22:53:23,519 frame 1650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:24.458221+00:00", "Log": "F 2026-08-21 22:53:24,457 DTMF digit #1 arrived DURING streaming t=33.944s since stream start (frame_count so far=1697) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:24.5208725+00:00", "Log": "F 2026-08-21 22:53:24,520 frame 1700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:24.9806141+00:00", "Log": "F 2026-08-21 22:53:24,980 DTMF digit #2 arrived DURING streaming t=34.466s since stream start (frame_count so far=1723) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:25.5104563+00:00", "Log": "F 2026-08-21 22:53:25,510 DTMF digit #3 arrived DURING streaming t=34.996s since stream start (frame_count so far=1749) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:25.5203345+00:00", "Log": "F 2026-08-21 22:53:25,520 frame 1750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:26.1903539+00:00", "Log": "F 2026-08-21 22:53:26,190 DTMF digit #4 arrived DURING streaming t=35.676s since stream start (frame_count so far=1783) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:26.5202117+00:00", "Log": "F 2026-08-21 22:53:26,519 frame 1800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:26.7205134+00:00", "Log": "F 2026-08-21 22:53:26,720 DTMF digit #5 arrived DURING streaming t=36.206s since stream start (frame_count so far=1810) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:27.2812573+00:00", "Log": "F 2026-08-21 22:53:27,280 DTMF digit #6 arrived DURING streaming t=36.767s since stream start (frame_count so far=1838) \u2014 R-03 evidence"}
+{"TimeStamp": "2026-08-21T22:53:27.5216159+00:00", "Log": "F 2026-08-21 22:53:27,521 frame 1850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:28.5196329+00:00", "Log": "F 2026-08-21 22:53:28,519 frame 1900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:29.5207952+00:00", "Log": "F 2026-08-21 22:53:29,520 frame 1950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:30.5210238+00:00", "Log": "F 2026-08-21 22:53:30,520 frame 2000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:31.5218186+00:00", "Log": "F 2026-08-21 22:53:31,521 frame 2050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:32.5222078+00:00", "Log": "F 2026-08-21 22:53:32,521 frame 2100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:33.5182775+00:00", "Log": "F 2026-08-21 22:53:33,518 frame 2150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:34.5177891+00:00", "Log": "F 2026-08-21 22:53:34,517 frame 2200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:35.5180087+00:00", "Log": "F 2026-08-21 22:53:35,517 frame 2250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:36.5190894+00:00", "Log": "F 2026-08-21 22:53:36,518 frame 2300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:37.5176099+00:00", "Log": "F 2026-08-21 22:53:37,517 frame 2350 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:38.5186194+00:00", "Log": "F 2026-08-21 22:53:38,518 frame 2400 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:39.5195976+00:00", "Log": "F 2026-08-21 22:53:39,519 frame 2450 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:40.5212349+00:00", "Log": "F 2026-08-21 22:53:40,520 frame 2500 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:41.5207848+00:00", "Log": "F 2026-08-21 22:53:41,520 frame 2550 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:42.5199062+00:00", "Log": "F 2026-08-21 22:53:42,519 frame 2600 echoed, local processing latency=0.2ms"}
+{"TimeStamp": "2026-08-21T22:53:43.5167039+00:00", "Log": "F 2026-08-21 22:53:43,516 frame 2650 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:44.5259311+00:00", "Log": "F 2026-08-21 22:53:44,525 frame 2700 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:45.5191576+00:00", "Log": "F 2026-08-21 22:53:45,518 frame 2750 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:46.5185822+00:00", "Log": "F 2026-08-21 22:53:46,518 frame 2800 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:47.5184664+00:00", "Log": "F 2026-08-21 22:53:47,518 frame 2850 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:48.5199423+00:00", "Log": "F 2026-08-21 22:53:48,519 frame 2900 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:49.5187746+00:00", "Log": "F 2026-08-21 22:53:49,518 frame 2950 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:50.518943+00:00", "Log": "F 2026-08-21 22:53:50,518 frame 3000 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:51.5196928+00:00", "Log": "F 2026-08-21 22:53:51,519 frame 3050 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:52.5196063+00:00", "Log": "F 2026-08-21 22:53:52,518 frame 3100 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:53.5215552+00:00", "Log": "F 2026-08-21 22:53:53,521 frame 3150 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:54.5222791+00:00", "Log": "F 2026-08-21 22:53:54,521 frame 3200 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:55.518685+00:00", "Log": "F 2026-08-21 22:53:55,518 frame 3250 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:56.517255+00:00", "Log": "F 2026-08-21 22:53:56,516 frame 3300 echoed, local processing latency=0.1ms"}
+{"TimeStamp": "2026-08-21T22:53:57.3256235+00:00", "Log": "F 2026-08-21 22:53:57,325 callback event: Microsoft.Communication.MediaStreamingStopped"}
+{"TimeStamp": "2026-08-21T22:53:57.3257014+00:00", "Log": "F INFO:     100.100.0.147:59660 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:53:57.3438795+00:00", "Log": "F 2026-08-21 22:53:57,343 WS closed correlationId=7779386e-7eb0-405b-8d1c-5e4c9d119faa frames=3341 dtmf_tones=6"}
+{"TimeStamp": "2026-08-21T22:53:57.3439979+00:00", "Log": "F INFO:     connection closed"}
+{"TimeStamp": "2026-08-21T22:53:57.5376025+00:00", "Log": "F 2026-08-21 22:53:57,537 callback event: Microsoft.Communication.CallDisconnected"}
+{"TimeStamp": "2026-08-21T22:53:57.5377604+00:00", "Log": "F INFO:     100.100.0.147:59660 - \"POST /api/callbacks HTTP/1.1\" 200 OK"}
+{"TimeStamp": "2026-08-21T22:54:12.4452763+00:00", "Log": "F INFO:     100.100.0.67:55448 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:03:38.0986005+00:00", "Log": "F INFO:     100.100.0.147:48984 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:03:59.9608806+00:00", "Log": "F INFO:     100.100.0.67:45648 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:05:38.1262859+00:00", "Log": "F INFO:     100.100.0.67:35872 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:45:38.7249237+00:00", "Log": "F INFO:     100.100.0.147:34628 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-21T23:46:13.1936064+00:00", "Log": "F 2026-08-21 23:46:13,193 IncomingCall, correlationId=977a7c0f-e073-4eb0-82a2-87620d53ec13"}
+{"TimeStamp": "2026-08-21T23:46:13.1942517+00:00", "Log": "F 2026-08-21 23:46:13,194 Request URL: 'https://acs-azure-banking-voice.canada.communication.azure.com/calling/callConnections:answer?api-version=2025-05-15'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942674+00:00", "Log": "F Request method: 'POST'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942738+00:00", "Log": "F Request headers:"}
+{"TimeStamp": "2026-08-21T23:46:13.1942755+00:00", "Log": "F     'Content-Type': 'application/json'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942767+00:00", "Log": "F     'Content-Length': '9623'"}
+{"TimeStamp": "2026-08-21T23:46:13.194278+00:00", "Log": "F     'Repeatability-First-Sent': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942795+00:00", "Log": "F     'Repeatability-Request-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942807+00:00", "Log": "F     'Accept': 'application/json'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942819+00:00", "Log": "F     'x-ms-client-request-id': '7e32e582-9dba-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942832+00:00", "Log": "F     'User-Agent': 'azsdk-python-communication-callautomation/1.4.0 Python/3.12.14 (Linux-6.6.139.1-1.azl3-x86_64-with-glibc2.41)'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942865+00:00", "Log": "F     'x-ms-date': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942878+00:00", "Log": "F     'x-ms-content-sha256': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942889+00:00", "Log": "F     'x-ms-return-client-request-id': 'true'"}
+{"TimeStamp": "2026-08-21T23:46:13.19429+00:00", "Log": "F     'Authorization': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.1942913+00:00", "Log": "F A body is sent with the request"}
+{"TimeStamp": "2026-08-21T23:46:13.4009536+00:00", "Log": "F 2026-08-21 23:46:13,400 Response status: 400"}
+{"TimeStamp": "2026-08-21T23:46:13.4009967+00:00", "Log": "F Response headers:"}
+{"TimeStamp": "2026-08-21T23:46:13.4010147+00:00", "Log": "F     'Date': 'Fri, 21 Aug 2026 23:46:13 GMT'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010169+00:00", "Log": "F     'Content-Type': 'application/json; charset=utf-8'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010182+00:00", "Log": "F     'Transfer-Encoding': 'chunked'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010195+00:00", "Log": "F     'Connection': 'keep-alive'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010207+00:00", "Log": "F     'MS-CV': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010219+00:00", "Log": "F     'X-Microsoft-Skype-Client': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.401027+00:00", "Log": "F     'X-Ms-Client-Version': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010284+00:00", "Log": "F     'api-supported-versions': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010296+00:00", "Log": "F     'x-ms-client-request-id': '7e32e582-9dba-11f1-9b0b-56c2832a656a'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010309+00:00", "Log": "F     'X-Microsoft-Skype-Chain-ID': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010321+00:00", "Log": "F     'x-azure-ref': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010333+00:00", "Log": "F     'Strict-Transport-Security': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4010344+00:00", "Log": "F     'X-Cache': 'REDACTED'"}
+{"TimeStamp": "2026-08-21T23:46:13.4014788+00:00", "Log": "F INFO:     100.100.0.147:59792 - \"POST /api/incoming-call HTTP/1.1\" 500 Internal Server Error"}
+{"TimeStamp": "2026-08-21T23:46:13.4059264+00:00", "Log": "F ERROR:    Exception in ASGI application"}
+{"TimeStamp": "2026-08-21T23:46:13.405953+00:00", "Log": "F Traceback (most recent call last):"}
+{"TimeStamp": "2026-08-21T23:46:13.4059652+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 409, in run_asgi"}
+{"TimeStamp": "2026-08-21T23:46:13.4059682+00:00", "Log": "F     result = await app(  # type: ignore[func-returns-value]"}
+{"TimeStamp": "2026-08-21T23:46:13.405975+00:00", "Log": "F              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4059776+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 60, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059797+00:00", "Log": "F     return await self.app(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.405982+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4059842+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1054, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059864+00:00", "Log": "F     await super().__call__(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4059884+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 112, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059903+00:00", "Log": "F     await self.middleware_stack(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4059922+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 187, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4059943+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.4079351+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 165, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079553+00:00", "Log": "F     await self.app(scope, receive, _send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079653+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 62, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079671+00:00", "Log": "F     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079686+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079699+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.407971+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079752+00:00", "Log": "F     await app(scope, receive, sender)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079765+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 714, in __call__"}
+{"TimeStamp": "2026-08-21T23:46:13.4079777+00:00", "Log": "F     await self.middleware_stack(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079789+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 734, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4079801+00:00", "Log": "F     await route.handle(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079813+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 288, in handle"}
+{"TimeStamp": "2026-08-21T23:46:13.4079824+00:00", "Log": "F     await self.app(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4079836+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 76, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080158+00:00", "Log": "F     await wrap_app_handling_exceptions(app, request)(scope, receive, send)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080182+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.408021+00:00", "Log": "F     raise exc"}
+{"TimeStamp": "2026-08-21T23:46:13.4080223+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080235+00:00", "Log": "F     await app(scope, receive, sender)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080246+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 73, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080259+00:00", "Log": "F     response = await f(request)"}
+{"TimeStamp": "2026-08-21T23:46:13.408027+00:00", "Log": "F                ^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080282+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 301, in app"}
+{"TimeStamp": "2026-08-21T23:46:13.4080293+00:00", "Log": "F     raw_response = await run_endpoint_function("}
+{"TimeStamp": "2026-08-21T23:46:13.4080305+00:00", "Log": "F                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080316+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 212, in run_endpoint_function"}
+{"TimeStamp": "2026-08-21T23:46:13.4080328+00:00", "Log": "F     return await dependant.call(**values)"}
+{"TimeStamp": "2026-08-21T23:46:13.4080339+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4080359+00:00", "Log": "F   File \"/app/app.py\", line 86, in incoming_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4080371+00:00", "Log": "F     call_automation_client.answer_call("}
+{"TimeStamp": "2026-08-21T23:46:13.4080893+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/core/tracing/decorator.py\", line 119, in wrapper_use_tracer"}
+{"TimeStamp": "2026-08-21T23:46:13.4081068+00:00", "Log": "F     return func(*args, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081119+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081133+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/communication/callautomation/_call_automation_client.py\", line 472, in answer_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4081147+00:00", "Log": "F     result = self._client.answer_call(answer_call_request=answer_call_request, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081159+00:00", "Log": "F              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081172+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/core/tracing/decorator.py\", line 119, in wrapper_use_tracer"}
+{"TimeStamp": "2026-08-21T23:46:13.4081183+00:00", "Log": "F     return func(*args, **kwargs)"}
+{"TimeStamp": "2026-08-21T23:46:13.4081884+00:00", "Log": "F            ^^^^^^^^^^^^^^^^^^^^^"}
+{"TimeStamp": "2026-08-21T23:46:13.4081943+00:00", "Log": "F   File \"/usr/local/lib/python3.12/site-packages/azure/communication/callautomation/_generated/operations/_operations.py\", line 1210, in answer_call"}
+{"TimeStamp": "2026-08-21T23:46:13.4081987+00:00", "Log": "F     raise HttpResponseError(response=response, model=error)"}
+{"TimeStamp": "2026-08-21T23:46:13.4082008+00:00", "Log": "F azure.core.exceptions.HttpResponseError: (8523) Incoming Call Context is invalid."}
+{"TimeStamp": "2026-08-21T23:46:13.4082041+00:00", "Log": "F Code: 8523"}
+{"TimeStamp": "2026-08-21T23:46:13.4082054+00:00", "Log": "F Message: Incoming Call Context is invalid."}
+{"TimeStamp": "2026-08-21T23:46:13.4082066+00:00", "Log": "F Target: /calling/callConnections:answer"}
+{"TimeStamp": "2026-08-22T00:01:23.9687055+00:00", "Log": "F INFO:     100.100.0.67:60198 - \"GET / HTTP/1.1\" 404 Not Found"}
+{"TimeStamp": "2026-08-22T00:02:29.35001", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-22T00:03:29.5047", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-22T00:04:29.62437", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-22T00:05:29.6961", "Log": "No logs since last 60 seconds"}
+{"TimeStamp": "2026-08-22T00:06:29.8018", "Log": "No logs since last 60 seconds"}

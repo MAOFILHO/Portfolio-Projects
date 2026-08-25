@@ -56,10 +56,11 @@ from fnol_voice_agent.agents.nodes.repair import handle_no_match_or_barge_in
 from fnol_voice_agent.agents.nodes.routing import make_route_and_classify_node
 from fnol_voice_agent.agents.nodes.safety import l1_safety_check
 from fnol_voice_agent.agents.nodes.update_contact_info import update_contact_info_node
-from fnol_voice_agent.agents.state import AgentState
+from fnol_voice_agent.agents.state import AgentState, EscalationRecord
 from fnol_voice_agent.aws.bedrock_router import BedrockConverseCaller
 from fnol_voice_agent.guardrails.client import GuardrailClient
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, Embedder
+from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 
 # Engineering default, not a tuned value (Phase 6 owns tuning against real evals) -- below this, the
 # merged router's intent classification is treated as inconclusive, same as an Ambiguous/OutOfScope
@@ -98,8 +99,30 @@ _GUARDRAIL_INPUT_BLOCKED_RESPONSE = (
 )
 
 
-def _guardrail_blocked_response(_state: AgentState) -> dict[str, Any]:
-    return {"response_text": _GUARDRAIL_INPUT_BLOCKED_RESPONSE}
+def _guardrail_blocked_response(state: AgentState) -> dict[str, Any]:
+    # `D140`/`OI58`: this node used to speak `_GUARDRAIL_INPUT_BLOCKED_RESPONSE`'s transfer promise with
+    # no `EscalationRecord` -- `D89`'s own INPUT-block path, and the same class of gap as `guardrails_
+    # nodes.py`'s OUTPUT-block branch and `update_contact_info.py`'s confirm-ceiling branch. Called
+    # directly (this node already receives the full `AgentState`, `contact_id` included) rather than
+    # routed through `repair.py`'s shared `handle_no_match_or_barge_in`, which is keyed to no-match/
+    # barge-in retry counting specifically and has no notion of an INPUT-guardrail block at all.
+    result = initiate_escalation(
+        contact_id=state.get("contact_id", "unknown"),
+        triggering_layer="capability",
+        context={
+            "filled_slots": state.get("filled_slots", {}),
+            "turn_input": state.get("turn_input", ""),
+            "reason": "input_guardrail_blocked",
+        },
+    )
+    escalation: EscalationRecord = {
+        "contact_id": result.contact_id,
+        "triggering_layer": result.triggering_layer,
+        "route": 3,
+        "reason": "input_guardrail_blocked",
+        "context": result.context,
+    }
+    return {"response_text": _GUARDRAIL_INPUT_BLOCKED_RESPONSE, "escalation": escalation}
 
 
 def _after_l1(state: AgentState) -> str:
@@ -177,9 +200,7 @@ def build_graph(
         "guardrails_input_check",
         make_guardrails_input_node(client=guardrail_client),  # type: ignore[arg-type]
     )
-    builder.add_node(
-        "guardrail_blocked_response", _guardrail_blocked_response  # type: ignore[arg-type]
-    )
+    builder.add_node("guardrail_blocked_response", _guardrail_blocked_response)
     builder.add_node(
         "route_and_classify",
         make_route_and_classify_node(caller=bedrock_caller),  # type: ignore[arg-type]

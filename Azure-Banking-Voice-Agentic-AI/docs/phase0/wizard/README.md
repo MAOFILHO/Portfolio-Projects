@@ -42,9 +42,10 @@ Flagged inline in `01-provision.sh` and worth reading before you run it:
 1. The Models API `api-version` used for the R-01 deprecation-date check.
 2. The List Area Codes / phone-number search REST paths and `api-version` (Communication Services'
    phone-number APIs move fast).
-3. The exact `azure-communication-callautomation` SDK parameter/enum names in the generated echo app
-   (`docs/phase0/echo-app/app.py`) — written from `docs/PLAN.md`'s verified protocol facts, not
-   independently re-checked against the currently-installed SDK version.
+3. ~~The exact `azure-communication-callautomation` SDK parameter/enum names in the generated echo
+   app~~ — **resolved 2026-08-21**. `docs/echo-app/app.py` is now the sole source of truth (verified
+   against the installed 1.4.0 package, not templated by this script). See item below and
+   `docs/phase0/findings.md`, "Stage 12 -- ECHO_DIR misdirection".
 
 None of these are guesses dressed up as certainty — each is called out at the point it's used, per this
 project's "verify, don't assume" rule (R-01 already burned it once on an unverified regional claim).
@@ -54,7 +55,10 @@ project's "verify, don't assume" rule (R-01 already burned it once on an unverif
 - `docs/phase0/wizard/.env.phase0` — captured values (resource names, the phone number, timestamps).
 - `docs/phase0/findings.md` — every raw R-01/R-02/R-03/R-04/R-05/R-06/R-08 result, appended as each
   script produces it.
-- `docs/phase0/echo-app/` — the throwaway echo WebSocket app (`app.py`, `Dockerfile`, `requirements.txt`).
+- `docs/echo-app/` — the throwaway echo WebSocket app (`app.py`, `Dockerfile`, `requirements.txt`),
+  git-tracked and human-reviewed. `01-provision.sh` Stage 11 only verifies it's present and
+  git-tracked; it no longer generates it. **Not** `docs/phase0/echo-app/` — that path was this
+  project's own ECHO_DIR misdirection bug, resolved 2026-08-21 (`docs/phase0/findings.md`).
 - `docs/adr/ADR-001-data-residency.md`, `docs/adr/ADR-002-geography-knobs.md` — written by `01`, using
   the R-05/R-06 results measured in that same run.
 - `COSTS.md` (project root) — finalized by `04`, with the exit-gate table `docs/PLAN.md` requires.
