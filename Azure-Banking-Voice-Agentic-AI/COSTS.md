@@ -159,3 +159,39 @@ writeup and the corrected discrimination-at-72h analysis: `docs/phase0/findings.
 blade retirement and the free-tier suppression question." `FREETIER_CLEAN=yes` in `.env.phase0`
 reflects this, not the wizard's own re-run.
 
+## R-04 telemetry window — scope note (2026-08-24, before script 4's Stage 4 writes the measured section)
+
+R-04's Replicas-continuity figure (`docs/phase0/findings.md`, "R-04 — Container Apps compute cost...")
+measures `CALL3_TIME` (2026-08-21T22:54:09Z) to teardown — **the idle window only, by design**
+(`04-teardown-and-r08.sh` Stage 1's own window definition, reused rather than invented fresh — see
+that finding's "Window measured" line). It does not cover, and was never intended to cover, the
+provisioning-through-test-calls period (`PROVISION_TIME` 22:49:35Z through Call 3's start at
+22:54:09Z, which includes all three test calls). Do not read the "103/103 datapoints, zero gaps"
+continuity claim as spanning back to provisioning — it doesn't. What does cover that earlier period is
+log-based, not metric-based: see `docs/phase0/findings.md`, "R-03 residual — cold-start/scale-from-zero
+hypothesis ruled out."
+
+## Measured, not estimated (generated 2026-08-25T01:26:32Z by docs/phase0/wizard/04-teardown-and-r08.sh)
+
+| Item | Plan estimate | Measured |
+|---|---|---|
+| Fixed monthly (extrapolated) | $5.29–$15.31 | $6.72 |
+| Per-minute floor | $0.0215/min | $0.031/min |
+| Container Apps idle-vs-active (R-04) | undocumented, decision 15 assumed idle | **IDLE** |
+| Demo runs/month (R-08) | ~30-160 (naive, pre-eval-budget estimate) | **79.2** (gate: PASSED) |
+
+If the free-tier promotion section above (or added by 03-cost-check-24h.sh) flagged any of these
+meters as free-tier-covered, treat the "Measured" column with that caveat — see that section's
+fallback (measured quantity × PLAN.md's list rate) before trusting these dollar figures.
+
+### Transport RTT baseline
+
+See docs/phase0/findings.md "R-02 / R-03 / RTT" section — app-side processing-latency samples
+from 3 test calls (turns, not calls; not a turn-latency percentile — that needs Phase 2's
+RealtimeSession per B5).
+
+### Full detail
+
+docs/phase0/findings.md has every raw query result this wizard captured (R-01, R-02, R-03, R-04,
+R-05, R-06, R-08) with timestamps.
+

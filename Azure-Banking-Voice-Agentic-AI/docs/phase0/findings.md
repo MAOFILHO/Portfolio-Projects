@@ -2085,6 +2085,56 @@ script's pattern. This means the automated R-02/R-03 findings.md write has been 
 call — a second silent-failure bug in the same evidence path as the `--tail 500` one above, caught
 in the same pass. Fixed alongside the DTMF-prompt-on-all-3-calls fix below.
 
+### R-03 residual — cold-start/scale-from-zero hypothesis ruled out (2026-08-24)
+
+Tested against evidence already on disk, before teardown — no new call placed. Hypothesis: Call 1 hit
+a cold replica (scale-from-zero), the WebSocket was accepted before the media handler was ready, and
+early DTMF frames were dropped as a result.
+
+**Ruled out.** Timeline reconstructed from
+`docs/phase0/evidence/containerapp-logs-2026-08-21T2303Z-3-test-calls.txt` and `.env.phase0`:
+
+- **Single cold start for the whole session** — `grep -c "Started server process"` across the full
+  capture returns exactly 1 (at 22:49:52.0278Z). No second occurrence before, between, or after any
+  of the three calls.
+- **Single revision/replica ID across all three calls** — `ca-azbank-echo-p0--kkp0zzb-84b5446875-mbrq7`,
+  unchanged for the entire captured session, no replica change.
+- **App startup completed 80s before Call 1's `IncomingCall`** — `Application startup complete` /
+  `Uvicorn running` at 22:49:52.0289Z vs. Call 1's `IncomingCall` at 22:51:12.2116Z (WS opened
+  22:51:13.426Z, 81s after startup).
+- **A completed, unrelated HTTP round-trip 74s before Call 1** — the Event Grid validation handshake
+  and `POST /api/incoming-call` → `200 OK` at 22:49:58.0979Z, proof the app was already live and
+  correctly serving requests well before Call 1 arrived, not mid-warm-up.
+- Call 1 is in fact the *closest* of the three calls to the cold start (80s out; Calls 2 and 3 are
+  further out, ~161s/~198s by their own `IncomingCall`-equivalent timing) — the reverse of what "cold
+  start hit Call 1 specifically" would predict — and 80s is well past ACS's own documented cold-start
+  tolerance ceiling (~30s max, "Why `min-replicas=1`" above).
+
+This is log-based evidence, not metric-based: the R-04 Replicas metric series (Azure Monitor) does
+**not** cover this window — its query starts at `CALL3_TIME` (22:54:09Z), i.e. after all three calls
+(see the matching scope note added to `COSTS.md` alongside this entry).
+
+**The two candidates already on record above are unchanged by this finding**: DTMF wasn't actually
+sent during Call 1, or it was sent but not recognized upstream by ACS before reaching this app's
+WebSocket callback. This entry removes a third candidate from contention; it does not resolve between
+the two that remain.
+
+### R-03 residual — promoted to a Phase 1 entry criterion (2026-08-24)
+
+Distinguishing "not sent" from "sent but unrecognized upstream by ACS" requires ACS-side call
+diagnostics — the Log Analytics delivery path that currently returns zero rows (see "Log delivery —
+still zero rows..." immediately below: `ContainerAppConsoleLogs` and `ContainerAppSystemLogs` both 0
+rows despite a confirmed-correct diagnostic-setting configuration). App-side logs are downstream of
+the fork where ACS decodes DTMF tones and structurally cannot answer this: the app's WebSocket
+callback only ever receives what ACS already decided to forward, so no amount of app-side logging can
+tell "ACS decoded the tone and it was dropped before reaching the app" from "ACS never decoded a tone
+at all."
+
+**Phase 1 entry criterion**: the Log Analytics delivery path must be working — real ACS-side call
+diagnostics flowing — before this gap can be closed. **No further diagnostic calls should be placed
+until then**: a call placed now would land in the same blind spot Call 1 did and cannot produce
+evidence that settles this, only another ambiguous data point.
+
 ## Log delivery — still zero rows after a full lifecycle, diagnostic setting confirmed attached
 
 Re-checked after the container's full lifecycle (create → healthz → 3 real answered calls) with
@@ -2730,4 +2780,39 @@ PLAN.md's original estimate used US East rates rather than Canada Central (settl
 above) — not because compute turned out to be free. R-08 remains meaningfully bounded by
 Container Apps' (now precisely measured) idle cost plus the eval budget, same as originally designed,
 just with a verdict and a number instead of a range and an assumption.
+
+## R-04 — idle-vs-active Container Apps billing verdict
+
+Idle window: 2026-08-21T22:54:09Z to 2026-08-25T01:25:45Z (UTC), Container App left untouched, both WebSockets
+closed per decision 15.
+
+**The free compute grant is the headline, not this verdict.** Container Apps' standing monthly
+free compute grant (180,000 vCPU-s / 360,000 GiB-s) covers ~8.3 days of this app's continuous
+0.25 vCPU/0.5 GiB runtime every month, regardless of idle-vs-active. For an always-on service
+(min-replicas=1, required for inbound telephony), that means ~27.6% of every month's compute is
+free no matter what; the remaining ~21.7 days bill at whichever rate this verdict determines.
+
+**Idle-vs-active verdict (supporting detail): IDLE**
+
+- Replicas: 299 datapoints, 0 gaps
+- Network: 299 intervals, 1 over 1,000 B/s
+  (0 excluding the expected first-interval call-tail)
+- Monthly Container Apps cost net of the free grant, at this verdict's rate: **$5.72**
+  (Canada Central rates, not PLAN.md's $4.29/$14.31 — those were derived from US East
+  rates by mistake, settled elsewhere in this file; PLAN.md's Budget section is stale here)
+
+Cost Management cross-check (informational only — a $0/near-$0 reading here is expected given
+the free grant above and does not by itself confirm or contradict the verdict):
+
+```json
+
+```
+
+## R-08 — demo runs/month, computed from measured meters
+
+- Measured $/minute: $0.031
+- Measured fixed monthly (extrapolated): $6.72
+- Eval-budget ceiling reserved: $6.00 (docs/PLAN.md hard ceiling)
+- Left for manual/demo calls: $12.28/mo
+- At B4's 5-min cap per run: **79.2 demo runs/month**
 

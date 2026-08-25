@@ -220,7 +220,7 @@ PYEOF
 )
 say "Monthly Container Apps cost, net of the free grant, at this verdict's rate: \$${R04_MONTHLY_NET_OF_GRANT}"
 note "(this is the figure to use for Stage 3's fixed-monthly input below, not \$0 and not the raw"
-note "cross-check dollar figure above, which reflects only ~26h of a month, not a full month)"
+note "cross-check dollar figure above, which reflects only ~74h of a month, not a full month)"
 write_env "R04_MONTHLY_NET_OF_GRANT" "$R04_MONTHLY_NET_OF_GRANT"
 
 {
@@ -487,12 +487,31 @@ if [[ -z "${PHONE_NUMBER:-}" ]]; then
   err "trusting this teardown's result: ACS resource -> Phone Numbers."
 else
   ACS_TOKEN=$(az account get-access-token --resource "https://communication.azure.com" --query accessToken -o tsv)
-  OWNED_NUMBERS=$(curl -s -H "Authorization: Bearer $ACS_TOKEN" \
-    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers?api-version=2025-06-01")
-  if printf '%s' "$OWNED_NUMBERS" | grep -qF "$PHONE_NUMBER"; then
+  OWNED_NUMBERS_BODY_FILE=$(mktemp)
+  # `|| echo "000"` matters under set -e: a transport-level failure (curl exit 7, DNS failure, no
+  # route) would otherwise kill the script at this assignment, before the non-2xx branch below ever
+  # runs -- making the "OWNERSHIP CHECK COULD NOT BE COMPLETED" message unreachable in exactly the
+  # case it exists for. "000" is not a valid HTTP status and correctly fails the ^2[0-9][0-9]$ test
+  # below, so a transport failure falls through to that branch instead of crashing past it.
+  OWNED_NUMBERS_HTTP_CODE=$(curl -s -o "$OWNED_NUMBERS_BODY_FILE" -w '%{http_code}' \
+    -H "Authorization: Bearer $ACS_TOKEN" \
+    "https://${ACS_NAME}.canada.communication.azure.com/phoneNumbers?api-version=2025-06-01" || echo "000")
+  OWNED_NUMBERS=$(cat "$OWNED_NUMBERS_BODY_FILE")
+  rm -f "$OWNED_NUMBERS_BODY_FILE"
+  # A non-2xx response means the check itself failed (bad token, throttling, transient network/API
+  # error) -- it says nothing about whether the number is actually owned, and must NOT be reported as
+  # an R-09 violation. Only a 2xx response that genuinely lacks the number is a violation/drift.
+  if [[ ! "$OWNED_NUMBERS_HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+    err "OWNERSHIP CHECK COULD NOT BE COMPLETED -- /phoneNumbers request returned HTTP $OWNED_NUMBERS_HTTP_CODE, not 2xx."
+    err "This is NOT a confirmed R-09 violation -- it's a failed check, not evidence the number is gone."
+    err "Raw response:"
+    printf '%s\n' "$OWNED_NUMBERS" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$OWNED_NUMBERS"
+    err "STOP -- verify manually (Azure portal: ACS resource -> Phone Numbers) before proceeding."
+    exit 1
+  elif printf '%s' "$OWNED_NUMBERS" | grep -qF "$PHONE_NUMBER"; then
     ok "confirmed: $PHONE_NUMBER is still owned — number stays leased per docs/PLAN.md's explicit R-09 design"
   else
-    err "R-09 VIOLATION OR DRIFT: $PHONE_NUMBER not found in the live /phoneNumbers response."
+    err "R-09 VIOLATION OR DRIFT: $PHONE_NUMBER not found in the live /phoneNumbers response (HTTP $OWNED_NUMBERS_HTTP_CODE)."
     err "This script never calls a release/delete on it -- if it's really gone, something outside this"
     err "script's control did it. Raw response:"
     printf '%s\n' "$OWNED_NUMBERS" | python3 -m json.tool 2>/dev/null | sed 's/^/    /' || printf '%s\n' "$OWNED_NUMBERS"

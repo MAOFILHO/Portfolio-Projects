@@ -122,6 +122,16 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
    workspace with no `--logs-destination`/`--logs-workspace-id` flag passed — $0 in practice at this
    project's volume, but see open item 1: the auto-provisioned path doesn't even deliver logs, so
    Phase 1 needs a deliberate choice here regardless of cost.
+10. **R-03 residual promoted to a Phase 1 entry criterion (2026-08-24).** Call 1's zero DTMF tones
+    remains unresolved (open item 3); the cold-start/scale-from-zero hypothesis was tested against
+    existing evidence and ruled out (single cold start, 80s before Call 1's `IncomingCall`, single
+    revision/replica ID throughout — `docs/phase0/findings.md`, "R-03 residual — cold-start/
+    scale-from-zero hypothesis ruled out"). The two candidates that remain — DTMF not sent vs. sent
+    but unrecognized upstream by ACS — can only be distinguished by ACS-side call diagnostics, which
+    depend on open item 1's Log Analytics zero-rows gap being fixed first. **Blocked on open item 1;
+    no further diagnostic calls should be placed until that path works** — app-side logs are
+    downstream of ACS's decode fork and cannot separate the two candidates. Full disposition:
+    `docs/phase0/findings.md`, "R-03 residual — promoted to a Phase 1 entry criterion".
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
