@@ -490,7 +490,70 @@ ADR-002 exist in `docs/adr/`. **R-08's demo-runs/month figure is computed and re
 in under 5, Phase 0 stops here and we discuss reducing fixed cost or raising the ceiling before
 Phase 1 proceeds.**
 
-### Phase 1 — Duplex audio path
+### Phase 1 (REVISED 2026-08-28) — Agentic conversation prototype
+
+Supersedes the original Phase 1 definition below. Scope reframed 2026-08-28: this is a portfolio
+prototype demonstrating an agentic voice IVR, not a production banking system — smallest thing that
+demonstrates the capability convincingly, end to end, in one real spoken call.
+
+**Phases 2–6 as currently written are optional follow-on work, not committed scope.** Phase 1 as
+defined here is the deliverable — a working, demonstrable prototype. Phases 2 through 6 redo this
+work more completely (real gate, real network client, real auth, observability, evals) but are not
+required for the project to be finished and demonstrable. Left unedited below; see their existing
+definitions if that work is picked up later.
+
+**GOAL:** dial `+17059100383`, speak naturally, and: ask a balance, request a transfer, hear the
+agent confirm the new balance, get refused in speech (not silently) when a transfer would overdraw.
+
+**In scope:**
+1. Agent turn loop over the existing Azure OpenAI realtime deployment (speech in → model → speech
+   out), built on Phase 0's echo transport.
+2. Tool/function calling — `get_balance`, `transfer`, `list_accounts` — backed by in-memory mock
+   accounts. State lives in the process; resets on restart. No network client, no persistence.
+3. Transfer validation: sufficient funds, valid account IDs. A failed check is refused in speech
+   ("you have $2,400 available"), never silently.
+4. Fix `docs/echo-app/app.py:86` — wrap `answer_call()` in `try`/`except`, return a fallback
+   response instead of an unhandled `500` on ACS rejection. Verified by code review, not a live
+   acceptance test — forcing an ACS rejection on a real call isn't a reasonable test for a demo phase.
+5. Measure operating mode during the first real conversation and compare against R-04's IDLE
+   verdict before any further spend (see cost note below).
+
+**Out of scope, deferred and named as such:** DTMF, PIN auth, the B1 auth gate (`dispatch/gate.py`
+does not exist in this phase — nothing here touches real money or a real account, so there's nothing
+to gate yet), the ≥120-case adversarial suite, PII redaction, the eval harness, observability
+tooling, any real data store, `mock-core-banking`'s own FastAPI service. R-03 (Call 1's zero-DTMF
+anomaly): known open question, not a Phase 1 blocker — it concerns the deleted echo app, and Call 1's
+evidence no longer exists to settle it.
+
+**Exit tests** (the demo recording script *is* the acceptance test — each row is dialed, spoken, and
+heard on one real call):
+
+| # | I do | I should hear |
+|---|---|---|
+| 1 | Dial `+17059100383`, wait for answer | Agent greets, invites a request — no dead air, no silent drop |
+| 2 | Say "what's my chequing balance?" | Agent states the mocked chequing balance correctly, in speech |
+| 3 | Say "move $150 from chequing to savings" | Agent confirms the transfer before or as it executes |
+| 4 | Ask for the chequing balance again | Agent states the new, debited balance — proves the tool call mutated mock state, not just spoke a fixed line |
+| 5 | Request a transfer larger than the account's available balance | Agent refuses in speech, states the actual available amount, does not execute |
+| 6 | Ask for a nonexistent account or a nonsense request | Agent responds gracefully — no crash, no silent hang |
+
+**Cost and mode-measurement note:** this phase requires re-provisioning Container Apps compute
+(deleted at Phase 0 teardown) — R-04's $5.72/mo idle figure is a verdict that has to be re-earned, not
+money already in the bank. What has to hold for the $25/mo ceiling to survive a container doing real
+conversational work: the realtime WebSocket still has to close between calls (decision 15) — a turn
+loop with in-call tool calls doesn't obviously change that, but it's untested territory (Phase 0 only
+ever ran a stateless echo, never a stateful agent loop with function-calling round-trips inside one
+call). **The first real conversation should measure**: replica count and `RxBytes`/`TxBytes`
+immediately after the call ends and again ~1h later — the same way R-04 measured Phase 0's three
+calls — to catch, before a second call is placed, whether tool-call latency or lingering session state
+keeps the replica warm past ACS's own between-calls closure. If that first measurement comes back
+ACTIVE instead of settling to IDLE, `04-teardown-and-r08.sh`'s own Stage 3 arithmetic (Part 3(c) of
+`EXIT-AND-PHASE1-ENTRY.md`) already fails the budget before a second call is even attempted — the same
+self-firing stop condition, just tripped one phase earlier than that document anticipated.
+
+---
+
+### Phase 1 (ORIGINAL, SUPERSEDED 2026-08-28) — Duplex audio path
 Echo call, no agent, no tools, no auth. `AcsTransport` + `MediaTransport` protocol, Event Grid
 webhook, call lifecycle, barge-in via `StopAudio`, WS close-on-hangup (decision 15).
 **Exit:** dial → answer → speak → hear yourself, latency recorded, `make teardown` leaves zero
