@@ -68,27 +68,17 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
    `--follow`-based
    capture was tried and found **not durable** — known unresolved upstream bug
    ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)), empirically dies
-   after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
-   (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a plain `--tail 300`
-   every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`. **Periodic
-   firing confirmed empirically 2026-08-21T22:33:30 local** (mtime advanced exactly at T0+900s with
-   no manual action — `docs/phase0/findings.md`, "LaunchAgent — StartInterval scare..."). **Do not
-   use `launchctl list <label>`'s output to check this** — it never echoes `StartInterval`/
-   `RunAtLoad` for any job, scheduled correctly or not (verified against an unrelated known-scheduled
-   agent), and `LastExitStatus 0` can't distinguish "ran once, dead" from "firing every 15min." The
-   only reliable check: does the evidence file's mtime advance across an interval boundary.
-   **Confirmed 2026-08-22 to survive a real sleep/wake cycle** — fired ~10 times over an overnight
-   ~8h25m stretch, roughly every 50min rather than every 15 (`launchd` coalesces `StartInterval`
-   jobs across sleep; expected, not a defect). Idle-rate margin still holds at that spacing; a wide
-   gap between consecutive snapshot timestamps is coalescing, not an outage. Contains duplicate
-   lines across overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
-   **The committed 3-test-calls capture and the snapshot file are not interchangeable** — call 1's
-   `CallConnected` scrolled out of the snapshot's `--tail 300` buffer before the LaunchAgent's first
-   pull and is only in the committed capture; teardown needs both files (`docs/phase0/evidence/
-   README.md`, `docs/phase0/findings.md` "Overnight idle window...").
-   **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
-   pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
-   fix, not a workaround, before then.
+   after ~5-6min idle every time. **The `launchd` LaunchAgent poller is dead, as of 2026-08-28** — not
+   loaded (`launchctl list` shows no matching label), and its plist
+   (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) is absent from disk (script 04 only
+   ever unloads this plist, never removes it, so the absence is unexplained — open item, see the
+   summary file below). Last real write: 2026-08-25T01:15:46Z. Its evidence file
+   (`docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`, 51,981 lines) is preserved
+   permanently in commit `07faf3b`; as of 2026-08-28 it's untracked (`.gitignore`) and local-disk-only
+   — breakdown and the open plist-absence item are in
+   `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21-SUMMARY.md`. A production voice agent
+   cannot run on Phase 1 with no durable logging; this needs a real fix, not a workaround, before
+   then.
 2. **`02-test-calls.sh` must not be re-run this window.** Its Stages 1-3 have no
    skip-if-already-confirmed guard, so it unconditionally prompts for 3 fresh billable calls before
    Stage 4's (free, read-only) evidence extraction can run — a design gap (cheap operation welded to

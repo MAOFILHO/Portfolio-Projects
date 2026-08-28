@@ -30,3 +30,8 @@ graphify-out/
 # Log Analytics raw exports — durable local copies, not committed; the
 # raw-snapshot-in-git question (see the 51k-line evidence file) is still open
 docs/phase0/evidence/loganalytics-export/
+
+# Container App log-snapshot poller output — full 51,944-line capture preserved
+# permanently in commit 07faf3b; untracked 2026-08-28 to stop it recommitting larger.
+# Summary: docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21-SUMMARY.md
+docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl
