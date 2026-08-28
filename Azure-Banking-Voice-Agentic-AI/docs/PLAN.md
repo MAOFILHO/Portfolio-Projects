@@ -518,6 +518,8 @@ caps, **fail-closed**, `T-B4-FAILCLOSED`.
 latency figure, turn count stated.
 
 ### Phase 6 — Observability
+**Tooling pinned 2026-08-21** (see "Observability tooling" below): the **Azure Monitor OpenTelemetry
+Distro**, targeting the **Application Insights** resource this phase creates — not a third-party SaaS.
 OTel per call session → App Insights, correlated via `x-ms-call-correlation-id`. **Redaction
 processor** — the thing repo 2 conspicuously lacks. PII scrubbing before export.
 **Exit:** a full call traceable end-to-end with zero PII in any span.
@@ -537,6 +539,63 @@ redaction via Language free tier; summary/intent/outcome → Table Storage. L3 e
 suites at their weekly/on-demand cadence. Any ADRs not already written during their triggering phase
 (ADR-001/002 were written in Phase 0); `RESULTS.md`, `README.md`, architecture diagram.
 **Exit:** the repo reads as a matched pair with FNOL.
+
+---
+
+## Observability tooling — evaluated 2026-08-21, confirmed 2026-08-28
+
+Phase 6 (below) always planned "OTel → App Insights" in shape; this section pins down the concrete
+tool and verifies it actually clears the "free-tier/lowest-cost SKU" bar rather than assuming it does.
+Two options were compared: Azure-native (Azure Monitor via OpenTelemetry) and LangFuse (Marco offered
+to supply API keys). Every figure below is quoted from a live fetch of the vendor's own page on
+2026-08-21, not memory.
+
+**Azure Monitor / Application Insights, via the Azure Monitor OpenTelemetry Distro:**
+- Officially the recommended code-based instrumentation path (Microsoft Learn,
+  `azure-monitor/app/opentelemetry-overview`), with a **built-in OTel agent for Azure Container Apps**
+  specifically — this project's own compute layer — and documented tracing support for the **OpenAI
+  Agents SDK** by name, which matters because `docs/PLAN.md` (Architecture) already plans to pin
+  `openai-agents >= 0.3.0`.
+- Application Insights (workspace-based) bills through the same Log Analytics ingestion meter as the
+  workspace Stage 12 queried live this session (`docs/phase0/findings.md`, "Stage 12 — auto-created
+  Log Analytics workspace"). That check established the workspace exists and its per-GB rate from
+  the Retail Prices API; it did not verify any delivery path into it. Microsoft's own pricing page,
+  fetched directly —
+  **"The first 5 GB/month per billing account in this tier are free"** — permanent, not a trial. Beyond
+  that, `$2.76/GB` in `canadacentral` (Azure Retail Prices API, queried live). App Insights data
+  specifically gets **90 days of free retention** (vs. 31 days for a generic Log Analytics workspace),
+  also a direct quote from the same page.
+- This distinction matters because of Phase 0's diagnostic-setting failure (`PROJECT_STATE.md`, open
+  item 1; `docs/handoffs/2026-08-27-phase1-logpath-resolved.md`): the Application Insights OTel Distro
+  ingests via its own dedicated endpoint (`dc.applicationinsights.azure.com` or a region-specific
+  variant), authenticated by the resource's connection string — a mechanism entirely independent of
+  `Microsoft.Insights/diagnosticSettings`, which is what failed in Phase 0. Confirmed against
+  Microsoft Learn, not memory: `azure-monitor/app/app-insights-overview` (OTel Distro setup path is
+  create resource → connection string → instrument; "Diagnostic settings" is listed separately, as an
+  unrelated platform-log-export feature) and `azure-monitor/app/connection-strings` (ingestion is a
+  direct HTTPS push to the connection string's endpoint, no diagnostic-settings resource involved).
+- At this project's actual call volume — capped by B4 at 5 min/20 turns per call, with R-08's own
+  demo-runs/month figure already tight — per-call telemetry will not come close to 5 GB/month. No new
+  resource, no new API key, no data leaving Azure.
+- Stays inside the single-jurisdiction residency posture `ADR-001`/`ADR-002` deliberately built: the
+  Application Insights resource lives in Canada Central like everything else.
+
+**LangFuse, evaluated and not recommended:**
+- Hobby (free) tier, fetched from `langfuse.com/pricing`: **50k units/month, 30-day data retention, 2
+  seats**, no credit card required.
+- **Cloud hosting regions: US, EU, or Japan — no Canada.** Routing call-derived telemetry through
+  LangFuse Cloud would put it outside the single-jurisdiction posture this project has otherwise held
+  to since the Canada Central region revision (decision 12) — a real conflict with `ADR-001`, not a
+  minor one.
+- Self-hosting is free as software but needs its own compute (another Container App or VM) — a new
+  billable resource this budget has never accounted for, to duplicate capability Azure Monitor already
+  provides natively.
+
+**Recommendation: Azure Monitor / Application Insights via the OTel Distro. LangFuse not adopted** —
+the residency conflict for Cloud, and the unbudgeted-resource cost for self-host, both argue against it
+for capability that's already covered. Recorded here as evaluated-and-rejected, not silently dropped,
+in case a future phase's needs change the calculus. Pending Marco's explicit confirmation, same as any
+other architecture decision in this file.
 
 ---
 
