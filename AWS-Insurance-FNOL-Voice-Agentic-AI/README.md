@@ -211,18 +211,18 @@ All three were found the same way: by checking something that already looked set
         │            ApplyGuardrail (INPUT)                        │    │
         │                  │                                       │    │
         │                  ▼                                       │    │
-        │            classify_turn  ── Nova Micro, forced tool-use  │    │
-        │            {safety_flag, intent, confidence}              │    │
+        │           classify_turn  ── Nova Micro, forced tool-use  │    │
+        │           {safety_flag, intent, confidence}              │    │
         │                  │            │                          │    │
-        │        safety_flag└────────────┼──────────────────────────┤    │
+        │       safety_flag└────────────┼──────────────────────────┤    │
         │                               ▼                          ▼    │
         │            ┌──────────────────────────────┐      injury_      │
         │            │ FileAutoClaim                │      escalation   │
         │            │ CheckClaimStatus             │        │          │
-        │            │ CoverageQuestion      (RAG)  │        │ 911 line  │
-        │            │ RentalTowingEntitlement      │        │ first,    │
-        │            │ UpdateContactInfo    (write) │        │ then      │
-        │            │ repair / retry ladder        │        │ transfer  │
+        │            │ CoverageQuestion      (RAG)  │        │ 911 line │
+        │            │ RentalTowingEntitlement      │        │ first,   │
+        │            │ UpdateContactInfo    (write) │        │ then     │
+        │            │ repair / retry ladder        │        │ transfer │
         │            └──────────────┬───────────────┘        │          │
         │                           ▼                        │          │
         │            ApplyGuardrail (OUTPUT)                 │          │
