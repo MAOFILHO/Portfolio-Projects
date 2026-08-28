@@ -9,7 +9,9 @@ move the oldest closed material out to `docs/phase0/` first if an addition would
 **Phase 0 — Provisioning & Meter Spike.** All 12 stages of `01-provision.sh` complete. Container App
 `ca-azbank-echo-p0` is deployed, healthy, and **first real answered phone call happened
 2026-08-21** — all 3 test calls to `+17059100383` connected, echoed correctly, DTMF registered on 2
-of 3. Full session narrative: `docs/handoffs/2026-08-21-phase0-first-successful-call.md`,
+of 3. Three earlier inbound calls that day were dropped by the `APP_BASE_URL` placeholder race,
+fixed same-day in `770c1f3`, before these three connected. Full session narrative:
+`docs/handoffs/2026-08-21-phase0-first-successful-call.md`,
 `docs/phase0/findings.md` (everything from Stage 7 onward, including all bugs found/fixed this
 session, is there — not duplicated here).
 
@@ -126,6 +128,12 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
     no further diagnostic calls should be placed until that path works** — app-side logs are
     downstream of ACS's decode fork and cannot separate the two candidates. Full disposition:
     `docs/phase0/findings.md`, "R-03 residual — promoted to a Phase 1 entry criterion".
+11. **`docs/echo-app/app.py:86` — `answer_call()` has no `try`/`except` and no fallback (open
+    defect for Phase 1, not fixed).** Any ACS rejection propagates unhandled, returns `500` to
+    Event Grid, and drops the call silently — the caller hears ringing until timeout, no
+    `reject_call`/busy signal. The `APP_BASE_URL` placeholder race that triggered this exact path is
+    fixed (`770c1f3`); the missing error handling that let it drop calls silently is not. Phase 1
+    builds its own call-handling logic directly on this handler.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 

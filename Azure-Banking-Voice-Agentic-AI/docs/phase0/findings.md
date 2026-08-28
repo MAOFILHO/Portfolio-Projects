@@ -1154,6 +1154,15 @@ showed the actual failure: `answer_call()` raised `HttpResponseError: (400) Inva
 The field CallbackUri is invalid`, on two separate `IncomingCall` deliveries, both producing a
 `500` back to Event Grid.
 
+**Corrected 2026-08-28**, from the Log Analytics export
+(`docs/phase0/evidence/loganalytics-export/console.jsonl`): this was **three distinct
+correlationIds**, not two — `977a7c0f-e073-4eb0-82a2-87620d53ec13`,
+`e46be7d4-adad-4857-9e22-1230125353e9`, and `05bb7729-1792-4271-aa2d-b622b6787eb8` — across 23 total
+delivery attempts (11 + 6 + 6, Event Grid's standard exponential-backoff retry schedule against each,
+verified against Microsoft's own delivery-and-retry docs). All three hit the identical `CallbackUri
+is invalid` / `500` failure, confined to revision `vm6ylxz` (the Container App's first incarnation).
+The root cause and fix below are unaffected by this correction — only the call count was wrong.
+
 Root cause, confirmed by direct inspection, not assumed: Stage 12 created the Container App with
 `app-base-url` secret literally set to the string `"placeholder"` (the real FQDN doesn't exist
 until after `containerapp create` returns), then queried the live FQDN and patched the secret
