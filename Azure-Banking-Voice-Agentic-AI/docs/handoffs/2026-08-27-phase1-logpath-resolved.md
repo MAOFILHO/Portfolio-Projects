@@ -228,3 +228,53 @@ None needed — no API keys, tokens, or credentials appear in this document. Cor
 names, and the phone number's existence are project infrastructure identifiers, not personal data.
 The Azure SDK request/response header dumps referenced (but not reproduced in full here) already carry
 `'REDACTED'` placeholders at source, from the app's own logging.
+
+---
+
+## Toolchain after Mac rebuild (2026-08-27/28 audit)
+
+This Mac was rebuilt from scratch and data migrated back. Two gaps had already surfaced before this
+audit: `az` CLI was absent (installed mid earlier session) and bash was 3.2, which broke the monorepo's
+shared `scripts/git-hooks/pre-commit` (needs `readarray`/`declare -A`, bash ≥4) until bash 5 was
+installed. This audit read every external command `docs/phase0/wizard/*.sh` and `scripts/*.py`
+actually invoke and checked each against this machine, read-only except for the extension installs
+noted below and Docker Desktop being launched (Marco's own action, not this session's).
+
+**Tool/version table**, as of 2026-08-28, after Docker Desktop was launched:
+
+| Tool | Present | Version |
+|---|---|---|
+| `az` | yes | 2.89.1 |
+| `curl` | yes | 8.7.1 |
+| `docker` | yes (Docker Desktop launched during this session — was not on PATH before) | 29.7.2 |
+| `docker buildx` | yes | v0.36.1-desktop.1 |
+| `python3` | yes | 3.14.7 |
+| `git` | yes | 2.55.0 |
+| `bash` | yes | 5.3.15 |
+| `launchctl` | yes (macOS builtin) | Darwin 7.0.0 |
+| `date` | yes (BSD). GNU-style `-d` fails cleanly (`illegal option -- d`, exit 1); the BSD fallback (`-j -f ...` / `-v-Nd`) that every invocation falls through to was tested against all three fallback patterns used in `03-cost-check-24h.sh` and `04-teardown-and-r08.sh` and matched an independent Python cross-check exactly (epoch conversion, date-only conversion, "N days ago" window) | — |
+
+**Three gaps flagged, none blocking, all fixable before Phase 1**:
+1. `docker buildx` is never checked by `01-provision.sh`'s own preflight (`:265`) — it only checks
+   `command -v docker`, not buildx's presence.
+2. `git` is absent from that same preflight loop entirely, despite Stage 11 (`:907`,
+   `git -C "$SCRIPT_DIR" rev-parse --show-toplevel`) hard-depending on it.
+3. No `.venv` exists for this project — the shared pre-commit hook's `run_check()` falls back to bare
+   `python3` (3.14.7). Harmless today (`check_project_root_scope.py` is stdlib-only), but worth knowing
+   before anything adds a third-party dependency to that check script.
+
+**`az` extension installs, before/after** — triggered by this audit's own `-h` probing (checking which
+command groups need an extension), not by a provisioning run:
+
+| Extension | Before | After | Real dependency? |
+|---|---|---|---|
+| `communication` | absent | 1.14.0 (stable) | Yes — `az communication create/list/show/list-key` is called live at `01-provision.sh:533,542,1007,1139` and `04-teardown-and-r08.sh:424,475`. Kept per Marco's instruction. |
+| `costmanagement` | absent | 1.0.0 (stable) | No — the scripts deliberately route around `az costmanagement query` (that CLI subcommand doesn't exist in the installable extension) via `az rest` directly instead. Installed by this audit's probing, unused by any script, kept per Marco's instruction. |
+| `log-analytics` | 1.0.0b1 (preview) | unchanged | Only for ad-hoc `az monitor log-analytics query` investigation (this doc's own root-cause section above) — no wizard script calls it. `01-provision.sh:1091`'s `az monitor log-analytics workspace list` is core CLI, a different command family from this extension. |
+
+**Caveat on Phase 0's figures, additional to COSTS.md's existing modeled-not-measured caveat**: `az` is
+now 2.89.1 on a machine rebuilt from scratch. Every Phase 0 measurement (R-01 through R-09, the cost
+and latency findings in `findings.md` and `PROJECT_STATE.md`) was produced by whatever `az` CLI version
+was installed on the pre-rebuild Mac — that version is unknown and, because the machine was rebuilt
+rather than upgraded in place, unrecoverable. Phase 0's numbers carry this unstated-CLI-version caveat
+alongside the modeled-vs-measured one; there is no way to resolve it after the fact.
