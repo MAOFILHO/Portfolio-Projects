@@ -23,3 +23,10 @@ deployment_state.json
 .vscode/
 .idea/
 .DS_Store
+
+# graphify (local knowledge-graph build output — not project artifacts)
+graphify-out/
+
+# Log Analytics raw exports — durable local copies, not committed; the
+# raw-snapshot-in-git question (see the 51k-line evidence file) is still open
+docs/phase0/evidence/loganalytics-export/

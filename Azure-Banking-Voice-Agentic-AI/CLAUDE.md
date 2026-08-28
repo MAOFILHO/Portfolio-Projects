@@ -112,6 +112,10 @@ after a resume found `Microsoft.Communication` already `Registered` while the do
 `Registering`, and separately found two real fixes sitting uncommitted in the working tree from a
 session that ended without closing them out.
 
+A diagnostic setting returning ARM 200 OK proves creation, not delivery. No observability path may be
+described as verified or correctly configured until its destination table has been queried for rows
+after a known emission.
+
 ## Hard exclusions
 
 These are not style preferences — each one is a specific, evidenced defect found during scoping.
