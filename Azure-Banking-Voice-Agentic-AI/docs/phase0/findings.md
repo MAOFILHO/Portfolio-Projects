@@ -2145,8 +2145,8 @@ ContainerAppConsoleLogs | count  →  0 rows
 ContainerAppSystemLogs  | count  →  0 rows
 ```
 
-Confirmed this is not a configuration mistake on this project's end — both the native path and the
-explicit fallback are correctly wired:
+**As understood 2026-08-21:** this looked like it was not a configuration mistake on this project's
+end — both the native path and the explicit fallback appeared correctly wired:
 
 - `az containerapp env show ... --query properties.appLogsConfiguration` → `destination:
   "log-analytics"`, `customerId` matching the correct (non-orphaned) workspace.
@@ -2154,10 +2154,19 @@ explicit fallback are correctly wired:
   present, `ContainerAppConsoleLogs` and `ContainerAppSystemLogs` both `enabled: true`, pointed at
   the same correct workspace.
 
-Both delivery paths are configured exactly as documented and neither has delivered a single row,
-over an hour after real, confirmed activity (not an idle container — three actual answered calls).
-This is now a confirmed platform-level gap, not a "give it more time" situation — genuinely
-undiagnosed, not explained by anything found so far.
+Both delivery paths appeared configured exactly as documented, and neither had delivered a single
+row, over an hour after real, confirmed activity (not an idle container — three actual answered
+calls). At the time this read as a confirmed platform-level gap, genuinely undiagnosed, not
+explained by anything found so far.
+
+**Corrected 2026-08-27**: "correctly wired" / "configured exactly as documented" is disproven, not
+just unverified — `azbank-p0-console-logs` was created without `--export-to-resource-specific`, so
+it defaulted to the `AzureDiagnostics` table instead of the resource-specific tables named above —
+and `AzureDiagnostics` itself was never materialized in the workspace (a bare `count` against it
+returns `PathNotFoundError`), so the setting delivered nothing anywhere, not merely to a different
+table than expected. The "neither has delivered a single row" observation itself was and remains
+correct. Full evidence: `docs/handoffs/2026-08-27-phase1-logpath-resolved.md`, "RESOLVED —
+diagnostic-setting delivery".
 
 **Practical consequence for R-04's remaining ~72h**: Log Analytics cannot be relied on for any
 evidence during this window. `az containerapp logs show --tail 300` (the CLI's live streaming
@@ -2771,7 +2780,7 @@ arithmetic blocks were pulled out of the script and re-run against this session'
 telemetry-measured grant-cost figure ($5.72/mo, genuinely measured) and PLAN.md's own floor/realistic
 per-minute rates ($0.0215/$0.031, its estimate, not a billing read) — before being trusted here).
 
-**This is not the dramatic reframing it might sound like.** The free grant is real and matters (it's
+The free grant is real and matters (it's
 the difference between $5.72/mo and the $7.78/mo pre-grant idle figure this section's rates would
 otherwise imply for a full month) — but because this app must run continuously all month for real
 telephony service, the grant only ever offsets ~27.6% of a month's compute, not all of it. The

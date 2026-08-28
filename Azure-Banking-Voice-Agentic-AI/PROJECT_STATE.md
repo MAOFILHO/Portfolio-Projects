@@ -58,10 +58,14 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
 
 ## Open items
 
-1. **Log Analytics delivers zero rows — confirmed platform gap, needs real diagnosis before Phase
-   1.** Both the native `appLogsConfiguration` path and an explicit `az monitor diagnostic-settings`
-   resource are correctly configured (verified: right workspace, right categories enabled) and
-   neither has delivered a single row, even after a full real-call lifecycle. `--follow`-based
+1. **Log Analytics: root cause found 2026-08-27, corrects an earlier claim on this line.** The
+   native `appLogsConfiguration` path is correctly configured (verified: right workspace, right
+   categories enabled) and is the source of all Phase 0 console/system data (2743+71 rows, in
+   `_CL`-suffixed tables). The explicit `az monitor diagnostic-settings` resource
+   (`azbank-p0-console-logs`) was NOT correctly configured, contrary to what this line previously
+   said: created without `--export-to-resource-specific`, it defaulted to the `AzureDiagnostics`
+   table and delivered nothing. Full evidence: `docs/handoffs/2026-08-27-phase1-logpath-resolved.md`.
+   `--follow`-based
    capture was tried and found **not durable** — known unresolved upstream bug
    ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)), empirically dies
    after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
