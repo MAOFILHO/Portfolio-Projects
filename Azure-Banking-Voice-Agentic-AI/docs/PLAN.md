@@ -297,9 +297,18 @@ calculator API v3 (`https://azure.microsoft.com/api/v3/pricing/communication-ser
 | Item | Cost |
 |---|---|
 | Canada local number | $1.00 |
-| Container Apps, min-replicas=1, 0.25 vCPU / 0.5 GiB | **$4.29 idle** – **$14.31 active** |
+| Container Apps, min-replicas=1, 0.25 vCPU / 0.5 GiB | **$5.72 idle** – **$20.03 active** |
 | Table Storage, App Insights (<5 GB), Static Web Apps | ~$0 |
-| **Subtotal** | **$5.29 – $15.31** |
+| **Subtotal** | **$6.72 – $21.03** |
+
+Container Apps row: modeled from published rates, not measured from billing — `armRegionName eq
+'canadacentral'`, Azure Retail Prices API, queried 2026-08-28. Method: this project's own
+grant-netting formula (730h/month × 0.25 vCPU / 0.5 GiB, net of the 180,000 vCPU-s / 360,000 GiB-s
+free grant). **Corrected 2026-08-28**: the original $4.29 idle / $14.31 active reproduced against
+`eastus` rates, not Canada Central where this project's resources actually live (decision 12,
+ADR-001) — a region mismatch present since the original 2026-08-19 scoping commit (`2b577e1`), which
+recorded no region, no citation, and no method for either figure. Full derivation:
+`docs/phase0/findings.md`, "Discrepancy settled, 2026-08-22."
 
 **Per minute (inbound)**
 
@@ -328,25 +337,35 @@ live model involved — only the smaller L4 *live* sample costs money.
 
 **Honest result including evals:**
 
-| | Idle Container Apps ($4.29) | Active Container Apps ($14.31) |
+| | Idle Container Apps ($5.72) | Active Container Apps ($20.03) |
 |---|---|---|
-| Fixed + eval ceiling | $11.29 | $21.31 |
-| Left for manual/demo calls | $13.71 | $3.69 |
-| **At floor rate ($0.0215/min)** | **~638 min (10.6 hr)** | **~172 min (2.9 hr)** |
-| **At realistic rate ($0.031/min)** | **~442 min (7.4 hr)** | **~119 min (2.0 hr)** |
+| Fixed + eval ceiling | $12.72 | $27.03 |
+| Left for manual/demo calls | $12.28 | **−$2.03** |
+| **At floor rate ($0.0215/min)** | **~571 min (9.5 hr)** | **0 — already over ceiling before any call** |
+| **At realistic rate ($0.031/min)** | **~396 min (6.6 hr)** | **0 — already over ceiling before any call** |
 
-**So: roughly 2 to 10.6 hours/month of actual manual testing/demo calling** — down from the naive
-5–15 hour figure once evals are accounted for. The Container Apps idle-vs-active question is still
-the single biggest lever (worth ~7.5 hours), with the eval ceiling as the second. Both are Phase 0
-measurements; the eval estimate itself gets replaced with a measured actual once the harness exists
-in Phase 2, same as every other number in this budget.
+**The ACTIVE column now exceeds the $25/mo ceiling before a single call minute is spent**: $27.03
+fixed + eval alone leaves −$2.03, not the $3.69 this table previously showed. This is a real
+tightening, not a rounding artifact. What keeps this project inside B4 in practice is R-04's own
+verdict (`docs/phase0/findings.md`): the Container App's actual, measured operating mode is **IDLE**,
+not active. The active column above is a worst-case bound this budget must stay aware of, not the
+live finding — if that verdict ever changes, this budget breaks before B4's own per-call limits would
+trigger.
 
-Notes: Canada and US local are **identically priced** — no delta from choosing Canada. Outbound
-$0.013/min never applies — see decision 17, `escalate_to_human` never places a real call. Container
-Apps free grant is 180,000 vCPU-s / 360,000 GiB-s / 2M requests. During a call the replica is
-unambiguously **active** (24 kHz PCM16 = 48,000 B/s vs a 1,000 B/s idle threshold); between calls is
-undocumented, hence decision 15. `min-replicas=0` is **disqualifying** for inbound telephony (cold
-start seconds→30s).
+**So: roughly 0 (active, over ceiling) to 9.5 hours/month (idle, floor rate) of actual manual
+testing/demo calling** — the naive original range was 2–10.6 hours; the active column no longer has
+any room once evals are accounted for. The Container Apps idle-vs-active question is still the single
+biggest lever, now a pass/fail one rather than a matter of degree, with the eval ceiling as the
+second. Both are Phase 0 measurements; the eval estimate itself gets replaced with a measured actual
+once the harness exists in Phase 2, same as every other number in this budget.
+
+Notes: Canada and US local are **identically priced for the phone-number meter specifically** — no
+delta from choosing Canada for that meter. (The Container Apps compute meter above is *not*
+identically priced across regions — see its provenance note.) Outbound $0.013/min never applies — see
+decision 17, `escalate_to_human` never places a real call. Container Apps free grant is 180,000
+vCPU-s / 360,000 GiB-s / 2M requests. During a call the replica is unambiguously **active** (24 kHz
+PCM16 = 48,000 B/s vs a 1,000 B/s idle threshold); between calls is undocumented, hence decision 15.
+`min-replicas=0` is **disqualifying** for inbound telephony (cold start seconds→30s).
 
 ---
 
