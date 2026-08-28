@@ -1121,7 +1121,7 @@ pattern. Of the ~20 call sites across all four scripts:
 destructive, but still a re-run hazard):**
 - `03-cost-check-24h.sh` Stage 1 (`>> "$COSTS_FILE"`, the Free Services portal check section)
   — no guard against re-appending an identical section on a re-run.
-- `04-teardown-and-r08.sh`'s final "Measured, not estimated" section (`>> "$COSTS_FILE"`) — the
+- `04-teardown-and-r08.sh`'s final "Modeled from telemetry" section (`>> "$COSTS_FILE"`) — the
   file-creation preamble above it *is* guarded (`if [[ ! -f "$COSTS_FILE" ]]`), but the actual
   R-04/R-08 results block that follows is not; a re-run would duplicate-append rather than
   overwrite the earlier measurement.
@@ -2767,8 +2767,9 @@ grant-corrected dollar figure. Recomputed here rather than left for Monday:
 
 **R-08: ~79–114 demo runs/month. Gate PASSES** (comfortably above the 5-run floor) — computed, verified
 against the extracted computation in `04-teardown-and-r08.sh` itself (both the grant-cost and R-08
-arithmetic blocks were pulled out of the script and run against this session's real measured data
-before being trusted here).
+arithmetic blocks were pulled out of the script and re-run against this session's actual inputs — R-04's
+telemetry-measured grant-cost figure ($5.72/mo, genuinely measured) and PLAN.md's own floor/realistic
+per-minute rates ($0.0215/$0.031, its estimate, not a billing read) — before being trusted here).
 
 **This is not the dramatic reframing it might sound like.** The free grant is real and matters (it's
 the difference between $5.72/mo and the $7.78/mo pre-grant idle figure this section's rates would
@@ -2808,11 +2809,28 @@ the free grant above and does not by itself confirm or contradict the verdict):
 
 ```
 
-## R-08 — demo runs/month, computed from measured meters
+## R-08 — demo runs/month, computed from telemetry + hand-entered inputs
 
-- Measured $/minute: $0.031
-- Measured fixed monthly (extrapolated): $6.72
+- Modeled $/minute: $0.031
+- Modeled fixed monthly (extrapolated): $6.72
 - Eval-budget ceiling reserved: $6.00 (docs/PLAN.md hard ceiling)
 - Left for manual/demo calls: $12.28/mo
 - At B4's 5-min cap per run: **79.2 demo runs/month**
+
+**Provenance note**: none of the figures above come from an Azure Cost Management billing query.
+`$6.72` (Fixed monthly) = `R04_MONTHLY_NET_OF_GRANT` (`$5.72`, computed from Container Apps
+replica/network telemetry against Canada Central Retail Prices API rates, net of the free compute
+grant) + a hardcoded `$1.00` phone-number constant — and matches `04-teardown-and-r08.sh`'s own
+unmodified suggested default for that prompt exactly (`04:284`). `$0.031/min` (Per-minute floor) was
+free-text keyboard entry at that script's `ask` prompt, matching the upper end of the fallback range
+the prompt itself suggests typing (`04:290`) — not read from any per-minute billing meter. `79.2`
+(Demo runs/month) is arithmetic performed on those two inputs (`04:294-309`). This run's three Cost
+Management dollar-total queries (`COST_JSON`, `IDLE_COST_JSON`, `FULL_COST_JSON`) feed none of the
+figures above.
+
+**Open question, not resolved**: unlike `03-cost-check-24h.sh` Stage 3's sanity confirm (explicitly
+attributed above — "answered by the assistant during this session, not by Marco"), no equivalent
+disclosure exists anywhere in this file for who answered `04-teardown-and-r08.sh`'s two prompts
+(`04:290-291`, `MEASURED_PER_MIN_COST` / `MEASURED_FIXED_MONTHLY_INPUT`) that produced `$0.031` and
+`$6.72`. Who answered them is unknown from any tracked record.
 

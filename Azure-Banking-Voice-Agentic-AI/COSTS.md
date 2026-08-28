@@ -159,7 +159,7 @@ writeup and the corrected discrimination-at-72h analysis: `docs/phase0/findings.
 blade retirement and the free-tier suppression question." `FREETIER_CLEAN=yes` in `.env.phase0`
 reflects this, not the wizard's own re-run.
 
-## R-04 telemetry window — scope note (2026-08-24, before script 4's Stage 4 writes the measured section)
+## R-04 telemetry window — scope note (2026-08-24, before script 4's Stage 4 writes the "Modeled from telemetry" section)
 
 R-04's Replicas-continuity figure (`docs/phase0/findings.md`, "R-04 — Container Apps compute cost...")
 measures `CALL3_TIME` (2026-08-21T22:54:09Z) to teardown — **the idle window only, by design**
@@ -171,17 +171,28 @@ continuity claim as spanning back to provisioning — it doesn't. What does cove
 log-based, not metric-based: see `docs/phase0/findings.md`, "R-03 residual — cold-start/scale-from-zero
 hypothesis ruled out."
 
-## Measured, not estimated (generated 2026-08-25T01:26:32Z by docs/phase0/wizard/04-teardown-and-r08.sh)
+## Modeled from telemetry (generated 2026-08-25T01:26:32Z by docs/phase0/wizard/04-teardown-and-r08.sh)
 
-| Item | Plan estimate | Measured |
+| Item | Plan estimate | Modeled |
 |---|---|---|
 | Fixed monthly (extrapolated) | $5.29–$15.31 | $6.72 |
 | Per-minute floor | $0.0215/min | $0.031/min |
 | Container Apps idle-vs-active (R-04) | undocumented, decision 15 assumed idle | **IDLE** |
 | Demo runs/month (R-08) | ~30-160 (naive, pre-eval-budget estimate) | **79.2** (gate: PASSED) |
 
+**Provenance note**: none of the figures in this table come from an Azure Cost Management billing
+query. `$6.72` (Fixed monthly) = `R04_MONTHLY_NET_OF_GRANT` (`$5.72`, computed from Container Apps
+replica/network telemetry against Canada Central Retail Prices API rates, net of the free compute
+grant) + a hardcoded `$1.00` phone-number constant — and matches `04-teardown-and-r08.sh`'s own
+unmodified suggested default for that prompt exactly (`04:284`). `$0.031/min` (Per-minute floor) was
+free-text keyboard entry at that script's `ask` prompt, matching the upper end of the fallback range
+the prompt itself suggests typing (`04:290`) — not read from any per-minute billing meter. `79.2`
+(Demo runs/month) is arithmetic performed on those two inputs (`04:294-309`). This run's three Cost
+Management dollar-total queries (`COST_JSON`, `IDLE_COST_JSON`, `FULL_COST_JSON`) feed none of the
+figures above.
+
 If the free-tier promotion section above (or added by 03-cost-check-24h.sh) flagged any of these
-meters as free-tier-covered, treat the "Measured" column with that caveat — see that section's
+meters as free-tier-covered, treat the "Modeled" column with that caveat — see that section's
 fallback (measured quantity × PLAN.md's list rate) before trusting these dollar figures.
 
 ### Transport RTT baseline
@@ -192,6 +203,8 @@ RealtimeSession per B5).
 
 ### Full detail
 
-docs/phase0/findings.md has every raw query result this wizard captured (R-01, R-02, R-03, R-04,
-R-05, R-06, R-08) with timestamps.
+docs/phase0/findings.md has the raw query results this wizard persists, with timestamps (R-01 through
+R-06, R-08). Two are not persisted: Stage 2's full Cost Management roundup (FULL_COST_JSON) is
+terminal output only, and Stage 1's raw Replicas/RxBytes/TxBytes metrics survive as derived counts,
+not raw results.
 
