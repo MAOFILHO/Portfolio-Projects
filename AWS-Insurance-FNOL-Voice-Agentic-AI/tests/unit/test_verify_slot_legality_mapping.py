@@ -25,6 +25,7 @@ from scripts.verify_slot_legality_mapping import (
     assert_matches_src_constant,
     legal_slots_by_intent,
 )
+from fnol_voice_agent.api.lex_codehook import _LEGAL_SLOTS_BY_INTENT
 
 _BOT_TFTPL = Path("infra/terraform/stacks/main/bot.yaml.tftpl")
 
@@ -195,3 +196,50 @@ def test_assert_matches_src_constant_raises_on_a_mismatched_mapping() -> None:
 
     with pytest.raises(SlotLegalityDriftError):
         assert_matches_src_constant(tftpl_mapping, mismatched_src_constant)
+
+
+def test_the_named_graph_internal_slot_does_not_trigger_a_drift_raise() -> None:
+    """`D200`/`OI118`. `claim_or_policy_number` is listed in `_GRAPH_INTERNAL_SLOTS["CheckClaimStatus"]`
+    -- present in the src-constant-shaped mapping, absent from the tftpl-shaped one, and that specific
+    combination must NOT raise, because it's exactly what the allowlist exists to permit.
+    """
+    tftpl_mapping = {"CheckClaimStatus": frozenset({"claim_number"})}
+    src_constant = {"CheckClaimStatus": frozenset({"claim_number", "claim_or_policy_number"})}
+
+    assert_matches_src_constant(tftpl_mapping, src_constant)  # must not raise
+
+
+def test_an_unlisted_extra_still_raises_despite_the_allowlist() -> None:
+    """The allowlist names ONE slot for ONE intent, not "any extra, anywhere" -- an extra slot name that
+    is not `_GRAPH_INTERNAL_SLOTS`-listed for its intent must still fail loudly, same as before the
+    allowlist existed. Otherwise the allowlist would have quietly widened row 3's own equality check
+    into a subset check, the exact `D126` shape it exists not to become.
+    """
+    tftpl_mapping = {"CheckClaimStatus": frozenset({"claim_number"})}
+    src_constant = {"CheckClaimStatus": frozenset({"claim_number", "some_other_unlisted_extra"})}
+
+    with pytest.raises(SlotLegalityDriftError):
+        assert_matches_src_constant(tftpl_mapping, src_constant)
+
+
+def test_the_allowlisted_slot_does_not_exempt_a_different_intent() -> None:
+    """`claim_or_policy_number` is listed only under `"CheckClaimStatus"` -- the same extra name showing
+    up under a DIFFERENT intent is not covered by that entry and must still raise. Pins that the
+    allowlist keys on intent name, not slot name alone.
+    """
+    tftpl_mapping = {"CoverageQuestion": frozenset({"coverage_topic"})}
+    src_constant = {"CoverageQuestion": frozenset({"coverage_topic", "claim_or_policy_number"})}
+
+    with pytest.raises(SlotLegalityDriftError):
+        assert_matches_src_constant(tftpl_mapping, src_constant)
+
+
+def test_real_files_match_after_the_graph_internal_slots_allowlist() -> None:
+    """The actual live comparison `main()` runs: `bot.yaml.tftpl`'s real, parsed mapping against the
+    real `_LEGAL_SLOTS_BY_INTENT` (`src/fnol_voice_agent/api/lex_codehook.py`). Before this fix,
+    `CheckClaimStatus`'s `claim_or_policy_number` made this raise -- correctly, since the constant had
+    started legitimately holding a name the tftpl doesn't declare (`D200`/`OI118`). Must not raise now.
+    """
+    tftpl_mapping = legal_slots_by_intent(_BOT_TFTPL.read_text())
+
+    assert_matches_src_constant(tftpl_mapping, _LEGAL_SLOTS_BY_INTENT)  # must not raise

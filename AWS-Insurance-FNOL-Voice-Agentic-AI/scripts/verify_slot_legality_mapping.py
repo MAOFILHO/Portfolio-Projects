@@ -153,17 +153,37 @@ def legal_slots_by_intent(text: str) -> dict[str, frozenset[str]]:
     return mapping
 
 
+# `D200`/`OI118`. Names, not just membership -- each graph-internal slot survives only for the exact
+# intent it's listed under, never blanket-exempted across all five. `CheckClaimStatus`'s
+# `claim_or_policy_number` (`check_claim_status.py:19`) is a disambiguation slot the graph itself
+# elicits, never declared in `bot.yaml.tftpl` and never a candidate to BE declared there -- Lex has no
+# slot to fill for it, it exists only as the `slot_name` `_elicit_slot` is asked to route. Subtracted
+# from `_LEGAL_SLOTS_BY_INTENT`'s side before the equality compare below, not folded into a weaker
+# subset assert over the whole mapping -- an unlisted extra anywhere else must still fail loudly, the
+# same `D126` shape this row's equality check exists to catch one level up.
+_GRAPH_INTERNAL_SLOTS: dict[str, frozenset[str]] = {
+    "CheckClaimStatus": frozenset({"claim_or_policy_number"}),
+}
+
+
 def assert_matches_src_constant(
     tftpl_mapping: dict[str, frozenset[str]], src_constant: dict[str, frozenset[str]]
 ) -> None:
     """Raise `SlotLegalityDriftError`, naming exactly what differs, unless `tftpl_mapping` (the parsed
-    ground truth, `legal_slots_by_intent`'s own output) and `src_constant` (`_LEGAL_SLOTS_BY_INTENT`)
-    are EQUAL -- same intent keys, same slot-name set per key. See `SlotLegalityDriftError`'s own
-    docstring for why equality, not subset.
+    ground truth, `legal_slots_by_intent`'s own output) and `src_constant` (`_LEGAL_SLOTS_BY_INTENT`),
+    AFTER subtracting `_GRAPH_INTERNAL_SLOTS` from `src_constant`'s side, are EQUAL -- same intent keys,
+    same slot-name set per key. Still equality, not subset, over what's left after that one named
+    allowlist is removed: see `SlotLegalityDriftError`'s own docstring for why a bare subset assert
+    over the whole mapping would pass vacuously instead.
     """
-    if tftpl_mapping == src_constant:
+    effective_src_constant = {
+        intent: slots - _GRAPH_INTERNAL_SLOTS.get(intent, frozenset())
+        for intent, slots in src_constant.items()
+    }
+    if tftpl_mapping == effective_src_constant:
         return
 
+    src_constant = effective_src_constant
     lines: list[str] = []
     tftpl_only_intents = sorted(set(tftpl_mapping) - set(src_constant))
     constant_only_intents = sorted(set(src_constant) - set(tftpl_mapping))

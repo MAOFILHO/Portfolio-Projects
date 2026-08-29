@@ -409,7 +409,22 @@ _LEGAL_SLOTS_BY_INTENT: dict[str, frozenset[str]] = {
             "confirm_file_claim",
         }
     ),
-    Intent.CHECK_CLAIM_STATUS.value: frozenset({"claim_number"}),
+    Intent.CHECK_CLAIM_STATUS.value: frozenset(
+        {
+            "claim_number",
+            # `D200`/`OI118`: `claim_or_policy_number` is a GRAPH-INTERNAL disambiguation slot
+            # (`check_claim_status.py:19`), never Lex-declared in `bot.yaml.tftpl` -- the node names it
+            # as `active_slot` when neither `claim_number` nor `policy_number` is filled yet
+            # (`check_claim_status.py:28-31`), and until 2026-08-29's deploy this row-2 guard had no way
+            # to know that name existed, so it raised `_UnroutableIntentError` on the very first live
+            # `CheckClaimStatus` turn. Listing it here does not make it a real Lex slot -- it can never
+            # appear as a KEY in `lex_slots` (Lex has no such slot to fill), only as the `slot_name`
+            # being elicited. `scripts/verify_slot_legality_mapping.py`'s criterion-3 equality assert
+            # accounts for this exact name via its own `_GRAPH_INTERNAL_SLOTS` allowlist -- it is
+            # subtracted before the tftpl comparison, not silently absorbed into a weakened assert.
+            "claim_or_policy_number",
+        }
+    ),
     Intent.COVERAGE_QUESTION.value: frozenset({"coverage_topic"}),
     Intent.RENTAL_TOWING_ENTITLEMENT.value: frozenset({"entitlement_type", "claim_number"}),
     Intent.UPDATE_CONTACT_INFO.value: frozenset(

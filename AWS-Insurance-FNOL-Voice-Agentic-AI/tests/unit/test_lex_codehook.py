@@ -821,6 +821,25 @@ def test_the_illegal_slot_name_error_message_embeds_slot_name_and_graph_intent()
     assert "CoverageQuestion" in message
 
 
+def test_check_claim_status_own_internal_slot_name_is_legal_and_does_not_raise() -> None:
+    """`D200`/`OI118`. `claim_or_policy_number` is `check_claim_status.py:19`'s own graph-internal
+    disambiguation slot -- it names it as `active_slot` when neither `claim_number` nor `policy_number`
+    is filled yet (`check_claim_status.py:28-31`), but it was never a Lex-declared slot name
+    (`bot.yaml.tftpl`'s `CheckClaimStatus` block only ever declared `claim_number`, `:516`). Row 2's own
+    guard, added for the OI80 stale-`active_slot` case, had no way to know this name existed -- it went
+    live for the first time on the 2026-08-29 deploy and raised `_UnroutableIntentError` on the very
+    first turn of a real `CheckClaimStatus` call, confirmed via CloudWatch. This is the correctness case
+    row 2's own guard must NOT reject: a slot the graph legitimately elicits under the SAME intent it's
+    asking about, not a stale leftover from a prior one.
+    """
+    event = _event(intent_name="CheckClaimStatus")
+    result = {"intent": "CheckClaimStatus"}
+
+    response = lex_codehook._elicit_slot(event, result, "claim_or_policy_number", "unused")
+
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "claim_or_policy_number"
+
+
 def test_lex_slots_are_filtered_to_the_graph_intents_legal_set() -> None:
     """Row 1's own trigger: the router-drift shape (`OI80`'s live turn-1->2 observation) -- Lex still
     carries `UpdateContactInfo`'s slot keys from a prior turn while the graph has moved to
