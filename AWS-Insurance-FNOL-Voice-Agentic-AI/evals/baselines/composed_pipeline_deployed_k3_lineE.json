@@ -31,14 +31,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        18598,
-        1535,
-        1098
+        13908,
+        1027,
+        1006
       ],
       "session_ids": [
-        "criterion9-e93e2593-164c-4f61-9cde-aeaf1bdd14bf",
-        "criterion9-66ff09b0-2385-4aee-93ab-ae3d06fc2eab",
-        "criterion9-a8ae5a68-b308-4cc2-af4d-14ba59ef664d"
+        "criterion9-8d40877e-a9bc-485a-9164-85100d8e77a9",
+        "criterion9-ac81d7c7-e5ae-4021-882e-df778b5b8353",
+        "criterion9-48bf2479-933c-4ce3-b0b1-b7e360f6435c"
       ]
     },
     {
@@ -61,14 +61,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        215,
-        211,
-        2614
+        203,
+        221,
+        209
       ],
       "session_ids": [
-        "criterion9-41ae871a-a84c-4c53-aa9b-c3a43dd320be",
-        "criterion9-fa6726be-96ec-42e9-a58e-1fe3788f0f9a",
-        "criterion9-a42a3f30-2e9f-4728-bbb1-5c81a2c53aca"
+        "criterion9-a5723683-fbd8-40b1-ae36-ec04bbc1810e",
+        "criterion9-1454ee7c-06db-4e99-a6b1-75022dd68f3f",
+        "criterion9-65f26d7f-f8a8-4b89-b7ad-031d583d90f8"
       ]
     },
     {
@@ -91,14 +91,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1977,
-        1047,
-        1039
+        995,
+        1120,
+        1058
       ],
       "session_ids": [
-        "criterion9-8caf1e52-598f-4a27-bbf5-7a1084b4a18a",
-        "criterion9-b1507358-53ab-4c67-bb28-55ec63a18c81",
-        "criterion9-fb43c79e-a7b6-4f32-a1c6-7d39add2d3e6"
+        "criterion9-3d7bbef9-2f19-4454-9de0-7407811946cb",
+        "criterion9-3c23aaa8-2489-4f9c-8b64-e8d7c766e56e",
+        "criterion9-d838684c-c203-45da-8d7d-a80db72fbd95"
       ]
     },
     {
@@ -121,14 +121,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        211,
-        201,
-        198
+        196,
+        186,
+        189
       ],
       "session_ids": [
-        "criterion9-3e84358d-1b61-4a5c-b8db-8b4169fefad1",
-        "criterion9-6d758d6a-0b22-4735-a24f-b6f829d74e39",
-        "criterion9-329e9dbb-4093-43f2-870b-e8d304eca2d7"
+        "criterion9-adf4ce35-969a-43d5-a833-a044b53a60d3",
+        "criterion9-d6e7bbd4-f504-447d-9259-b73e950a286c",
+        "criterion9-20fb8405-5b0d-4277-a7a4-0300e4ddf862"
       ]
     },
     {
@@ -151,14 +151,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        196,
-        188,
-        199
+        211,
+        200,
+        192
       ],
       "session_ids": [
-        "criterion9-fa700556-4706-4f61-8da5-940f20e0ff88",
-        "criterion9-9b9a7dec-618f-49f3-a64f-039cbe033ef2",
-        "criterion9-ed0446e7-1530-41f4-835d-a3de45e69d0d"
+        "criterion9-64426b44-388e-4736-8c13-fb83e0316818",
+        "criterion9-f9f7c5a3-3e56-43fd-b378-32553b8c9773",
+        "criterion9-64218c23-df3b-462c-8ac5-78e99af5f0e6"
       ]
     },
     {
@@ -181,14 +181,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        189,
-        192,
-        180
+        167,
+        183,
+        175
       ],
       "session_ids": [
-        "criterion9-69121856-ca39-4634-89a0-36f3e4dc91b0",
-        "criterion9-8cf09666-bce3-4fcc-b709-fcacc4426fc7",
-        "criterion9-0d2b3423-f229-48fc-b988-035961f5b901"
+        "criterion9-62c3b2e3-e040-4916-baf2-6c373a610edb",
+        "criterion9-12896fb4-6f91-474e-a447-f22cbcf36f42",
+        "criterion9-633a2bd5-90d5-4a8d-8bdc-54d53fab2efe"
       ]
     },
     {
@@ -211,14 +211,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        201,
-        204,
-        193
+        188,
+        183,
+        289
       ],
       "session_ids": [
-        "criterion9-19bab0f3-1b01-4505-9b5e-86db966ba7ce",
-        "criterion9-98bc6e49-5292-4a30-b4a8-041c7c08c256",
-        "criterion9-a0f7f13a-30db-4ee5-a5bf-6f64ad921033"
+        "criterion9-95549abc-5535-4468-a3a7-2878d391adb1",
+        "criterion9-3688a075-13d6-4124-8abd-a71bce568c41",
+        "criterion9-2aaf4644-0249-4050-9005-93b81f61460a"
       ]
     },
     {
@@ -241,14 +241,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        220,
-        212,
-        212
+        204,
+        183,
+        208
       ],
       "session_ids": [
-        "criterion9-64360cd6-a455-49db-bec3-9b7d59b83702",
-        "criterion9-0004598a-da5f-4822-a8f9-380ae9f804ce",
-        "criterion9-bda0f119-d800-49e2-b127-dadacc39924f"
+        "criterion9-3ce88591-b42a-4134-9139-aeacf7ce0464",
+        "criterion9-cae2c2bf-0856-4de4-a132-c7b15580635e",
+        "criterion9-7fbcb873-551f-4359-8d27-ed3bfa867d85"
       ]
     },
     {
@@ -271,14 +271,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1197,
-        1063,
-        1136
+        1101,
+        1122,
+        1054
       ],
       "session_ids": [
-        "criterion9-4223a938-907c-4296-98f9-c67b3fa1b470",
-        "criterion9-5d3cdb34-e714-4f1c-9c34-6ee72465c4b3",
-        "criterion9-dd249e8d-2fd3-4996-afd0-cc1370530954"
+        "criterion9-86330fd5-f832-4ca8-abef-1f5c5ff3b02f",
+        "criterion9-ac9c0418-1d9e-4fcb-8761-0d2dcce54597",
+        "criterion9-0b4843e9-3448-47f4-9079-523b34771b3c"
       ]
     },
     {
@@ -301,14 +301,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1155,
-        1125,
-        1024
+        1139,
+        1188,
+        1178
       ],
       "session_ids": [
-        "criterion9-6f520fa6-e0e0-4c5f-9b87-d93a26c57b15",
-        "criterion9-60143a95-c35e-4808-8c85-d9f21e923757",
-        "criterion9-944db450-674f-4f1c-9011-ac6b0265a78c"
+        "criterion9-725d92ec-bcf1-40bd-ba98-7649ee5f8923",
+        "criterion9-8f6a6888-a369-4126-b384-6c564ddd9d2b",
+        "criterion9-7e2922f1-abe3-43a1-85b3-11cb56237e15"
       ]
     },
     {
@@ -331,14 +331,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1228,
-        1125,
-        1179
+        1073,
+        1058,
+        1039
       ],
       "session_ids": [
-        "criterion9-7001ba99-8606-4588-bfd4-108a5ef872e5",
-        "criterion9-41a7759d-ddf6-4782-8365-3ad9609c161c",
-        "criterion9-7eb1af26-6ad2-4be3-ba66-62ea0c7d0f90"
+        "criterion9-0f182b72-e219-43e9-952f-113c6387ab10",
+        "criterion9-584dfaf8-d75a-4f12-aa26-9961fab26295",
+        "criterion9-0a8e6418-22b2-49e8-97e9-421d0ff07cd2"
       ]
     },
     {
@@ -361,14 +361,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1074,
-        1025,
-        1123
+        1039,
+        1037,
+        1048
       ],
       "session_ids": [
-        "criterion9-a0bc66bf-3cc3-4ac5-b3e4-b902521387f9",
-        "criterion9-8acad477-c6fa-4b92-90f8-9458ae4d1b20",
-        "criterion9-e58eae4f-fd0b-4407-b7b3-6ab39079e478"
+        "criterion9-407a046c-8aa4-46fc-8a1c-4ed43483e782",
+        "criterion9-7422ebc5-37d5-476f-87da-e093d0cf93d2",
+        "criterion9-d122ef01-d73d-4d5e-9633-e96459693e6b"
       ]
     },
     {
@@ -391,14 +391,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1130,
-        1032,
-        1009
+        1068,
+        1008,
+        991
       ],
       "session_ids": [
-        "criterion9-601e7755-1995-4b8a-84bc-4188ed72ffc4",
-        "criterion9-ef84302d-2c88-43a8-b735-31dd813f741e",
-        "criterion9-17e22cd5-0ee6-44bc-b88e-4e87efc017e7"
+        "criterion9-482c1895-85b5-48a8-ac44-3d206bb5f36c",
+        "criterion9-07814ac5-e9c3-42a8-be0b-c0b3c6fd8286",
+        "criterion9-679a7289-4cc5-4e99-91e8-9b40501dacc3"
       ]
     },
     {
@@ -421,14 +421,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1117,
-        985,
-        1076
+        993,
+        1054,
+        1026
       ],
       "session_ids": [
-        "criterion9-85fc58d0-615f-4b69-8455-00ca485cac80",
-        "criterion9-e1101843-d8e8-44da-9e0f-9862288b1123",
-        "criterion9-4a7d89e4-6c38-490d-9ec7-5558ec7cf508"
+        "criterion9-82cd0952-62cb-44ba-8a5e-2899311f64a1",
+        "criterion9-f299e112-1d2a-4e6c-8003-045b74d5202b",
+        "criterion9-897434b6-4d56-431d-80bb-185dd2edc0fb"
       ]
     },
     {
@@ -451,14 +451,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1029,
-        1085,
-        1113
+        1012,
+        1023,
+        1034
       ],
       "session_ids": [
-        "criterion9-e12541c3-c4bd-44eb-bd93-98109b90d948",
-        "criterion9-d92445c5-0a63-4795-8dfd-18e6236419d8",
-        "criterion9-8d40310a-eddf-442b-af9f-00641da69dfb"
+        "criterion9-f90aba21-86b2-4247-b643-13ce9e7da2d2",
+        "criterion9-01ddd66b-f5d4-458c-a3d7-be433d297eb9",
+        "criterion9-46af78c9-3c6b-4cd8-8463-d5c0c015cf2c"
       ]
     },
     {
@@ -481,14 +481,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1019,
-        1036,
-        1057
+        1128,
+        971,
+        1177
       ],
       "session_ids": [
-        "criterion9-71b22829-90f6-45e4-9605-aed9f9e7e016",
-        "criterion9-773405aa-36be-4bc6-80d8-882fa7187cb9",
-        "criterion9-c93ad1f8-cedb-4bf1-b7e6-e3ee107852b6"
+        "criterion9-21d6675d-9577-404a-9d84-67c89e2d80db",
+        "criterion9-e609405b-e389-43d4-8755-50ac96224e9c",
+        "criterion9-53fc8f2c-652a-4a84-bf06-b0c52e0c116e"
       ]
     },
     {
@@ -511,14 +511,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1147,
-        975,
-        1199
+        1015,
+        1032,
+        1014
       ],
       "session_ids": [
-        "criterion9-4e6eaee6-2a3d-470c-b78f-6a270ffcd932",
-        "criterion9-7e7a552b-25c9-496f-af2a-0767001aecca",
-        "criterion9-56a8e21d-0aed-490d-9853-175a3fdbeb92"
+        "criterion9-7a5a745a-da44-4769-86eb-98dd164208b2",
+        "criterion9-c632190d-0b0f-439c-a12b-c8c611172f4f",
+        "criterion9-ae386193-fd5e-4d4f-8812-811a8b25fc04"
       ]
     },
     {
@@ -541,14 +541,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1062,
-        1000,
-        1117
+        986,
+        984,
+        1034
       ],
       "session_ids": [
-        "criterion9-0d6811cb-6ccc-46b2-808f-922ff892abc3",
-        "criterion9-f8012b62-5af7-4fb4-8f21-f6f13a3fed82",
-        "criterion9-b6b986bd-56a8-48b7-abde-77cf1625a412"
+        "criterion9-4314eaf9-57b8-48ce-bfd0-16bd7db8e1b6",
+        "criterion9-64d6b5ca-1dda-4e30-838d-a8d629672a18",
+        "criterion9-8fb79ded-1717-4b00-82ee-30d8193d0983"
       ]
     },
     {
@@ -571,14 +571,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        201,
-        187,
-        199
+        191,
+        213,
+        184
       ],
       "session_ids": [
-        "criterion9-cba3b547-233d-4b5b-84c8-740301b5462e",
-        "criterion9-e168e2ec-0e93-4283-a408-999dd874a7ef",
-        "criterion9-2272fbaf-26e8-482f-9231-d595f46aadcd"
+        "criterion9-45ac7b1a-a357-4ac7-9636-df0fb4016ed2",
+        "criterion9-bb16097b-20c3-406f-9a0f-27da23e69b51",
+        "criterion9-83c4b047-bd29-4b0e-a286-bb5a7f0eb213"
       ]
     },
     {
@@ -601,14 +601,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1064,
-        961,
-        1145
+        987,
+        1162,
+        1121
       ],
       "session_ids": [
-        "criterion9-a45dd7c9-d9cc-40d3-8287-73952f16a489",
-        "criterion9-cb227e72-f0ce-4b63-9297-c10c007c2ff2",
-        "criterion9-fe3eaa04-9a0d-41f9-a70a-9b57d150fc98"
+        "criterion9-f4405d1c-ace5-4a90-b5d0-7e8dd4710a58",
+        "criterion9-88b19a68-a094-49d9-9514-b5dd4be6ecb0",
+        "criterion9-088c431b-67b7-40a1-b2dd-7aeee374877f"
       ]
     },
     {
@@ -631,14 +631,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1022,
-        1127,
-        1030
+        1042,
+        1120,
+        1029
       ],
       "session_ids": [
-        "criterion9-b884abeb-858b-4ab3-9f30-371a299efc53",
-        "criterion9-98e8dbe2-02a0-4f49-8e2e-539017e3fb6e",
-        "criterion9-a16ae2aa-a704-4a79-a3b6-9ca5ee867234"
+        "criterion9-b9d00581-eba4-4f94-beb7-1de4ca49355b",
+        "criterion9-dcaad288-7ebe-48fa-82b7-94318677df32",
+        "criterion9-33db9f32-1f96-4b0c-b4ea-e076b8ac97cf"
       ]
     },
     {
@@ -661,14 +661,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1039,
-        973,
-        1052
+        1019,
+        1115,
+        1025
       ],
       "session_ids": [
-        "criterion9-a21fb29d-95d6-422e-96b4-7fa8f2c4df60",
-        "criterion9-f1609455-3191-47d4-bf60-c18c8c248050",
-        "criterion9-10d3afed-2007-40ab-8846-6a6b188afc17"
+        "criterion9-04593802-c892-48d9-bc99-7a8e6bb3a0fa",
+        "criterion9-34e69086-6b24-4cac-8be7-4fead5454be6",
+        "criterion9-4e28e701-5a37-4346-9a38-9c474b50fbb3"
       ]
     },
     {
@@ -691,14 +691,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1671,
-        1054,
-        1125
+        1056,
+        1067,
+        991
       ],
       "session_ids": [
-        "criterion9-a712fee2-91e1-4406-8a3c-914f856dbed7",
-        "criterion9-fc06bffa-7687-41f1-bd58-596b0ab1c0b1",
-        "criterion9-fa001ef0-e3d6-40ea-9343-9f5c9b170c7c"
+        "criterion9-cdf53b24-116d-4349-9aa0-8f98de437236",
+        "criterion9-12ff6053-ed3e-4458-90de-b77380e1d276",
+        "criterion9-55945ec7-029c-4a07-a591-224621038cee"
       ]
     },
     {
@@ -721,14 +721,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        982,
-        1092,
-        985
+        1046,
+        1076,
+        1022
       ],
       "session_ids": [
-        "criterion9-6cf0a035-6033-4143-a081-d930d34355b5",
-        "criterion9-c40ae76c-17e7-4401-a254-a73332b73469",
-        "criterion9-eb007fad-00cb-4d79-aa34-234cb529f177"
+        "criterion9-18bb7ce6-7e2b-4094-b581-515f78481289",
+        "criterion9-5b2feb97-448e-4fce-b73e-2ab1a2351fec",
+        "criterion9-d193d298-0754-4260-91f3-01eed6fcb347"
       ]
     },
     {
@@ -751,14 +751,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1039,
-        1160,
-        1016
+        1046,
+        1188,
+        1024
       ],
       "session_ids": [
-        "criterion9-1ae6bd40-e2da-4bbd-8f6d-b25840145544",
-        "criterion9-4305ce2f-9db6-46fb-99a1-4433dfe018cf",
-        "criterion9-042d025f-2c57-4016-89c3-efb494faf490"
+        "criterion9-012eef8f-18b9-4d04-99f5-ea86ecb26c47",
+        "criterion9-da8ca6ce-5639-478e-91aa-579816b55e5c",
+        "criterion9-18bbb7da-fdb0-430d-84b0-c87e7981588e"
       ]
     },
     {
@@ -781,14 +781,14 @@
       "d52_worst_case": true,
       "diverges_from_d52": false,
       "elapsed_ms_samples": [
-        1134,
-        1015,
-        1130
+        1042,
+        1080,
+        1154
       ],
       "session_ids": [
-        "criterion9-30099217-31eb-4d8f-ac84-f52fed74c575",
-        "criterion9-c739f21e-82c1-47d8-89d9-188e6a3373a0",
-        "criterion9-f7b0b752-4f60-43d6-806b-34faf36307d3"
+        "criterion9-c4f71abf-da08-470f-b068-2a17f2e45fef",
+        "criterion9-3860c0da-4eee-4ccd-962f-f8e6ea4e1c4a",
+        "criterion9-2ef7bb00-2fab-4633-bfd6-6dbc2597f441"
       ]
     }
   ],
@@ -799,8 +799,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1155,
-      "session_id": "criterion9-d6f7b0ec-01a0-4e74-9ac8-7dd39c318eba"
+      "elapsed_ms": 1125,
+      "session_id": "criterion9-6f8fccb0-f8c4-4a87-b13a-21704c7f8a24"
     },
     {
       "text": "the car's totalled",
@@ -808,8 +808,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1039,
-      "session_id": "criterion9-6c25aa6b-dcfe-4ad1-a98e-0b7dbe20f5ff"
+      "elapsed_ms": 1127,
+      "session_id": "criterion9-61d29ebc-bf60-4c83-85b4-c6498c543b64"
     },
     {
       "text": "I've got a bit of a bruise on my knee where it hit the dash, nothing worth mentioning really",
@@ -817,8 +817,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 989,
-      "session_id": "criterion9-da8aa6bd-14e6-4dce-8251-f8f87c818425"
+      "elapsed_ms": 1144,
+      "session_id": "criterion9-de442aa1-c6be-4ab8-9089-8fcd311947d8"
     },
     {
       "text": "no injuries at all, just the two cars",
@@ -826,8 +826,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1085,
-      "session_id": "criterion9-51a2df27-dd34-4b60-9c2f-17170957fd97"
+      "elapsed_ms": 1136,
+      "session_id": "criterion9-42114c4e-1cb7-4ca5-82e1-1bdbe74f7b6b"
     },
     {
       "text": "the front end is completely destroyed",
@@ -835,8 +835,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1058,
-      "session_id": "criterion9-9f986dab-6ef0-4317-9701-e65ec785263e"
+      "elapsed_ms": 1100,
+      "session_id": "criterion9-7d72909e-c3ed-49a5-b8c4-ffe8012550f0"
     },
     {
       "text": "there's no blood or anything, it's just the bumper",
@@ -844,8 +844,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1024,
-      "session_id": "criterion9-aea72128-137d-460e-9711-69a7fe45ae45"
+      "elapsed_ms": 1123,
+      "session_id": "criterion9-41b1d743-f463-458b-8443-48eb3d9d4a43"
     },
     {
       "text": "my back's been bad since last year, nothing to do with today",
@@ -853,8 +853,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 985,
-      "session_id": "criterion9-f8913036-05f2-460d-bae1-16c4d80ee2b8"
+      "elapsed_ms": 1124,
+      "session_id": "criterion9-55b0dde8-6e17-4df3-b260-d75ff8dffa69"
     },
     {
       "text": "everyone's fine, we all walked away from it",
@@ -862,8 +862,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1036,
-      "session_id": "criterion9-9c08747f-4001-4928-bda7-24f2fa16aef7"
+      "elapsed_ms": 1231,
+      "session_id": "criterion9-a0ef1d87-6239-4203-a5a2-b6bd82516f09"
     },
     {
       "text": "she took a real beating, poor thing, I've had that car eleven years",
@@ -871,8 +871,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1085,
-      "session_id": "criterion9-95a66961-6e6a-4652-b54e-cb558b7d817f"
+      "elapsed_ms": 1126,
+      "session_id": "criterion9-d0ed1af5-62f4-4914-a6ac-ab3faba4ad20"
     },
     {
       "text": "thankfully nobody was injured",
@@ -880,8 +880,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1046,
-      "session_id": "criterion9-d727e9be-bfbe-4066-9394-9d742930d8a8"
+      "elapsed_ms": 1053,
+      "session_id": "criterion9-e9998de5-d99d-4b29-87c5-41bcdd340043"
     },
     {
       "text": "there's a scrape on my elbow, I've put a plaster on it, it's fine",
@@ -889,8 +889,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1023,
-      "session_id": "criterion9-52fc67ba-a702-4758-9407-676398b8d317"
+      "elapsed_ms": 1097,
+      "session_id": "criterion9-07190fd2-7b17-44bd-bc5a-64a04b0257ba"
     },
     {
       "text": "I checked on the other driver and the two kids in her back seat and honestly not one of them had a scratch on them",
@@ -898,8 +898,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1042,
-      "session_id": "criterion9-3186de97-709d-4522-b6b5-f52a63fabeaf"
+      "elapsed_ms": 1053,
+      "session_id": "criterion9-10bf7b98-d1ca-4686-8776-6584d21990a8"
     },
     {
       "text": "I'm a bit stiff in the shoulder this morning but that's about the size of it",
@@ -907,8 +907,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 1000,
-      "session_id": "criterion9-730d1b0c-8bcd-47e1-8591-89274db2e577"
+      "elapsed_ms": 1113,
+      "session_id": "criterion9-81717089-ea32-401f-afa6-22ccc5319fa5"
     },
     {
       "text": "the ambulance did come out but after they'd had a look at the three of us they said there was no need for anyone to go in",
@@ -916,8 +916,8 @@
       "status": "escalated",
       "escalation_reason": "detection-pregraph",
       "falsely_escalated": true,
-      "elapsed_ms": 215,
-      "session_id": "criterion9-888d5844-3992-413a-80e2-efcbebe8f0f4"
+      "elapsed_ms": 202,
+      "session_id": "criterion9-d77e1604-bde2-4dc9-9284-1393648e1e3a"
     },
     {
       "text": "the driver's door is caved right in, it'll be a write-off",
@@ -925,8 +925,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 989,
-      "session_id": "criterion9-f53c346f-fd5c-45e9-baa3-a771bb34180c"
+      "elapsed_ms": 987,
+      "session_id": "criterion9-924ee097-4af0-4bd2-bc97-e186caef88ca"
     },
     {
       "text": "I don't think anyone's hurt, we're all just a bit shaken up",
@@ -934,8 +934,8 @@
       "status": "escalated",
       "escalation_reason": "detection-graph",
       "falsely_escalated": true,
-      "elapsed_ms": 974,
-      "session_id": "criterion9-f439adf5-c4bf-43e7-bf35-7be3dae9b888"
+      "elapsed_ms": 1057,
+      "session_id": "criterion9-c0b753ed-a03a-44d8-96d1-8e16a93072c7"
     },
     {
       "text": "I had a knee replacement a few years back but it held up fine, no bother",
@@ -943,8 +943,8 @@
       "status": "not-escalated",
       "escalation_reason": null,
       "falsely_escalated": false,
-      "elapsed_ms": 1152,
-      "session_id": "criterion9-b4aad897-f832-410b-9fa6-0b8d4185fb84"
+      "elapsed_ms": 1033,
+      "session_id": "criterion9-999af53c-cb65-4c15-9192-b5dcb7c26400"
     }
   ],
   "positives": 26,
@@ -1004,20 +1004,20 @@
   "total_recognize_text_calls": 95,
   "path_attribution": {
     "read_ok": true,
-    "log_events_matched": 82,
-    "l1_count": 21,
-    "graph_path_count": 61,
+    "log_events_matched": 86,
+    "l1_count": 22,
+    "graph_path_count": 64,
     "other_layer_count": 0
   },
   "cost": {
     "lex_usd": 0.07125,
     "bedrock_usd_basis": "positives exact: CloudWatch log line per escalating call, D52's per-call rate; negatives assumed graph-path unconditionally (see module docstring -- no log line exists for a correctly non-escalating call)",
-    "bedrock_usd": 0.026418,
-    "graph_path_calls_used_for_estimate": 78,
-    "total_usd": 0.097668
+    "bedrock_usd": 0.027434,
+    "graph_path_calls_used_for_estimate": 81,
+    "total_usd": 0.098684
   },
-  "run_started_utc": "2026-08-29T11:25:12+00:00",
-  "run_finished_utc": "2026-08-29T11:26:56+00:00",
+  "run_started_utc": "2026-08-29T12:02:30+00:00",
+  "run_finished_utc": "2026-08-29T12:04:06+00:00",
   "bot_id": "W9MNF86T1H",
   "bot_alias_id": "ZYAWLCMPQX"
 }
