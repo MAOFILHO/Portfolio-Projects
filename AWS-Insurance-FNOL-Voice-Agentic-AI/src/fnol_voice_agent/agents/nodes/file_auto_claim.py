@@ -96,10 +96,22 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
         }
 
     if _CONFIRM_KEY not in filled:
+        # `D89`/`OI6`: "...go ahead and file this claim?" collides with the `legal_and_medical_advice`
+        # guardrail's "settlement negotiations" wording under this exact affirmation/interrogative
+        # confirmation shape -- confirmed live, both directions (the agent's own prompt AND the caller's
+        # natural "yes, go ahead and file it" reply), across five investigation rounds and two failed
+        # guardrail-definition apply attempts (`RESULTS.md` §41-§49, `PROJECT_STATE.md` OI6). "submit" is
+        # the evidenced-safe substitute -- `RESULTS.md` §41's own probe: "should I go ahead and submit
+        # this claim" -> `NONE`. This is an application-side reword (Option B), not a guardrail change --
+        # deliberately, since both guardrail-side attempts (an exclusion-clause carve-out and a positive
+        # re-scoping) already failed, one at `apply` (200-char cap) and one at verification (0/4 fixed,
+        # plus a regression). Residual, not eliminated by this fix: a caller who says "file" unprompted in
+        # their own reply is still exposed -- this removes the agent's own prompt as the trigger, which is
+        # the half within this system's control.
         return {
             "active_slot": _CONFIRM_KEY,
             "filled_slots": filled,
-            "response_text": f"{_summarize(filled)} Should I go ahead and file this claim?",
+            "response_text": f"{_summarize(filled)} Should I go ahead and submit this claim?",
         }
 
     if filled[_CONFIRM_KEY] is not True:
@@ -109,7 +121,7 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
         return {
             "active_slot": _CONFIRM_KEY,
             "filled_slots": filled,
-            "response_text": "Should I go ahead and file this claim?",
+            "response_text": "Should I go ahead and submit this claim?",
         }
 
     try:

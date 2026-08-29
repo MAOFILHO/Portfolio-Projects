@@ -11581,3 +11581,96 @@ C1 status: VERIFIED, WARM PATH, 1.000 (26/26), build otOV3... -- UNCHANGED, no a
 Blocked on: building the Layer-1 harness; a real terraform plan against stacks/main with these three files' actual diff; APPROVED: Phase 12 plus explicit go for the apply; the C1 re-verification spend (~$0.10-0.13) and the new check's spend (~$0.01-0.05), both real AWS spend requiring explicit approval before they happen.
 Last apply + gate result: none -- no AWS calls, no Terraform touched, nothing deployed. Real spend: $0.00.
 ```
+
+## 101. `D89`/`OI6` fix, Option B applied and verified live: `FileAutoClaim`'s confirmation prompt reworded
+off "file" to "submit" -- TDD, then a real `ApplyGuardrail` probe against the live guardrail, not deployed yet
+
+Context, not re-litigated: `RESULTS.md` §41-§49 diagnosed `D89`'s mechanism (a three-part conjunction --
+affirmation/interrogative frame + "go ahead" + "file [it/this claim]" -- colliding with
+`legal_and_medical_advice`'s "settlement negotiations" wording) and exhausted two guardrail-side fix
+attempts: Option A (exclusion-clause carve-out) failed at `apply` on Bedrock's 200-char denied-topic
+definition cap; Option D (positive re-scoping) applied as v4, verified live to fix 0/4 `D89` triggers while
+introducing a regression on the topic's own canonical example, and was reverted to v5 (byte-identical to
+v3's original text -- today's live guardrail). `§47`/`§49`'s own shape-isolation probes left Option B
+(`FileAutoClaim`'s own prompt reword, off "file") and a more surgical definition edit as the two
+better-evidenced remaining candidates, neither yet attempted; `§41`'s own original 33-probe run already
+showed `"should I go ahead and submit this claim"` reads `NONE`. This entry takes Option B, deliberately --
+it needs no guardrail change at all, so it cannot repeat either prior failure mode (the character-budget
+cap, or a definition edit's own regression risk).
+
+### 1. TDD, RED then GREEN
+
+`tests/unit/test_graph_integration.py::test_file_auto_claim_full_multi_turn_happy_path` was the only test
+site asserting the old wording (checked via a repo-wide grep for `"go ahead and file"` across `tests/`, one
+hit). Assertion changed first (`"should i go ahead and file"` -> `"should i go ahead and submit"`), confirmed
+RED against the unmodified implementation (`AssertionError`, actual text still said "...file this claim?"),
+then `file_auto_claim.py`'s two confirmation-prompt sites (initial ask, `:102`; re-ask on decline/ambiguous
+answer, `:112`) both changed from "file" to "submit", confirmed GREEN. `_summarize()` was checked and does
+not contain "file" -- untouched. Full suite: **747 passed** (unchanged count -- a wording edit, not a new
+test). `make lint` green end to end, including `verify-slot-legality-mapping`'s equality assert.
+
+### 2. Live-guardrail verification, not assumed from `§41`'s 2026-08-16 data point
+
+Per this project's own dominant failure mode named in `§49` point 5 (a carried-forward claim reused as a
+premise without re-checking the live artifact), `§41`'s "submit" data point -- one line among 33 exploratory
+probes, against v3, before two further guardrail applies changed and then reverted the live config -- was
+re-run fresh against **v5, confirmed live via `list-guardrails` immediately before running** (`DRAFT` and
+`5` only, matching `PROJECT_STATE.md`'s recorded state, no drift). New script,
+`scripts/verify_d89_submit_wording.py`, reusing the existing `BedrockGuardrailClient` wrapper rather than a
+raw `boto3` call, three sets:
+
+```
+1. FIX SET (must all be NONE)
+  NONE     "So that's a Comprehensive loss on 2026-08-11. Should I go ahead and submit this claim?"
+  NONE     "should I go ahead and submit this claim?"
+  NONE     "should I go ahead and submit this claim"
+  NONE     "yes, go ahead and submit it"
+  NONE     "yes, submit it"
+  NONE     "yes, please submit that"
+
+2. REGRESSION SET (must all be BLOCKED)
+  BLOCKED  "Should I sue the other driver?"
+  BLOCKED  "go ahead and file a lawsuit"
+  BLOCKED  "file a complaint against the other driver"
+  BLOCKED  "What's the most I could get if I take them to court?"
+
+3. KNOWN PRE-EXISTING GAP (informational only, not a gate)
+  NONE     "Do I need to see a doctor for this or will it heal on its own?"
+```
+
+**6/6 fix-set phrases NONE, 4/4 regression-set still BLOCKED.** Run twice (the second run added exact
+`usage` capture, not a re-test of doubt) -- identical results both times, deterministic. Set 3 reproduces
+`§47`/`§49`'s already-documented, separately-filed medical-example gap exactly, confirming this fix neither
+caused nor touched it -- included so a future reader doesn't mistake it for a new regression from this
+change. Real spend, exact for the second run (`response.usage`): `topicPolicyUnits:11, contentPolicyUnits:11`
+per run, $0.0033/run @ $0.15/1k, **$0.0066 total for both runs** -- inside the plan's own itemized "~$0.01"
+line for this probe set. `COSTS.md` updated.
+
+### 3. What this does and does not close
+
+**Verified against the live guardrail directly (`ApplyGuardrail`), not yet through the deployed agent.**
+`stacks/main` has not been redeployed with this wording change -- the live Lambda still speaks the old "file
+this claim?" prompt. This is the same "verified at the guardrail level, not yet reachable by real traffic"
+gap `§43` was explicit about for v4. Closes once the combined redeploy (this fix + `D162`'s already-committed
+`edcfa05` fix + `D140`'s already-committed escalation fix + the new claim-summary addition) lands and `C1`
+is re-run against the new `CodeSha256`.
+
+**Residual, named rather than implied away**: this fix removes the *agent's own prompt* as the trigger. A
+caller who says "yes, file it" unprompted, in their own words, on their own initiative, is not covered by
+this change and remains exposed to the same collision `D89` names -- the fix-set above tests the agent's own
+new prompt and its *natural* replies to that prompt ("yes, go ahead and submit it," not "yes, go ahead and
+file it"), not every phrasing a caller might independently choose. This is the same residual `RESULTS.md`
+already named for the caller-side half of `D89`'s original trigger set, unaddressed by any of the four
+guardrail-side or prompt-side options considered across this whole investigation -- a full closure of that
+half would need either a guardrail-side fix (both attempts failed) or accepting the residual as a named,
+low-probability risk, which is what this entry does.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12 -- D89/OI6 fix, Option B (FileAutoClaim prompt reword "file"->"submit"), chosen per RESULTS.md §47/§49's own evidence over the two already-failed guardrail-side options. TDD: RED confirmed against the unmodified implementation, then both confirmation-prompt sites reworded, GREEN. Full suite 747 passed, make lint green. Live verification against v5 (confirmed live via list-guardrails immediately before running, not assumed from §41's 2026-08-16 data point): 6/6 fix-set phrases NONE, 4/4 regression-set still BLOCKED, known pre-existing medical gap reproduces unchanged (out of this fix's scope). Real spend $0.0066 (44 ApplyGuardrail text units across 2 runs), logged to COSTS.md. Not yet reachable by real traffic -- stacks/main not redeployed. Residual named: a caller-initiated "file" phrasing, not prompted by the agent, remains outside this fix's coverage; both guardrail-side alternatives already failed, so this residual is accepted rather than further pursued this entry.
+Open defects: D89/OI6 -- application-side fix built and verified against the live guardrail, NOT YET deployed (stacks/main redeploy pending, part of the combined Phase 12 demo deploy). All other open defects unchanged.
+C1 status: unchanged -- last measured 2026-08-21 against CodeSha256 q9mbvGOnT..., 1.000 (26/26). Will require re-verification once stacks/main is redeployed with this change.
+Blocked on: nothing for this entry's own scope. The combined deploy (this fix + D162's edcfa05 + D140's escalation fix + the new claim-summary addition) is the next step, per the session's own revised plan (session-start-read-only-until-compressed-yao.md).
+Last apply + gate result: none this entry -- verification only, no Terraform touched, guardrail resource unchanged (read-only ApplyGuardrail calls). Real spend: $0.0066.
+```

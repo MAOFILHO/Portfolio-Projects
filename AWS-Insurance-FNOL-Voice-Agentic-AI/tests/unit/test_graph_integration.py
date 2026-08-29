@@ -401,8 +401,12 @@ def test_file_auto_claim_full_multi_turn_happy_path(real_store_and_embedder: Any
         assert result.get("response_text"), f"no response for turn {turn_input!r}"
 
     # All slots filled -- next turn should be the confirmation prompt.
+    # `D89`/`OI6`: "file" collides with `legal_and_medical_advice`'s "settlement negotiations" wording
+    # under this exact affirmation/interrogative confirmation shape (`RESULTS.md` §41, §47, §49's own
+    # probes) -- "submit" is the evidenced-safe substitute (`RESULTS.md` §41: "should I go ahead and
+    # submit this claim" probed `NONE` against the live guardrail).
     result = _invoke_turn(graph, config, turn_input="that's everything")
-    assert "should i go ahead and file" in result["response_text"].lower()
+    assert "should i go ahead and submit" in result["response_text"].lower()
 
     result = _invoke_turn(graph, config, turn_input="yes", new_slots={"confirm_file_claim": True})
     assert "your claim number is clm-" in result["response_text"].lower()
