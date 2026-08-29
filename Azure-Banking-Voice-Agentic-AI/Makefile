@@ -1,4 +1,4 @@
-.PHONY: install-hooks verify-project-root-scope
+.PHONY: install-hooks verify-project-root-scope test
 
 # Only targets that are genuinely functional today are listed here -- mirrors FNOL's own Makefile
 # discipline (AWS-Insurance-FNOL-Voice-Agentic-AI/Makefile: "nothing may be stubbed out and labeled
@@ -15,6 +15,11 @@ VENV := .venv/bin
 verify-project-root-scope:
 	@if [ -x "$(VENV)/python" ]; then $(VENV)/python scripts/check_project_root_scope.py; \
 	else python3 scripts/check_project_root_scope.py; fi
+
+# Phase 1's mock-accounts module. Stdlib unittest, not pytest -- no test runner was installed yet
+# and three tests don't justify adding one.
+test:
+	@python3 -m unittest discover -s tests -v
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to
