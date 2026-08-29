@@ -6,6 +6,27 @@ move the oldest closed material out to `docs/phase0/` first if an addition would
 
 ## Current phase
 
+**Phase 1 — Agentic conversation prototype. Approved by Marco 2026-08-29** (`APPROVED: Phase 1`,
+per `docs/PLAN.md`'s revised Phase 1 definition, 2026-08-28). Scope: agent turn loop over the
+existing AOAI realtime deployment, tool calling (`get_balance`/`transfer`/`list_accounts`) over
+in-memory mock accounts, the `app.py:86` try/except fix. DTMF, PIN/auth, B1 gate, evals,
+observability explicitly out of scope this phase (`docs/PLAN.md` Phase 1, "Out of scope"). The
+revised Phase 1 definition also resolves `docs/phase0/EXIT-AND-PHASE1-ENTRY.md` Part 3's three
+open decisions: (a) scope = app.py fix only, not DTMF disambiguation; (b) R-03 dropped as an entry
+criterion (known open question, not a blocker); (c) budget not gated explicitly in advance —
+`04-teardown-and-r08.sh`'s own Stage 3 stop condition is the enforcement point, with an explicit
+instruction to measure operating mode after the first real conversation before further spend. Not
+yet started — no code written, no compute re-provisioned. Nothing here is billable yet.
+
+**No code exists yet for the realtime bridge, tool calling, or mock accounts** — Phase 1 build has
+not started as of this entry. The AOAI Realtime API's exact wire format (session.update shape,
+function-calling event schema, `input_audio_format`/`output_audio_format` values matching ACS's
+`Pcm24KMono`) has not been verified against live docs this session — a `/research` pass before
+writing the bridge is recommended, per this project's "never build a factual unknown from memory"
+rule.
+
+## Phase 0 — closed, retained for reference until moved to `docs/phase0/`
+
 **Phase 0 — Provisioning & Meter Spike.** All 12 stages of `01-provision.sh` complete. Container App
 `ca-azbank-echo-p0` is deployed, healthy, and **first real answered phone call happened
 2026-08-21** — all 3 test calls to `+17059100383` connected, echoed correctly, DTMF registered on 2
@@ -118,16 +139,12 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
    workspace with no `--logs-destination`/`--logs-workspace-id` flag passed — $0 in practice at this
    project's volume, but see open item 1: the auto-provisioned path doesn't even deliver logs, so
    Phase 1 needs a deliberate choice here regardless of cost.
-10. **R-03 residual promoted to a Phase 1 entry criterion (2026-08-24).** Call 1's zero DTMF tones
-    remains unresolved (open item 3); the cold-start/scale-from-zero hypothesis was tested against
-    existing evidence and ruled out (single cold start, 80s before Call 1's `IncomingCall`, single
-    revision/replica ID throughout — `docs/phase0/findings.md`, "R-03 residual — cold-start/
-    scale-from-zero hypothesis ruled out"). The two candidates that remain — DTMF not sent vs. sent
-    but unrecognized upstream by ACS — can only be distinguished by ACS-side call diagnostics, which
-    depend on open item 1's Log Analytics zero-rows gap being fixed first. **Blocked on open item 1;
-    no further diagnostic calls should be placed until that path works** — app-side logs are
-    downstream of ACS's decode fork and cannot separate the two candidates. Full disposition:
-    `docs/phase0/findings.md`, "R-03 residual — promoted to a Phase 1 entry criterion".
+10. **SUPERSEDED 2026-08-28: R-03 residual is no longer a Phase 1 entry criterion.** `docs/PLAN.md`'s
+    revised Phase 1 explicitly drops it ("known open question, not a Phase 1 blocker — it concerns
+    the deleted echo app, and Call 1's evidence no longer exists to settle it"). Left unresolved
+    permanently for Call 1 specifically; Calls 2/3 already confirm DTMF works in the common case.
+    ACS-side diagnostics were never configured and this decision means they won't be, for this
+    question. Full history: `docs/phase0/EXIT-AND-PHASE1-ENTRY.md` Part 3(b).
 11. **`docs/echo-app/app.py:86` — `answer_call()` has no `try`/`except` and no fallback (open
     defect for Phase 1, not fixed).** Any ACS rejection propagates unhandled, returns `500` to
     Event Grid, and drops the call silently — the caller hears ringing until timeout, no

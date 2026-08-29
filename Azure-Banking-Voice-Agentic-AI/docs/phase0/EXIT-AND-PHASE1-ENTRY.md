@@ -264,7 +264,9 @@ fix shape and testable without new billable spend, whereas DTMF disambiguation's
 (figuring out whether ACS even exposes the diagnostic data needed) is itself unresolved research,
 not just an implementation task.
 
-**Decision: _______ (awaiting Marco's input)**
+**Decision (2026-08-29, via the revised Phase 1 scope): `app.py:86` fix, alongside the new agent
+turn loop — not DTMF disambiguation.** DTMF stays out of scope entirely for Phase 1
+(`docs/PLAN.md`).
 
 ### (b) R-03 — drop it as an entry criterion, re-provision and reproduce, or something else?
 
@@ -274,7 +276,8 @@ not just an implementation task.
 | **Re-provision and reproduce** | Full Container App/CAE re-provisioning cost (same as 3(a) row above) + at least one new real call, placed specifically to generate fresh, diagnosable data — and only useful if ACS-side diagnostics are actually configured and working *before* that call happens, which is itself unproven capability, not a known-working path. | Real chance of spending real money and a real call attempt without actually resolving anything, if the ACS-diagnostics side turns out not to expose what's needed. |
 | **Something else** (e.g.: check whether ACS retains any call-level diagnostic data independent of a diagnostic-settings configuration, retroactively, for a call that already happened) | Unknown — this hasn't been researched. Plausibly free (a read-only API check) if such a retention window exists; plausibly a dead end if it doesn't. | Worth a cheap `/research`-style check before committing to the "re-provision and reproduce" cost, in my view — but that's a view, not a decision. |
 
-**Decision: _______ (awaiting Marco's input)**
+**Decision (2026-08-29, via the revised Phase 1 scope): dropped as an entry criterion.** Permanently
+unresolved for Call 1 specifically; Calls 2/3 already confirm the mechanism works.
 
 ### (c) Budget — does R-04's IDLE verdict gate Phase 1 entry?
 
@@ -313,4 +316,7 @@ Options for whether this gates entry — framed against what actually happens, n
 | **Gate entry explicitly on it** — require a stated commitment that Phase 1 work won't change operating mode, or a re-measurement plan if it might, decided *before* any re-provisioning happens | Adds a step before Phase 1 starts, but it's deciding something in advance that the script would otherwise decide for you, later, mid-phase. Costs nothing extra if the commitment holds. |
 | **Don't gate entry explicitly — accept that `04-teardown-and-r08.sh`'s own STOP condition is the real gate** — proceed into Phase 1 work, and let a future re-run of this script's Stage 3 be the actual enforcement point if operating mode ever comes out ACTIVE | Faster start, but the "gate" isn't avoided, only deferred to a point already fixed in the script's own logic — Phase 1 work could get partway done (a fix built, re-provisioned, exercised) before an ACTIVE verdict on some later run halts further progress under this same $25 ceiling. Whether that's an acceptable order of operations, given real money and a real re-provisioning cycle would already be spent by then, is the actual tradeoff here. |
 
-**Decision: _______ (awaiting Marco's input)**
+**Decision (2026-08-29, via the revised Phase 1 scope): no explicit pre-gate.**
+`04-teardown-and-r08.sh`'s Stage 3 stop condition is the enforcement point; `docs/PLAN.md`'s revised
+Phase 1 instead requires measuring operating mode after the first real conversation before further
+spend.
