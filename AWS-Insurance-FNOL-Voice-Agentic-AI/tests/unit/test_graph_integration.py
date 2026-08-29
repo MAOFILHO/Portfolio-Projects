@@ -408,8 +408,20 @@ def test_file_auto_claim_full_multi_turn_happy_path(real_store_and_embedder: Any
     result = _invoke_turn(graph, config, turn_input="that's everything")
     assert "should i go ahead and submit" in result["response_text"].lower()
 
+    # Success response: claim number, a short recap (loss type + date), next steps -- templated,
+    # voice-budgeted (~40 words), and must never contain "file" (`D89`/`OI6`'s trigger word).
     result = _invoke_turn(graph, config, turn_input="yes", new_slots={"confirm_file_claim": True})
-    assert "your claim number is clm-" in result["response_text"].lower()
+    response = result["response_text"]
+    response_lower = response.lower()
+    assert "your claim number is clm-" in response_lower
+    assert "comprehensive" in response_lower  # recap names loss_type
+    assert "2026-08-11" in response_lower  # recap names loss_datetime
+    assert "adjuster" in response_lower  # next steps: adjuster contact window
+    assert "status" in response_lower  # next steps: how to check status
+    assert "file" not in response_lower  # D89/OI6's trigger word must never appear
+    assert (
+        len(response.split()) <= 40
+    ), f"success response is {len(response.split())} words, over budget"
 
 
 # --- Injury preemption ------------------------------------------------------------------------------

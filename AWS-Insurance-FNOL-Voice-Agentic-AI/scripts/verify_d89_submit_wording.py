@@ -20,8 +20,17 @@ Three sets, mirroring `RESULTS.md` §41/§47's own probe shape:
    a separate, already-filed defect (the topic's own canonical example never triggers its own topic).
    Included here only so a result on it is not misread as caused by this change; not a pass/fail gate for
    THIS script.
+4. **SUCCESS-RESPONSE SET, source="OUTPUT"** -- Step 2's new `FileAutoClaim` success text
+   (`_recap_for_success` + claim number + `_NEXT_STEPS`, `file_auto_claim.py`). Tested on the OUTPUT
+   channel specifically, not INPUT like sets 1-3: `file_auto_claim` is a real `OUTPUT_GUARDRAIL_SOURCES`
+   member (`agents/graph.py:88-90`), so every response it returns is actually evaluated via
+   `guardrails_output_check`'s real `ApplyGuardrail(source="OUTPUT", ...)` call in production -- this is
+   the channel this text will actually run through, not a stand-in. Must read `NONE`.
+5. **NATURAL CALLER REPLIES to the success response, source="INPUT"** -- the success text is a
+   statement, not a question, so there is no confirmation-shape reply to probe the way sets 1-3 do; these
+   are the ordinary closing turns a caller says after hearing it. Must read `NONE`.
 
-Real spend: ~8 topic-policy `ApplyGuardrail` calls, $0.15/1k text units -- a fraction of a cent, well
+Real spend: ~19 topic-policy `ApplyGuardrail` calls, $0.15/1k text units -- a fraction of a cent, well
 inside the plan's own itemized "~$0.01" line for this probe set.
 """
 
@@ -29,6 +38,7 @@ from __future__ import annotations
 
 import sys
 
+from fnol_voice_agent.agents.nodes.file_auto_claim import _NEXT_STEPS, _recap_for_success
 from fnol_voice_agent.guardrails.client import BedrockGuardrailClient
 
 GUARDRAIL_ID = "zl5ppnyorwd2"
@@ -54,15 +64,32 @@ KNOWN_GAP_INFORMATIONAL = [
     "Do I need to see a doctor for this or will it heal on its own?",
 ]
 
+# Built from the real module, not re-typed here -- the same reason `file_auto_claim.py:139-141`'s prior
+# fix reused live code rather than a hand-copied string: a hand-copied probe string can silently drift
+# from what actually ships.
+_EXAMPLE_FILLED = {"loss_type": "Comprehensive", "loss_datetime": "2026-08-11T09:00:00-04:00"}
+SUCCESS_RESPONSE_SET = [
+    f"{_recap_for_success(_EXAMPLE_FILLED)} Your claim number is CLM-2608-00056-4. {_NEXT_STEPS}",
+]
+
+SUCCESS_RESPONSE_REPLY_SET = [
+    "ok, thanks",
+    "great, thank you",
+    "no that's all, thank you",
+    "ok, goodbye",
+]
+
 
 _TOTAL_USAGE: dict[str, int] = {}
 
 
-def _run(client: BedrockGuardrailClient, label: str, phrases: list[str]) -> list[tuple[str, str]]:
+def _run(
+    client: BedrockGuardrailClient, label: str, phrases: list[str], source: str = "INPUT"
+) -> list[tuple[str, str]]:
     results = []
     print(f"\n{label}")
     for phrase in phrases:
-        result = client.apply_guardrail("INPUT", phrase)
+        result = client.apply_guardrail(source, phrase)  # type: ignore[arg-type]
         action = "BLOCKED" if result.blocked else result.raw_action
         results.append((phrase, action))
         print(f"  {action:8s} {phrase!r}")
@@ -81,9 +108,22 @@ def main() -> int:
         "3. KNOWN PRE-EXISTING GAP (informational only, not a gate)",
         KNOWN_GAP_INFORMATIONAL,
     )
+    success_results = _run(
+        client,
+        "4. SUCCESS RESPONSE, source=OUTPUT (must be NONE)",
+        SUCCESS_RESPONSE_SET,
+        source="OUTPUT",
+    )
+    success_reply_results = _run(
+        client,
+        "5. NATURAL CALLER REPLIES to success response, source=INPUT (must be NONE)",
+        SUCCESS_RESPONSE_REPLY_SET,
+    )
 
     fix_failures = [p for p, a in fix_results if a != "NONE"]
     regression_failures = [p for p, a in regression_results if a != "BLOCKED"]
+    success_failures = [p for p, a in success_results if a != "NONE"]
+    success_reply_failures = [p for p, a in success_reply_results if a != "NONE"]
 
     print("\n--- Summary ---")
     if fix_failures:
@@ -98,9 +138,25 @@ def main() -> int:
     else:
         print(f"OK: all {len(REGRESSION_SET)} regression-set phrases still BLOCKED")
 
-    print(f"Real guardrail usage (all 3 sets, exact from response.usage): {_TOTAL_USAGE}")
+    if success_failures:
+        print(f"FAIL: success response blocked/masked on OUTPUT: {success_failures}")
+    else:
+        print("OK: success response reads NONE on the real OUTPUT channel")
 
-    return 1 if (fix_failures or regression_failures) else 0
+    if success_reply_failures:
+        print(
+            f"FAIL: {len(success_reply_failures)} natural reply(s) blocked: {success_reply_failures}"
+        )
+    else:
+        print(f"OK: all {len(SUCCESS_RESPONSE_REPLY_SET)} natural replies to it read NONE")
+
+    print(f"Real guardrail usage (all 5 sets, exact from response.usage): {_TOTAL_USAGE}")
+
+    return (
+        1
+        if (fix_failures or regression_failures or success_failures or success_reply_failures)
+        else 0
+    )
 
 
 if __name__ == "__main__":

@@ -79,6 +79,25 @@ def _summarize(filled: dict[str, Any]) -> str:
     )
 
 
+def _recap_for_success(filled: dict[str, Any]) -> str:
+    """Narrower than `_summarize` -- 2 facts (type, date), not 3 (type/date/location), and deliberately
+    not a call to `_summarize` itself. Two reasons, not one: (1) the caller already heard the full
+    3-fact recap one turn ago at confirmation (`:114`'s `_summarize(filled)` call) -- repeating it
+    verbatim here is redundant and, combined with the claim number and next-steps text this response
+    also carries, risks the ~40-word voice budget the success response is held to; (2) this is the
+    fact set the success response actually needs to name, not every fact `_summarize` happens to carry.
+    Same `"That's a..."` phrasing convention as `_summarize`, not a new one invented for this call site.
+    """
+    return f"That's a {filled['loss_type']} loss on {filled['loss_datetime']}."
+
+
+# `D89`/`OI6`: no invented business commitment exists anywhere in this system (`Claim`/`claims_server.py`
+# checked -- neither carries an adjuster-SLA field), so "2 business days" here is illustrative flavor
+# text, not a real system guarantee -- flagged rather than silently presented as measured. The
+# status-check half IS grounded: `CheckClaimStatus` is a real intent a caller can reach by calling back.
+_NEXT_STEPS = "An adjuster will contact you within 2 business days. Call back anytime to check your claim status."
+
+
 def file_auto_claim(state: AgentState) -> dict[str, Any]:
     filled = dict(state.get("filled_slots", {}))
     active_slot = state.get("active_slot")
@@ -145,8 +164,17 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
             )
         }
 
+    # Success response: recap (2 facts) + claim number + next steps, one turn, templated -- not
+    # generated. This system has exactly two generation paths (`CoverageQuestion`,
+    # `RentalTowingEntitlement`); every other response, this one included, is fixed text built from
+    # already-validated slot values, so it cannot hallucinate a fact about the caller's own claim.
+    # Deliberately drops the prior "Is there anything else?" tail (word-budget discipline, and
+    # `check_claim_status.py`'s own terminal response carries no such tail either -- consistent with
+    # that sibling intent's convention, not a new one invented here).
     return {
         "active_slot": None,
         "filled_slots": filled,
-        "response_text": f"Your claim number is {claim.claim_number}. Is there anything else?",
+        "response_text": (
+            f"{_recap_for_success(filled)} Your claim number is {claim.claim_number}. {_NEXT_STEPS}"
+        ),
     }
