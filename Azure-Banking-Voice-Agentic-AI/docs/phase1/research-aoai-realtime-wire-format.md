@@ -169,9 +169,17 @@ troubleshooting section's stated 24kHz/mono) is **PCM16, 24kHz, mono — an exac
 `Pcm24KMono`** on sample rate, bit depth, and channel count. No sample-rate or bit-depth conversion
 should be required in either direction; only the transport envelope differs — ACS wraps base64 audio
 in its own `{"Kind":"AudioData","AudioData":{"Data":"<base64>"}}` JSON frame while the realtime API
-wraps the same base64 payload in `input_audio_buffer.append` (client→server) and
-`response.audio.delta` (server→client) JSON events. The bridge's job is therefore re-enveloping the
-base64 payload between the two JSON frame shapes, not resampling/re-encoding audio.
+wraps the same base64 payload in `input_audio_buffer.append` (client→server, field `audio`) and — per
+a live probe against `aoai-azure-banking-voice-cc`, 2026-08-29, output_modalities=["audio"] —
+**`response.output_audio.delta`** (field `delta`), **not** `response.audio.delta` as this document
+previously stated from doc prose alone. The installed `openai` Python SDK's own generated type
+(`response_audio_delta_event.py`) already carried `type: Literal["response.output_audio.delta"]`,
+contradicting its own filename — the live probe was run specifically to resolve that contradiction
+rather than trust either source, and confirmed the SDK's wire value, not the docs' prose, is what
+Azure actually sends: 8 `response.output_audio.delta` events observed (6400–38400 base64 chars each)
+plus separate `response.output_audio_transcript.delta` events (a text transcript stream, not audio —
+do not confuse the two). The bridge's job is therefore re-enveloping the base64 payload between the
+two JSON frame shapes, not resampling/re-encoding audio.
 
 Azure's own troubleshooting section adds a chunking recommendation not stated by OpenAI's own docs
 fetched today: "Check that audio chunks aren't too large; send audio in small increments (recommended:
