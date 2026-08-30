@@ -53,7 +53,11 @@ _CLASSIFY_TURN_SYSTEM_PROMPT = (
     "response the caller will hear — you only call `classify_turn`. Set `safety_flag` to true on "
     "any hint of injury, pain, unconsciousness, or medical distress to anyone, including indirect "
     "or self-negating phrasing (\"I'm fine but he's not moving\") — when in doubt, true. Classify "
-    "`intent` from the caller's turn and prior context. If the turn mixes two intents, set `intent` "
+    "`intent` from the caller's turn and prior context. If prior context includes a line starting "
+    '"Currently eliciting slot:", a slot is actively being collected -- classify `intent` as the '
+    "intent that slot belongs to unless the turn is clearly and unambiguously about something else "
+    "entirely; merely resembling another intent's vocabulary or surface form is not enough on its "
+    "own to leave the active slot. If the turn mixes two intents, set `intent` "
     "to the one requiring immediate attention and note the confidence accordingly — the calling "
     "graph handles the deferred second intent, not you. If `coverage_topic` has been filled this "
     "call, classify whether the question is about *whether coverage exists* (election-fact) for a "
