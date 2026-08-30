@@ -16,10 +16,12 @@ verify-project-root-scope:
 	@if [ -x "$(VENV)/python" ]; then $(VENV)/python scripts/check_project_root_scope.py; \
 	else python3 scripts/check_project_root_scope.py; fi
 
-# Phase 1's mock-accounts module. Stdlib unittest, not pytest -- no test runner was installed yet
-# and three tests don't justify adding one.
+# Phase 1's voice-agent tests. Stdlib unittest, not pytest -- no test runner was installed and a
+# handful of tests didn't justify adding one. bridge.py imports fastapi/openai (see
+# voice-agent/requirements.txt), so this needs the venv, same as verify-project-root-scope above.
 test:
-	@python3 -m unittest discover -s tests -v
+	@if [ -x "$(VENV)/python" ]; then $(VENV)/python -m unittest discover -s tests -v; \
+	else python3 -m unittest discover -s tests -v; fi
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to
