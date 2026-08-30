@@ -695,18 +695,43 @@ def _log_turn_observability(
     walk: it means this specific line's "keys only" guarantee is enforced by two independent layers (this
     call's own construction, and the filter's plain `str` path) rather than resting on the filter's newer,
     less-exercised container-walking branch alone.
+
+    **`safety_flag`/`response_text_len`, added `D203`/`OI121` and `D204`/`OI122` (`PROJECT_STATE.md`).**
+    `safety_flag` is `result.get("safety_flag")` -- a bare bool set unconditionally by `route_and_classify`
+    (`agents/nodes/routing.py:51-53`), never derived from caller text, safe to log outright. It resolves
+    `D203`/`OI121`'s own gap: an `InjuryEscalation` turn is currently indistinguishable in CloudWatch
+    between "L2's own union flag fired" and "the classifier's `intent` landed on `InjuryEscalation`
+    directly" -- both collapse to the same `graph_intent`/`escalated` shape today.
+
+    `response_text_len` is `len(result.get("response_text") or "")` -- a length only, never the content.
+    `response_text` itself is deliberately NOT added here: at least three nodes build it by interpolating
+    caller-supplied slot values directly (`update_contact_info.py:55,94`'s `f"That's {filled['new_value']}
+    -- is that right?"` reads back the caller's own new phone/email/address; `file_auto_claim.py:133`'s
+    `_summarize(filled)` folds vehicle/date/location/loss-type slot values into a sentence; `coverage_
+    question.py:92`/`rental_towing.py:86` log the LLM's free-text `answer`, which can restate what the
+    caller asked). `redact_for_transcript` (`guardrails/pii.py`, applied to every string log arg by
+    `PIIRedactionLogFilter`) catches phone/email/address/policy-number-*shaped* strings by regex, but its
+    own docstring says plainly it does not catch personal names and can miss creatively-phrased addresses
+    -- and it has no detector at all for a vehicle description or loss narrative, because those aren't PII
+    in the regex sense, they are the caller's own words. Logging `response_text` verbatim here would risk
+    exactly the raw-transcript leakage Marco's session instruction ruled out; length is the safe subset of
+    that signal. The one call site where `response_text` IS logged verbatim, `:747-753` below, is exempt
+    because it is provably built from a fixed, non-interpolated string constant only -- see that site's own
+    comment.
     """
     incoming_intent = _intent_from(event)
     outgoing_intent = response["sessionState"]["intent"]
     logger.info(
         "turn contact=%s lex_intent=%s lex_slot_keys=%s graph_intent=%s outgoing_intent=%s "
-        "outgoing_slot_keys=%s",
+        "outgoing_slot_keys=%s safety_flag=%s response_text_len=%d",
         _contact_id_from(event),
         incoming_intent.get("name"),
         ",".join(sorted((incoming_intent.get("slots") or {}).keys())),
         result.get("intent"),
         outgoing_intent.get("name"),
         ",".join(sorted((outgoing_intent.get("slots") or {}).keys())),
+        result.get("safety_flag"),
+        len(result.get("response_text") or ""),
     )
 
 
@@ -744,11 +769,24 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
                 # shape `D84` already established for "no legal Lex intent to elicit under," now carrying
                 # that answer instead of silently dropping it. See `_UnroutableIntentError`'s own
                 # docstring for why this is caught here rather than at `handler`'s blanket except.
+                #
+                # `response_text` is logged VERBATIM here, unlike `_log_turn_observability`'s general line
+                # -- safe only because this branch is reachable exclusively via `handle_no_match_or_
+                # barge_in` (`agents/nodes/repair.py:43-72`), whose only two non-escalation return values
+                # are the fixed module-level constants `GENERIC_REPROMPT`/`BARGE_IN_OPEN_REPROMPT`
+                # (`repair.py:27,33`) -- neither interpolates a slot value or any caller-supplied text.
+                # (The escalation branch's `CAPABILITY_ESCALATION_SCRIPT` is also static but can't reach
+                # here: `_respond_from_graph_result`'s `if escalation:` branch, `:717-732`, already
+                # returns before this `else` is entered.) Added for `D202`/`OI120`'s own live verification
+                # this session -- do not widen this pattern to a node whose `response_text` isn't
+                # provably static; see `_log_turn_observability`'s docstring for why the general line
+                # logs length only.
                 logger.info(
-                    "active_slot=%s not routable under intent=%s -- delegating with response_text "
+                    "active_slot=%s not routable under intent=%s -- delegating with response_text=%r "
                     "instead of an illegal ElicitSlot (D202/OI120)",
                     active_slot,
                     result.get("intent"),
+                    response_text,
                 )
                 response = _delegate(event, response_text)
         else:
