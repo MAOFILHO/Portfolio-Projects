@@ -18,12 +18,35 @@ criterion (known open question, not a blocker); (c) budget not gated explicitly 
 instruction to measure operating mode after the first real conversation before further spend. Not
 yet started — no code written, no compute re-provisioned. Nothing here is billable yet.
 
-**No code exists yet for the realtime bridge, tool calling, or mock accounts** — Phase 1 build has
-not started as of this entry. The AOAI Realtime API's exact wire format (session.update shape,
-function-calling event schema, `input_audio_format`/`output_audio_format` values matching ACS's
-`Pcm24KMono`) has not been verified against live docs this session — a `/research` pass before
-writing the bridge is recommended, per this project's "never build a factual unknown from memory"
-rule.
+**Mock accounts module done, TDD'd, green: `voice-agent/accounts.py` + `tests/test_accounts.py`**
+(`make test`, stdlib unittest, 7 tests) — `list_accounts`/`get_balance`/`transfer` over a
+module-level dict, unknown-account and non-positive-amount both raise, insufficient funds refuses
+in speech without mutating. No tool-calling layer or agent loop wired to it yet.
+
+**`/research` done: `docs/phase1/research-aoai-realtime-wire-format.md` (2026-08-29, live-sourced,
+430+ lines).** Confirms audio format is an exact match (`audio/pcm`/`pcm16` @ 24kHz mono = ACS's
+`Pcm24KMono`, no resampling needed) and documents the full tool-calling event flow
+(`response.function_call_arguments.done` → `conversation.item.create`
+`function_call_output` → `response.create`).
+
+**RESOLVED 2026-08-29 by live probe: `gpt-realtime-mini` `2025-10-06` DOES support function/tool
+calling on Azure.** What had been a load-bearing open question (doc inference from Azure's
+changelog wording suggested `2025-10-06` might lack parity with the newer `2025-12-15` version) was
+settled empirically, not by more reading: a WebSocket session against the live
+`aoai-azure-banking-voice-cc` deployment, declaring one trivial tool (`get_time`), got the tool
+echoed back verbatim in `session.updated` and a full `response.function_call_arguments.delta` →
+`.done` sequence when prompted — zero error events. Raw log:
+`docs/phase1/evidence/tool-calling-probe-2026-08-29.json`; narrative:
+`docs/phase1/research-aoai-realtime-wire-format.md`'s "RESOLVED" callout. **No B3 pin change
+needed — Phase 1's tool-calling scope is buildable against the current deployment as-is.** No new
+Azure resource was created for this check (existing deployment, kept live at Phase 0 teardown for
+exactly this purpose, `04-teardown-and-r08.sh:397`).
+
+Five smaller open questions remain, none blocking bridge-building: session.update shape ambiguity
+between an older flat schema and the GA nested one (this probe used and confirmed the GA nested
+shape works); which session fields are `session.update`-settable; input/output format symmetry not
+stated as a hard rule; `semantic_vad` reliability on Azure (untested — `server_vad` is the
+confirmed-working default, used in this probe's session too). Full detail in the research doc.
 
 ## Phase 0 — closed, retained for reference until moved to `docs/phase0/`
 
