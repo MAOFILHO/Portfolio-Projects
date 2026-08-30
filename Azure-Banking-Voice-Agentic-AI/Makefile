@@ -1,4 +1,4 @@
-.PHONY: install-hooks verify-project-root-scope test
+.PHONY: install-hooks verify-project-root-scope install test
 
 # Only targets that are genuinely functional today are listed here -- mirrors FNOL's own Makefile
 # discipline (AWS-Insurance-FNOL-Voice-Agentic-AI/Makefile: "nothing may be stubbed out and labeled
@@ -16,12 +16,19 @@ verify-project-root-scope:
 	@if [ -x "$(VENV)/python" ]; then $(VENV)/python scripts/check_project_root_scope.py; \
 	else python3 scripts/check_project_root_scope.py; fi
 
-# Phase 1's voice-agent tests. Stdlib unittest, not pytest -- no test runner was installed and a
-# handful of tests didn't justify adding one. bridge.py imports fastapi/openai (see
-# voice-agent/requirements.txt), so this needs the venv, same as verify-project-root-scope above.
-test:
-	@if [ -x "$(VENV)/python" ]; then $(VENV)/python -m unittest discover -s tests -v; \
-	else python3 -m unittest discover -s tests -v; fi
+# Installs everything `make test` needs. Two subprojects have their own requirements.txt today --
+# voice-agent/ (bridge.py: fastapi/openai) and docs/echo-app/ (app.py: fastapi/uvicorn/
+# azure-communication-callautomation) -- and tests/ imports both. .venv/ is gitignored, so a fresh
+# clone has neither the venv nor these packages until this runs; creates the venv if missing so
+# `make test` works right after clone with no separate manual step to remember.
+install:
+	@test -x "$(VENV)/python" || python3 -m venv .venv
+	@$(VENV)/pip install -q -r voice-agent/requirements.txt -r docs/echo-app/requirements.txt
+
+# Phase 1's voice-agent tests, now covering docs/echo-app/ too. Stdlib unittest, not pytest -- no
+# test runner was installed and a handful of tests didn't justify adding one.
+test: install
+	@$(VENV)/python -m unittest discover -s tests -v
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to

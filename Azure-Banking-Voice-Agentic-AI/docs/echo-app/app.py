@@ -18,6 +18,7 @@ import os
 import time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from azure.core.exceptions import AzureError
 from azure.communication.callautomation import (
     CallAutomationClient,
     MediaStreamingOptions,
@@ -82,21 +83,48 @@ async def incoming_call(request: Request):
             return {"validationResponse": code}
         if event.get("eventType") == "Microsoft.Communication.IncomingCall":
             incoming_call_context = event["data"]["incomingCallContext"]
-            log.info("IncomingCall, correlationId=%s", event["data"].get("correlationId"))
-            call_automation_client.answer_call(
-                incoming_call_context=incoming_call_context,
-                callback_url=CALLBACK_URL,
-                media_streaming=MediaStreamingOptions(
-                    transport_url=WS_URL,
-                    transport_type=StreamingTransportType.WEBSOCKET,
-                    content_type=MediaStreamingContentType.AUDIO,
-                    audio_channel_type=MediaStreamingAudioChannelType.MIXED,
-                    start_media_streaming=True,
-                    enable_bidirectional=True,
-                    audio_format=AudioFormat.PCM24_K_MONO,
-                    enable_dtmf_tones=True,
-                ),
-            )
+            correlation_id = event["data"].get("correlationId")
+            log.info("IncomingCall, correlationId=%s", correlation_id)
+            try:
+                call_automation_client.answer_call(
+                    incoming_call_context=incoming_call_context,
+                    callback_url=CALLBACK_URL,
+                    media_streaming=MediaStreamingOptions(
+                        transport_url=WS_URL,
+                        transport_type=StreamingTransportType.WEBSOCKET,
+                        content_type=MediaStreamingContentType.AUDIO,
+                        audio_channel_type=MediaStreamingAudioChannelType.MIXED,
+                        start_media_streaming=True,
+                        enable_bidirectional=True,
+                        audio_format=AudioFormat.PCM24_K_MONO,
+                        enable_dtmf_tones=True,
+                    ),
+                )
+            except AzureError as e:
+                # AzureError, not HttpResponseError: ACS returning an error status (HttpResponseError)
+                # is one failure mode, but a transport failure talking to ACS at all -- timeout,
+                # connection reset, DNS -- raises ServiceRequestError/ServiceResponseError instead,
+                # which are siblings of HttpResponseError under AzureError, not subclasses of it
+                # (confirmed against azure-core's exceptions.py). Catching only HttpResponseError
+                # would let those escape as an unhandled 500, exactly the bug this fix removes.
+                log.error("answer_call failed, correlationId=%s: %s", correlation_id, e)
+                # Best-effort, not guaranteed: reject_call reuses the same incoming_call_context, so
+                # it only lands if the call is still actually ringing (e.g. answer_call failed on a
+                # MediaStreamingOptions config problem). If answer_call failed because the call is
+                # already gone -- caller hung up, or the context itself expired -- reject_call hits
+                # the same missing/expired resource and fails too (verified against Microsoft's
+                # AnswerFailed subcodes 8522/8501/8528 "call not found/not established/terminated"
+                # and 71005 "token validation error"). So the caller ends up disconnected when
+                # reject_call lands, or was already gone before it ran -- but if reject_call fails
+                # for a transient reason (e.g. a network blip) while the call is still actually
+                # ringing, the caller is left ringing with no disconnect and no error, same as the
+                # original bug minus the 500. No further fallback exists for that case today. The
+                # except below only keeps the (expected, logged) reject_call failure from itself
+                # propagating as a 500.
+                try:
+                    call_automation_client.reject_call(incoming_call_context=incoming_call_context)
+                except AzureError as reject_e:
+                    log.error("reject_call also failed, correlationId=%s: %s", correlation_id, reject_e)
     return {}
 
 
