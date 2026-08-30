@@ -41,8 +41,59 @@ def _build_classify_messages(state: AgentState) -> list[dict[str, Any]]:
     return [{"role": "user", "content": [{"text": text}]}]
 
 
+def _confirmation_already_resolved(state: AgentState) -> bool:
+    """D-new (live repro: contacts `003af9a0-bc53-45a7-a223-490001660e5b`/22:40,
+    `f9a25ea6-eaa8-4b20-90f2-56f55d552ea4`/22:42, both `graph_intent=Ambiguous` on a bare "No").
+    True when `active_slot` is an `AMAZON.Confirmation` slot AND Lex has already delivered this
+    turn's interpretedValue for it -- the classifier cannot add anything on that turn, only
+    misclassify a content-free "Yes"/"No" (unlike `D204`/`OI122`'s soft-prompt precedence clause,
+    which does hold for a domain term like "Comprehensive" -- this is a structural gap, not a
+    prompting one, hence the structural fix here rather than in `bedrock_router.py`).
+
+    The signal is `isinstance(filled_slots[active_slot], bool)`, not a hand-maintained list of
+    confirmation slot names mirrored from `bot.yaml.tftpl` (the `D78` drift this project has
+    already been burned by once). It works because of two facts, each already relied on
+    elsewhere and not invented for this check:
+
+    1. `_coerce_slot_value` (`api/lex_codehook.py:540`) only ever produces a Python `bool` from
+       Lex's literal `"Yes"`/`"No"` -- its own docstring: "No other slot type in this bot ever
+       resolves to exactly Yes/No, so this coercion is safe applied blind." A `bool` in
+       `filled_slots` is therefore proof the slot IS `AMAZON.Confirmation`-typed.
+    2. A slot only ever becomes `active_slot` while still missing from `filled_slots`
+       (`file_auto_claim.py`'s `_next_missing_slot`/`update_contact_info.py`'s equivalent, both
+       clearing the confirm-slot key before re-asking on decline) -- so a value present for it now
+       can only have arrived via THIS turn's `_merged_filled_slots` (`api/lex_codehook.py:573`),
+       never a stale leftover from an earlier turn.
+
+    This couples this check to `_coerce_slot_value`'s existing assumption rather than to a second,
+    independently-drifting copy of it: if that assumption ever breaks (a future slot type also
+    resolving to literal "Yes"/"No"), both break together, in the same place, not silently apart.
+    """
+    active_slot = state.get("active_slot")
+    if not active_slot:
+        return False
+    filled_slots = state.get("filled_slots") or {}
+    return isinstance(filled_slots.get(active_slot), bool)
+
+
 def make_route_and_classify_node(*, caller: BedrockConverseCaller | None = None) -> NodeFn:
     def route_and_classify(state: AgentState) -> dict[str, Any]:
+        if _confirmation_already_resolved(state):
+            # Skip the Bedrock call entirely and let the coerced value flow through: reuse the
+            # intent this call was already routing under (the checkpointer's persisted `intent`
+            # from the turn that set this `active_slot` in the first place -- `route_and_classify`
+            # is the only node that ever writes `intent`, so it is still last turn's value here,
+            # before this branch would otherwise overwrite it). `safety_flag` is `l1_safety_flag`
+            # only, no `classification.safety_flag` to union with -- `l1_safety_check` already
+            # guarantees `l1_safety_flag` is False on every turn that reaches this node, and a bare
+            # "Yes"/"No" carries no injury signal for L2 to have found anyway.
+            return {
+                "safety_flag": state.get("l1_safety_flag", False),
+                "intent": state.get("intent"),
+                "intent_confidence": 1.0,
+                "coverage_question_type": state.get("coverage_question_type", "not_applicable"),
+            }
+
         messages = _build_classify_messages(state)
         classification = classify_turn(messages, caller=caller)
         # D15's union semantics: L1 firing already ends the turn before this node runs (graph.py), so in

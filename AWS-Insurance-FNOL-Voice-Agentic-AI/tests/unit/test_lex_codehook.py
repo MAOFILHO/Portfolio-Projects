@@ -89,6 +89,11 @@ def _install_fake_graph(
     needs this: it drives the SAME model through a scripted low-confidence sequence across several
     turns, which `by_model`'s one-fixed-response-per-model-id shape cannot express. Default `None`
     leaves every existing caller unaffected.
+
+    Returns `(graph, caller)`, not just `graph` -- the D-new confirmation-bypass safety test needs
+    `caller.call_count` directly (proof the classifier was never reached on a given turn, the same
+    idiom `test_graph_integration.py`'s `caller.call_count == 0` assertions already use), and every
+    existing call site here calls this bare (no assignment), so widening the return is additive.
     """
     store = DynamoVectorStore(
         table_name=f"fnol-codehook-test-kb-{table_suffix}", region="us-west-2"
@@ -105,7 +110,7 @@ def _install_fake_graph(
         checkpointer=checkpointer,
     )
     monkeypatch.setattr(lex_codehook, "_get_graph", lambda: graph)
-    return graph
+    return graph, caller
 
 
 def _event(
@@ -1227,6 +1232,61 @@ def test_injuries_present_confirmed_false_does_not_escalate(
         )
 
     assert response["sessionState"].get("sessionAttributes", {}).get("escalate") != "true"
+
+
+def test_injuries_present_true_still_escalates_with_the_confirmation_bypass_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Marco's safety check on this session's `routing.py` confirmation-bypass (`D-new`,
+    `_confirmation_already_resolved`): `injuries_present` is itself `AMAZON.Confirmation`-typed
+    (`bot.yaml.tftpl:238-248`) and coerces to `bool` exactly like `police_report_filed`/
+    `other_party_involved` do. Does a caller's "Yes" now take the new bypass and skip the L2
+    classifier on a genuine injury disclosure?
+
+    No. Escalation on `injuries_present` is `D79`'s pre-graph check (`lex_codehook.py:865`,
+    `if filled_slots.get("injuries_present") is True: return _escalate(...)`), evaluated inside
+    `_dispatch` BEFORE `_run_graph_turn`/`graph.invoke()` is called at all -- the graph, and the
+    `routing.py` bypass living inside it, never run on this turn, so neither can be reached,
+    regardless of what `active_slot` is. `file_auto_claim.py`'s `_SLOT_ORDER` never includes
+    `injuries_present` either (module docstring: "DIALOGUE-POLICIES.md §5's hard escalation
+    preempts before this node is ever reached"), so the graph itself never legitimately produces
+    `active_slot == "injuries_present"` in the first place.
+
+    This test forces that exact configuration anyway, via `graph.update_state` (bypassing normal
+    graph mechanics, since no node ever sets it), as the worst case for the new bypass: even seeded
+    there, `D79`'s check still fires first. `caller.call_count == 0` is the load-bearing assertion --
+    proof the classifier (and the new bypass inside `route_and_classify`) was never reached this
+    turn, not merely that escalation happened for some other reason.
+    """
+    with mock_aws():
+        graph, caller = _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d79-active-slot-injuries",
+        )
+        contact_id = "c-d79-active-slot-injuries"
+        config = {"configurable": {"thread_id": contact_id}}
+        graph.update_state(
+            config,
+            {"active_slot": "injuries_present", "filled_slots": {"policy_number": "PY4821"}},
+        )
+
+        response = lex_codehook.handler(
+            _event(
+                transcript="Yes",
+                slots={"injuries_present": _slot("Yes")},
+                session_attributes={"contactId": contact_id},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert (
+        response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    )
+    assert "911" in response["messages"][0]["content"]
+    assert caller.call_count == 0  # the classifier -- and the new bypass -- were never reached
 
 
 # ---------------------------------------------------------------------------------------------------
