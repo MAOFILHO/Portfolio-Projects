@@ -30,6 +30,7 @@ import pytest
 from moto import mock_aws
 
 from fnol_voice_agent.agents.graph import build_graph
+from fnol_voice_agent.agents.nodes.repair import GENERIC_REPROMPT
 from fnol_voice_agent.agents.testing.fake_llm import (
     FakeBedrockConverseClient,
     converse_tool_use_response,
@@ -707,10 +708,15 @@ def test_a_malformed_or_non_slot_bearing_graph_intent_raises_rather_than_echoing
 def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Proves the guard's exception actually reaches `handler()`'s existing fail-open path end-to-end, not
-    only that `_elicit_slot` raises in isolation. No raw-text safety signal on this transcript, so this
-    must fail OPEN to `Delegate` -- and critically must NOT return `ElicitSlot` built from Lex's own echoed
-    intent, which is the exact `D84` shape this guard exists to keep from reappearing silently.
+    """Proves the guard's exception actually reaches a fail-open `Delegate` end-to-end, not only that
+    `_elicit_slot` raises in isolation -- and critically must NOT return `ElicitSlot` built from Lex's own
+    echoed intent, which is the exact `D84` shape this guard exists to keep from reappearing silently.
+
+    **Amended by `D202`/`OI120`**: this scenario is now caught inside `_respond_from_graph_result` (not
+    `handler`'s blanket except -- see `_UnroutableIntentError`'s own docstring), and the fail-open
+    `Delegate` it falls to now carries `response_text` as a `messages` array rather than silently dropping
+    it. This test keeps asserting the `Delegate`-not-`ElicitSlot` shape `D84` cares about; the message
+    itself is `test_d202_oi120_...`'s job, directly below.
     """
     with mock_aws():
         _install_fake_graph(
@@ -737,7 +743,99 @@ def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
         )
 
     assert response["sessionState"]["dialogAction"]["type"] == "Delegate"
-    assert "messages" not in response
+
+
+def test_d202_oi120_ambiguous_turn_with_stale_active_slot_delivers_response_text_and_holds_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D202`/`OI120` (`PROJECT_STATE.md`). Same raise shape as the `D84` test above (`Ambiguous`
+    colliding with a stale `active_slot="policy_number"`), but this test is about what the CALLER hears
+    once the guard raises, not just that it raises (that part is already covered). Before this fix,
+    `handler`'s blanket `except Exception` catches `_UnroutableIntentError` and falls to bare
+    `_delegate(event)`, which carries no `messages` key at all -- the real, already-computed
+    `GENERIC_REPROMPT` from `handle_no_match_or_barge_in` is silently discarded, and the caller hears
+    nothing this codehook decided to say. Real repro this test reflects: contact
+    `157916fe-a33b-48de-ab2b-13e5950cd745`, `"i don't have it handy now"` mid-`FileAutoClaim`'s
+    `policy_number` elicitation.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d202-oi120",
+        )
+        monkeypatch.setattr(
+            lex_codehook,
+            "_run_graph_turn",
+            lambda *a, **k: {
+                "active_slot": "policy_number",
+                "response_text": GENERIC_REPROMPT,
+                "intent": "Ambiguous",
+            },
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="FileAutoClaim",
+                transcript="i don't have it handy now",
+                session_attributes={"contactId": "c-d202-oi120"},
+            ),
+            None,
+        )
+
+    # (a) the caller hears the graph's real answer -- not silence, not a fabricated generic fallback.
+    assert response["messages"] == [{"contentType": "PlainText", "content": GENERIC_REPROMPT}]
+
+    # (b) Lex's dialog state does not advance past policy_number -- checked directly on the wire shape,
+    # not inferred: not Close/Fulfilled (which would end the intent), and the echoed intent's own
+    # policy_number slot is still unfilled, so Lex's own dialog manager keeps trying to fill it.
+    assert response["sessionState"]["dialogAction"]["type"] != "Close"
+    assert response["sessionState"]["intent"]["state"] != "Fulfilled"
+    assert response["sessionState"]["intent"]["slots"].get("policy_number") is None
+
+
+def test_d202_oi120_same_guard_with_no_response_text_delivers_the_generic_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same `D202`/`OI120` raise shape as the test above, but `result["response_text"]` is absent this
+    time. `_respond_from_graph_result`'s own fallback line runs unconditionally, BEFORE the `active_slot`
+    branch even looks at it: `response_text = result.get("response_text") or ("I'm sorry, ...")`. So the
+    text handed into the `except _UnroutableIntentError` catch, and on to `_delegate`, is already that
+    fallback string by the time the catch runs -- the catch itself has no separate branch for "was there a
+    real answer." Proves the fix is generic to WHAT `response_text` is, not special-cased to the
+    `GENERIC_REPROMPT` value the test above happens to use.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d202-oi120-no-response-text",
+        )
+        monkeypatch.setattr(
+            lex_codehook,
+            "_run_graph_turn",
+            lambda *a, **k: {
+                "active_slot": "policy_number",
+                "intent": "Ambiguous",
+                # no "response_text" key at all -- result.get("response_text") returns None, falsy.
+            },
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="FileAutoClaim",
+                transcript="i don't have it handy now",
+                session_attributes={"contactId": "c-d202-oi120-no-response-text"},
+            ),
+            None,
+        )
+
+    # the caller hears the fallback text, not silence and not an unhandled exception reaching the caller.
+    assert response["messages"] == [
+        {
+            "contentType": "PlainText",
+            "content": lex_codehook._GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT,
+        }
+    ]
+    assert response["sessionState"]["dialogAction"]["type"] != "Close"
 
 
 # ---------------------------------------------------------------------------------------------------

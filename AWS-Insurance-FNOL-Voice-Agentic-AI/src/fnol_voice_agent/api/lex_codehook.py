@@ -186,6 +186,12 @@ _UNAVAILABLE_SAFETY_SCRIPT = (
 _UNAVAILABLE_OVERRIDE_SCRIPT = (
     "I'm having trouble with our system right now, so let me connect you with someone directly."
 )
+# `_respond_from_graph_result`'s own fallback -- a graph result that reached here with no `response_text`
+# at all (an unexpected node-return shape, not a designed path). Named so it isn't a bare string duplicated
+# between the function and anything (a test included) that needs to assert against it.
+_GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT = (
+    "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
+)
 
 _GRAPH: Any = None  # lazily built and cached per warm instance -- ADR-009. See `_get_graph`.
 
@@ -289,15 +295,31 @@ def _turn_input_from(event: dict[str, Any]) -> str:
     return str(transcript) if transcript else ""
 
 
-def _delegate(event: dict[str, Any]) -> dict[str, Any]:
-    """Hand the turn back to Lex's own elicitation state machine. Fail-OPEN response shape."""
-    return {
+def _delegate(event: dict[str, Any], message: str | None = None) -> dict[str, Any]:
+    """Hand the turn back to Lex's own elicitation state machine. Fail-OPEN response shape.
+
+    `message`, when given, attaches a `messages` array carrying it. Legal alongside `Delegate`: the Lex V2
+    Lambda response format documents `messages` as a top-level field independent of `dialogAction.type` --
+    `Delegate` "requires no other fields," not "no other fields allowed" (`lambda-response-format.html`,
+    verified 2026-08-30). `_close`/`_elicit_slot` already both attach the identical shape under two
+    different `dialogAction` types, confirming the mechanism here isn't tied to one either.
+
+    `D202`/`OI120`'s own fix reuses this: `_respond_from_graph_result` calls this WITH a message when
+    `_elicit_slot` raises `_UnroutableIntentError` on a real, already-computed `response_text` that
+    otherwise had nowhere to go. `intent`/`sessionAttributes` still echo the event unchanged either way --
+    that's what keeps this shape non-advancing (same slots, same `state`) regardless of whether a message
+    rides along.
+    """
+    response: dict[str, Any] = {
         "sessionState": {
             "dialogAction": {"type": "Delegate"},
             "intent": _intent_from(event),
             "sessionAttributes": _session_attributes_from(event),
         }
     }
+    if message is not None:
+        response["messages"] = [{"contentType": "PlainText", "content": message}]
+    return response
 
 
 def _close(
@@ -354,12 +376,23 @@ def _close(
 class _UnroutableIntentError(RuntimeError):
     """`D84`. Raised when the graph names an `active_slot` but `result["intent"]` is absent, not a valid
     `Intent` value, or not one of the five Lex-declared slot-bearing intents -- there is no legal Lex
-    intent name left to send an `ElicitSlot` under. Deliberately never caught inside this module: letting
-    it propagate to `handler()`'s existing fail-open/fail-closed split is the point, not an omission --
-    the alternative it replaces was silently falling back to Lex's own echoed intent, which is the exact
-    mechanism `D84` diagnosed. A benign turn (no L1/L3 signal on this turn's raw text) fails OPEN to
-    `Delegate`; a turn that also carries a raw-text safety signal fails CLOSED, same as any other
-    unexpected `_dispatch` exception."""
+    intent name left to send an `ElicitSlot` under. Never falls back to Lex's own echoed intent as if it
+    were the graph's own choice -- that silent-fallback shape is the exact mechanism `D84` diagnosed, and
+    remains true here.
+
+    **Amended by `D202`/`OI120`, not reversed**: this is now caught, narrowly, in
+    `_respond_from_graph_result` right around the `_elicit_slot` call, rather than always propagating to
+    `handler()`'s blanket `except Exception`. The catch still resolves to the SAME fail-open `_delegate`
+    shape `D84` established -- it just carries the graph's real `response_text` now instead of silently
+    dropping it (`repair.py`'s `handle_no_match_or_barge_in` never clears `active_slot`, so this is the
+    expected, anticipated shape of a stale slot meeting an `Ambiguous`/`OutOfScope` turn, not a genuinely
+    unexpected failure). The "fails CLOSED on a raw-text safety signal" property is unaffected: `_dispatch`
+    already returns via `_escalate` on `l1_fired`/`l3_fired` BEFORE `_run_graph_turn` ever runs
+    (`:739`/`:796`), so this error type can only ever arise on a turn where `handler`'s own
+    `safety_signal_present` is already `False` -- there is no case this narrower catch takes away from the
+    blanket handler's fail-closed path. That blanket `except Exception` still exists, unchanged, for
+    genuinely unexpected exceptions (a dependency down, a malformed event) -- this error type just no
+    longer needs to reach it."""
 
 
 # `D84`. The five Lex-declared intents that carry a `Slots:` block in `bot.yaml.tftpl` -- the only names
@@ -678,9 +711,7 @@ def _log_turn_observability(
 
 
 def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    response_text = result.get("response_text") or (
-        "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
-    )
+    response_text = result.get("response_text") or _GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT
 
     escalation = result.get("escalation")
     if escalation:
@@ -702,7 +733,24 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
     else:
         active_slot = result.get("active_slot")
         if active_slot:
-            response = _elicit_slot(event, result, active_slot, response_text)
+            try:
+                response = _elicit_slot(event, result, active_slot, response_text)
+            except _UnroutableIntentError:
+                # `D202`/`OI120`: a slot is actively being elicited, but this turn's classified `intent`
+                # (e.g. `Ambiguous`, from a conversational non-answer) isn't a legal Lex intent to elicit
+                # `active_slot` under. `_elicit_slot` correctly refuses to send an illegal `ElicitSlot` --
+                # but `response_text` is a real, already-computed answer (here, `handle_no_match_or_
+                # barge_in`'s `GENERIC_REPROMPT`), not nothing. Falls to the SAME fail-open `_delegate`
+                # shape `D84` already established for "no legal Lex intent to elicit under," now carrying
+                # that answer instead of silently dropping it. See `_UnroutableIntentError`'s own
+                # docstring for why this is caught here rather than at `handler`'s blanket except.
+                logger.info(
+                    "active_slot=%s not routable under intent=%s -- delegating with response_text "
+                    "instead of an illegal ElicitSlot (D202/OI120)",
+                    active_slot,
+                    result.get("intent"),
+                )
+                response = _delegate(event, response_text)
         else:
             # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from
             # whichever node the graph actually routed to (`result["intent"]`), but before this fix
