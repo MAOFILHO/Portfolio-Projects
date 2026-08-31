@@ -1394,6 +1394,59 @@ def test_a_per_turn_log_line_is_emitted_and_names_both_intents_when_they_disagre
     assert "PY9001" not in message
 
 
+def test_the_per_turn_log_line_reports_insured_vehicle_vin_length_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Two live calls tonight (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400` and
+    `4c968199-218f-42dd-9f68-834947f3902b`) reached `file_new_claim` with an `insured_vehicle_vin` that
+    was never asked for and turned out to be the wrong shape -- caught at `file_auto_claim.py:159-165`,
+    spoken to the caller, never logged. There was no way to see from CloudWatch whether a future call's
+    version of this is the same failure recurring or something new, without re-deriving it from a live
+    trace by hand each time. This line makes that observable going forward: the VIN's LENGTH only, never
+    its value -- `insured_vehicle_vin` carries `ObfuscationSetting: DefaultObfuscation` in
+    `bot.yaml.tftpl` for a reason, and this line does not undo that.
+    """
+    event = _event(intent_name="FileAutoClaim", slots={"policy_number": _slot("PY4821")})
+    result = {
+        "intent": "FileAutoClaim",
+        "response_text": "Which of your vehicles is this about?",
+        "active_slot": "insured_vehicle_vin",
+        "escalation": None,
+        "filled_slots": {"policy_number": "PY4821", "insured_vehicle_vin": "ABCDEFGHIJKL"},
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    message = turn_records[0].message
+    assert "insured_vehicle_vin_len=12" in message
+    assert "ABCDEFGHIJKL" not in message, "the VIN's VALUE must never reach this log line"
+
+
+def test_the_per_turn_log_line_reports_no_length_when_the_vin_is_unfilled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Sibling case: an ordinary turn where `insured_vehicle_vin` hasn't been asked yet must not log a
+    fabricated length -- `None`/absent is itself the correct, honest signal on that turn."""
+    event = _event(intent_name="FileAutoClaim", slots={})
+    result = {
+        "intent": "FileAutoClaim",
+        "response_text": "What's your policy number?",
+        "active_slot": "policy_number",
+        "escalation": None,
+        "filled_slots": {},
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    assert "insured_vehicle_vin_len=None" in turn_records[0].message
+
+
 def test_an_escalating_turn_logs_both_its_own_escalation_line_and_the_per_turn_line(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

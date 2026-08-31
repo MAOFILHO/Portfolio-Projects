@@ -45,6 +45,27 @@ _CONDITIONAL_ON: dict[str, tuple[str, Any]] = {
     "police_report_number": ("police_report_filed", True)
 }
 
+# Live repro (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400`, `4c968199-218f-42dd-9f68-834947f3902b`):
+# `insured_vehicle_vin` is `AMAZON.FreeFormInput` in `bot.yaml.tftpl` -- the loosest slot type in this
+# bot -- and Lex's own whole-utterance NLU opportunistically resolved it from speech nobody was asked
+# about, landing a wrong-shaped value in `filled_slots` before this node ever elicited it. `models/
+# fnol.py:22`'s `FileAutoClaimSlots.insured_vehicle_vin` already knows the one hard constraint a VIN has
+# in this system -- exactly 17 characters -- so this is that same fact, not a new one, applied at the
+# boundary that decides "already answered." Deliberately NOT a general validation framework: VIN is the
+# only `_SLOT_ORDER` slot with a format this node can check without inventing a rule for every other
+# slot's free text (loss_location, damage_description, driver_name have no comparable hard shape; the
+# enum/bool/date slots are already constrained by their Lex slot type, not by this node).
+_VIN_LENGTH = 17
+
+
+def _is_answered(slot: str, value: Any) -> bool:
+    if value is None:
+        return False
+    if slot == "insured_vehicle_vin":
+        return isinstance(value, str) and len(value) == _VIN_LENGTH
+    return True
+
+
 _ELICITATION_PROMPTS: dict[str, str] = {
     "policy_number": "What's your policy number?",
     "insured_vehicle_vin": "Which of your vehicles is this about?",
@@ -67,7 +88,7 @@ def _next_missing_slot(filled: dict[str, Any]) -> str | None:
             dep_slot, dep_value = _CONDITIONAL_ON[slot]
             if filled.get(dep_slot) != dep_value:
                 continue  # not applicable given the caller's other answers
-        if filled.get(slot) is None:
+        if not _is_answered(slot, filled.get(slot)):
             return slot
     return None
 

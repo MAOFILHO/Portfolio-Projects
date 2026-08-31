@@ -696,6 +696,19 @@ def _log_turn_observability(
     call's own construction, and the filter's plain `str` path) rather than resting on the filter's newer,
     less-exercised container-walking branch alone.
 
+    **`insured_vehicle_vin_len`, added alongside the `_next_missing_slot` VIN-shape fix this same session
+    (`agents/nodes/file_auto_claim.py`).** Two live calls
+    (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400`, `4c968199-218f-42dd-9f68-834947f3902b`) reached
+    `file_new_claim` with an `insured_vehicle_vin` neither the codehook nor the caller ever supplied on
+    purpose -- Lex's own whole-utterance NLU opportunistically resolved it, `_next_missing_slot` (`agents/
+    nodes/file_auto_claim.py`) treated any non-`None` value as answered, and the wrong-shaped result
+    survived to fulfillment before throwing. This line is the length-only signal a future occurrence needs
+    to be seen from CloudWatch directly, without re-deriving it from a live trace by hand: `None` means the
+    slot was genuinely unfilled this turn (the honest, expected value on most turns); any other number is
+    exactly what landed in it, still never the value itself -- same "keys/lengths only" discipline as
+    `response_text_len` below, for the same reason (`ObfuscationSetting: DefaultObfuscation` on this slot
+    in `bot.yaml.tftpl` is a decision, not a default, and this line does not undo it).
+
     **`safety_flag`/`response_text_len`, added `D203`/`OI121` and `D204`/`OI122` (`PROJECT_STATE.md`).**
     `safety_flag` is `result.get("safety_flag")` -- a bare bool set unconditionally by `route_and_classify`
     (`agents/nodes/routing.py:51-53`), never derived from caller text, safe to log outright. It resolves
@@ -721,9 +734,11 @@ def _log_turn_observability(
     """
     incoming_intent = _intent_from(event)
     outgoing_intent = response["sessionState"]["intent"]
+    vin = (result.get("filled_slots") or {}).get("insured_vehicle_vin")
+    vin_len = len(vin) if isinstance(vin, str) else None
     logger.info(
         "turn contact=%s lex_intent=%s lex_slot_keys=%s graph_intent=%s outgoing_intent=%s "
-        "outgoing_slot_keys=%s safety_flag=%s response_text_len=%d",
+        "outgoing_slot_keys=%s safety_flag=%s response_text_len=%d insured_vehicle_vin_len=%s",
         _contact_id_from(event),
         incoming_intent.get("name"),
         ",".join(sorted((incoming_intent.get("slots") or {}).keys())),
@@ -732,6 +747,7 @@ def _log_turn_observability(
         ",".join(sorted((outgoing_intent.get("slots") or {}).keys())),
         result.get("safety_flag"),
         len(result.get("response_text") or ""),
+        vin_len,
     )
 
 
