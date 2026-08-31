@@ -620,15 +620,86 @@ pause "Review the area codes above — you'll pick one in the next stage. Press 
 stage "Purchase a Canada local geographic number"
 
 # R-09 in practice: a second purchase is permanent (this rule forbids ever releasing either number),
-# so this stage must never re-run its search/purchase logic once PHONE_NUMBER is set -- not "usually
-# skip", structurally cannot reach the purchase call at all when it's already set. Read directly from
-# ENV_FILE via _existing (same mechanism ask()/ask_secret() use), not trusted from a shell variable
-# that might not be populated on a fresh invocation of this script.
-if [[ -n "$(_existing "PHONE_NUMBER" || true)" ]]; then
-  ok "already purchased, skipping: $(_existing "PHONE_NUMBER") (PHONE_NUMBER set in $ENV_FILE)"
-  note "R-09: this number is never released by any script, so a re-run never re-purchases while"
-  note "PHONE_NUMBER is set. Delete it from .env.phase0 yourself if you genuinely need a new search --"
-  note "never as an accidental side effect of re-running this script."
+# so this stage must never re-run its search/purchase logic once ACS already owns a number -- not
+# "usually skip", structurally cannot reach the purchase call at all when one exists. Azure is now
+# the authority, not the local .env.phase0 file: PHONE_NUMBER there is gitignored and machine-local
+# (confirmed 2026-08-31 -- untracked, `.env.*` in .gitignore), so a fresh clone, a different machine,
+# or a deleted env file would silently defeat a local-file-only check while ACS still owns the first
+# number -- exactly the gap Stages 5-8 don't have, because they all check live Azure state directly
+# (`az cognitiveservices account show`, `az communication list`, etc.) rather than trusting a local
+# cache. `az communication phonenumber list --connection-string` (communication extension; verified
+# live 2026-08-31 against this project's own ACS resource -- returns a flat JSON array, each entry
+# carrying a `phoneNumber` field, e.g. `+17059100383`) is queried every run for the same reason.
+# Still flagged preview by Azure itself (`WARNING: This command group is in preview and under
+# development` on every invocation) as of this writing -- if this stage starts hard-failing after a
+# future CLI/extension update, that's the first thing to check, not this stage's own logic.
+ACS_CONNECTION_STRING=$(az communication list-key --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query primaryConnectionString -o tsv)
+if ! OWNED_NUMBERS_JSON=$(az communication phonenumber list --connection-string "$ACS_CONNECTION_STRING" -o json 2>&1); then
+  err "az communication phonenumber list failed -- can't confirm whether ACS already owns a number,"
+  err "so this must not proceed to a purchase attempt. Raw output:"
+  printf '%s\n' "$OWNED_NUMBERS_JSON" | sed 's/^/    /'
+  err "If this is '... is not recognized', the 'communication' CLI extension isn't installed --"
+  err "run: az extension add --name communication -- then re-run this stage."
+  on_error 1
+fi
+# python3 is already a Stage 1 prerequisite (checked alongside az/curl/docker), so parsing the JSON
+# with it here is not a new undeclared dependency -- kept instead of --query/JMESPath because a real
+# JSON parse reads more plainly here than a JMESPath expression. One call, not two: a parse failure
+# must be exactly as loud as the `az` call itself failing above, not silently coerced into "0 owned" --
+# this still-preview command's response shape (flagged above) could change, and something as
+# plausible as `{"value": [...]}` (the norm for the ACS REST endpoints this same script calls
+# elsewhere) would parse as valid JSON yet crash on the field lookup below if not caught explicitly.
+# Confirmed empirically 2026-08-31: with the old two-call `2>/dev/null || echo 0`/`|| true` pattern,
+# that exact wrapped shape produced OWNED_COUNT=1 (an accidental, wrong-reason match on dict-key
+# count) and OWNED_NUMBER='' -- indistinguishable from "genuinely zero numbers owned" to the
+# branches below, and the one case this stage exists to prevent falling through on.
+if ! OWNED_PARSED=$(printf '%s' "$OWNED_NUMBERS_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if not isinstance(d, list):
+    sys.exit(f"expected a JSON array, got {type(d).__name__}")
+print(len(d))
+print(d[0]["phoneNumber"] if d else "")
+' 2>&1); then
+  err "couldn't parse az communication phonenumber list's output as the expected flat array --"
+  err "$OWNED_PARSED"
+  err "Raw output:"
+  printf '%s\n' "$OWNED_NUMBERS_JSON" | sed 's/^/    /'
+  err "Do not proceed to a purchase attempt without knowing whether ACS already owns a number."
+  on_error 1
+fi
+OWNED_COUNT=$(printf '%s\n' "$OWNED_PARSED" | sed -n '1p')
+if [[ "$OWNED_COUNT" -gt 1 ]]; then
+  warn "$OWNED_COUNT numbers are owned by $ACS_NAME, not 1 -- unexpected under R-09 (only one purchase"
+  warn "was ever supposed to happen). Using the first returned; investigate the extra number(s) in the"
+  warn "Azure portal -- this script never releases any number automatically."
+fi
+OWNED_NUMBER=$(printf '%s\n' "$OWNED_PARSED" | sed -n '2p')
+LOCAL_PHONE_NUMBER=$(_existing "PHONE_NUMBER" || true)
+
+if [[ -n "$OWNED_NUMBER" ]]; then
+  ok "ACS already owns a number: $OWNED_NUMBER (confirmed live via az communication phonenumber list)"
+  if [[ "$LOCAL_PHONE_NUMBER" != "$OWNED_NUMBER" ]]; then
+    if [[ -n "$LOCAL_PHONE_NUMBER" ]]; then
+      warn "local $ENV_FILE had PHONE_NUMBER=$LOCAL_PHONE_NUMBER, which doesn't match the live value --"
+      warn "Azure wins; correcting the local file."
+    else
+      note "PHONE_NUMBER wasn't set in $ENV_FILE (fresh clone/machine, or the file was lost) -- writing"
+      note "the live value now instead of re-purchasing."
+    fi
+    write_env "PHONE_NUMBER" "$OWNED_NUMBER"
+  fi
+  note "R-09: this number is never released by any script, so a re-run never re-purchases while ACS"
+  note "already owns one -- checked against Azure directly, not trusted from the local file alone."
+elif [[ -n "$LOCAL_PHONE_NUMBER" ]]; then
+  # Azure is authoritative, so a local file claiming a number Azure doesn't confirm is a real
+  # discrepancy to stop and investigate -- never silently papered over by proceeding to a second
+  # purchase, and never trusted over what Azure just reported.
+  err "local $ENV_FILE says PHONE_NUMBER=$LOCAL_PHONE_NUMBER, but az communication phonenumber list"
+  err "returned no owned numbers for $ACS_NAME. Do not proceed -- this could mean the number was"
+  err "released outside this project (forbidden by R-09) or the ACS resource was recreated."
+  err "Investigate in the Azure portal before re-running this stage."
+  on_error 1
 else
 
 # Hard precondition: phone number purchase is a Microsoft.Communication data-plane operation and
