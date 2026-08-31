@@ -256,6 +256,28 @@ on_error() {
 }
 trap 'on_error $?' ERR
 
+# Verifies each path is git-tracked AND matches HEAD exactly (no unstaged or staged edits) --
+# `git ls-files --error-unmatch` alone only proves a file is tracked, not that the working tree
+# still matches what's committed. An uncommitted edit to a tracked bridge.py would pass a
+# tracked-only check and still get baked into the pushed image -- unreviewed code shipping under
+# a "verified" banner, the exact failure this guard exists to prevent.
+assert_tracked_and_clean() {
+  local dir="$1"; shift
+  if ! git -C "$dir" ls-files --error-unmatch "$@" >/dev/null 2>&1; then
+    err "$dir/{$*} exist but aren't all git-tracked --"
+    err "refusing to build from an unreviewed file. This check exists because an unreviewed, B2-shaped"
+    err "image nearly shipped once before, for docs/echo-app/ specifically (docs/phase0/findings.md,"
+    err "'Stage 12 -- ECHO_DIR misdirection') -- the same protection now applies wherever this check runs."
+    return 1
+  fi
+  if ! git -C "$dir" diff --quiet -- "$@" || ! git -C "$dir" diff --cached --quiet -- "$@"; then
+    err "$dir has uncommitted changes to: $* --"
+    err "this is expected during active development, not a bug: commit or discard the change, then"
+    err "re-run 01-provision.sh from the top. It will not build from a tracked-but-modified file."
+    return 1
+  fi
+}
+
 banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 1/4: Provisioning"
 
 # ── Stage 1: pre-flight (free, read-only) ──────────────────────────────────
@@ -916,24 +938,33 @@ REPO_TOPLEVEL="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" || {
   on_error 1
 }
 ECHO_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/docs/echo-app"
+VOICE_AGENT_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/voice-agent"
 
-# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked, or the script stops here.
-# This is the guard that would have caught the ECHO_DIR misdirection the moment it happened, instead
-# of silently building whatever sat at the wrong path. There is deliberately no "generate it if
-# missing" fallback left in this script -- a wrong path must stop the script, never regenerate from a
-# template.
+# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked AND clean, or the script
+# stops here. This is the guard that would have caught the ECHO_DIR misdirection the moment it
+# happened, instead of silently building whatever sat at the wrong path. There is deliberately no
+# "generate it if missing" fallback left in this script -- a wrong path must stop the script, never
+# regenerate from a template.
 if [[ ! -f "$ECHO_DIR/app.py" ]]; then
   err "ECHO_DIR=$ECHO_DIR has no app.py. Either this path is wrong or the file was moved/deleted --"
   err "either way, refusing to proceed without it. Fix docs/echo-app/ directly, never via this script."
   on_error 1
 fi
-if ! git -C "$ECHO_DIR" ls-files --error-unmatch app.py requirements.txt Dockerfile >/dev/null 2>&1; then
-  err "ECHO_DIR=$ECHO_DIR/{app.py,requirements.txt,Dockerfile} exist but aren't all git-tracked --"
-  err "refusing to build from an unreviewed file. This is exactly the failure mode that nearly shipped"
-  err "an unreviewed, B2-shaped image before (docs/phase0/findings.md, 'Stage 12 -- ECHO_DIR misdirection')."
+assert_tracked_and_clean "$ECHO_DIR" app.py requirements.txt Dockerfile || on_error 1
+ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present, git-tracked, and clean"
+
+# Same guard, extended to voice-agent/ -- Stage 12 now bridges this directory into the image via
+# `docker buildx build --build-context voice-agent=...` and the Dockerfile's `COPY --from=voice-agent`
+# (added alongside this check). Nothing outside docs/echo-app/ was previously covered by any
+# git-tracked-or-clean assertion; an uncommitted edit to bridge.py would otherwise pass silently into
+# a pushed image the same way the original ECHO_DIR misdirection did.
+if [[ ! -f "$VOICE_AGENT_DIR/bridge.py" ]]; then
+  err "VOICE_AGENT_DIR=$VOICE_AGENT_DIR has no bridge.py. Either this path is wrong or the file was"
+  err "moved/deleted -- refusing to proceed without it. Fix voice-agent/ directly, never via this script."
   on_error 1
 fi
-ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present and git-tracked"
+assert_tracked_and_clean "$VOICE_AGENT_DIR" bridge.py accounts.py requirements.txt || on_error 1
+ok "$VOICE_AGENT_DIR verified: bridge.py/accounts.py/requirements.txt present, git-tracked, and clean"
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
@@ -969,7 +1000,9 @@ ok "logged in to docker.io as $DOCKERHUB_USERNAME"
 # the one time it walked an index at all, it failed. Eliminating the variable is free; testing whether
 # Azure tolerates it costs a billable `containerapp create`. Verified manually 2026-08-21: with these
 # flags, `docker buildx imagetools inspect` shows a single linux/amd64 manifest, no second entry.
-docker buildx build --platform linux/amd64 --provenance=false --sbom=false -t "$IMAGE" --push "$ECHO_DIR"
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  --build-context voice-agent="$VOICE_AGENT_DIR" \
+  -t "$IMAGE" --push "$ECHO_DIR"
 ok "built for linux/amd64 and pushed $IMAGE"
 
 # Fail loudly here, before any Azure spend, if the pushed image isn't actually linux/amd64 --
