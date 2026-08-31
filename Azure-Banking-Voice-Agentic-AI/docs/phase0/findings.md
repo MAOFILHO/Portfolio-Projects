@@ -2852,3 +2852,74 @@ disclosure exists anywhere in this file for who answered `04-teardown-and-r08.sh
 (`04:290-291`, `MEASURED_PER_MIN_COST` / `MEASURED_FIXED_MONTHLY_INPUT`) that produced `$0.031` and
 `$6.72`. Who answered them is unknown from any tracked record.
 
+## Stage 9 gap — PHONE_NUMBER skip check trusted a gitignored, machine-local file, 2026-08-31
+
+Found by testing the guard's failure modes against a clean tree, not by reading the code and
+assuming it was safe — same discipline as the ACS inventory volatility finding above.
+
+**What was wrong**: Stage 9's skip check gated the entire search+purchase flow on `_existing
+"PHONE_NUMBER"` — a read from `docs/phase0/wizard/.env.phase0`. That file is gitignored (`.env.*`,
+confirmed via `git check-ignore -v`) and untracked (`git ls-files` returns nothing for it) — it
+exists only on whichever machine ran the wizard, never travels with the repo. Stages 5, 6, 7, and 8
+all gate their own idempotency on live Azure state instead (`az cognitiveservices account show`, a
+`## R-06` marker in this file, `az cognitiveservices account deployment show`, `az communication
+list`) — Stage 9 was the one stage in the sequence whose only guard against re-provisioning pointed
+at a file, not at Azure.
+
+**Why it mattered**: R-09 (`docs/PLAN.md`, `CLAUDE.md`) makes a second phone-number purchase
+permanent and irreversible — no teardown path may ever release either number. A fresh clone, a
+different machine, or a deleted/corrupted `.env.phase0` would silently defeat the only check
+standing between a re-run and a second, permanent purchase, while the ACS resource genuinely still
+owned the first number the whole time. Confirmed live on this machine, 2026-08-31: `.env.phase0`
+currently does have `PHONE_NUMBER=+17059100383` set, so the gap wasn't live-exploitable here today —
+but that safety net is exactly the file the gap depended on being present, which is the dependency
+the fix below removes.
+
+**Fix**: `b438cd5`, "Phase 1: Stage 9 checks Azure for owned numbers, not local env file." Stage 9
+now queries `az communication phonenumber list --connection-string ...` (Azure CLI `communication`
+extension; verified live against this project's own ACS resource before writing the fix — returns a
+flat JSON array, each entry carrying a `phoneNumber` field) unconditionally on every run, and treats
+that as the sole authority: if Azure reports an owned number, the stage skips regardless of what the
+local file says, and self-heals `.env.phase0` to match Azure rather than trusting it. If Azure
+reports none *and* the local file claims one, that's now a real discrepancy (`on_error 1`, stop and
+investigate) rather than silently proceeding. The local file can no longer gate the purchase path in
+either direction.
+
+## Stage 9 gap — the fix's own JSON parse swallowed errors, 2026-08-31
+
+Also found by testing, not reading: the first version of the fix above closed the local-file gap but
+introduced a narrower one of its own in the process, caught only by feeding it deliberately
+malformed input before treating it as safe.
+
+**What was wrong**: `az communication phonenumber list`'s own exit-code failure was handled
+correctly (`on_error 1`). But the two `python3 -c` calls parsing its JSON output used `2>/dev/null ||
+echo 0` / `2>/dev/null || true` — any parse failure was silently coerced into "zero numbers owned"
+rather than surfaced. Tested against four shapes locally (no Azure calls):
+
+| stdin | `OWNED_COUNT` | `OWNED_NUMBER` |
+|---|---|---|
+| flat array, 1 entry (the real, verified shape) | `1` | `+17059100383` |
+| `[]` (genuinely empty) | `0` | `''` |
+| garbage / non-JSON | `0` | `''` |
+| `{"value": [{"phoneNumber": "+17059100383"}]}` — object-wrapped | `1` *(coincidence — counts dict keys, not numbers)* | `''` |
+
+The last case is the real finding: valid JSON, no exception reaches the `az`-call exit-code guard
+(that guard only checks whether the command itself succeeded, not the shape of what it printed), yet
+the number lookup silently swallows a `KeyError` and comes back empty — indistinguishable from
+"Azure genuinely owns nothing." Not hypothetical: `az communication phonenumber list` is still
+flagged preview by Azure itself (`WARNING: This command group is in preview and under development`,
+printed on every invocation), and object-wrapped results (`"value": [...]`, `"phoneNumbers": [...]`)
+are already the norm for the ACS REST endpoints this same script calls elsewhere (search, purchase,
+list-owned-post-purchase). Combined with an absent local file — the exact scenario the fix above
+exists to handle — this would have silently fallen through to the purchase flow with Azure already
+owning a number.
+
+**Fix**: folded into the same commit (`b438cd5`, amended before it was ever pushed or reviewed as
+final — no separate commit for the intermediate, narrower-buggy version exists in history). The two
+separate parses were replaced with one `python3` call that explicitly asserts the top-level JSON is
+a list (exits nonzero with a message if not) before indexing into it; a nonzero exit is now treated
+exactly like the `az` command's own failure — `on_error 1`, not a default. Re-tested against the
+same four shapes: the two genuine shapes (flat array, empty array) parse identically to before; both
+bad shapes (garbage, object-wrapped) now stop the script with a clear diagnostic instead of reading
+as "zero owned."
+
