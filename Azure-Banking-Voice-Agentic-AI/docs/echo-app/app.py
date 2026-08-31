@@ -1,23 +1,20 @@
-"""Phase 0 minimal echo app — NOT production code, exists only to answer calls and measure meters.
+"""Answers incoming ACS calls and bridges the media WebSocket to the AOAI realtime deployment —
+NOT production code.
 
-Answers an incoming ACS call, starts bidirectional media streaming to /ws, echoes AudioData frames
-back verbatim, and logs DtmfData frames with wall-clock timestamps (evidence for R-03: does DTMF
-actually arrive during active bidirectional streaming). Also logs per-frame arrival/echo timestamps
-for a transport RTT baseline (B5 note in docs/PLAN.md: Phase 0 can only measure transport RTT, not
-turn latency — no realtime session exists yet).
+Handles the Event Grid webhook (subscription-validation handshake + IncomingCall), starts
+bidirectional media streaming to /ws with DTMF tones enabled, and hands the accepted WebSocket to
+bridge.run_bridge (voice-agent/bridge.py) for the whole ACS <-> AOAI realtime relay — audio is no
+longer echoed back.
 
 VERIFY before running: the exact MediaStreamingOptions field/enum names against the installed
 azure-communication-callautomation version. Written from docs/PLAN.md's verified protocol facts
 (frame shapes, WS URL, EnableBidirectional requirement), not independently re-checked against the
 current SDK signature.
 """
-import base64
-import json
 import logging
 import os
-import time
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket
 from azure.core.exceptions import AzureError
 from azure.communication.callautomation import (
     CallAutomationClient,
@@ -28,20 +25,10 @@ from azure.communication.callautomation import (
     AudioFormat,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-log = logging.getLogger("echo")
+import bridge
 
-# --- B2 DELETE-IN-PHASE-2 ---------------------------------------------------------------
-# Resolved once at import time, not re-read per-call, so this run's own log stream states up
-# front whether raw DTMF tone values could ever appear in it — no need to go hunting for the
-# env var separately. Fail-closed: unset, empty, or any unrecognized value all mean OFF.
-_LOG_DTMF_RAW = os.environ.get("PHASE0_LOG_DTMF_VALUES", "")
-LOG_DTMF_VALUES = _LOG_DTMF_RAW.strip().lower() in ("1", "true", "yes")
-log.info(
-    "boot: PHASE0_LOG_DTMF_VALUES=%r -> raw DTMF tone values %s be logged this run",
-    _LOG_DTMF_RAW or "<unset>", "WILL" if LOG_DTMF_VALUES else "will NOT",
-)
-# --- END B2 DELETE-IN-PHASE-2 -----------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+log = logging.getLogger("app")
 
 # Attribution for whatever R-04 measures against this run — baked in at build time by the
 # Dockerfile (`pip freeze > /app/installed-versions.txt`, gated by a build-time `test -s`
@@ -138,61 +125,16 @@ async def callbacks(request: Request):
 
 @app.websocket("/ws")
 async def media_stream(websocket: WebSocket):
+    """Hands the whole call off to bridge.run_bridge (voice-agent/bridge.py) -- ACS media frames
+    relay to/from the AOAI realtime deployment instead of being echoed. run_bridge already
+    swallows WebSocketDisconnect internally (ends the relay when either side hangs up), so this
+    handler doesn't need its own try/except for it."""
     correlation_id = websocket.headers.get("x-ms-call-correlation-id")
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
-    stream_start_ts = time.monotonic()  # elapsed-time zero point; time.monotonic() itself is an
-                                         # arbitrary epoch, not wall clock or stream-relative
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    frame_count = 0
-    dtmf_count = 0
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            recv_ts = time.monotonic()
-            msg = json.loads(raw)
-            kind = msg.get("kind")
-
-            if kind == "AudioData":
-                b64 = msg["audioData"]["data"]
-                # Echo verbatim. Outbound keys are capitalized per docs/PLAN.md's verified protocol facts.
-                echo = {"Kind": "AudioData", "AudioData": {"Data": b64}}
-                await websocket.send_text(json.dumps(echo))
-                send_ts = time.monotonic()
-                frame_count += 1
-                if frame_count % 50 == 0:  # ~once/second at 50 frames/sec
-                    log.info(
-                        "frame %d echoed, local processing latency=%.1fms",
-                        frame_count, (send_ts - recv_ts) * 1000,
-                    )
-
-            elif kind == "DtmfData":
-                dtmf_count += 1
-                # Digit count + arrival timing only — this is the actual R-03 evidence (does DTMF
-                # arrive during active bidirectional streaming) and carries no PIN content, so it
-                # logs unconditionally, same as the AudioData frame counter above. Elapsed time is
-                # relative to WS-open (stream_start_ts), not the raw time.monotonic() value, which
-                # is an arbitrary epoch with no meaning on its own.
-                log.info(
-                    "DTMF digit #%d arrived DURING streaming t=%.3fs since stream start (frame_count so far=%d) — R-03 evidence",
-                    dtmf_count, recv_ts - stream_start_ts, frame_count,
-                )
-                # --- B2 DELETE-IN-PHASE-2 ---------------------------------------------------------
-                # Raw tone value, gated on the module-level LOG_DTMF_VALUES resolved once at boot
-                # (see top of file) rather than re-reading the env var per digit. Phase 0 has no
-                # PIN/auth path, so the value itself carries no confidentiality risk yet — but once
-                # Phase 2 puts a PIN on this same DTMF path, B2 (PIN never appears in any
-                # transcript/log line/span/record) means this block cannot survive unmodified.
-                if LOG_DTMF_VALUES:
-                    tone = msg.get("dtmfData", {}).get("data")
-                    log.info("DTMF raw tone value=%s (PHASE0_LOG_DTMF_VALUES set)", tone)
-                # --- END B2 DELETE-IN-PHASE-2 -----------------------------------------------------
-
-    except WebSocketDisconnect:
-        log.info(
-            "WS closed correlationId=%s frames=%d dtmf_tones=%d",
-            correlation_id, frame_count, dtmf_count,
-        )
+    await bridge.run_bridge(websocket)
+    log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 
 @app.get("/healthz")

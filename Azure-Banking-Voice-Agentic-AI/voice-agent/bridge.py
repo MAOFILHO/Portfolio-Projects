@@ -17,8 +17,6 @@ import accounts
 
 log = logging.getLogger("bridge")
 
-DEPLOYMENT = "gpt-realtime-mini"  # deployment name; model version pinned server-side, see B3
-
 SYSTEM_PROMPT = (
     "You are a phone banking agent. Be brief and clear, like a real phone call. Always use the "
     "tools to check a balance or make a transfer -- never state a balance or confirm a transfer "
@@ -94,10 +92,14 @@ async def run_bridge(acs_ws):
     """
     api_key = os.environ["AOAI_KEY"]
     endpoint = os.environ["AOAI_ENDPOINT"]
+    # No default: matches AOAI_KEY/AOAI_ENDPOINT above, and fails closed on a missing pin rather
+    # than silently falling back to some other deployment (B3, CLAUDE.md) -- a pin rotation is
+    # then a config change in 01-provision.sh, not a bridge.py edit.
+    deployment = os.environ["AOAI_DEPLOYMENT"]
     base_url = endpoint.replace("https://", "wss://").rstrip("/") + "/openai/v1"
     client = AsyncOpenAI(api_key=api_key, websocket_base_url=base_url)
 
-    async with client.realtime.connect(model=DEPLOYMENT) as aoai:
+    async with client.realtime.connect(model=deployment) as aoai:
         await aoai.send({
             "type": "session.update",
             "session": {
@@ -143,8 +145,14 @@ async def run_bridge(acs_ws):
                 # bug: docs/PLAN.md's "Key protocol facts (verified)" states it explicitly, and
                 # docs/echo-app/app.py uses exactly this casing on both sides in the code that
                 # answered and echoed all 3 real Phase 0 test calls.
+                if msg.get("kind") == "DtmfData":
+                    # Arrival only, no raw tone value (B2) -- Phase 0's R-03 question (does DTMF
+                    # arrive during active bidirectional streaming) is already answered, so this
+                    # doesn't need elapsed-time-since-stream-start the way app.py's old log did.
+                    log.info("DTMF frame arrived, ignored by realtime relay (out of scope for Phase 1)")
+                    continue
                 if msg.get("kind") != "AudioData":
-                    continue  # DtmfData etc: out of scope for Phase 1, ignored not crashed on
+                    continue  # anything else: out of scope for Phase 1, ignored not crashed on
                 await aoai.send({
                     "type": "input_audio_buffer.append",
                     "audio": msg["audioData"]["data"],

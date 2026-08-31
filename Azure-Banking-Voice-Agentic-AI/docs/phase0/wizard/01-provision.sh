@@ -1038,6 +1038,7 @@ confirm "Confirmed the repo is set to Private?" \
   || warn "left as whatever Docker Hub defaulted to — not a credential leak (see above), but there's no reason to publish this project's internal call-handling code by accident."
 
 ACS_CONNECTION_STRING=$(az communication list-key --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query primaryConnectionString -o tsv)
+AOAI_KEY=$(az cognitiveservices account keys list --name "$AOAI_NAME" --resource-group "$RESOURCE_GROUP" --query key1 -o tsv)
 
 if az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
   ok "Container Apps environment $CAE_NAME already exists"
@@ -1073,12 +1074,13 @@ if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_
   say "updating existing container app: refreshing secrets, then forcing a new revision"
   az containerapp secret set \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" "aoai-key=$AOAI_KEY" \
     --output none
   az containerapp update \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
     --image "$IMAGE" \
     --revision-suffix "p0$(date -u +%Y%m%d%H%M%S)" \
+    --set-env-vars "AOAI_ENDPOINT=$AOAI_ENDPOINT" "AOAI_DEPLOYMENT=$DEPLOYMENT_NAME" "AOAI_KEY=secretref:aoai-key" \
     --output none
   ok "container app $CONTAINERAPP_NAME updated: secrets refreshed, new revision forced"
 else
@@ -1095,7 +1097,8 @@ else
     --min-replicas 1 --max-replicas 1 \
     --cpu 0.25 --memory 0.5Gi \
     --env-vars "ACS_CONNECTION_STRING=secretref:acs-conn" "APP_BASE_URL=secretref:app-base-url" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+      "AOAI_ENDPOINT=$AOAI_ENDPOINT" "AOAI_DEPLOYMENT=$DEPLOYMENT_NAME" "AOAI_KEY=secretref:aoai-key" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" "aoai-key=$AOAI_KEY" \
     --output none
   ok "container app $CONTAINERAPP_NAME created (min-replicas=1, 0.25 vCPU / 0.5 GiB per docs/PLAN.md)"
 fi

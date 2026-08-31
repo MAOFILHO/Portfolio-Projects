@@ -8,6 +8,9 @@ from unittest.mock import patch
 # docs/echo-app/ is a standalone containerized app (own requirements.txt), not an importable
 # package -- same sys.path pattern as voice-agent/ in test_accounts.py/test_bridge.py.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "docs" / "echo-app"))
+# app.py now imports bridge (voice-agent/bridge.py) -- in the built image this is PYTHONPATH
+# (Dockerfile), here it's the same sys.path insert test_bridge.py already relies on.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "voice-agent"))
 
 # app.py reads these at import time (os.environ[...], no default) and constructs a
 # CallAutomationClient from the connection string -- that parses the string locally with no
@@ -72,6 +75,32 @@ class AnswerCallRejectionPath(unittest.TestCase):
         answer.assert_called_once()
         reject.assert_not_called()
         self.assertEqual(result, {})
+
+
+class FakeWebSocket:
+    def __init__(self):
+        self.headers = {}
+        self.accepted = False
+
+    async def accept(self):
+        self.accepted = True
+
+
+class MediaStreamDelegatesToBridge(unittest.TestCase):
+    def test_ws_handler_accepts_then_hands_off_to_bridge_run_bridge(self):
+        # /ws used to run its own echo loop; it now delegates the whole relay to bridge.run_bridge
+        # (voice-agent/bridge.py) -- this is the seam, not the frame-by-frame behavior, which is
+        # bridge.py's own responsibility and already covered by tests/test_bridge.py.
+        calls = []
+
+        async def fake_run_bridge(ws):
+            calls.append(ws)
+
+        fake_ws = FakeWebSocket()
+        with patch.object(app.bridge, "run_bridge", fake_run_bridge):
+            asyncio.run(app.media_stream(fake_ws))
+        self.assertTrue(fake_ws.accepted)
+        self.assertEqual(calls, [fake_ws])
 
 
 if __name__ == "__main__":
