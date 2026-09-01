@@ -551,6 +551,27 @@ ACTIVE instead of settling to IDLE, `04-teardown-and-r08.sh`'s own Stage 3 arith
 `EXIT-AND-PHASE1-ENTRY.md`) already fails the budget before a second call is even attempted — the same
 self-firing stop condition, just tripped one phase earlier than that document anticipated.
 
+**R-08 branch decision (recorded 2026-09-01, before spend):** the two outcomes of step 5's
+measurement are not symmetric.
+- **If step 5 measures IDLE** (the container settles back down between calls, as R-04 found in
+  Phase 0): the $6.72/mo fixed-cost path holds, R-08's gate passes, Phase 1 proceeds as scoped.
+- **If step 5 measures ACTIVE** (the container stays warm — the $21.03/mo fixed-cost path): the
+  response is to **tear down compute and rework the design** so it can sleep between calls or cost
+  less while awake — **not** to accept the higher fixed cost and carry on. This isn't a judgment call
+  in the moment: at $21.03 fixed, `04-teardown-and-r08.sh`'s own Stage 3 arithmetic
+  (`left_for_calls = 25.0 − 21.03 − 6.00 = −2.03 ≤ 0`) already returns **0 demo runs/month** and fires
+  its own ⛔ R-08 GATE FAILED / STOP banner before a second call is even placed. **"Under $25/month" is
+  part of what this project demonstrates, not a target to renegotiate once the design becomes
+  inconvenient for it** — so on the ACTIVE result, the design changes, the claim doesn't.
+
+**Either way, R-08's documented 79.2 demo-runs/month figure (`docs/phase0/EXIT-AND-PHASE1-ENTRY.md:113-143`)
+becomes wrong the moment step 5 produces a real measurement, and must be corrected rather than left
+standing.** That figure is modeled from published Retail Prices API rates plus a hand-entered
+per-minute value, never measured from actual billing — no Cost Management query has ever succeeded in
+this project (both attempts in the Phase 0 teardown run failed). Once Phase 1 has a real, stateful
+agent-loop call to measure against, R-08 gets recomputed from that measurement and 79.2 is superseded
+in place, not carried forward as if it still describes this phase's cost.
+
 ---
 
 ### Phase 1 (ORIGINAL, SUPERSEDED 2026-08-28) — Duplex audio path
