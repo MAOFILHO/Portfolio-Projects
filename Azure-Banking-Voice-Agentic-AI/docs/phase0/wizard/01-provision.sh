@@ -634,14 +634,28 @@ stage "Purchase a Canada local geographic number"
 # development` on every invocation) as of this writing -- if this stage starts hard-failing after a
 # future CLI/extension update, that's the first thing to check, not this stage's own logic.
 ACS_CONNECTION_STRING=$(az communication list-key --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query primaryConnectionString -o tsv)
-if ! OWNED_NUMBERS_JSON=$(az communication phonenumber list --connection-string "$ACS_CONNECTION_STRING" -o json 2>&1); then
+# `2>&1` here was wrong: the preview WARNING noted above prints to stderr, not stdout -- verified live
+# 2026-09-01 by redirecting each stream separately against this project's own connection string
+# (stdout carried only the JSON array; stderr carried only the WARNING line, plus an ERROR line on a
+# genuine failure). Merging the two put the warning on line 1 of what OWNED_NUMBERS_JSON then fed to
+# json.load below, which cannot parse a leading non-JSON line -- so the parse failed on every run,
+# since Azure prints that warning unconditionally on every invocation of this command group. stderr is
+# captured to a temp file instead (same pattern as 02-test-calls.sh Stage 4's LOGS_STDERR_FILE) so
+# stdout stays pure JSON on success, with the warning/error text still available, separately, for
+# diagnostics. Still wrapped in `if !`, not a plain assignment, so a genuine `az` failure fails loud
+# here rather than being caught later as an unparseable-JSON symptom -- or, without the `if !` guard,
+# aborting via `set -e` before the diagnostic below ever prints.
+OWNED_NUMBERS_STDERR_FILE=$(mktemp)
+if ! OWNED_NUMBERS_JSON=$(az communication phonenumber list --connection-string "$ACS_CONNECTION_STRING" -o json 2>"$OWNED_NUMBERS_STDERR_FILE"); then
   err "az communication phonenumber list failed -- can't confirm whether ACS already owns a number,"
-  err "so this must not proceed to a purchase attempt. Raw output:"
-  printf '%s\n' "$OWNED_NUMBERS_JSON" | sed 's/^/    /'
+  err "so this must not proceed to a purchase attempt. Raw stderr:"
+  sed 's/^/    /' "$OWNED_NUMBERS_STDERR_FILE"
+  rm -f "$OWNED_NUMBERS_STDERR_FILE"
   err "If this is '... is not recognized', the 'communication' CLI extension isn't installed --"
   err "run: az extension add --name communication -- then re-run this stage."
   on_error 1
 fi
+rm -f "$OWNED_NUMBERS_STDERR_FILE"
 # python3 is already a Stage 1 prerequisite (checked alongside az/curl/docker), so parsing the JSON
 # with it here is not a new undeclared dependency -- kept instead of --query/JMESPath because a real
 # JSON parse reads more plainly here than a JMESPath expression. One call, not two: a parse failure
