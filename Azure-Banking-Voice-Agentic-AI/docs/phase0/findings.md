@@ -2923,3 +2923,477 @@ same four shapes: the two genuine shapes (flat array, empty array) parse identic
 bad shapes (garbage, object-wrapped) now stop the script with a clear diagnostic instead of reading
 as "zero owned."
 
+## R-01 — Models API deprecation-date check
+
+Queried 2026-09-01T19:09:24Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Airdrie","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"White Rock","administrativeDivision":{"localizedName":"BC","abbreviatedName":"BC"}},{"localizedName":"Ottawa","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Alma","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Granby","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Quebec City","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Saskatoon","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Whitehorse","administrativeDivision":{"localizedName":"YT","abbreviatedName":"YT"}}],"nextLink":null}
+```
+
+## R-01 — Models API deprecation-date check
+
+Queried 2026-09-01T19:17:48Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Airdrie","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"White Rock","administrativeDivision":{"localizedName":"BC","abbreviatedName":"BC"}},{"localizedName":"Ottawa","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Alma","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Granby","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Quebec City","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Saskatoon","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Whitehorse","administrativeDivision":{"localizedName":"YT","abbreviatedName":"YT"}}],"nextLink":null}
+```
+
