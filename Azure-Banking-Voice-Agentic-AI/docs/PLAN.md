@@ -528,14 +528,20 @@ evidence no longer exists to settle it.
 **Exit tests** (the demo recording script *is* the acceptance test — each row is dialed, spoken, and
 heard on one real call):
 
-| # | I do | I should hear |
-|---|---|---|
-| 1 | Dial `+17059100383`, wait for answer | Agent greets, invites a request — no dead air, no silent drop |
-| 2 | Say "what's my chequing balance?" | Agent states the mocked chequing balance correctly, in speech |
-| 3 | Say "move $150 from chequing to savings" | Agent confirms the transfer before or as it executes |
-| 4 | Ask for the chequing balance again | Agent states the new, debited balance — proves the tool call mutated mock state, not just spoke a fixed line |
-| 5 | Request a transfer larger than the account's available balance | Agent refuses in speech, states the actual available amount, does not execute |
-| 6 | Ask for a nonexistent account or a nonsense request | Agent responds gracefully — no crash, no silent hang |
+| # | I do | I should hear | Result |
+|---|---|---|---|
+| 1 | Dial `+17059100383`, wait for answer | Agent greets, invites a request — no dead air, no silent drop | **PASS** — call connected and ran to a clean "goodbye" close; not separately itemized by Marco, inferred from the call proceeding normally end to end |
+| 2 | Say "what's my chequing balance?" | Agent states the mocked chequing balance correctly, in speech | **PASS** — agent stated $2,400 |
+| 3 | Say "move $150 from chequing to savings" | Agent confirms the transfer before or as it executes | **PASS** — transfer executed, agent confirmed |
+| 4 | Ask for the chequing balance again | Agent states the new, debited balance — proves the tool call mutated mock state, not just spoke a fixed line | **PASS** — agent stated the new balance correctly, same exchange as row 3 |
+| 5 | Request a transfer larger than the account's available balance | Agent refuses in speech, states the actual available amount, does not execute | **PASS** — $3,000 attempt refused, agent stated $2,250 available (= $2,400 − $150, consistent with row 3's mutation) |
+| 6 | Ask for a nonexistent account or a nonsense request | Agent responds gracefully — no crash, no silent hang | **PASS** — $1,500-to-RRSP request refused, agent explained transfers are chequing/savings only |
+
+**All 6 rows PASS — first real call, 2026-09-01.** Open defect found on this call, not gating this
+table: the agent talks over the caller, cutting in before a sentence finishes — recorded as a
+turn-detection/VAD configuration issue in `PROJECT_STATE.md`'s open items, not fixed here. Step 5's
+operating-mode measurement (replica count, RxBytes/TxBytes) was also taken on this call — see the
+cost note above and `PROJECT_STATE.md` for the reading and its pending ~1h follow-up.
 
 **Cost and mode-measurement note:** this phase requires re-provisioning Container Apps compute
 (deleted at Phase 0 teardown) — R-04's $5.72/mo idle figure is a verdict that has to be re-earned, not

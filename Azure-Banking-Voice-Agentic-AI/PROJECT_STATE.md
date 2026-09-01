@@ -48,6 +48,17 @@ shape works); which session fields are `session.update`-settable; input/output f
 stated as a hard rule; `semantic_vad` reliability on Azure (untested — `server_vad` is the
 confirmed-working default, used in this probe's session too). Full detail in the research doc.
 
+**First real Phase 1 call, 2026-09-01: all 6 `docs/PLAN.md` exit-test rows PASS** (balance query,
+transfer, mutated-balance re-check, overdraft refusal, unknown-account refusal, clean call end) —
+table with results in `docs/PLAN.md`, Phase 1 REVISED section. Open defect found on this call: see
+open item 12 below. Step 5's operating-mode reading was also taken on this call — RxBytes/TxBytes idle-baseline (~180
+KB/15min) before the call, call itself visible as a ~23 MB spike (Replicas held at 1.0 throughout,
+but that's not idle/active evidence: `--min-replicas 1 --max-replicas 1` means it can't read
+anything else regardless); full data in
+`docs/phase1/evidence/first-call-operating-mode-2026-09-01.md`.
+**Not yet a verdict** — PLAN.md's method needs a second reading ~1h after the first; until then the
+R-08 branch decision (`docs/PLAN.md`, Phase 1 section) has nothing to act on.
+
 ## Phase 0 — closed, retained for reference until moved to `docs/phase0/`
 
 **Phase 0 — Provisioning & Meter Spike.** All 12 stages of `01-provision.sh` complete. Container App
@@ -174,6 +185,11 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
     `reject_call`/busy signal. The `APP_BASE_URL` placeholder race that triggered this exact path is
     fixed (`770c1f3`); the missing error handling that let it drop calls silently is not. Phase 1
     builds its own call-handling logic directly on this handler.
+12. **Agent interrupts the caller — open defect, found on the first real call, 2026-09-01, not
+    fixed.** The agent talks too fast and cuts in before the caller finishes a sentence. Scoped as a
+    turn-detection/VAD configuration issue on the realtime session (`server_vad` settings — silence
+    duration, prefix padding, threshold), not an architecture problem: all 6 exit-test rows still
+    passed despite it. Fix is config tuning on the existing session setup, not new code.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
