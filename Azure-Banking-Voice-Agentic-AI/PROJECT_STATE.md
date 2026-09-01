@@ -51,13 +51,25 @@ confirmed-working default, used in this probe's session too). Full detail in the
 **First real Phase 1 call, 2026-09-01: all 6 `docs/PLAN.md` exit-test rows PASS** (balance query,
 transfer, mutated-balance re-check, overdraft refusal, unknown-account refusal, clean call end) —
 table with results in `docs/PLAN.md`, Phase 1 REVISED section. Open defect found on this call: see
-open item 12 below. Step 5's operating-mode reading was also taken on this call — RxBytes/TxBytes idle-baseline (~180
-KB/15min) before the call, call itself visible as a ~23 MB spike (Replicas held at 1.0 throughout,
-but that's not idle/active evidence: `--min-replicas 1 --max-replicas 1` means it can't read
-anything else regardless); full data in
-`docs/phase1/evidence/first-call-operating-mode-2026-09-01.md`.
-**Not yet a verdict** — PLAN.md's method needs a second reading ~1h after the first; until then the
-R-08 branch decision (`docs/PLAN.md`, Phase 1 section) has nothing to act on.
+open item 12 below (downgraded — see below).
+
+**Second real Phase 1 call, 2026-09-01 ~18:39 ET**: three transfers (chequing→savings,
+savings→chequing, chequing→savings), balances correct after each; unknown-account request to RRSP
+refused in speech, agent named the two accounts that do exist. The interruption defect from the
+first call did **not** occur here — same image, same VAD config, nothing changed between calls.
+
+**Step 5 operating-mode verdict: IDLE.** Full four-hour metrics window: container returned to its
+~189 KB in / ~118 KB out per-15min baseline within one bucket after the first call, held flat there
+across four consecutive buckets (76 minutes) until the second call; both calls visible as spikes
+against that flat baseline (23.8 MB at 21:10Z, 18.0 MB at 22:25Z). R-04's idle finding holds for a
+stateful agent loop with tool calls, not just the stateless echo app — the R-08 ACTIVE branch
+(`docs/PLAN.md`, Phase 1 section) does not trigger, no teardown, no rework. Two caveats stand
+alongside this verdict: the idle baseline is ~180 KB/15min, not zero (platform health probes,
+present before this session's changes, not new); and this measured operating **mode** only — the
+dollar figures chained from it remain modeled from published rates plus hand-entered input, never
+measured from billing. Full data: `docs/phase1/evidence/first-call-operating-mode-2026-09-01.md`.
+**R-08's documented 79.2 demo-runs/month figure now needs recomputing against this IDLE verdict**,
+per the branch decision — not done in this step; see the Active risks note below.
 
 ## Phase 0 — closed, retained for reference until moved to `docs/phase0/`
 
@@ -186,17 +198,22 @@ crash the moment Stage 1 ran, caught before Monday's one live run, not during it
     fixed (`770c1f3`); the missing error handling that let it drop calls silently is not. Phase 1
     builds its own call-handling logic directly on this handler.
 12. **Agent interrupts the caller — open defect, found on the first real call, 2026-09-01, not
-    fixed.** The agent talks too fast and cuts in before the caller finishes a sentence. Scoped as a
-    turn-detection/VAD configuration issue on the realtime session (`server_vad` settings — silence
-    duration, prefix padding, threshold), not an architecture problem: all 6 exit-test rows still
-    passed despite it. Fix is config tuning on the existing session setup, not new code.
+    fixed, intermittent — did NOT occur on the second real call same day (same image, same VAD
+    config, nothing changed between calls).** The agent talks too fast and cuts in before the caller
+    finishes a sentence. Scoped as a turn-detection/VAD configuration issue on the realtime session
+    (`server_vad` settings — silence duration, prefix padding, threshold), not an architecture
+    problem. Downgraded from every-call to intermittent, not closed — nothing explains its absence
+    on the second call, so it isn't ruled out. Fix is config tuning, not new code, once/if it
+    reproduces again.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-02 and R-03 confirmed** 2026-08-21 (real calls, real echo, DTMF on 2/3 — see open item 3 for the
 one gap). **R-04 ANSWERED 2026-08-22 (IDLE), ahead of the 72h window's wall-clock close** — measured
-from telemetry, not Cost Analysis dollars; see Current phase above. **R-08 ANSWERED 2026-08-22:
-~79–114 demo runs/month, gate PASSES** — recomputed from measured meters, not the naive estimate.
+from telemetry, not Cost Analysis dollars; **reconfirmed 2026-09-01 for Phase 1's stateful agent
+loop** (see Current phase above). **R-08 ANSWERED 2026-08-22: ~79–114 demo runs/month, gate
+PASSES — STALE as of the 2026-09-01 IDLE verdict, needs recomputing, not done** (see Current phase
+above).
 **R-01, R-05, R-06 resolved** (2026-08-20). **R-09** (number irreplaceability) is a standing hard
 rule, not something to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 resolve.

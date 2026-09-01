@@ -53,15 +53,27 @@ Timestamp             Name               Total
 2026-09-01T21:09:00Z  Network Out Bytes  22784753.0
 ```
 
-## Reading (not yet a verdict)
+## Extended window — through the second call, 2026-09-01
 
-Buckets 19:24–20:54 (7 buckets, ~166–190 KB in / ~104–119 KB out each) sit well under PLAN.md's
-stated 1,000 B/s active threshold (≈167 B/s average) — consistent with idle platform-level traffic
-(health probes etc.), not an open audio stream. The 21:09 bucket (23.9 MB in / 22.8 MB out) is the
-call itself.
+Reported by Marco (raw `az monitor metrics list` output for this later window not repasted here):
+after the first call, the container returned to the ~189 KB in / ~118 KB out baseline within one
+`PT15M` bucket and held flat there across four consecutive buckets (76 minutes) until the second
+call. Both calls are visible as spikes against that flat baseline: first call ~23.8 MB at 21:10Z
+(the 21:09 bucket above), second call ~18.0 MB at 22:25Z.
 
-**This single reading does not answer IDLE-vs-ACTIVE.** PLAN.md's step 5 method requires a second
-reading ~1h after this one: if traffic in that follow-up bucket settles back to the ~180 KB/15min
-baseline above, the container closed its WebSocket and went idle (R-04's Phase 0 verdict holds). If
-it stays elevated, that is the ACTIVE result the R-08 branch decision (`docs/PLAN.md`, Phase 1
-section) governs — tear down and rework, not carry the higher cost forward. Pending.
+## Verdict: IDLE
+
+**R-04's idle finding holds for a stateful agent loop with tool calls, not just the stateless echo
+app.** The container returned to its pre-call baseline within one bucket after each call and stayed
+there until the next call started — no lingering elevated traffic between calls across the full
+four-hour window measured. The R-08 ACTIVE branch (`docs/PLAN.md`, Phase 1 section) does not
+trigger: no teardown, no design rework.
+
+**Two caveats stand alongside this verdict, not folded into it:**
+- The idle baseline itself is ~180 KB/15min, not zero — likely platform-level health probes, present
+  before any of this session's changes, not something newly introduced. The verdict rests on values
+  three orders of magnitude below the call spikes, not on literal 0 B.
+- This measured operating **mode** only. The dollar figures chained from it ($6.72/mo fixed, R-08's
+  demo-runs figure) remain modeled from published Retail Prices API rates plus a hand-entered
+  per-minute value, never measured from actual Cost Management billing. Confirming IDLE mode doesn't
+  upgrade those numbers from modeled to measured.
