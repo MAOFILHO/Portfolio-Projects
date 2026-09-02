@@ -139,6 +139,7 @@ from typing import Any, Literal
 
 from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
+from fnol_voice_agent.mcp.claims_server import resolve_vehicle_description
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 from fnol_voice_agent.models.enums import Intent
 from fnol_voice_agent.observability.log_redaction import install_pii_log_filter
@@ -185,6 +186,12 @@ _UNAVAILABLE_SAFETY_SCRIPT = (
 # a_raw_text_l3_match_escalates_even_when_the_graph_cannot_be_reached` was written to catch and did.
 _UNAVAILABLE_OVERRIDE_SCRIPT = (
     "I'm having trouble with our system right now, so let me connect you with someone directly."
+)
+# `_respond_from_graph_result`'s own fallback -- a graph result that reached here with no `response_text`
+# at all (an unexpected node-return shape, not a designed path). Named so it isn't a bare string duplicated
+# between the function and anything (a test included) that needs to assert against it.
+_GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT = (
+    "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
 )
 
 _GRAPH: Any = None  # lazily built and cached per warm instance -- ADR-009. See `_get_graph`.
@@ -289,15 +296,31 @@ def _turn_input_from(event: dict[str, Any]) -> str:
     return str(transcript) if transcript else ""
 
 
-def _delegate(event: dict[str, Any]) -> dict[str, Any]:
-    """Hand the turn back to Lex's own elicitation state machine. Fail-OPEN response shape."""
-    return {
+def _delegate(event: dict[str, Any], message: str | None = None) -> dict[str, Any]:
+    """Hand the turn back to Lex's own elicitation state machine. Fail-OPEN response shape.
+
+    `message`, when given, attaches a `messages` array carrying it. Legal alongside `Delegate`: the Lex V2
+    Lambda response format documents `messages` as a top-level field independent of `dialogAction.type` --
+    `Delegate` "requires no other fields," not "no other fields allowed" (`lambda-response-format.html`,
+    verified 2026-08-30). `_close`/`_elicit_slot` already both attach the identical shape under two
+    different `dialogAction` types, confirming the mechanism here isn't tied to one either.
+
+    `D202`/`OI120`'s own fix reuses this: `_respond_from_graph_result` calls this WITH a message when
+    `_elicit_slot` raises `_UnroutableIntentError` on a real, already-computed `response_text` that
+    otherwise had nowhere to go. `intent`/`sessionAttributes` still echo the event unchanged either way --
+    that's what keeps this shape non-advancing (same slots, same `state`) regardless of whether a message
+    rides along.
+    """
+    response: dict[str, Any] = {
         "sessionState": {
             "dialogAction": {"type": "Delegate"},
             "intent": _intent_from(event),
             "sessionAttributes": _session_attributes_from(event),
         }
     }
+    if message is not None:
+        response["messages"] = [{"contentType": "PlainText", "content": message}]
+    return response
 
 
 def _close(
@@ -354,12 +377,23 @@ def _close(
 class _UnroutableIntentError(RuntimeError):
     """`D84`. Raised when the graph names an `active_slot` but `result["intent"]` is absent, not a valid
     `Intent` value, or not one of the five Lex-declared slot-bearing intents -- there is no legal Lex
-    intent name left to send an `ElicitSlot` under. Deliberately never caught inside this module: letting
-    it propagate to `handler()`'s existing fail-open/fail-closed split is the point, not an omission --
-    the alternative it replaces was silently falling back to Lex's own echoed intent, which is the exact
-    mechanism `D84` diagnosed. A benign turn (no L1/L3 signal on this turn's raw text) fails OPEN to
-    `Delegate`; a turn that also carries a raw-text safety signal fails CLOSED, same as any other
-    unexpected `_dispatch` exception."""
+    intent name left to send an `ElicitSlot` under. Never falls back to Lex's own echoed intent as if it
+    were the graph's own choice -- that silent-fallback shape is the exact mechanism `D84` diagnosed, and
+    remains true here.
+
+    **Amended by `D202`/`OI120`, not reversed**: this is now caught, narrowly, in
+    `_respond_from_graph_result` right around the `_elicit_slot` call, rather than always propagating to
+    `handler()`'s blanket `except Exception`. The catch still resolves to the SAME fail-open `_delegate`
+    shape `D84` established -- it just carries the graph's real `response_text` now instead of silently
+    dropping it (`repair.py`'s `handle_no_match_or_barge_in` never clears `active_slot`, so this is the
+    expected, anticipated shape of a stale slot meeting an `Ambiguous`/`OutOfScope` turn, not a genuinely
+    unexpected failure). The "fails CLOSED on a raw-text safety signal" property is unaffected: `_dispatch`
+    already returns via `_escalate` on `l1_fired`/`l3_fired` BEFORE `_run_graph_turn` ever runs
+    (`:739`/`:796`), so this error type can only ever arise on a turn where `handler`'s own
+    `safety_signal_present` is already `False` -- there is no case this narrower catch takes away from the
+    blanket handler's fail-closed path. That blanket `except Exception` still exists, unchanged, for
+    genuinely unexpected exceptions (a dependency down, a malformed event) -- this error type just no
+    longer needs to reach it."""
 
 
 # `D84`. The five Lex-declared intents that carry a `Slots:` block in `bot.yaml.tftpl` -- the only names
@@ -379,6 +413,59 @@ _SLOT_BEARING_INTENTS = frozenset(
     }
 )
 
+# `D162`/`OI80` rows 1/2 (`PROJECT_STATE.md` exit-criteria table). HAND-MAINTAINED, mirroring
+# `_SLOT_BEARING_INTENTS`'s own accepted duplication risk one level down: each intent's legal Lex slot
+# NAMES, not just membership. The runtime source of truth cannot be `scripts/verify_slot_legality_
+# mapping.py`'s `legal_slots_by_intent` (which parses `bot.yaml.tftpl` directly) -- neither that script
+# nor the tftpl ship in the Lambda package (`infra/terraform/stacks/main/lambda.tf:44-54`, `source_dir
+# = ".../src"`), so this constant is what actually runs. Criterion 3's lint
+# (`scripts/verify_slot_legality_mapping.py`, wired into `make lint`) is what keeps it in sync with
+# `bot.yaml.tftpl` -- it does not (yet) assert equality against this constant; that extension is its own
+# separate change, not made here. Transcribed by hand from `bot.yaml.tftpl`'s own `Slots:` blocks:
+# `FileAutoClaim` `:187`, `CheckClaimStatus` `:516`, `CoverageQuestion` `:599`,
+# `RentalTowingEntitlement` `:641`, `UpdateContactInfo` `:710`. All five keys present is load-bearing --
+# `_elicit_slot` below indexes this dict by `graph_intent.value` unconditionally; an absent key raises
+# `KeyError`, not the intended `_UnroutableIntentError`, for any of the five slot-bearing intents.
+_LEGAL_SLOTS_BY_INTENT: dict[str, frozenset[str]] = {
+    Intent.FILE_AUTO_CLAIM.value: frozenset(
+        {
+            "policy_number",
+            "loss_datetime",
+            "loss_location",
+            "loss_type",
+            "damage_description",
+            "insured_vehicle_vin",
+            "injuries_present",
+            "other_party_involved",
+            "police_report_filed",
+            "police_report_number",
+            "driver_name",
+            "confirm_file_claim",
+        }
+    ),
+    Intent.CHECK_CLAIM_STATUS.value: frozenset(
+        {
+            "claim_number",
+            # `D200`/`OI118`: `claim_or_policy_number` is a GRAPH-INTERNAL disambiguation slot
+            # (`check_claim_status.py:19`), never Lex-declared in `bot.yaml.tftpl` -- the node names it
+            # as `active_slot` when neither `claim_number` nor `policy_number` is filled yet
+            # (`check_claim_status.py:28-31`), and until 2026-08-29's deploy this row-2 guard had no way
+            # to know that name existed, so it raised `_UnroutableIntentError` on the very first live
+            # `CheckClaimStatus` turn. Listing it here does not make it a real Lex slot -- it can never
+            # appear as a KEY in `lex_slots` (Lex has no such slot to fill), only as the `slot_name`
+            # being elicited. `scripts/verify_slot_legality_mapping.py`'s criterion-3 equality assert
+            # accounts for this exact name via its own `_GRAPH_INTERNAL_SLOTS` allowlist -- it is
+            # subtracted before the tftpl comparison, not silently absorbed into a weakened assert.
+            "claim_or_policy_number",
+        }
+    ),
+    Intent.COVERAGE_QUESTION.value: frozenset({"coverage_topic"}),
+    Intent.RENTAL_TOWING_ENTITLEMENT.value: frozenset({"entitlement_type", "claim_number"}),
+    Intent.UPDATE_CONTACT_INFO.value: frozenset(
+        {"policy_number", "field", "new_value", "confirm_update_contact_info"}
+    ),
+}
+
 
 def _elicit_slot(
     event: dict[str, Any], result: dict[str, Any], slot_name: str, message: str
@@ -392,8 +479,11 @@ def _elicit_slot(
     by construction, for every turn that reaches this function.
 
     Raises `_UnroutableIntentError` -- never falls back to `_intent_from(event)` -- if `result["intent"]`
-    is absent, not a valid `Intent` value, or not one of `_SLOT_BEARING_INTENTS`. See the module docstring's
-    `D84` entry for why silently falling back would reintroduce the defect this function exists to fix.
+    is absent, not a valid `Intent` value, not one of `_SLOT_BEARING_INTENTS`, or (`D162`/`OI80` row 2)
+    `slot_name` itself is not legal for `graph_intent`. See the module docstring's `D84` entry for why
+    silently falling back would reintroduce the defect this function exists to fix; row 2's own trigger
+    is `repair.py`'s stale-`active_slot` shape, where a slot legal under a PRIOR intent survives into a
+    turn the graph has freshly, validly classified under a different one.
     """
     raw_intent = result.get("intent")
     if not isinstance(raw_intent, str):
@@ -410,11 +500,23 @@ def _elicit_slot(
         raise _UnroutableIntentError(
             f"active_slot={slot_name!r} but result['intent']={graph_intent!r} declares no Lex slots"
         )
+    if slot_name not in _LEGAL_SLOTS_BY_INTENT[graph_intent.value]:
+        raise _UnroutableIntentError(
+            f"active_slot={slot_name!r} but result['intent']={graph_intent!r} does not declare that slot"
+        )
 
-    # The `slots` map is still Lex's own -- only `name` changes. Rebuilding `slots` from scratch is exactly
-    # the mistake `_intent_from`'s own docstring warns against (it drops every value collected so far); the
-    # graph has no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
-    lex_slots = _intent_from(event).get("slots") or {}
+    # The `slots` map is still Lex's own -- only `name` changes, and (`D162`/`OI80` row 1) only the keys
+    # legal for `graph_intent` survive: Lex may still be carrying keys from whatever intent it last had in
+    # progress (the router-drift trigger this row closes), and embedding those illegal keys alongside a
+    # legal `graph_intent` is the residual `DependencyFailedException` shape row 2's own raise does not
+    # cover -- row 2 guards `slot_name` (the one slot being elicited THIS turn), not every key already
+    # sitting in `lex_slots`. Dropped silently, not raised: an illegal leftover key is expected drift, not
+    # a malformed turn. Rebuilding `slots` from scratch instead of filtering is exactly the mistake
+    # `_intent_from`'s own docstring warns against (it drops every value collected so far); the graph has
+    # no independent notion of Lex's wire-shape slot values to rebuild it from regardless.
+    raw_lex_slots = _intent_from(event).get("slots") or {}
+    legal_slot_names = _LEGAL_SLOTS_BY_INTENT[graph_intent.value]
+    lex_slots = {name: value for name, value in raw_lex_slots.items() if name in legal_slot_names}
     # `D90` part 2 (`RESULTS.md` §34, option B). Corroborating, not corrective, here -- the `D84` guard
     # above already makes `intent.name` agree with the graph's own decision on every `ElicitSlot` response,
     # so this field and `intent.name` are always equal at this point. Set anyway, for the same reason a
@@ -476,8 +578,31 @@ def _merged_filled_slots(previous: dict[str, Any], event: dict[str, Any]) -> dic
     simpler than tracking only "this turn's new answer," which would have to special-case the confirm
     slots (`D78`) that Lex's own dialog manager does not walk toward on its own.
     """
+    interpreted = _lex_interpreted_slots(event)
     merged = dict(previous)
-    merged.update(_lex_interpreted_slots(event))
+    merged.update(interpreted)
+
+    # `D207`/`OI125`: `insured_vehicle_vin`'s slot type is `AMAZON.FreeFormInput` -- Lex hands back
+    # whatever the caller said about their vehicle, not a VIN. Resolved here, against `merged`'s own
+    # `policy_number` (the accumulated answer, not just this turn's raw Lex slots -- `policy_number` is
+    # almost always a PRIOR turn's checkpointed value by the time this slot is reached), not in
+    # `agents/nodes/file_auto_claim.py` -- that node's contract is deciding what to ask next from
+    # already-interpreted values, not parsing raw speech (see its own module docstring).
+    if "insured_vehicle_vin" in interpreted:
+        policy_number = merged.get("policy_number")
+        resolved = (
+            resolve_vehicle_description(interpreted["insured_vehicle_vin"], policy_number)
+            if isinstance(policy_number, str)
+            else None
+        )
+        if resolved is not None:
+            merged["insured_vehicle_vin"] = resolved
+        else:
+            # No match, an ambiguous match, or no policy_number yet -- drop the raw text rather than
+            # let it masquerade as an answer. `file_auto_claim.py`'s shape check would otherwise accept
+            # a coincidentally-17-character value that isn't a real VIN (contact `33b36200-...`) or
+            # loop forever re-asking a description that can never validate (contact `0cac5d80-...`).
+            merged.pop("insured_vehicle_vin", None)
     return merged
 
 
@@ -549,10 +674,109 @@ def _run_graph_turn(
     return result
 
 
-def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    response_text = result.get("response_text") or (
-        "I'm sorry, something went wrong on my end. Let me connect you with someone who can help."
+def _log_turn_observability(
+    event: dict[str, Any], result: dict[str, Any], response: dict[str, Any]
+) -> None:
+    """`D162`'s diagnostic prerequisite (`PROJECT_STATE.md` `OI80`) -- unconditional, unlike this module's
+    other three log lines (`:507`/`:566`/`:687`, each conditional on escalation or an unhandled exception).
+    `graph_intent` (`result.get("intent")`, named by `route_and_classify`, `agents/nodes/routing.py:54`)
+    has never been observable in CloudWatch for any turn: neither `agents/nodes/routing.py` nor
+    `agents/graph.py` logs anything at all. This is the one function that has both the graph's `result`
+    and the built outgoing `response` in scope, for every branch (`_close`'s escalation and default
+    branches, `_elicit_slot`'s branch) -- fires once per turn `_respond_from_graph_result` returns a
+    response for.
+
+    **Not literally every turn of every call -- six paths return a response to Lex without ever calling
+    this function, and correctly so, because none of them ever invoke the graph:**
+    - `_dispatch`'s L1 raw-text match, `:677-685`
+    - `_dispatch`'s `D79` `injuries_present`-confirmed check, `:714-726`
+    - `_dispatch`'s L3 ("agent"/"human") override, `:729-741`
+    - `handler`'s non-dict `event` guard, `:749-750`
+    - `handler`'s fail-open path (`_delegate`, when `_dispatch` raised and no safety signal was present),
+      `:767`
+    - `handler`'s fail-closed path (`_escalate`, from the same `except` block, when a safety signal was
+      present), `:771` onward
+
+    All six are correct to skip: `graph_intent` is `result.get("intent")`, and `result` is the graph's own
+    output (`_run_graph_turn`, `:522`). A turn that never reaches `_run_graph_turn` has no `result` to name
+    an intent from -- there is nothing this line could report on those paths that wouldn't be fabricated.
+    The three `_dispatch` checks exist specifically so certain turns bypass the graph and the checkpointer
+    entirely (the module docstring's own AWS-independent-fast-path property for L1); `handler`'s three
+    paths run only when `_dispatch` itself failed or was never reached. Extending this line to those six
+    paths would mean inventing a `graph_intent` value for a turn the graph never classified, which is a
+    worse diagnostic than reporting nothing.
+
+    **Keys only, never values** -- same redaction discipline as the existing `:566` line, which logs only
+    identifiers/labels (`contact_id`, `triggering_layer`, `route`, `reason`), never the caller's raw
+    utterance or any slot content. Slot dicts here are logged as sorted, comma-joined key strings; slot
+    VALUES (which may hold a phone number, an email, a VIN -- exactly `UpdateContactInfo`'s own slot
+    content) never reach this line.
+
+    **Passed as joined `str`, not as a bare `list`, deliberately.** `PIIRedactionLogFilter`
+    (`observability/log_redaction.py`) now walks into a `list`/`tuple` arg and redacts its `str` elements
+    (added alongside this line, for exactly this call site), so a bare `list[str]` arg would already be
+    covered. Joining to a single `str` here anyway is deliberate redundancy, not distrust of that filter
+    walk: it means this specific line's "keys only" guarantee is enforced by two independent layers (this
+    call's own construction, and the filter's plain `str` path) rather than resting on the filter's newer,
+    less-exercised container-walking branch alone.
+
+    **`insured_vehicle_vin_len`, added alongside the `_next_missing_slot` VIN-shape fix this same session
+    (`agents/nodes/file_auto_claim.py`).** Two live calls
+    (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400`, `4c968199-218f-42dd-9f68-834947f3902b`) reached
+    `file_new_claim` with an `insured_vehicle_vin` neither the codehook nor the caller ever supplied on
+    purpose -- Lex's own whole-utterance NLU opportunistically resolved it, `_next_missing_slot` (`agents/
+    nodes/file_auto_claim.py`) treated any non-`None` value as answered, and the wrong-shaped result
+    survived to fulfillment before throwing. This line is the length-only signal a future occurrence needs
+    to be seen from CloudWatch directly, without re-deriving it from a live trace by hand: `None` means the
+    slot was genuinely unfilled this turn (the honest, expected value on most turns); any other number is
+    exactly what landed in it, still never the value itself -- same "keys/lengths only" discipline as
+    `response_text_len` below, for the same reason (`ObfuscationSetting: DefaultObfuscation` on this slot
+    in `bot.yaml.tftpl` is a decision, not a default, and this line does not undo it).
+
+    **`safety_flag`/`response_text_len`, added `D203`/`OI121` and `D204`/`OI122` (`PROJECT_STATE.md`).**
+    `safety_flag` is `result.get("safety_flag")` -- a bare bool set unconditionally by `route_and_classify`
+    (`agents/nodes/routing.py:51-53`), never derived from caller text, safe to log outright. It resolves
+    `D203`/`OI121`'s own gap: an `InjuryEscalation` turn is currently indistinguishable in CloudWatch
+    between "L2's own union flag fired" and "the classifier's `intent` landed on `InjuryEscalation`
+    directly" -- both collapse to the same `graph_intent`/`escalated` shape today.
+
+    `response_text_len` is `len(result.get("response_text") or "")` -- a length only, never the content.
+    `response_text` itself is deliberately NOT added here: at least three nodes build it by interpolating
+    caller-supplied slot values directly (`update_contact_info.py:55,94`'s `f"That's {filled['new_value']}
+    -- is that right?"` reads back the caller's own new phone/email/address; `file_auto_claim.py:133`'s
+    `_summarize(filled)` folds vehicle/date/location/loss-type slot values into a sentence; `coverage_
+    question.py:92`/`rental_towing.py:86` log the LLM's free-text `answer`, which can restate what the
+    caller asked). `redact_for_transcript` (`guardrails/pii.py`, applied to every string log arg by
+    `PIIRedactionLogFilter`) catches phone/email/address/policy-number-*shaped* strings by regex, but its
+    own docstring says plainly it does not catch personal names and can miss creatively-phrased addresses
+    -- and it has no detector at all for a vehicle description or loss narrative, because those aren't PII
+    in the regex sense, they are the caller's own words. Logging `response_text` verbatim here would risk
+    exactly the raw-transcript leakage Marco's session instruction ruled out; length is the safe subset of
+    that signal. The one call site where `response_text` IS logged verbatim, `:747-753` below, is exempt
+    because it is provably built from a fixed, non-interpolated string constant only -- see that site's own
+    comment.
+    """
+    incoming_intent = _intent_from(event)
+    outgoing_intent = response["sessionState"]["intent"]
+    vin = (result.get("filled_slots") or {}).get("insured_vehicle_vin")
+    vin_len = len(vin) if isinstance(vin, str) else None
+    logger.info(
+        "turn contact=%s lex_intent=%s lex_slot_keys=%s graph_intent=%s outgoing_intent=%s "
+        "outgoing_slot_keys=%s safety_flag=%s response_text_len=%d insured_vehicle_vin_len=%s",
+        _contact_id_from(event),
+        incoming_intent.get("name"),
+        ",".join(sorted((incoming_intent.get("slots") or {}).keys())),
+        result.get("intent"),
+        outgoing_intent.get("name"),
+        ",".join(sorted((outgoing_intent.get("slots") or {}).keys())),
+        result.get("safety_flag"),
+        len(result.get("response_text") or ""),
+        vin_len,
     )
+
+
+def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    response_text = result.get("response_text") or _GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT
 
     escalation = result.get("escalation")
     if escalation:
@@ -570,17 +794,65 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
             escalation.get("route"),
             "detection-graph",
         )
-        return _close(event, response_text, escalated=True, escalation_reason="detection-graph")
+        response = _close(event, response_text, escalated=True, escalation_reason="detection-graph")
+    else:
+        active_slot = result.get("active_slot")
+        if active_slot:
+            try:
+                response = _elicit_slot(event, result, active_slot, response_text)
+            except _UnroutableIntentError:
+                # `D202`/`OI120`: a slot is actively being elicited, but this turn's classified `intent`
+                # (e.g. `Ambiguous`, from a conversational non-answer) isn't a legal Lex intent to elicit
+                # `active_slot` under. `_elicit_slot` correctly refuses to send an illegal `ElicitSlot` --
+                # but `response_text` is a real, already-computed answer (here, `handle_no_match_or_
+                # barge_in`'s `GENERIC_REPROMPT`), not nothing. Falls to the SAME fail-open `_delegate`
+                # shape `D84` already established for "no legal Lex intent to elicit under," now carrying
+                # that answer instead of silently dropping it. See `_UnroutableIntentError`'s own
+                # docstring for why this is caught here rather than at `handler`'s blanket except.
+                #
+                # `response_text` is logged VERBATIM here, unlike `_log_turn_observability`'s general line
+                # -- safe only because this branch is reachable exclusively via `handle_no_match_or_
+                # barge_in` (`agents/nodes/repair.py:43-72`), whose only two non-escalation return values
+                # are the fixed module-level constants `GENERIC_REPROMPT`/`BARGE_IN_OPEN_REPROMPT`
+                # (`repair.py:27,33`) -- neither interpolates a slot value or any caller-supplied text.
+                # (The escalation branch's `CAPABILITY_ESCALATION_SCRIPT` is also static but can't reach
+                # here: `_respond_from_graph_result`'s `if escalation:` branch, `:717-732`, already
+                # returns before this `else` is entered.) Added for `D202`/`OI120`'s own live verification
+                # this session -- do not widen this pattern to a node whose `response_text` isn't
+                # provably static; see `_log_turn_observability`'s docstring for why the general line
+                # logs length only.
+                logger.info(
+                    "active_slot=%s not routable under intent=%s -- delegating with response_text=%r "
+                    "instead of an illegal ElicitSlot (D202/OI120)",
+                    active_slot,
+                    result.get("intent"),
+                    response_text,
+                )
+                response = _delegate(event, response_text)
+        else:
+            # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from
+            # whichever node the graph actually routed to (`result["intent"]`), but before this fix
+            # `_close()` never read that value, only `_intent_from(event)` (Lex's original echo).
+            # `executed_node_intent` is the fix; `intent.name`'s own value is deliberately unchanged
+            # (option A, not this option, is what would change it).
+            response = _close(event, response_text, executed_node_intent=result.get("intent"))
 
-    active_slot = result.get("active_slot")
-    if active_slot:
-        return _elicit_slot(event, result, active_slot, response_text)
-
-    # `D90` part 2 -- this is the exact line the defect lived on: `response_text` came from whichever node
-    # the graph actually routed to (`result["intent"]`), but before this fix `_close()` never read that
-    # value, only `_intent_from(event)` (Lex's original echo). `executed_node_intent` is the fix; `intent.
-    # name`'s own value is deliberately unchanged (option A, not this option, is what would change it).
-    return _close(event, response_text, executed_node_intent=result.get("intent"))
+    # This project treats escalation delivery as no-accept-risk (row 9, `PROJECT_STATE.md`'s exit-criteria
+    # table) -- a diagnostic must never be able to replace an already-built response (escalation above all)
+    # with `handler`'s fail-open/fail-closed path just because logging it failed. `_log_turn_observability`
+    # is caught narrowly (`Exception`, not `BaseException`, so `KeyboardInterrupt`/`SystemExit` still
+    # propagate) and the already-built `response` is returned regardless of whether the log line succeeded.
+    try:
+        _log_turn_observability(event, result, response)
+    except Exception:
+        # Arguments kept trivial and pre-stringified on purpose: this handler must not itself raise while
+        # reporting a failure. `response["sessionState"]["intent"]["name"]` is a plain `str` from `_close`/
+        # `_elicit_slot`'s own construction, never a value that could fail to format.
+        logger.warning(
+            "turn observability logging failed for outgoing intent %s -- response returned unaffected",
+            response["sessionState"]["intent"]["name"],
+        )
+    return response
 
 
 def _dispatch(event: dict[str, Any]) -> dict[str, Any]:

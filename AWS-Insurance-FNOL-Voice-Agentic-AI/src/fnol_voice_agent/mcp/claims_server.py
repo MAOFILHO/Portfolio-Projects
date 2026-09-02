@@ -12,6 +12,7 @@ rationale -- not repeated per-file here.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -21,7 +22,7 @@ from fnol_voice_agent.models.claim import CLAIM_NUMBER_PATTERN
 from fnol_voice_agent.models.fnol import FileAutoClaimSlots
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
 from fnol_voice_agent.validation.coverage import rental_days_remaining
-from fnol_voice_agent.validation.identifiers import compute_claim_number
+from fnol_voice_agent.validation.identifiers import compute_claim_number, normalize_policy_number
 
 from ._paths import CLAIMS_PATH, POLICYHOLDERS_PATH, VEHICLES_PATH
 
@@ -121,6 +122,28 @@ def _load_vehicles() -> list[Vehicle]:
     return [Vehicle.model_validate(record) for record in payload["vehicles"]]
 
 
+def _real_policy_numbers() -> frozenset[str]:
+    """Every policy number in the synthetic corpus -- the authoritative "real policy" set for
+    `normalize_policy_number`'s digits-only fallback, sourced from `policyholders.json` rather than
+    `vehicles.json`: a policy's *existence* is a policyholder fact, not a vehicle-ownership fact."""
+    payload = json.loads(POLICYHOLDERS_PATH.read_text())
+    return frozenset(record["policy_number"] for record in payload["policyholders"])
+
+
+def vehicles_for_policy(policy_number: str) -> list[Vehicle]:
+    """Every vehicle on `policy_number`'s policy, in corpus order -- the same order `resolve_vehicle_
+    description`'s ordinal matcher counts from, and what `file_auto_claim.py`'s enumeration prompt reads
+    back to the caller. Public (not `_`-prefixed): `file_auto_claim.py` needs this to build that prompt
+    and to decide whether a policy has exactly one vehicle worth skipping the question for (`D207`/
+    `OI125` direction 3) -- `resolve_vehicle_description`'s own scoping (below) is one caller of this,
+    not the only one, and this is the one site both the policy-number-case-insensitivity fix and its
+    digits-only mis-heard-leading-letter follow-up (`D207`/`OI125`, live evidence 2026-09-02) live for
+    this specific lookup.
+    """
+    policy_number_upper = normalize_policy_number(policy_number, _real_policy_numbers())
+    return [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
+
+
 def _load_deductible_for(policy_number: str) -> int:
     """The Section 7 (Loss-or-Damage) deductible is a fixed policy term, known at intake time even
     though the claim's eventual payout isn't -- looked up from the policyholder record rather than
@@ -182,6 +205,21 @@ def get_claim_status(claim_number: str | None = None, policy_number: str | None 
         ClaimNotFoundError: `claim_number` supplied but matches no record.
         NoOpenClaimError: `policy_number` supplied but resolves to no open claim.
     """
+    # `claim_number`/`policy_number` are both `AMAZON.AlphaNumeric` -- Lex lowercases both (confirmed
+    # live). Normalized before `GetClaimStatusArgs` is built: its pattern fields are uppercase-only, so a
+    # raw lowercase value fails validation before either comparison below is ever reached.
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears `policy_number`'s leading
+    # letter(s) ("py4821" arrives as "uy4821"/"ty4821"), scoped to `policy_number` only -- `claim_number`
+    # is not part of this fallback (`normalize_policy_number` returns the uppercased original unchanged
+    # when it can't resolve, so a value it doesn't fix reaches the format/not-found handling below
+    # exactly as it would have before).
+    claim_number = claim_number.upper() if claim_number is not None else None
+    policy_number = (
+        normalize_policy_number(policy_number, _real_policy_numbers())
+        if policy_number is not None
+        else None
+    )
     try:
         args = GetClaimStatusArgs(claim_number=claim_number, policy_number=policy_number)
     except ValidationError as exc:
@@ -240,6 +278,106 @@ def get_rental_status(claim_number: str) -> RentalStatus:
     return rental
 
 
+# Selection-answer matchers for `resolve_vehicle_description` -- `D207`/`OI125` direction 3. Each takes
+# the caller's raw text and the policy's own vehicle list (in corpus/prompt order, so "first"/"second"
+# line up with what `file_auto_claim.py`'s enumeration prompt just read back) and returns the one vehicle
+# a signal unambiguously picks out, or `None` if that signal wasn't present or didn't resolve to exactly
+# one vehicle. Deliberately no "one"/"two" cardinal-number aliases in `_ORDINAL_WORDS`: "the second one"
+# is a real example utterance, and "one" there is the filler noun ("the second [vehicle]"), not a
+# position -- aliasing it to index 0 would make that phrase ambiguous (positions {0, 1}) and return None
+# on exactly the case it must resolve.
+_ORDINAL_WORDS: dict[str, int] = {"first": 0, "1st": 0, "second": 1, "2nd": 1}
+
+
+def _match_by_ordinal(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    tokens = set(text.lower().split())
+    positions = {_ORDINAL_WORDS[token] for token in tokens if token in _ORDINAL_WORDS}
+    if len(positions) == 1:
+        (index,) = positions
+        if 0 <= index < len(vehicles):
+            return vehicles[index]
+    return None
+
+
+def _match_by_year(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    """Digit years only ("2022"), not spelled-out ones ("twenty twenty two") -- deliberately not built;
+    see `resolve_vehicle_description`'s own docstring for why."""
+    years = {int(year) for year in re.findall(r"\b(?:19|20)\d{2}\b", text)}
+    if len(years) == 1:
+        (year,) = years
+        matches = [v for v in vehicles if v.year == year]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
+def _match_by_make(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    text_lower = text.lower()
+    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.make.lower())}\b", text_lower)]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
+    """Resolves a caller's free-text vehicle description to a VIN, scoped to one policy's own vehicle
+    list -- `D207`/`OI125`'s fix, direction 2. Case-insensitive; matches on the vehicle's `model` name
+    alone, `make`+`model`, or `year`+`make`+`model` (all three collapse to "the model name appears in
+    the text" in practice, since no single policy in the real corpus has two vehicles sharing a model
+    name -- make/year only matter to disambiguate a collision if one ever exists). Also passes a real
+    17-character VIN straight through if it already belongs to this policy.
+
+    `D207`/`OI125` direction 3 adds three more signals, tried in order after the model-name match, for
+    when the caller is answering `file_auto_claim.py`'s enumeration prompt ("Is this about the 2022
+    Meridian, or the 2024 Skiff?") rather than volunteering a model name: **ordinal/position** ("the
+    first one", "first"), **year** ("2022" -- digit form only; a spelled-out "twenty twenty two" is not
+    parsed, a real scoping gap, not an oversight -- word-to-number parsing is materially bigger than this
+    fix and was never asked for beyond "a bare year works"), and **make** ("the Example Motors one").
+    Each is independently ambiguity-safe (`_match_by_ordinal`/`_match_by_year`/`_match_by_make` each
+    return `None` unless exactly one vehicle matches) and only tried if every earlier signal came back
+    empty, never overriding a signal that already resolved.
+
+    Returns None -- not an exception -- on no match or an ambiguous match (more than one vehicle on the
+    policy matches), so the caller's slot stays unanswered and gets re-asked rather than filing a claim
+    against the wrong vehicle.
+    """
+    candidate = text.strip().upper()
+    # `AMAZON.AlphaNumeric` (`policy_number`'s Lex slot type) lowercases its interpretedValue -- confirmed
+    # live, `scripts/probe_d207_vin_delivery.py` -- so the caller's own real policy number arrives as
+    # "py4821", not the corpus's canonical "PY4821". Normalized here, not upstream: this function has no
+    # Pydantic gate in front of it (unlike `file_new_claim`/`get_claim_status`/etc.), so it is the one
+    # site where a raw, un-normalized value reaches a comparison directly.
+    vehicles = vehicles_for_policy(policy_number)
+
+    if len(candidate) == 17:
+        for vehicle in vehicles:
+            if vehicle.vin.upper() == candidate:
+                return vehicle.vin
+
+    text_lower = text.lower()
+    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)]
+    if len(matches) == 1:
+        return matches[0].vin
+
+    # `D207`/`OI125` direction 3: telephony ASR cannot transcribe "Meridian" -- confirmed live over
+    # three diagnostic rounds, the model name never arrives. `file_auto_claim.py` now reads the
+    # policy's own vehicles back to the caller instead of asking an open question, so a selection
+    # answer needs its own matchers alongside the model-name one above.
+    ordinal_match = _match_by_ordinal(text, vehicles)
+    if ordinal_match is not None:
+        return ordinal_match.vin
+
+    year_match = _match_by_year(text, vehicles)
+    if year_match is not None:
+        return year_match.vin
+
+    make_match = _match_by_make(text, vehicles)
+    if make_match is not None:
+        return make_match.vin
+
+    return None
+
+
 def file_new_claim(
     policy_number: str,
     insured_vehicle_vin: str,
@@ -278,6 +416,17 @@ def file_new_claim(
         PolicyNotFoundError / VehicleNotOnPolicyError: `policy_number`/`insured_vehicle_vin` don't
             resolve to a real, matching pair in the synthetic corpus.
     """
+    # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
+    # here, before `FileAutoClaimSlots` is ever constructed: that model's own `policy_number` field is
+    # pattern-gated to `^PY\d{4}$`, so a raw "py4821" fails Pydantic validation (`InvalidNewClaimError`)
+    # before the policy/VIN comparisons below (`:346`/`:352`) are ever reached -- fixing those
+    # comparisons alone would not have fixed this call path.
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears the leading letter(s)
+    # ("py4821" arrives as "uy4821"/"ty4821"), which uppercasing alone cannot fix. `normalize_
+    # policy_number` returns the uppercased original unchanged when it can't resolve, so a value it
+    # doesn't fix still reaches `FileAutoClaimSlots`' pattern gate exactly as it would have before.
+    policy_number = normalize_policy_number(policy_number, _real_policy_numbers())
     if injuries_present:
         raise InjuryPresentError(
             "file_new_claim called with injuries_present=True -- this must be handled by the injury "

@@ -95,6 +95,7 @@ def _running_on_target() -> bool:
         and (sys.version_info.major, sys.version_info.minor) == _TARGET_PYTHON
     )
 
+
 # Mirrors pyproject.toml's runtime `dependencies` list MINUS `mcp` (excluded, see module docstring).
 # Duplicated here deliberately as an explicit, reviewable pin list rather than parsed from
 # pyproject.toml at run time -- this script's whole point is to catch a silent mismatch, and parsing the
@@ -145,13 +146,16 @@ def _dist_info_versions(layer_root: Path) -> dict[str, str]:
 def _try_import(import_name: str, layer_root: Path) -> str | None:
     """Attempts a real `importlib.import_module()` with `layer_root` on `sys.path`. Returns a problem
     string on failure, `None` on success. Only called when `_running_on_target()` is true -- see the
-    module docstring for why a mismatched-platform import is skipped rather than attempted and trusted."""
+    module docstring for why a mismatched-platform import is skipped rather than attempted and trusted.
+    """
     sys.path.insert(0, str(layer_root))
     try:
         importlib.invalidate_caches()
         importlib.import_module(import_name)
         return None
-    except Exception as exc:  # noqa: BLE001 - any import failure is the finding, not a bug in this script
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - any import failure is the finding, not a bug in this script
         return f"IMPORT FAILED: {import_name} — {type(exc).__name__}: {exc}"
     finally:
         sys.path.remove(str(layer_root))
@@ -276,7 +280,9 @@ def main(argv: list[str] | None = None) -> int:
     problems, import_check_ran = verify(args.layer_root, attempt_import=not args.no_import_check)
 
     if import_check_ran:
-        print("=== Import check: RAN (interpreter matches Lambda's arm64/Linux/CPython 3.12 target) ===")
+        print(
+            "=== Import check: RAN (interpreter matches Lambda's arm64/Linux/CPython 3.12 target) ==="
+        )
     else:
         print(
             "=== Import check: SKIPPED — this interpreter does not match Lambda's target "
@@ -292,8 +298,10 @@ def main(argv: list[str] | None = None) -> int:
         if archive_problems:
             print(f"=== Archive structure check: RAN against {args.zip} -- FAILED ===")
         else:
-            print(f"=== Archive structure check: RAN against {args.zip} -- every expected package is "
-                  f"under a top-level python/ prefix (D82) ===")
+            print(
+                f"=== Archive structure check: RAN against {args.zip} -- every expected package is "
+                f"under a top-level python/ prefix (D82) ==="
+            )
     else:
         print(
             "=== Archive structure check: SKIPPED — no --zip given. A skip here is not a pass: "
@@ -319,8 +327,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.zip is not None
         else "with the archive's own structure NOT checked — see the skip notice above"
     )
-    print(f"=== Layer content verification passed: {len(EXPECTED_PACKAGES)}/{len(EXPECTED_PACKAGES)} "
-          f"expected packages present at pinned versions, {import_clause}, {archive_clause} ===")
+    print(
+        f"=== Layer content verification passed: {len(EXPECTED_PACKAGES)}/{len(EXPECTED_PACKAGES)} "
+        f"expected packages present at pinned versions, {import_clause}, {archive_clause} ==="
+    )
     return 0
 
 

@@ -38,13 +38,19 @@ def _clean_caller() -> FakeBedrockConverseClient:
 # --- The two deterministic, no-AWS probes, tested directly against real node functions -----------------
 
 
-def test_probe_file_auto_claim_covers_its_three_dynamic_sites_with_real_text() -> None:
+def test_probe_file_auto_claim_covers_its_four_dynamic_sites_with_real_text() -> None:
+    """`D207`/`OI125` direction 3 turned the `insured_vehicle_vin` elicitation prompt (#2) dynamic --
+    it was a `_ELICITATION_PROMPTS[next_slot]` literal, now a `Name` (`prompt`) built by
+    `_vehicle_choices_prompt` -- a fourth site alongside the pre-existing three."""
     result = _probe_file_auto_claim()
     assert set(result) == {
+        "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#2",
         "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#3",
         "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#5",
         "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#6",
     }
+    vehicle_choice = result["fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#2"]
+    assert vehicle_choice == "Is this about the 2022 Meridian, or the 2024 Skiff?"
     confirm = result["fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#3"]
     assert "should i go ahead" in confirm.lower()
     except_text = result["fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#5"]
@@ -72,8 +78,8 @@ def test_run_readback_probe_passes_with_a_clean_guardrail_and_zero_coverage_gaps
     assert report.passed
     assert report.coverage_gaps == []
     assert report.unresolved_sources == []
-    # 3 (file_auto_claim) + 1 (check_claim_status) + 2 (coverage_question) + 1 (rental_towing) = 7.
-    assert len(report.covered) == 7
+    # 4 (file_auto_claim) + 1 (check_claim_status) + 2 (coverage_question) + 1 (rental_towing) = 8.
+    assert len(report.covered) == 8
     assert all(r.guardrail_action == "NONE" for r in report.covered)
 
 
@@ -140,5 +146,5 @@ def test_run_readback_probe_reports_a_coverage_gap_for_a_site_no_probe_covers(
     assert not report.passed
     assert phantom_site in report.coverage_gaps
     # The real, coverable sites are unaffected -- a coverage gap on one site must not swallow the rest.
-    assert len(report.covered) == 7
+    assert len(report.covered) == 8
     assert all(r.passed for r in report.covered)

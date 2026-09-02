@@ -22,26 +22,6 @@
 locals {
   repo_root   = abspath("${path.module}/../../../..")
   package_zip = "${path.module}/.terraform-build/lex-codehook.zip"
-
-  # `D80`/`D81`. Built by `make build-lambda-layer` (`docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md` §7) --
-  # cross-platform pip resolution against Linux/`arm64`/`cp312` wheels, not a bare `pip install` on this
-  # (Darwin) dev machine, which would silently produce macOS binaries. `deps_dir` must exist and be
-  # populated before `terraform plan` can even read `data.archive_file.codehook_deps` below; an empty or
-  # missing directory is a build-step failure, not a Terraform one, and must be diagnosed there first.
-  #
-  # `D82`. `deps_dir` is the directory pip installs INTO and is named `python/` for exactly one reason:
-  # AWS Lambda's Python layer convention requires every package under a `python/<package>` path inside
-  # the layer zip, so that unzipping to `/opt` lands them at `/opt/python/<package>` -- the one path
-  # Lambda's runtime actually adds to `sys.path` for a layer. `archive_file.source_dir` zips a
-  # directory's CONTENTS at the zip's root, not the directory itself -- pointing it AT `deps_dir` (i.e.
-  # at `python/`) silently drops that one path component and was `D82`'s exact root cause: a real,
-  # correctly-versioned layer that put every package at `/opt/pydantic` instead of `/opt/python/pydantic`,
-  # which is never on `sys.path`. `source_dir` below is `deps_root` -- `deps_dir`'s PARENT -- so the zip
-  # preserves `python/<package>/...`. `deps_root` contains nothing else, so nothing else ends up in the
-  # zip alongside it.
-  deps_root = "${path.module}/.terraform-build/layer"
-  deps_dir  = "${local.deps_root}/python"
-  deps_zip  = "${path.module}/.terraform-build/lex-codehook-deps.zip"
 }
 
 /*
@@ -81,66 +61,78 @@ data "archive_file" "codehook" {
 # ---------------------------------------------------------------------------------------------------
 
 /*
- * `local.deps_dir` is built by `make build-lambda-layer` (plan §7), NOT by this data source -- the
- * cross-platform pip install is not something `archive_file` or any other Terraform data source does.
- * This only zips what is already on disk, deterministically, so the resulting hash is content-addressed
- * the same way `data.archive_file.codehook` already is above.
+ * Pinned to version 2 by a DATA SOURCE, not built and published from this file -- `D160`/`OI78`'s row.
  *
- * `D82`, corrected: `source_dir` is `local.deps_root` -- `deps_dir`'s PARENT, i.e. the directory that
- * directly contains `python/` -- NOT `local.deps_dir` itself. `archive_file` zips a directory's
- * CONTENTS at the zip's root; pointing it at `deps_root` means the zip's root contains exactly one
- * entry, `python/`, with every package nested under it -- `python/pydantic/...`, `python/boto3/...` --
- * matching AWS Lambda's layer convention exactly. Pointing it at `deps_dir` (the bug this replaces) put
- * every package at the zip's OWN root instead, one path component short of where Lambda's runtime looks.
- * `scripts/verify_layer_contents.py --zip` asserts this structure directly against the built zip, not
- * only against the directory it was built from -- D82 passed every directory-based check that existed
- * before it and still shipped the wrong archive, which is exactly why a directory check alone is not
- * sufficient evidence for what ships.
+ * `version = 2`, not omitted: the `aws_lambda_layer_version` data source's own docs are explicit that
+ * omitting `version` resolves to "the latest available layer version" (registry.terraform.io/providers/
+ * hashicorp/aws/latest/docs/data-sources/lambda_layer_version) -- so pinning it here is what stops a
+ * layer published later (by hand, out-of-band) from silently becoming what this function ships next
+ * `apply`. That is deliberate, not a placeholder to bump without thought.
+ *
+ * WHY a reference, not a rebuild: `D160`/`OI78` (`docs/evidence/deployed-layer-v2-provenance.md`)
+ * established that this layer is NOT currently reproducible from what this repo commits, on three
+ * independent, unpinned dimensions -- an unpinned transitive closure (9 of 44 packages drifted version in
+ * 8 days), an unexplained fixed `2049-01-01` file mtime nothing in `STAGE4-LAMBDA-LAYER-PLAN.md` §7 sets,
+ * and an unpinned build interpreter (v2 was built under cpython-313; this repo's own `.venv` is
+ * cpython-312). A fresh `pip install --target` run today produces different bytes and a different hash
+ * than what is actually deployed, verified working, and referenced here. Rebuilding and republishing from
+ * this file would force-replace a known-good, already-verified layer with an unverified one for no
+ * functional reason -- and `PublishLayerVersion` is not an in-place update, so that replacement is a NEW
+ * version, immediately live, the moment `apply` runs. Referencing the deployed artifact by version number
+ * instead means `terraform plan` never reads `.terraform-build/layer` again and never risks that swap.
+ *
+ * This pin may change only when ALL of the following are true, not just one:
+ *   1. A new layer version has been deliberately published and independently verified working -- built,
+ *      alone, is not sufficient (that is exactly `D160`/`OI78`'s own finding about v2 vs. a same-day
+ *      rebuild).
+ *   2. `D160`/`OI78` has a recorded disposition -- reproducible build, or an accepted-risk decision to
+ *      keep pinning by hand across versions. This pin is a symptom of that defect staying open, not a
+ *      substitute for closing it.
+ *   3. `version` below is updated, and this comment's own history reflects why, not a silent bump.
  */
-data "archive_file" "codehook_deps" {
-  type        = "zip"
-  source_dir  = local.deps_root
-  output_path = local.deps_zip
+data "aws_lambda_layer_version" "codehook_deps" {
+  layer_name = "${local.name_prefix}-codehook-deps"
+  version    = 2
 }
 
 /*
- * Content-hash-in-key, not `etag`-based change detection on a fixed key -- the mechanism plan §6 spells
- * out as a five-step chain so a changed layer is never mistaken for an unchanged one:
+ * Detached from Terraform management here, not destroyed -- the layer version and its S3 object stay
+ * exactly as deployed; only the *managing* of them moves out of this file, replaced by the data source
+ * above reading the same ARN by version number.
  *
- *   1. `output_md5` hashes the actual zip bytes this run produced; it changes iff the layer's contents
- *      change. (`output_md5`, not `output_base64sha256`, deliberately -- the latter's alphabet includes
- *      `/` and `+`, which are legal in an S3 key but produce awkward implicit "subfolders" and characters
- *      that need URL-encoding to reference directly; this key exists purely for content-addressing, not
- *      for its cryptographic strength, so the hex digest is the better fit.)
- *   2. That hash is embedded IN the key, so a content change is a NEW object at a NEW key, never an
- *      in-place overwrite Terraform would have to notice via a remote read.
- *   3. `aws_lambda_layer_version.codehook_deps.s3_key` references that key directly -- a changed key is a
- *      changed input attribute Terraform's plan cannot miss, because it compares a value it computed
- *      itself against state rather than inferring drift from a remote read.
- *   4. A changed `s3_key` means `PublishLayerVersion` runs again, which returns a new, distinct,
- *      immutable layer ARN -- there is no "update a layer version in place."
- *   5. `aws_lambda_function.codehook.layers` references that ARN directly (below), so the new version
- *      flows into the function's own plan automatically, in the same apply that published it.
+ * `removed` blocks, not a bare `terraform state rm`: HashiCorp's own state-removal guidance recommends
+ * this ("we recommend using the `removed` block instead... it lets you preview the results of the
+ * operation, which makes it a safer way to remove resources" --
+ * developer.hashicorp.com/terraform/language/state/remove) specifically because the detach then shows up
+ * in `terraform plan` before it happens, rather than taking effect immediately as a CLI side effect with
+ * nothing to review first.
  *
- * `etag` is kept as belt-and-suspenders for the out-of-band case (something changes the S3 object without
- * changing the local artifact), not the mechanism this depends on for the ordinary "rebuilt the layer"
- * case, which is steps 1-2 alone.
+ * `lifecycle { destroy = false }` is the documented mechanism for exactly this hand-off:
+ * "Set destroy to false to remove the resource from state without destroying the actual resource... This
+ * allows you to hand off management responsibilities to another tool or team after using Terraform for
+ * the initial provisioning." (developer.hashicorp.com/terraform/language/block/removed)
+ *
+ * Rollback, if this detach is ever undone: both resource types support `terraform import` --
+ * `aws_lambda_layer_version` by ARN (`arn:aws:lambda:us-west-2:759316130780:layer:fnol-codehook-deps:2`
+ * as of this change), `aws_s3_object` by `bucket/key`
+ * (`fnol-artifacts-759316130780-us-west-2/lambda-layers/codehook-deps-73deb4753ca856a7cc60270092e4be96.zip`).
+ * Re-add the two `resource` blocks this change removes, then `terraform import` each -- no AWS resource
+ * was ever destroyed by this change, so rollback has no data-loss exposure.
  */
-resource "aws_s3_object" "codehook_deps_layer" {
-  bucket = aws_s3_bucket.artifacts.id
-  key    = "lambda-layers/codehook-deps-${data.archive_file.codehook_deps.output_md5}.zip"
-  source = data.archive_file.codehook_deps.output_path
-  etag   = data.archive_file.codehook_deps.output_md5
+removed {
+  from = aws_lambda_layer_version.codehook_deps
+
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_lambda_layer_version" "codehook_deps" {
-  layer_name  = "${local.name_prefix}-codehook-deps"
-  description = "Third-party runtime dependencies for the codehook Lambda. D80/D81."
-  s3_bucket   = aws_s3_bucket.artifacts.id
-  s3_key      = aws_s3_object.codehook_deps_layer.key
+removed {
+  from = aws_s3_object.codehook_deps_layer
 
-  compatible_runtimes      = ["python3.12"]
-  compatible_architectures = ["arm64"]
+  lifecycle {
+    destroy = false
+  }
 }
 
 # ---------------------------------------------------------------------------------------------------
@@ -284,9 +276,15 @@ resource "aws_lambda_function" "codehook" {
 
   # `D80`/`D81`. Without this, `data.archive_file.codehook` (this function's own code zip, `src/` only)
   # is the entire deployed package -- exactly the configuration that crashed 100% of its invocations at
-  # cold-start import for as long as it was live. One layer named directly by ARN, not a hardcoded
-  # version number, so a rebuilt layer's new ARN (§6 above) flows into this function's plan automatically.
-  layers = [aws_lambda_layer_version.codehook_deps.arn]
+  # cold-start import for as long as it was live.
+  #
+  # `D160`/`OI78`, amended: this used to read `aws_lambda_layer_version.codehook_deps.arn` -- a managed
+  # resource, so a rebuilt layer's new ARN flowed into this function's plan automatically. It no longer
+  # does. The layer build was found not to be reproducible (see the data source's own comment above), so
+  # this now reads a DATA SOURCE pinned to a fixed version number -- a rebuild no longer flows anywhere
+  # near this function's plan at all, on purpose. Bumping the version pin above is the only way this
+  # value changes now, and that comment states exactly what must be true before it does.
+  layers = [data.aws_lambda_layer_version.codehook_deps.arn]
 
   /*
    * `ADR-016`: the application inference profile ARNs are supplied here, at deployment time, while

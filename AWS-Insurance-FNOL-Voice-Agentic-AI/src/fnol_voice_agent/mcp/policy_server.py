@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fnol_voice_agent.models import Policyholder
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
+from fnol_voice_agent.validation.identifiers import normalize_policy_number
 
 from ._paths import POLICYHOLDERS_PATH
 
@@ -74,6 +75,18 @@ def get_policyholder_elections(policy_number: str) -> Policyholder:
         InvalidPolicyNumberError: `policy_number` doesn't match the `PY####` format.
         PolicyNotFoundError: `policy_number` is well-formed but matches no record.
     """
+    policyholders = _load_policyholders()
+    # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
+    # before `GetPolicyholderElectionsArgs` is built: its pattern field is uppercase-only, so a raw
+    # "py4821" fails validation before the dict lookup below is ever reached.
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears the leading letter(s)
+    # ("py4821" arrives as "uy4821"/"ty4821"), which uppercasing alone cannot fix. `normalize_
+    # policy_number` tries a digits-only match against the real corpus first; if that resolves to
+    # exactly one policy it returns the corrected value, otherwise it returns the uppercased original
+    # unchanged, so a value it can't resolve reaches the format/not-found handling below exactly as it
+    # would have before this fallback existed.
+    policy_number = normalize_policy_number(policy_number, policyholders)
     try:
         args = GetPolicyholderElectionsArgs(policy_number=policy_number)
     except ValidationError as exc:
@@ -81,7 +94,6 @@ def get_policyholder_elections(policy_number: str) -> Policyholder:
             f"policy_number={policy_number!r} does not match the PY#### format"
         ) from exc
 
-    policyholders = _load_policyholders()
     try:
         return policyholders[args.policy_number]
     except KeyError:

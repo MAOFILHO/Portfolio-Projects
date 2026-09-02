@@ -401,11 +401,83 @@ def test_file_auto_claim_full_multi_turn_happy_path(real_store_and_embedder: Any
         assert result.get("response_text"), f"no response for turn {turn_input!r}"
 
     # All slots filled -- next turn should be the confirmation prompt.
+    # `D89`/`OI6`: "file" collides with `legal_and_medical_advice`'s "settlement negotiations" wording
+    # under this exact affirmation/interrogative confirmation shape (`RESULTS.md` §41, §47, §49's own
+    # probes) -- "submit" is the evidenced-safe substitute (`RESULTS.md` §41: "should I go ahead and
+    # submit this claim" probed `NONE` against the live guardrail).
     result = _invoke_turn(graph, config, turn_input="that's everything")
-    assert "should i go ahead and file" in result["response_text"].lower()
+    assert "should i go ahead and submit" in result["response_text"].lower()
 
+    # Success response: claim number, a short recap (loss type + date), next steps -- templated,
+    # voice-budgeted (~40 words), and must never contain "file" (`D89`/`OI6`'s trigger word).
     result = _invoke_turn(graph, config, turn_input="yes", new_slots={"confirm_file_claim": True})
-    assert "your claim number is clm-" in result["response_text"].lower()
+    response = result["response_text"]
+    response_lower = response.lower()
+    assert "your claim number is clm-" in response_lower
+    assert "comprehensive" in response_lower  # recap names loss_type
+    assert "2026-08-11" in response_lower  # recap names loss_datetime
+    assert "adjuster" in response_lower  # next steps: adjuster contact window
+    assert "status" in response_lower  # next steps: how to check status
+    assert "file" not in response_lower  # D89/OI6's trigger word must never appear
+    assert (
+        len(response.split()) <= 40
+    ), f"success response is {len(response.split())} words, over budget"
+
+
+def test_bare_confirmation_answer_bypasses_the_classifier(real_store_and_embedder: Any) -> None:
+    """D-new. Live repro, two calls the same night (contacts 003af9a0-bc53-45a7-a223-490001660e5b
+    22:40 active_slot=police_report_filed, f9a25ea6-eaa8-4b20-90f2-56f55d552ea4 22:42
+    active_slot=other_party_involved): a bare "No" answering an `AMAZON.Confirmation` slot was
+    classified `Ambiguous` by the merged router, D202/OI120's catch reprompted, the caller repeated
+    "No", `Ambiguous` again, `RETRY_CEILING` hit, call escalated -- with the answer sitting in
+    `filled_slots[active_slot]` the whole time. D204/OI122's soft-prompt precedence clause held for a
+    domain term ("Comprehensive") earlier in the same session but not for a content-free
+    affirmative/negative -- evidence the fix belongs in control flow, not more prompt text.
+
+    Structural fix under test: `_coerce_slot_value` (`lex_codehook.py:540`) only ever produces a
+    Python `bool` from Lex's literal `"Yes"`/`"No"` -- "no other slot type in this bot ever resolves
+    to exactly Yes/No" is that function's own documented invariant, already relied on there. A `bool`
+    sitting in `filled_slots[active_slot]` is therefore proof both that `active_slot` is an
+    `AMAZON.Confirmation` slot and that Lex delivered it THIS turn (a slot only ever becomes
+    `active_slot` while still missing from `filled_slots`, per `file_auto_claim.py`'s own
+    `_next_missing_slot`) -- sufficient for `route_and_classify` to skip the Bedrock call entirely
+    and let the coerced value flow straight through, with no new hand-maintained slot-name list.
+    """
+    store, embedder = real_store_and_embedder
+    caller = FakeBedrockConverseClient()  # no responses scripted -- must never be called this turn
+    graph = build_graph(vector_store=store, embedder=embedder, bedrock_caller=caller)
+
+    filled_slots = {
+        "policy_number": "PY4821",
+        "insured_vehicle_vin": "9SYAB1239G1000101",
+        "loss_datetime": "2026-08-29T09:00:00-04:00",
+        "loss_location": "Innisfil, Ontario",
+        "loss_type": "Comprehensive",
+        "damage_description": "Rear bumper and tail light",
+        "other_party_involved": False,
+        "police_report_filed": False,  # Lex's coerced "No" for THIS turn's active_slot
+    }
+
+    result = graph.invoke(
+        {
+            "contact_id": "confirm-bypass-1",
+            "turn_input": "No",
+            "filled_slots": filled_slots,
+            "active_slot": "police_report_filed",
+            # last turn's classification, carried forward exactly as the real checkpointer would
+            # supply it (D90 part 1's own mechanism) -- not re-derived by this fix.
+            "intent": "FileAutoClaim",
+            "retry_counts": {},
+            "is_barge_in": False,
+        }
+    )
+
+    assert (
+        caller.call_count == 0
+    ), "classifier must not be called when Lex already resolved active_slot"
+    assert result["active_slot"] == "driver_name"
+    assert result["response_text"] == "Were you driving, or someone else?"
+    assert result.get("retry_counts", {}).get("police_report_filed") is None
 
 
 # --- Injury preemption ------------------------------------------------------------------------------

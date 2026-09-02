@@ -1,0 +1,115 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "05f7bb9a-78d2-441d-bed2-51775ea20cd2",
+    "HTTPStatusCode": 200,
+    "HTTPHeaders": {
+      "x-amzn-requestid": "05f7bb9a-78d2-441d-bed2-51775ea20cd2",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "x-content-type-options": "nosniff",
+      "date": "Sat, 22 Aug 2026 15:20:58 GMT",
+      "content-type": "application/json",
+      "content-length": "1499",
+      "connection": "keep-alive"
+    },
+    "RetryAttempts": 0
+  },
+  "messages": [
+    {
+      "content": "What's your policy number?",
+      "contentType": "PlainText"
+    }
+  ],
+  "sessionState": {
+    "dialogAction": {
+      "type": "ElicitSlot",
+      "slotToElicit": "policy_number"
+    },
+    "intent": {
+      "name": "UpdateContactInfo",
+      "slots": {
+        "confirm_update_contact_info": null,
+        "field": null,
+        "new_value": null,
+        "policy_number": null
+      },
+      "state": "InProgress",
+      "confirmationState": "None"
+    },
+    "sessionAttributes": {
+      "executed_node_intent": "UpdateContactInfo"
+    },
+    "originatingRequestId": "05f7bb9a-78d2-441d-bed2-51775ea20cd2"
+  },
+  "interpretations": [
+    {
+      "nluConfidence": {
+        "score": 1.0
+      },
+      "intent": {
+        "name": "UpdateContactInfo",
+        "slots": {
+          "confirm_update_contact_info": null,
+          "field": null,
+          "new_value": null,
+          "policy_number": null
+        },
+        "state": "InProgress",
+        "confirmationState": "None"
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.6
+      },
+      "intent": {
+        "name": "CoverageQuestion",
+        "slots": {
+          "coverage_topic": null
+        }
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.54
+      },
+      "intent": {
+        "name": "FileAutoClaim",
+        "slots": {
+          "confirm_file_claim": null,
+          "damage_description": null,
+          "driver_name": null,
+          "injuries_present": null,
+          "insured_vehicle_vin": null,
+          "loss_datetime": null,
+          "loss_location": null,
+          "loss_type": null,
+          "other_party_involved": null,
+          "police_report_filed": null,
+          "police_report_number": null,
+          "policy_number": null
+        }
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.52
+      },
+      "intent": {
+        "name": "InjuryEscalation",
+        "slots": {}
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "intent": {
+        "name": "FallbackIntent",
+        "slots": {}
+      },
+      "interpretationSource": "Lex"
+    }
+  ],
+  "sessionId": "d162-obs-site3-confirm-ceiling-recheck"
+}

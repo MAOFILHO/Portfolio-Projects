@@ -30,11 +30,22 @@ import pytest
 from moto import mock_aws
 
 from fnol_voice_agent.agents.graph import build_graph
+from fnol_voice_agent.agents.nodes.repair import GENERIC_REPROMPT
 from fnol_voice_agent.agents.testing.fake_llm import (
     FakeBedrockConverseClient,
     converse_tool_use_response,
 )
 from fnol_voice_agent.api import lex_codehook
+
+# `D162`/`OI80` rows 1/2 (`PROJECT_STATE.md` exit-criteria table). Does NOT exist yet as of this
+# import -- deliberately the first thing this test file fails on, before any test body runs. Per the
+# approved shape (Step 0 of this row's own TDD cycle): a hand-maintained constant in `src/` alongside
+# `_SLOT_BEARING_INTENTS` (`lex_codehook.py:372-380`), never a runtime import of
+# `scripts/verify_slot_legality_mapping.py` -- that module and the `bot.yaml.tftpl` it parses are both
+# outside `infra/terraform/stacks/main/lambda.tf:44-54`'s `source_dir = ".../src"` packaging root and
+# never reach the deployed Lambda. Criterion 3's lint is what will assert this constant matches the
+# tftpl-derived map once it exists; this file does not duplicate that check.
+from fnol_voice_agent.api.lex_codehook import _LEGAL_SLOTS_BY_INTENT
 from fnol_voice_agent.aws.checkpointer import build_test_checkpointer
 from fnol_voice_agent.guardrails.client import MockGuardrailClient
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, MockEmbedder
@@ -64,12 +75,25 @@ def _install_fake_graph(
     monkeypatch: pytest.MonkeyPatch,
     *,
     by_model: dict[str, Any],
+    responses: list[dict[str, Any]] | None = None,
     table_suffix: str = "default",
 ) -> Any:
     """Builds a real, locally-backed graph and patches `_get_graph` to return it -- the seam
     `lex_codehook.py` was written with exactly this purpose. Must be called inside a `mock_aws()` block
     that stays open for the duration of the test, since `graph.get_state`/`graph.invoke` make real boto3
     calls against the moto-mocked DynamoDB, not just at construction.
+
+    `responses`, when given, scripts the router turn-by-turn (FIFO, one per `.converse()` call) rather
+    than by `modelId` -- `FakeBedrockConverseClient`'s queue is consulted before `by_model`
+    (`agents/testing/fake_llm.py:58-59`). `D162`/`OI80` row 2's Layer 0 test is the first caller that
+    needs this: it drives the SAME model through a scripted low-confidence sequence across several
+    turns, which `by_model`'s one-fixed-response-per-model-id shape cannot express. Default `None`
+    leaves every existing caller unaffected.
+
+    Returns `(graph, caller)`, not just `graph` -- the D-new confirmation-bypass safety test needs
+    `caller.call_count` directly (proof the classifier was never reached on a given turn, the same
+    idiom `test_graph_integration.py`'s `caller.call_count == 0` assertions already use), and every
+    existing call site here calls this bare (no assignment), so widening the return is additive.
     """
     store = DynamoVectorStore(
         table_name=f"fnol-codehook-test-kb-{table_suffix}", region="us-west-2"
@@ -77,7 +101,7 @@ def _install_fake_graph(
     store.ensure_table()
     embedder = MockEmbedder()
     checkpointer = build_test_checkpointer(f"fnol-codehook-test-checkpoints-{table_suffix}")
-    caller = FakeBedrockConverseClient(by_model=by_model)
+    caller = FakeBedrockConverseClient(responses=responses, by_model=by_model)
     graph = build_graph(
         vector_store=store,
         embedder=embedder,
@@ -86,7 +110,7 @@ def _install_fake_graph(
         checkpointer=checkpointer,
     )
     monkeypatch.setattr(lex_codehook, "_get_graph", lambda: graph)
-    return graph
+    return graph, caller
 
 
 def _event(
@@ -391,7 +415,11 @@ def test_state_persists_across_two_turns_via_the_real_checkpointer(
         )
 
     assert r2["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
-    assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+    # `D207`/`OI125` direction 3: PY1103 has exactly one vehicle, so `insured_vehicle_vin` is now
+    # auto-filled rather than asked -- the next ElicitSlot after policy_number is `loss_datetime`. Still
+    # proves the property this test is named for: policy_number was merged in from turn 1 (otherwise
+    # turn 2 would re-ask "policy_number", not advance at all).
+    assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "loss_datetime"
 
 
 def test_file_auto_claim_reaches_fulfilment_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -447,6 +475,93 @@ def test_file_auto_claim_reaches_fulfilment_and_closes(monkeypatch: pytest.Monke
     assert response["sessionState"]["dialogAction"]["type"] == "Close"
     assert response["sessionState"]["intent"]["state"] == "Fulfilled"
     assert "your claim number is clm-" in response["messages"][0]["content"].lower()
+
+
+def test_a_vehicle_description_that_never_resolves_escalates_instead_of_looping_forever(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D207`/`OI125` Change 2 -- the live caller trap: contact `0cac5d80-...` heard the SAME
+    `insured_vehicle_vin` prompt for six turns straight with no counter and no exit. Change 1
+    (`_merged_filled_slots`/`resolve_vehicle_description`) fixed the SIGNAL -- an unresolvable
+    description is now popped, not left in `filled_slots` masquerading as an answer -- but the signal
+    only matters if something downstream reads it. This test proves something does, with NO new
+    production code: `file_auto_claim.py:127-129`'s existing "still missing" branch already turns a
+    popped slot into `response_text=None`, which `agents/graph.py`'s existing `_after_intent_node`
+    already routes to the SAME shared ladder every other slot's no-match uses
+    (`repair.py.handle_no_match_or_barge_in` / `retry_ladder.py`, `RETRY_CEILING=2`, reused unmodified,
+    not a second counter). Full stack, real graph, real resolver -- no seam mocked out.
+
+    Turn-by-turn, one contact: elicit `policy_number` -> elicit `insured_vehicle_vin` -> two consecutive
+    descriptions matching neither of PY4821's two real vehicles (`Meridian`, `Skiff`) -> escalate on the
+    second, per the existing ceiling (not a new one built for this slot). A third unresolvable turn is
+    sent anyway, past escalation, to prove the ceiling stays tripped rather than silently resetting --
+    that is "three consecutive unresolvable answers escalate rather than loop," Marco's own phrasing:
+    escalation in fact lands on the second (this system's real, unchanged `RETRY_CEILING`, not 3), and
+    the third turn is the evidence that this is a permanent exit, not a one-turn blip back into the loop.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="vin-retry-ceiling",
+        )
+        contact = {"contactId": "c-vin-retry-ceiling"}
+
+        r1 = lex_codehook.handler(
+            _event(session_attributes=contact, transcript="I want to file a claim"), None
+        )
+        assert r1["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+
+        r2 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"policy_number": _slot("PY4821")},
+                transcript="my policy number is PY4821",
+            ),
+            None,
+        )
+        assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+
+        # 1st unresolvable answer: matches neither vehicle on PY4821 -> resolver returns None ->
+        # popped, not passed through -> reprompt, not escalation yet.
+        r3 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a blue truck")},
+                transcript="a blue truck",
+            ),
+            None,
+        )
+        assert r3["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+        assert r3["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+        assert r3["messages"][0]["content"] == GENERIC_REPROMPT
+
+        # 2nd unresolvable answer: `retry_counts["insured_vehicle_vin"]` reaches the existing
+        # `RETRY_CEILING` (2) -> the shared ladder escalates, exactly as it would for any other slot.
+        r4 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a green van")},
+                transcript="a green van",
+            ),
+            None,
+        )
+        assert r4["sessionState"]["dialogAction"]["type"] == "Close"
+        assert r4["sessionState"]["sessionAttributes"]["escalate"] == "true"
+        assert r4["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
+
+        # 3rd unresolvable answer, sent anyway: the ceiling stays tripped rather than resetting --
+        # this is the "not a loop" property, not a fresh escalation call (retry_counts only grows).
+        r5 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a white minivan")},
+                transcript="a white minivan",
+            ),
+            None,
+        )
+        assert r5["sessionState"]["dialogAction"]["type"] == "Close"
+        assert r5["sessionState"]["sessionAttributes"]["escalate"] == "true"
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -689,10 +804,15 @@ def test_a_malformed_or_non_slot_bearing_graph_intent_raises_rather_than_echoing
 def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Proves the guard's exception actually reaches `handler()`'s existing fail-open path end-to-end, not
-    only that `_elicit_slot` raises in isolation. No raw-text safety signal on this transcript, so this
-    must fail OPEN to `Delegate` -- and critically must NOT return `ElicitSlot` built from Lex's own echoed
-    intent, which is the exact `D84` shape this guard exists to keep from reappearing silently.
+    """Proves the guard's exception actually reaches a fail-open `Delegate` end-to-end, not only that
+    `_elicit_slot` raises in isolation -- and critically must NOT return `ElicitSlot` built from Lex's own
+    echoed intent, which is the exact `D84` shape this guard exists to keep from reappearing silently.
+
+    **Amended by `D202`/`OI120`**: this scenario is now caught inside `_respond_from_graph_result` (not
+    `handler`'s blanket except -- see `_UnroutableIntentError`'s own docstring), and the fail-open
+    `Delegate` it falls to now carries `response_text` as a `messages` array rather than silently dropping
+    it. This test keeps asserting the `Delegate`-not-`ElicitSlot` shape `D84` cares about; the message
+    itself is `test_d202_oi120_...`'s job, directly below.
     """
     with mock_aws():
         _install_fake_graph(
@@ -719,7 +839,348 @@ def test_a_malformed_graph_intent_fails_open_to_delegate_end_to_end(
         )
 
     assert response["sessionState"]["dialogAction"]["type"] == "Delegate"
-    assert "messages" not in response
+
+
+def test_d202_oi120_ambiguous_turn_with_stale_active_slot_delivers_response_text_and_holds_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D202`/`OI120` (`PROJECT_STATE.md`). Same raise shape as the `D84` test above (`Ambiguous`
+    colliding with a stale `active_slot="policy_number"`), but this test is about what the CALLER hears
+    once the guard raises, not just that it raises (that part is already covered). Before this fix,
+    `handler`'s blanket `except Exception` catches `_UnroutableIntentError` and falls to bare
+    `_delegate(event)`, which carries no `messages` key at all -- the real, already-computed
+    `GENERIC_REPROMPT` from `handle_no_match_or_barge_in` is silently discarded, and the caller hears
+    nothing this codehook decided to say. Real repro this test reflects: contact
+    `157916fe-a33b-48de-ab2b-13e5950cd745`, `"i don't have it handy now"` mid-`FileAutoClaim`'s
+    `policy_number` elicitation.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d202-oi120",
+        )
+        monkeypatch.setattr(
+            lex_codehook,
+            "_run_graph_turn",
+            lambda *a, **k: {
+                "active_slot": "policy_number",
+                "response_text": GENERIC_REPROMPT,
+                "intent": "Ambiguous",
+            },
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="FileAutoClaim",
+                transcript="i don't have it handy now",
+                session_attributes={"contactId": "c-d202-oi120"},
+            ),
+            None,
+        )
+
+    # (a) the caller hears the graph's real answer -- not silence, not a fabricated generic fallback.
+    assert response["messages"] == [{"contentType": "PlainText", "content": GENERIC_REPROMPT}]
+
+    # (b) Lex's dialog state does not advance past policy_number -- checked directly on the wire shape,
+    # not inferred: not Close/Fulfilled (which would end the intent), and the echoed intent's own
+    # policy_number slot is still unfilled, so Lex's own dialog manager keeps trying to fill it.
+    assert response["sessionState"]["dialogAction"]["type"] != "Close"
+    assert response["sessionState"]["intent"]["state"] != "Fulfilled"
+    assert response["sessionState"]["intent"]["slots"].get("policy_number") is None
+
+
+def test_d202_oi120_same_guard_with_no_response_text_delivers_the_generic_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same `D202`/`OI120` raise shape as the test above, but `result["response_text"]` is absent this
+    time. `_respond_from_graph_result`'s own fallback line runs unconditionally, BEFORE the `active_slot`
+    branch even looks at it: `response_text = result.get("response_text") or ("I'm sorry, ...")`. So the
+    text handed into the `except _UnroutableIntentError` catch, and on to `_delegate`, is already that
+    fallback string by the time the catch runs -- the catch itself has no separate branch for "was there a
+    real answer." Proves the fix is generic to WHAT `response_text` is, not special-cased to the
+    `GENERIC_REPROMPT` value the test above happens to use.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d202-oi120-no-response-text",
+        )
+        monkeypatch.setattr(
+            lex_codehook,
+            "_run_graph_turn",
+            lambda *a, **k: {
+                "active_slot": "policy_number",
+                "intent": "Ambiguous",
+                # no "response_text" key at all -- result.get("response_text") returns None, falsy.
+            },
+        )
+        response = lex_codehook.handler(
+            _event(
+                intent_name="FileAutoClaim",
+                transcript="i don't have it handy now",
+                session_attributes={"contactId": "c-d202-oi120-no-response-text"},
+            ),
+            None,
+        )
+
+    # the caller hears the fallback text, not silence and not an unhandled exception reaching the caller.
+    assert response["messages"] == [
+        {
+            "contentType": "PlainText",
+            "content": lex_codehook._GRAPH_RESULT_MISSING_RESPONSE_TEXT_SCRIPT,
+        }
+    ]
+    assert response["sessionState"]["dialogAction"]["type"] != "Close"
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D162`/`OI80` rows 1/2 -- `_elicit_slot` raising on an illegal `slot_name` (row 2) and filtering
+# `lex_slots` to `graph_intent`'s legal set (row 1), both against `_LEGAL_SLOTS_BY_INTENT`. RED-first:
+# no implementation exists yet. Both use `CoverageQuestion`'s single-slot set (`{"coverage_topic"}`) and
+# `FileAutoClaim`'s/`UpdateContactInfo`'s larger sets as the legal/illegal contrast, matching the exact
+# `repair.py:43-72` stale-`active_slot` trigger row 2 exists to close: `handle_no_match_or_barge_in`
+# never clears `active_slot`, so a slot legal under a PRIOR intent can survive into a turn the graph has
+# freshly, validly classified under a different, unrelated intent.
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_an_illegal_slot_name_for_the_graph_intent_raises() -> None:
+    """`policy_number` is legal for `FileAutoClaim`/`UpdateContactInfo` but not `CoverageQuestion` --
+    a stale `active_slot` left over from a prior intent, surviving into a turn the graph has freshly
+    classified as `CoverageQuestion`. Must raise, not silently elicit a combination Lex's own dialog
+    manager would reject with `DependencyFailedException`.
+    """
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+    event = _event(intent_name="CoverageQuestion")
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+def test_an_illegal_slot_name_yields_no_response_regardless_of_lex_slots_filterability() -> None:
+    """NOT an ordering claim between row 2's raise and row 1's filter -- whether the implementation
+    checks legality before or after building a filtered `lex_slots` map is an internal detail with no
+    caller-visible difference (both orderings produce the same observable outcome: no response, an
+    exception instead), and this test does not and cannot distinguish them. What it does pin: an illegal
+    `slot_name` yields no response at all, even when `lex_slots` itself is filterable (carries a legal
+    key for the intent in scope) rather than trivially all-illegal -- a filter-only implementation that
+    silently degraded the raise to "filter and return" on this input would fail this test.
+    """
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+    event = _event(
+        intent_name="UpdateContactInfo",
+        slots={
+            "field": _slot("phone"),
+            "new_value": _slot("555-0100"),
+            "policy_number": _slot("PY9001"),
+        },
+    )
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    with pytest.raises(lex_codehook._UnroutableIntentError):
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+
+def test_the_illegal_slot_name_error_message_embeds_slot_name_and_graph_intent() -> None:
+    """Row 4's raised-turn evidence on the live 6-turn run is this exception's own traceback and nothing
+    else -- `_log_turn_observability` never runs on the raise path (it fires at `lex_codehook.py:651-652`,
+    after the `active_slot`/`_elicit_slot` branch; a raise there exits before that line is reached, caught
+    only by `handler`'s blanket `except Exception` and `logger.exception("codehook failed")` at `:765`).
+
+    Event intent (`UpdateContactInfo`) and graph intent (`result["intent"]`, `CoverageQuestion`) are
+    deliberately DIFFERENT here -- with them equal, an assertion that the message contains
+    "CoverageQuestion" cannot tell whether the implementation embedded the graph's own intent or simply
+    echoed Lex's. Row 4's evidence needs the REJECTING (graph) intent specifically, not whatever Lex
+    happened to send that turn, so this test can only prove the right thing when the two differ. Message
+    format otherwise matches the existing 3-part guard's own convention (`lex_codehook.py:400-402`/
+    `:406-408`/`:410-412`, each embedding `slot_name`/`active_slot` alongside the intent value).
+    """
+    event = _event(intent_name="UpdateContactInfo")
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+    assert "policy_number" not in _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"]
+
+    with pytest.raises(lex_codehook._UnroutableIntentError) as exc_info:
+        lex_codehook._elicit_slot(event, result, "policy_number", "unused")
+
+    message = str(exc_info.value)
+    assert "policy_number" in message
+    assert "CoverageQuestion" in message
+
+
+def test_check_claim_status_own_internal_slot_name_is_legal_and_does_not_raise() -> None:
+    """`D200`/`OI118`. `claim_or_policy_number` is `check_claim_status.py:19`'s own graph-internal
+    disambiguation slot -- it names it as `active_slot` when neither `claim_number` nor `policy_number`
+    is filled yet (`check_claim_status.py:28-31`), but it was never a Lex-declared slot name
+    (`bot.yaml.tftpl`'s `CheckClaimStatus` block only ever declared `claim_number`, `:516`). Row 2's own
+    guard, added for the OI80 stale-`active_slot` case, had no way to know this name existed -- it went
+    live for the first time on the 2026-08-29 deploy and raised `_UnroutableIntentError` on the very
+    first turn of a real `CheckClaimStatus` call, confirmed via CloudWatch. This is the correctness case
+    row 2's own guard must NOT reject: a slot the graph legitimately elicits under the SAME intent it's
+    asking about, not a stale leftover from a prior one.
+    """
+    event = _event(intent_name="CheckClaimStatus")
+    result = {"intent": "CheckClaimStatus"}
+
+    response = lex_codehook._elicit_slot(event, result, "claim_or_policy_number", "unused")
+
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "claim_or_policy_number"
+
+
+def test_lex_slots_are_filtered_to_the_graph_intents_legal_set() -> None:
+    """Row 1's own trigger: the router-drift shape (`OI80`'s live turn-1->2 observation) -- Lex still
+    carries `UpdateContactInfo`'s slot keys from a prior turn while the graph has moved to
+    `FileAutoClaim`. The response's `intent.slots` keys must be a subset of
+    `_LEGAL_SLOTS_BY_INTENT["FileAutoClaim"]` -- asserted against the constant itself, never a literal
+    slot name, so this test does not silently pass if the constant's own contents drift.
+    """
+    lex_slots = {
+        "field": _slot("phone"),
+        "new_value": _slot("555-0100"),
+        "confirm_update_contact_info": _slot("Yes"),
+        "policy_number": _slot("PY9001"),  # legal for FileAutoClaim too -- ambiguous by design
+    }
+    event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
+    result = {
+        "intent": "FileAutoClaim"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    response = lex_codehook._elicit_slot(event, result, "loss_datetime", "When did this happen?")
+
+    returned_keys = set(response["sessionState"]["intent"]["slots"].keys())
+    assert returned_keys <= _LEGAL_SLOTS_BY_INTENT["FileAutoClaim"]
+
+
+def test_every_lex_slot_illegal_for_the_graph_intent_filters_to_an_empty_dict() -> None:
+    """Shape-only assertion. Whether Lex's own dialog manager ACCEPTS an `ElicitSlot` response whose
+    `intent.slots` is `{}` is a live question this unit test cannot answer -- it exercises this
+    function's own return value, not a real Lex turn. Row 4's live 6-turn run is where that question
+    gets an actual answer, not here.
+    """
+    lex_slots = {
+        "field": _slot("phone"),
+        "new_value": _slot("555-0100"),
+        "confirm_update_contact_info": _slot("Yes"),
+    }
+    assert not (set(lex_slots) & _LEGAL_SLOTS_BY_INTENT["CoverageQuestion"])
+    event = _event(intent_name="UpdateContactInfo", slots=lex_slots)
+    result = {
+        "intent": "CoverageQuestion"
+    }  # no "active_slot" -- _elicit_slot never reads it (:383-431)
+
+    response = lex_codehook._elicit_slot(event, result, "coverage_topic", "What coverage question?")
+
+    assert response["sessionState"]["intent"]["slots"] == {}
+    assert response["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+    assert response["sessionState"]["dialogAction"]["slotToElicit"] == "coverage_topic"
+
+
+def test_row2_layer0_branch_i_ceiling_reached_via_a_stale_active_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D162`/`OI80` row 2's own closing condition, Layer 0 half: an in-process test proving the
+    branch-(i) retry-ceiling chain end to end -- a stale `active_slot` surviving from
+    `UpdateContactInfo` into two consecutive turns the graph freshly, validly classifies as
+    `FileAutoClaim` at low confidence.
+
+    Deliberately NOT the `Ambiguous`/low-confidence shape `test_graph_integration.py`'s own
+    `test_retry_ceiling_reached_via_mixed_normal_and_barge_in_triggers` already covers -- that shape
+    (`state["intent"] == "Ambiguous"`) trips `_elicit_slot`'s PRE-EXISTING check 3 ("declares no Lex
+    slots"), never row 2's new check 4. `route_and_classify` (`agents/nodes/routing.py:52-57`) writes
+    `intent` into state unconditionally, regardless of confidence -- a low-confidence turn that names a
+    real, slot-bearing intent (`FileAutoClaim` @ 0.3) still routes to repair (`graph.py:145`,
+    `confidence < LOW_CONFIDENCE_THRESHOLD`) while leaving `state["intent"] == "FileAutoClaim"`, which
+    is exactly the shape check 4 exists for. Copying the `Ambiguous` precedent here would have passed
+    while testing the wrong guard entirely -- the same `D126` shape (a check that exists, finds
+    nothing, and reads as clean), one level up.
+
+    Turn-by-turn, one session:
+      1: fresh `UpdateContactInfo` turn -> elicits `policy_number`.
+      2: answers `policy_number` -> elicits `field`; `active_slot="field"` checkpointed.
+      3: drift turn 1, `FileAutoClaim` @ 0.3 -- the stale `active_slot="field"` is illegal under
+         `FileAutoClaim` (check 4) -> `_elicit_slot` raises -> `handler` fails open -> silent
+         `Delegate`. `retry_counts["field"]` reaches 1 (`repair.py:44` keys the ladder on the SAME
+         stale slot the raise flags) and is checkpointed BEFORE the raise -- `graph.invoke()` commits
+         internally; the raise happens one call up the stack, in `_respond_from_graph_result`.
+      4: drift turn 2, same shape -- `retry_counts["field"]` reaches `RETRY_CEILING` (2) ->
+         `ceiling_reached` fires -> repair returns an `escalation` record, route 3 -> `Close`,
+         `escalated=True`, `escalation_reason="detection-graph"`. `_elicit_slot` is NEVER called this
+         turn: `_respond_from_graph_result` checks `escalation` before the `active_slot` branch
+         (`lex_codehook.py:670-671` precedes `:688-689`) -- the load-bearing assertion below.
+    """
+    real_elicit_slot = lex_codehook._elicit_slot
+    elicit_slot_calls: list[Any] = []
+
+    def _spy_elicit_slot(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        elicit_slot_calls.append((args, kwargs))
+        return real_elicit_slot(*args, **kwargs)
+
+    monkeypatch.setattr(lex_codehook, "_elicit_slot", _spy_elicit_slot)
+
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={},  # unused: every call this test drives is scripted via `responses` below
+            responses=[
+                _classification("UpdateContactInfo"),
+                _classification("UpdateContactInfo"),
+                _classification("FileAutoClaim", confidence=0.3),
+                _classification("FileAutoClaim", confidence=0.3),
+            ],
+            table_suffix="row2-layer0",
+        )
+        contact = {"contactId": "c-row2-layer0"}
+
+        r1 = lex_codehook.handler(
+            _event(intent_name="UpdateContactInfo", session_attributes=contact), None
+        )
+        assert r1["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+        assert len(elicit_slot_calls) == 1
+
+        r2 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                slots={"policy_number": _slot("PY1103")},
+                transcript="PY1103",
+            ),
+            None,
+        )
+        assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "field"
+        assert len(elicit_slot_calls) == 2
+
+        r3 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                transcript="actually, never mind, tell me about my rental coverage",
+            ),
+            None,
+        )
+        assert r3["sessionState"]["dialogAction"]["type"] == "Delegate"
+        assert len(elicit_slot_calls) == 3  # called this turn, and it raised
+
+        r4 = lex_codehook.handler(
+            _event(
+                intent_name="UpdateContactInfo",
+                session_attributes=contact,
+                transcript="hello? is anyone there",
+            ),
+            None,
+        )
+
+    assert r4["sessionState"]["dialogAction"]["type"] == "Close"
+    assert r4["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert r4["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
+    # The load-bearing assertion: unchanged from turn 3 -- `_elicit_slot` was never called this turn.
+    assert len(elicit_slot_calls) == 3
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -864,6 +1325,61 @@ def test_injuries_present_confirmed_false_does_not_escalate(
     assert response["sessionState"].get("sessionAttributes", {}).get("escalate") != "true"
 
 
+def test_injuries_present_true_still_escalates_with_the_confirmation_bypass_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Marco's safety check on this session's `routing.py` confirmation-bypass (`D-new`,
+    `_confirmation_already_resolved`): `injuries_present` is itself `AMAZON.Confirmation`-typed
+    (`bot.yaml.tftpl:238-248`) and coerces to `bool` exactly like `police_report_filed`/
+    `other_party_involved` do. Does a caller's "Yes" now take the new bypass and skip the L2
+    classifier on a genuine injury disclosure?
+
+    No. Escalation on `injuries_present` is `D79`'s pre-graph check (`lex_codehook.py:865`,
+    `if filled_slots.get("injuries_present") is True: return _escalate(...)`), evaluated inside
+    `_dispatch` BEFORE `_run_graph_turn`/`graph.invoke()` is called at all -- the graph, and the
+    `routing.py` bypass living inside it, never run on this turn, so neither can be reached,
+    regardless of what `active_slot` is. `file_auto_claim.py`'s `_SLOT_ORDER` never includes
+    `injuries_present` either (module docstring: "DIALOGUE-POLICIES.md §5's hard escalation
+    preempts before this node is ever reached"), so the graph itself never legitimately produces
+    `active_slot == "injuries_present"` in the first place.
+
+    This test forces that exact configuration anyway, via `graph.update_state` (bypassing normal
+    graph mechanics, since no node ever sets it), as the worst case for the new bypass: even seeded
+    there, `D79`'s check still fires first. `caller.call_count == 0` is the load-bearing assertion --
+    proof the classifier (and the new bypass inside `route_and_classify`) was never reached this
+    turn, not merely that escalation happened for some other reason.
+    """
+    with mock_aws():
+        graph, caller = _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="d79-active-slot-injuries",
+        )
+        contact_id = "c-d79-active-slot-injuries"
+        config = {"configurable": {"thread_id": contact_id}}
+        graph.update_state(
+            config,
+            {"active_slot": "injuries_present", "filled_slots": {"policy_number": "PY4821"}},
+        )
+
+        response = lex_codehook.handler(
+            _event(
+                transcript="Yes",
+                slots={"injuries_present": _slot("Yes")},
+                session_attributes={"contactId": contact_id},
+            ),
+            None,
+        )
+
+    assert response["sessionState"]["dialogAction"]["type"] == "Close"
+    assert response["sessionState"]["sessionAttributes"]["escalate"] == "true"
+    assert (
+        response["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-pregraph"
+    )
+    assert "911" in response["messages"][0]["content"]
+    assert caller.call_count == 0  # the classifier -- and the new bypass -- were never reached
+
+
 # ---------------------------------------------------------------------------------------------------
 # `D81` item 4 — escalation provenance, including the path that used to have none at all
 # ---------------------------------------------------------------------------------------------------
@@ -906,6 +1422,258 @@ def test_close_refuses_an_unattributed_escalation() -> None:
     fix -- so it must fail loudly here rather than silently emit an unattributed escalation."""
     with pytest.raises(ValueError):
         lex_codehook._close(_event(), "unused", escalated=True)
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D162` diagnostic prerequisite -- unconditional per-turn observability logging
+# ---------------------------------------------------------------------------------------------------
+#
+# `graph_intent` (`result["intent"]`, named by `route_and_classify`, `agents/nodes/routing.py:54`) has
+# never been observable in CloudWatch for any turn this project has run: this module's only three log
+# lines (`:507`/`:566`/`:687`) are each conditional on escalation or an unhandled exception, and neither
+# `agents/nodes/routing.py` nor `agents/graph.py` logs anything at all (confirmed by grep, `RESULTS.md`'s
+# live-log investigation of `D162`/`OI80`). These three tests drive `_respond_from_graph_result` directly
+# -- the same already-established seam `test_close_carries_executed_node_intent_on_an_ordinary_fulfillment`
+# and its neighbours use -- and assert a log record exists on the turn shapes that currently produce none.
+
+
+def test_a_per_turn_log_line_is_emitted_when_graph_intent_agrees_with_lex_intent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The plain, non-escalating, non-crashing case that today logs nothing at all: Lex's echoed intent
+    and the graph's own classification agree, the turn reaches `_close`'s default (non-escalated) branch.
+    """
+    event = _event(intent_name="CheckClaimStatus", slots={"policy_number": _slot("PY1234")})
+    result = {
+        "intent": "CheckClaimStatus",
+        "response_text": "Your claim CLM-1103-00001-1 is currently Open.",
+        "active_slot": None,
+        "escalation": None,
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1, "expected exactly one unconditional per-turn log line"
+    message = turn_records[0].message
+    assert "lex_intent=CheckClaimStatus" in message
+    assert "graph_intent=CheckClaimStatus" in message
+    assert "outgoing_intent=CheckClaimStatus" in message
+    assert "policy_number" in message  # a slot KEY, present on both sides
+    assert "PY1234" not in message, "slot VALUES must never reach this log line"
+
+
+def test_a_per_turn_log_line_is_emitted_and_names_both_intents_when_they_disagree(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The `D84` disagreement shape: Lex's own NLU landed on `CheckClaimStatus`, the graph classifies
+    `FileAutoClaim` and asks for its own first slot. The log line must name BOTH values, not just one --
+    that is the entire point of `D163`'s finding that `escalation_reason` alone cannot do this."""
+    event = _event(intent_name="CheckClaimStatus", slots={"policy_number": _slot("PY9001")})
+    result = {"intent": "FileAutoClaim", "active_slot": "loss_datetime", "escalation": None}
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    message = turn_records[0].message
+    assert "lex_intent=CheckClaimStatus" in message
+    assert "graph_intent=FileAutoClaim" in message
+    assert "outgoing_intent=FileAutoClaim" in message
+    assert "PY9001" not in message
+
+
+def test_the_per_turn_log_line_reports_insured_vehicle_vin_length_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Two live calls tonight (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400` and
+    `4c968199-218f-42dd-9f68-834947f3902b`) reached `file_new_claim` with an `insured_vehicle_vin` that
+    was never asked for and turned out to be the wrong shape -- caught at `file_auto_claim.py:159-165`,
+    spoken to the caller, never logged. There was no way to see from CloudWatch whether a future call's
+    version of this is the same failure recurring or something new, without re-deriving it from a live
+    trace by hand each time. This line makes that observable going forward: the VIN's LENGTH only, never
+    its value -- `insured_vehicle_vin` carries `ObfuscationSetting: DefaultObfuscation` in
+    `bot.yaml.tftpl` for a reason, and this line does not undo that.
+    """
+    event = _event(intent_name="FileAutoClaim", slots={"policy_number": _slot("PY4821")})
+    result = {
+        "intent": "FileAutoClaim",
+        "response_text": "Which of your vehicles is this about?",
+        "active_slot": "insured_vehicle_vin",
+        "escalation": None,
+        "filled_slots": {"policy_number": "PY4821", "insured_vehicle_vin": "ABCDEFGHIJKL"},
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    message = turn_records[0].message
+    assert "insured_vehicle_vin_len=12" in message
+    assert "ABCDEFGHIJKL" not in message, "the VIN's VALUE must never reach this log line"
+
+
+def test_the_per_turn_log_line_reports_no_length_when_the_vin_is_unfilled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Sibling case: an ordinary turn where `insured_vehicle_vin` hasn't been asked yet must not log a
+    fabricated length -- `None`/absent is itself the correct, honest signal on that turn."""
+    event = _event(intent_name="FileAutoClaim", slots={})
+    result = {
+        "intent": "FileAutoClaim",
+        "response_text": "What's your policy number?",
+        "active_slot": "policy_number",
+        "escalation": None,
+        "filled_slots": {},
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(turn_records) == 1
+    assert "insured_vehicle_vin_len=None" in turn_records[0].message
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D207`/`OI125`: `insured_vehicle_vin`'s elicitation prompt asks for a spoken vehicle description, not
+# a VIN -- resolved codehook-side, at `_merged_filled_slots`, the same slot-read boundary that already
+# folds Lex's per-turn slots onto the checkpointed `filled_slots`. `policy_number` is read from the
+# MERGED result, not just this turn's raw Lex slots, because it is almost always a prior turn's
+# checkpointed answer by the time this slot is reached. PY4821 (real corpus fixture) carries two
+# vehicles: a 2022 Example Motors Meridian (VIN 9SYAB1239G1000101) and a 2024 Harborline Skiff.
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_merged_filled_slots_resolves_a_spoken_vehicle_description_to_a_vin() -> None:
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("the Meridian")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
+
+
+def test_merged_filled_slots_passes_a_real_vin_through_unchanged() -> None:
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("9SYAB1239G1000101")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
+
+
+def test_merged_filled_slots_drops_an_unresolvable_vehicle_description() -> None:
+    """Contact `0cac5d80-...`'s own repro: none of the six answers the caller actually gave were
+    trying to be a VIN. The slot must stay unanswered, not carry the raw text forward, so
+    `file_auto_claim.py`'s own shape check re-asks it."""
+    previous = {"policy_number": "PY4821"}
+    event = _event(intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("my scooter")})
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_drops_a_coincidentally_17_character_value_not_on_the_policy() -> None:
+    """Contact `33b36200-...`'s own repro: a 17-character value that passed the old shape check by
+    accident, was not a real VIN, and failed downstream at fulfillment instead."""
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("ABCDEFGHIJKLMNOPQ")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_drops_the_vehicle_slot_when_policy_number_is_not_yet_known() -> None:
+    """Defensive -- `_SLOT_ORDER` always asks `policy_number` first, but resolution has no policy to
+    scope against if it somehow runs before that answer is checkpointed."""
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("the Meridian")}
+    )
+
+    merged = lex_codehook._merged_filled_slots({}, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_keeps_an_already_resolved_vin_from_a_prior_turn() -> None:
+    """The common real-world shape: `insured_vehicle_vin` was resolved and checkpointed last turn, and
+    this turn's event carries some other slot's new answer, not this one."""
+    previous = {"policy_number": "PY4821", "insured_vehicle_vin": "9SYAB1239G1000101"}
+    event = _event(intent_name="FileAutoClaim", slots={"loss_location": _slot("Highway 401")})
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
+
+
+def test_an_escalating_turn_logs_both_its_own_escalation_line_and_the_per_turn_line(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The new unconditional line is additional to, not a replacement for, the existing `:566` escalation
+    line -- an escalating turn must produce both, so a CloudWatch query over either one still finds it.
+    """
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {"contact_id": "c-d162-escalation", "triggering_layer": "L2", "route": 1},
+        "response_text": "connecting you now",
+        "intent": "FileAutoClaim",
+        "active_slot": None,
+    }
+
+    with caplog.at_level("INFO", logger="fnol_voice_agent.api.lex_codehook"):
+        lex_codehook._respond_from_graph_result(event, result)
+
+    escalation_records = [r for r in caplog.records if r.message.startswith("escalating contact")]
+    turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
+    assert len(escalation_records) == 1, "the existing :566 line must still fire, unchanged"
+    assert len(turn_records) == 1, "the new unconditional line must ALSO fire on an escalating turn"
+    assert "graph_intent=FileAutoClaim" in turn_records[0].message
+
+
+def test_a_raising_observability_log_does_not_replace_an_escalation_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Row 9's no-accept-risk rule for escalation delivery, applied to the diagnostic added for `D162`:
+    `_log_turn_observability` raising must never cost the caller an already-built `EscalationRecord`'s
+    response. If this call site were unguarded, the exception would propagate out of
+    `_respond_from_graph_result`, past `_dispatch`, into `handler`'s `except Exception` block, and the
+    caller would get the fail-closed escalation instead of the one actually computed here -- silently
+    replacing a real route/reason with a different one, for no reason connected to the escalation itself.
+    """
+    monkeypatch.setattr(
+        lex_codehook,
+        "_log_turn_observability",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    event = _event(intent_name="FileAutoClaim")
+    result = {
+        "escalation": {
+            "contact_id": "c-observability-failure",
+            "triggering_layer": "L2",
+            "route": 1,
+        },
+        "response_text": "connecting you now",
+        "intent": "FileAutoClaim",
+        "active_slot": None,
+    }
+
+    response = lex_codehook._respond_from_graph_result(event, result)
+
+    session_attributes = response["sessionState"]["sessionAttributes"]
+    assert session_attributes["escalate"] == "true"
+    assert session_attributes["escalation_reason"] == "detection-graph"
 
 
 # ---------------------------------------------------------------------------------------------------

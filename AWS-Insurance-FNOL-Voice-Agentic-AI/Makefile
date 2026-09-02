@@ -1,7 +1,7 @@
 .PHONY: ingest test lint format typecheck eval redteam bootstrap verify-backend verify-inference \
         verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
-        verify-project-root-scope verify-duplicate-identifiers install-hooks \
-        deploy provision destroy teardown
+        verify-project-root-scope verify-duplicate-identifiers verify-slot-legality-mapping \
+        install-hooks deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
 # targets (bootstrap, deploy, destroy, eval, redteam, simulate, verify-billable — see CLAUDE.md) are added
@@ -119,6 +119,15 @@ teardown: destroy
 # Also fails if it finds no flows at all, which is the same failure one level up.
 verify-flows:
 	@$(VENV)/python scripts/check_flows.py
+
+# `D162`/`OI80` fix, exit-criteria table row 3 (`PROJECT_STATE.md`): the {intent: {slot names}} map
+# derived from bot.yaml.tftpl's own Slots: blocks, as a standalone check -- not yet consumed by
+# api/lex_codehook.py::_elicit_slot (rows 1/2's own scope). --require-at-least 5 pins today's known
+# count of slot-bearing intents (FileAutoClaim, CheckClaimStatus, CoverageQuestion,
+# RentalTowingEntitlement, UpdateContactInfo) so a parser that silently found zero, or fewer than
+# expected, does not read as passing -- same rule verify-flows applies to flow discovery above.
+verify-slot-legality-mapping:
+	@$(VENV)/python scripts/verify_slot_legality_mapping.py --require-at-least 5
 
 # `D76`: aws_iam_role.lex_runtime failed at CreateRole on an em dash in `description` -- IAM
 # validates that field against Latin-1 (tab/LF/CR plus U+0020-U+007E plus U+00A1-U+00FF) and rejects
@@ -291,6 +300,7 @@ lint:
 	$(VENV)/black --check $(CHECKED)
 	@$(MAKE) --no-print-directory verify-flows
 	@$(MAKE) --no-print-directory verify-charset
+	@$(MAKE) --no-print-directory verify-slot-legality-mapping
 
 # ruff --fix + black
 format:

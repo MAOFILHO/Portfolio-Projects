@@ -4,9 +4,10 @@
 *when enough is known to file*, given whatever is already in `state["filled_slots"]` -- it does not parse
 raw speech into slot values itself. That is Lex's own NLU job (`ADR-001`: "Lex V2 remains the
 turn-manager"), not built until Phase 8; this graph receives already-interpreted values the way a real
-Lex codehook would. `insured_vehicle_vin` is assumed already resolved to a VIN by the time it reaches
-`filled_slots` (Lex's enum-disambiguation of "my Honda Civic" against the policy's vehicle list,
-`SLOT-DESIGN.md` §1.2) -- not re-resolved here.
+Lex codehook would. `insured_vehicle_vin` is resolved to a real VIN before it ever reaches `filled_slots`
+-- codehook-side, at `api/lex_codehook.py`'s `_merged_filled_slots` (`resolve_vehicle_description`,
+`D207`/`OI125`), not by a Lex slot-type enum (the Lex slot type stays `AMAZON.FreeFormInput`) and not
+re-resolved here.
 
 **Per-turn contract** (same as every intent node in this package): a falsy/missing `response_text` means
 "no new information this turn for the slot we were waiting on" -- `agents/graph.py` routes that to the
@@ -16,6 +17,7 @@ for the caller.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fnol_voice_agent.agents.state import AgentState
@@ -24,7 +26,10 @@ from fnol_voice_agent.mcp.claims_server import (
     PolicyNotFoundErrorForNewClaim,
     VehicleNotOnPolicyError,
     file_new_claim,
+    vehicles_for_policy,
 )
+
+logger = logging.getLogger(__name__)
 
 # SLOT-DESIGN.md §1.1's elicitation priority order. injuries_present is not here -- DIALOGUE-POLICIES.md
 # §5's hard escalation preempts before this node is ever reached on an injury-flagged turn, so this node
@@ -45,6 +50,39 @@ _CONDITIONAL_ON: dict[str, tuple[str, Any]] = {
     "police_report_number": ("police_report_filed", True)
 }
 
+# Live repro (contacts `fee42379-c6a9-4eaa-94d4-be20b355c400`, `4c968199-218f-42dd-9f68-834947f3902b`):
+# `insured_vehicle_vin` is `AMAZON.FreeFormInput` in `bot.yaml.tftpl` -- the loosest slot type in this
+# bot -- and Lex's own whole-utterance NLU opportunistically resolved it from speech nobody was asked
+# about, landing a wrong-shaped value in `filled_slots` before this node ever elicited it. `models/
+# fnol.py:22`'s `FileAutoClaimSlots.insured_vehicle_vin` already knows the one hard constraint a VIN has
+# in this system -- exactly 17 characters -- so this is that same fact, not a new one, applied at the
+# boundary that decides "already answered." Deliberately NOT a general validation framework: VIN is the
+# only `_SLOT_ORDER` slot with a format this node can check without inventing a rule for every other
+# slot's free text (loss_location, damage_description, driver_name have no comparable hard shape; the
+# enum/bool/date slots are already constrained by their Lex slot type, not by this node).
+_VIN_LENGTH = 17
+
+
+def _is_answered(slot: str, value: Any) -> bool:
+    if value is None:
+        return False
+    if slot == "insured_vehicle_vin":
+        return isinstance(value, str) and len(value) == _VIN_LENGTH
+    if slot == "policy_number":
+        # `D207`/`OI125` follow-up, live evidence 2026-09-02 (contacts `07ec07e6`/`f5cd57b9`): ASR
+        # mis-hears or truncates policy_number ('uy4821', 'py', 'py48') often enough that a non-None
+        # value here is not enough to call it answered -- `vehicles_for_policy`'s own normalize_
+        # policy_number fallback (case + digits-only) already resolves what CAN be resolved
+        # (`claims_server.py`), so a value that still comes back with zero vehicles genuinely does not
+        # name a real policy. Treating it as answered anyway is exactly the bug this fixes:
+        # `_vehicle_choices_prompt` would then fall through to its <2-vehicle branch and ask the open,
+        # unanswerable "Which vehicle...?" question for a policy number that never resolved, instead of
+        # re-asking the one slot that actually needs a new answer. Same shape as the VIN check above --
+        # a value that cannot possibly be real is not a filled slot.
+        return isinstance(value, str) and len(vehicles_for_policy(value)) > 0
+    return True
+
+
 _ELICITATION_PROMPTS: dict[str, str] = {
     "policy_number": "What's your policy number?",
     "insured_vehicle_vin": "Which of your vehicles is this about?",
@@ -61,13 +99,57 @@ _ELICITATION_PROMPTS: dict[str, str] = {
 _CONFIRM_KEY = "confirm_file_claim"
 
 
+def _autofill_single_vehicle(filled: dict[str, Any]) -> None:
+    """`D207`/`OI125` direction 3, item 3: a policy with exactly one vehicle is never asked at all --
+    filled here, in place, before `_next_missing_slot` ever sees `insured_vehicle_vin` as outstanding.
+    83% of the real corpus's policies (5 of 6) have exactly one vehicle -- this is the common case, not
+    an edge case, and removes the question entirely for most callers rather than merely making it easier
+    to answer. No-op if `policy_number` isn't known yet (`_SLOT_ORDER` always asks it first, so this
+    only matters on the very turn it's answered) or if `insured_vehicle_vin` is already filled.
+    """
+    if "insured_vehicle_vin" in filled:
+        return
+    policy_number = filled.get("policy_number")
+    if not isinstance(policy_number, str):
+        return
+    vehicles = vehicles_for_policy(policy_number)
+    if len(vehicles) == 1:
+        filled["insured_vehicle_vin"] = vehicles[0].vin
+
+
+def _vehicle_choices_prompt(filled: dict[str, Any]) -> str:
+    """Builds "Is this about the 2022 Meridian, or the 2024 Skiff?" from the policy's own vehicles, in
+    place of the static `_ELICITATION_PROMPTS["insured_vehicle_vin"]` open question -- three live
+    diagnostic rounds (`D207`/`OI125`) confirmed telephony ASR cannot transcribe "Meridian" at all, so
+    the fix is reading the caller's own vehicles back rather than asking them to volunteer a model name.
+    `resolve_vehicle_description`'s ordinal matcher counts positions in this same order.
+
+    Falls back to the static open question if the policy has zero or one vehicle -- one vehicle should
+    already have been auto-filled by `_autofill_single_vehicle` before this is ever called, so that branch
+    is defensive, not a real path for this corpus. Zero vehicles is now also defensive, not a real path:
+    `_is_answered`'s `policy_number` check (`D207`/`OI125` follow-up) already refuses to treat a
+    `policy_number` that resolves to zero vehicles as answered, so `_next_missing_slot` re-asks
+    `policy_number` itself before this function is ever called with one. Before that fix, an unresolvable
+    `policy_number` reached here and fell into this same branch, asking the caller an unanswerable open
+    vehicle question for a policy number that had never resolved -- this function's own contract (build a
+    prompt for a KNOWN policy's vehicles) never covered a policy that wasn't known to exist at all; that
+    was a caller-side bug in what got sent to it, not a gap in what this function itself does.
+    """
+    vehicles = vehicles_for_policy(filled["policy_number"])
+    if len(vehicles) < 2:
+        return _ELICITATION_PROMPTS["insured_vehicle_vin"]
+    names = [f"the {vehicle.year} {vehicle.model}" for vehicle in vehicles]
+    choices = ", ".join(names[:-1]) + f", or {names[-1]}"
+    return f"Is this about {choices}?"
+
+
 def _next_missing_slot(filled: dict[str, Any]) -> str | None:
     for slot in _SLOT_ORDER:
         if slot in _CONDITIONAL_ON:
             dep_slot, dep_value = _CONDITIONAL_ON[slot]
             if filled.get(dep_slot) != dep_value:
                 continue  # not applicable given the caller's other answers
-        if filled.get(slot) is None:
+        if not _is_answered(slot, filled.get(slot)):
             return slot
     return None
 
@@ -79,6 +161,25 @@ def _summarize(filled: dict[str, Any]) -> str:
     )
 
 
+def _recap_for_success(filled: dict[str, Any]) -> str:
+    """Narrower than `_summarize` -- 2 facts (type, date), not 3 (type/date/location), and deliberately
+    not a call to `_summarize` itself. Two reasons, not one: (1) the caller already heard the full
+    3-fact recap one turn ago at confirmation (`:114`'s `_summarize(filled)` call) -- repeating it
+    verbatim here is redundant and, combined with the claim number and next-steps text this response
+    also carries, risks the ~40-word voice budget the success response is held to; (2) this is the
+    fact set the success response actually needs to name, not every fact `_summarize` happens to carry.
+    Same `"That's a..."` phrasing convention as `_summarize`, not a new one invented for this call site.
+    """
+    return f"That's a {filled['loss_type']} loss on {filled['loss_datetime']}."
+
+
+# `D89`/`OI6`: no invented business commitment exists anywhere in this system (`Claim`/`claims_server.py`
+# checked -- neither carries an adjuster-SLA field), so "2 business days" here is illustrative flavor
+# text, not a real system guarantee -- flagged rather than silently presented as measured. The
+# status-check half IS grounded: `CheckClaimStatus` is a real intent a caller can reach by calling back.
+_NEXT_STEPS = "An adjuster will contact you within 2 business days. Call back anytime to check your claim status."
+
+
 def file_auto_claim(state: AgentState) -> dict[str, Any]:
     filled = dict(state.get("filled_slots", {}))
     active_slot = state.get("active_slot")
@@ -87,19 +188,38 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
         # We asked for `active_slot` last turn and it's still missing -- a no-match on this specific slot.
         return {"active_slot": active_slot, "response_text": None}
 
+    _autofill_single_vehicle(filled)
+
     next_slot = _next_missing_slot(filled)
     if next_slot is not None:
+        prompt = (
+            _vehicle_choices_prompt(filled)
+            if next_slot == "insured_vehicle_vin"
+            else _ELICITATION_PROMPTS[next_slot]
+        )
         return {
             "active_slot": next_slot,
             "filled_slots": filled,
-            "response_text": _ELICITATION_PROMPTS[next_slot],
+            "response_text": prompt,
         }
 
     if _CONFIRM_KEY not in filled:
+        # `D89`/`OI6`: "...go ahead and file this claim?" collides with the `legal_and_medical_advice`
+        # guardrail's "settlement negotiations" wording under this exact affirmation/interrogative
+        # confirmation shape -- confirmed live, both directions (the agent's own prompt AND the caller's
+        # natural "yes, go ahead and file it" reply), across five investigation rounds and two failed
+        # guardrail-definition apply attempts (`RESULTS.md` §41-§49, `PROJECT_STATE.md` OI6). "submit" is
+        # the evidenced-safe substitute -- `RESULTS.md` §41's own probe: "should I go ahead and submit
+        # this claim" -> `NONE`. This is an application-side reword (Option B), not a guardrail change --
+        # deliberately, since both guardrail-side attempts (an exclusion-clause carve-out and a positive
+        # re-scoping) already failed, one at `apply` (200-char cap) and one at verification (0/4 fixed,
+        # plus a regression). Residual, not eliminated by this fix: a caller who says "file" unprompted in
+        # their own reply is still exposed -- this removes the agent's own prompt as the trigger, which is
+        # the half within this system's control.
         return {
             "active_slot": _CONFIRM_KEY,
             "filled_slots": filled,
-            "response_text": f"{_summarize(filled)} Should I go ahead and file this claim?",
+            "response_text": f"{_summarize(filled)} Should I go ahead and submit this claim?",
         }
 
     if filled[_CONFIRM_KEY] is not True:
@@ -109,7 +229,7 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
         return {
             "active_slot": _CONFIRM_KEY,
             "filled_slots": filled,
-            "response_text": "Should I go ahead and file this claim?",
+            "response_text": "Should I go ahead and submit this claim?",
         }
 
     try:
@@ -133,8 +253,25 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
             )
         }
 
+    # Success event: proves a claim was filed at all, without linking the log line to which one.
+    # `bot.yaml.tftpl`'s ObfuscationSetting on claim_number and D70's "identifiers in logs are not
+    # removable" reasoning generalise past Lex's own transcripts -- an issued claim number is exactly as
+    # linkable to a policyholder's record as one recited back, so it (and every slot value) is deliberately
+    # excluded here. `contact_id` is the correlation key already used elsewhere (`api/lex_codehook.py`),
+    # not a claim/policy identifier.
+    logger.info("claim filed successfully contact=%s", state.get("contact_id"))
+
+    # Success response: recap (2 facts) + claim number + next steps, one turn, templated -- not
+    # generated. This system has exactly two generation paths (`CoverageQuestion`,
+    # `RentalTowingEntitlement`); every other response, this one included, is fixed text built from
+    # already-validated slot values, so it cannot hallucinate a fact about the caller's own claim.
+    # Deliberately drops the prior "Is there anything else?" tail (word-budget discipline, and
+    # `check_claim_status.py`'s own terminal response carries no such tail either -- consistent with
+    # that sibling intent's convention, not a new one invented here).
     return {
         "active_slot": None,
         "filled_slots": filled,
-        "response_text": f"Your claim number is {claim.claim_number}. Is there anything else?",
+        "response_text": (
+            f"{_recap_for_success(filled)} Your claim number is {claim.claim_number}. {_NEXT_STEPS}"
+        ),
     }

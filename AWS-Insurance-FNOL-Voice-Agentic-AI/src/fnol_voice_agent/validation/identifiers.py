@@ -8,6 +8,7 @@ algorithm, not two that could silently drift.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 POLICY_NUMBER_RE = re.compile(r"^PY\d{4}$")
 CLAIM_NUMBER_RE = re.compile(r"^CLM-(\d{2})(\d{2})-(\d{5})-(\d)$")
@@ -115,3 +116,43 @@ def validate_drivers_licence(value: str) -> bool:
 
 def validate_police_report_number(value: str) -> bool:
     return bool(POLICE_REPORT_RE.match(value))
+
+
+def resolve_policy_number_by_digits(
+    candidate: str, real_policy_numbers: Iterable[str]
+) -> str | None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02: ASR mis-hears `policy_number`'s leading
+    letter(s) ("PY4821" arrives as "uy4821"/"ty4821") more often than it mis-hears a digit. Every real
+    corpus policy number is `PY` + 4 digits, so today the digit string alone already identifies one
+    policy uniquely -- this matches `candidate` against `real_policy_numbers` on DIGITS ONLY and returns
+    the one real policy number whose own digits are identical, or `None` if that resolves to zero or more
+    than one policy. Deliberately narrow, NOT a general fuzzy matcher: no edit distance, no phonetic
+    matching, nothing beyond "strip every non-digit character and compare exactly."
+
+    `None` on zero matches (including when `candidate` has no digits at all -- an empty digit string
+    matches nothing) and on more than one match, so an ambiguous or unresolved candidate is never guessed
+    at; the caller's own not-found handling runs unchanged in both cases.
+    """
+    digits = "".join(ch for ch in candidate if ch.isdigit())
+    if not digits:
+        return None
+    matches = {p for p in real_policy_numbers if "".join(ch for ch in p if ch.isdigit()) == digits}
+    if len(matches) == 1:
+        return next(iter(matches))
+    return None
+
+
+def normalize_policy_number(candidate: str, real_policy_numbers: Iterable[str]) -> str:
+    """Uppercases `candidate` and, only if that isn't already a real policy number, tries
+    `resolve_policy_number_by_digits` against `real_policy_numbers`. Returns the resolved canonical
+    value on a unique digits match; otherwise returns the uppercased original UNCHANGED -- this function
+    only ever adds a new way to succeed, never a new way to fail. A candidate this can't resolve reaches
+    the caller exactly as it would have before this fallback existed, so existing format-invalid/
+    not-found error handling downstream is untouched.
+    """
+    real = set(real_policy_numbers)
+    upper = candidate.upper()
+    if upper in real:
+        return upper
+    resolved = resolve_policy_number_by_digits(upper, real)
+    return resolved if resolved is not None else upper

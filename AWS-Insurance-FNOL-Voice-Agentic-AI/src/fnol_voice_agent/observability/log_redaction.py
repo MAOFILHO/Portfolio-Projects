@@ -36,8 +36,11 @@ capabilities" discipline (`CLAUDE.md`):**
   traceback, at a call site with no locals holding raw PII in scope at that point. **Revisit this the
   moment exception logging expands past that one site** -- the gap does not scale safely with more
   `logger.exception` call sites the way the covered `record.msg`/`args` path does.
-- Non-string args (e.g. `route`, an `int`) pass through unchanged rather than being stringified -- this
-  preserves the log's structured/diagnostic shape rather than coercing every field to text.
+- Non-string, non-container args (e.g. `route`, an `int`) pass through unchanged rather than being
+  stringified -- this preserves the log's structured/diagnostic shape rather than coercing every field to
+  text. A `list` or `tuple` arg is walked recursively and each `str` element inside it IS redacted
+  (`_log_turn_observability`'s two `list[str]` slot-key args, added `D162`/`OI80`, are what this covers --
+  before this, a list-typed arg passed through untouched because the top-level value wasn't a `str`).
 
 **Self-reporting install, added 2026-08-15 (Marco, "option (c)") -- proving this filter is actually attached
 in the deployed runtime should not require a diagnostic branch in `handler()` or a full `C1` re-verification
@@ -67,6 +70,24 @@ from fnol_voice_agent.guardrails.pii import redact_for_transcript
 _install_logger = logging.getLogger(__name__)
 
 
+def _redact_value(value: object) -> object:
+    """Redacts a single arg value: a `str` is run through `redact_for_transcript` directly; a `list` or
+    `tuple` is walked recursively, redacting each `str` element and preserving the container type;
+    anything else (`int`, `None`, ...) passes through unchanged.
+
+    Added for `_log_turn_observability`'s (`api/lex_codehook.py`) two `list[str]` args -- the slot-key
+    lists are the first non-`str`, non-`int` args this codebase has ever logged, and the pre-existing
+    `isinstance(arg, str)` check on `record.args`' own elements never looked inside a list to redact it.
+    """
+    if isinstance(value, str):
+        return redact_for_transcript(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
+    return value
+
+
 class PIIRedactionLogFilter(logging.Filter):
     """Runs a log record's message and string args through `redact_for_transcript`.
 
@@ -79,18 +100,12 @@ class PIIRedactionLogFilter(logging.Filter):
         record.msg = redact_for_transcript(str(record.msg))
         if record.args:
             if isinstance(record.args, tuple):
-                record.args = tuple(
-                    redact_for_transcript(arg) if isinstance(arg, str) else arg
-                    for arg in record.args
-                )
+                record.args = tuple(_redact_value(arg) for arg in record.args)
             elif isinstance(record.args, dict):
                 # %-style logging with a mapping arg (`logger.info("%(x)s", {"x": ...})`) -- not used
                 # anywhere in this codebase today, but redacted for consistency rather than left as an
                 # unguarded second calling convention.
-                record.args = {
-                    key: redact_for_transcript(value) if isinstance(value, str) else value
-                    for key, value in record.args.items()
-                }
+                record.args = {key: _redact_value(value) for key, value in record.args.items()}
         return True
 
 

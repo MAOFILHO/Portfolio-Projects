@@ -70,7 +70,9 @@ def main() -> int:
     # wrapper classes (BotoBedrockConverseClient / BedrockEmbedder / BedrockGuardrailClient), so it gets
     # no guard by construction. This call is that guard, added directly at the point of construction
     # (found missing 2026-08-15, CF4 correction -- RESULTS.md §12.4/§12.6).
-    assert_real_aws_allowed("bedrock (control plane) / verify_inference_profiles.GetInferenceProfile")
+    assert_real_aws_allowed(
+        "bedrock (control plane) / verify_inference_profiles.GetInferenceProfile"
+    )
     client = boto3.client("bedrock", region_name=DEFAULT_REGION)
 
     failures: list[str] = []

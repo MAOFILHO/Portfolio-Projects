@@ -85,7 +85,9 @@ def test_an_ordinary_fallback_intent_that_is_not_failed_is_not_treated_as_invali
     """Only the (name, state) PAIR is the crash signature -- a `FallbackIntent` on its own can be a
     legitimate no-match turn (unrelated to this project's cold-start crash), and must not be conflated
     with it."""
-    status, _ = _classify_invocation(_response(intent_name="FallbackIntent", intent_state="InProgress"))
+    status, _ = _classify_invocation(
+        _response(intent_name="FallbackIntent", intent_state="InProgress")
+    )
     assert status == "not-escalated"
 
 
@@ -101,16 +103,17 @@ def test_an_ordinary_fallback_intent_that_is_not_failed_is_not_treated_as_invali
         ("detection-graph", "detection-graph"),
         ("fail-closed", "fail-closed"),
         (None, "other-default"),
-        ("detection", "other-default"),  # the old, pre-split value -- must not silently pass as either
+        (
+            "detection",
+            "other-default",
+        ),  # the old, pre-split value -- must not silently pass as either
         ("some-future-value", "other-default"),
     ],
 )
 def test_escalation_reason_is_read_and_unknown_values_fall_back_to_other_default(
     raw_reason: str | None, expected: str
 ) -> None:
-    status, reason = _classify_invocation(
-        _response(escalate="true", escalation_reason=raw_reason)
-    )
+    status, reason = _classify_invocation(_response(escalate="true", escalation_reason=raw_reason))
     assert status == "escalated"
     assert reason == expected
 
@@ -180,9 +183,7 @@ def test_measure_positives_aborts_the_run_on_an_invalid_sample() -> None:
     """Regression test for the exact incident: today's still-broken deployed function crashes at
     cold-start import on every call, which reads as this shape on every one of the k samples. A passing
     `escalated`/`not-escalated` bucket must never be computed from a run containing it."""
-    runtime = _FakeRuntime(
-        [_response(intent_name="FallbackIntent", intent_state="Failed")] * 3
-    )
+    runtime = _FakeRuntime([_response(intent_name="FallbackIntent", intent_state="Failed")] * 3)
     with pytest.raises(RunInvalidError, match="invalid invocation"):
         measure_positives(
             runtime,

@@ -1,0 +1,97 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "d6cd9236-865c-4a61-b624-c508ee2bef90",
+    "HTTPStatusCode": 200,
+    "HTTPHeaders": {
+      "x-amzn-requestid": "d6cd9236-865c-4a61-b624-c508ee2bef90",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "x-content-type-options": "nosniff",
+      "date": "Sat, 22 Aug 2026 02:58:33 GMT",
+      "content-type": "application/json",
+      "content-length": "1133",
+      "connection": "keep-alive"
+    },
+    "RetryAttempts": 0
+  },
+  "messages": [
+    {
+      "content": "I'm not able to help with that -- let me connect you with someone who can.",
+      "contentType": "PlainText"
+    }
+  ],
+  "sessionState": {
+    "dialogAction": {
+      "type": "Close"
+    },
+    "intent": {
+      "name": "FallbackIntent",
+      "slots": {},
+      "state": "Fulfilled",
+      "confirmationState": "None"
+    },
+    "sessionAttributes": {
+      "escalate": "true",
+      "escalation_reason": "detection-graph"
+    },
+    "originatingRequestId": "d6cd9236-865c-4a61-b624-c508ee2bef90"
+  },
+  "interpretations": [
+    {
+      "intent": {
+        "name": "FallbackIntent",
+        "slots": {},
+        "state": "Fulfilled",
+        "confirmationState": "None"
+      }
+    },
+    {
+      "nluConfidence": {
+        "score": 0.6
+      },
+      "intent": {
+        "name": "CheckClaimStatus",
+        "slots": {
+          "claim_number": null
+        }
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.55
+      },
+      "intent": {
+        "name": "InjuryEscalation",
+        "slots": {}
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.55
+      },
+      "intent": {
+        "name": "CoverageQuestion",
+        "slots": {
+          "coverage_topic": null
+        }
+      },
+      "interpretationSource": "Lex"
+    },
+    {
+      "nluConfidence": {
+        "score": 0.52
+      },
+      "intent": {
+        "name": "RentalTowingEntitlement",
+        "slots": {
+          "claim_number": null,
+          "entitlement_type": null
+        }
+      },
+      "interpretationSource": "Lex"
+    }
+  ],
+  "requestAttributes": {},
+  "sessionId": "row9-layer1-site2-output-guardrail-block"
+}
