@@ -7,12 +7,29 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from fnol_voice_agent.agents.nodes.file_auto_claim import (
     _next_missing_slot,
     _vehicle_choices_prompt,
     file_auto_claim,
 )
 from fnol_voice_agent.mcp.claims_server import resolve_vehicle_description, vehicles_for_policy
+
+# Known-good slot set: PY1103 has exactly one vehicle (9SYCD4568G1000102), matching
+# test_graph_integration.py's own happy-path fixture, so `file_new_claim` accepts it as-is.
+_FILLED_HAPPY_PATH = {
+    "policy_number": "PY1103",
+    "insured_vehicle_vin": "9SYCD4568G1000102",
+    "loss_datetime": "2026-08-11T09:00:00-04:00",
+    "loss_location": "Rue Principale, Ottawa, ON",
+    "loss_type": "Comprehensive",
+    "damage_description": "Windshield crack",
+    "other_party_involved": False,
+    "police_report_filed": False,
+    "driver_name": "Marc-Andre Tremblay",
+    "confirm_file_claim": True,
+}
 
 # All ten `_SLOT_ORDER` slots present and valid except `insured_vehicle_vin` -- everything but VIN
 # already "answered" ensures a false pass here (returning `None`) can only be `_next_missing_slot`
@@ -116,3 +133,65 @@ def test_ordinal_resolution_matches_the_prompts_own_reading_order() -> None:
     first_vehicle_in_prompt = model_positions[min(model_positions)]
 
     assert resolve_vehicle_description("the first one", "PY4821") == first_vehicle_in_prompt.vin
+
+
+# ---------------------------------------------------------------------------------------------------
+# Success-event logging, no identifier (reconciled against bot.yaml.tftpl's ObfuscationSetting on
+# claim_number and D70's "identifiers in logs are not removable": the claim number is exactly as
+# linkable to a policyholder when issued as when recited, so it is never logged -- this line proves a
+# claim was filed at all, without naming which one or carrying any slot value.
+# ---------------------------------------------------------------------------------------------------
+
+_LOGGER_NAME = "fnol_voice_agent.agents.nodes.file_auto_claim"
+
+
+def test_a_success_event_is_logged_when_a_claim_is_filed_successfully(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    state = {
+        "filled_slots": dict(_FILLED_HAPPY_PATH),
+        "active_slot": "confirm_file_claim",
+        "contact_id": "test-contact-123",
+    }
+
+    with caplog.at_level("INFO", logger=_LOGGER_NAME):
+        result = file_auto_claim(state)
+
+    assert (
+        "your claim number is clm-" in result["response_text"].lower()
+    )  # sanity: this IS the success path
+
+    success_records = [
+        r for r in caplog.records if r.message.startswith("claim filed successfully")
+    ]
+    assert len(success_records) == 1, "expected exactly one success-event log line"
+    message = success_records[0].message
+    for leaked in (
+        "PY1103",
+        "9SYCD4568G1000102",
+        "Comprehensive",
+        "Marc-Andre Tremblay",
+        "Rue Principale",
+        "Windshield crack",
+    ):
+        assert leaked not in message, f"slot value {leaked!r} must never reach this log line"
+    assert "CLM-" not in message, "claim number must never reach this log line"
+
+
+def test_no_success_event_is_logged_on_the_exception_path(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Valid policy (PY1103), but a VIN that belongs to a different policy (PY4821) -- file_new_claim
+    # raises VehicleNotOnPolicyError. _is_answered only checks VIN length, so this reaches file_new_claim
+    # rather than being re-elicited.
+    filled = {**_FILLED_HAPPY_PATH, "insured_vehicle_vin": "9SYAB1239G1000101"}
+    state = {"filled_slots": filled, "active_slot": "confirm_file_claim"}
+
+    with caplog.at_level("INFO", logger=_LOGGER_NAME):
+        result = file_auto_claim(state)
+
+    assert "problem filing" in result["response_text"].lower()  # sanity: this IS the exception path
+    success_records = [
+        r for r in caplog.records if r.message.startswith("claim filed successfully")
+    ]
+    assert len(success_records) == 0, "success event must not fire on the exception path"

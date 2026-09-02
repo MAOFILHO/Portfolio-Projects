@@ -17,6 +17,7 @@ for the caller.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fnol_voice_agent.agents.state import AgentState
@@ -27,6 +28,8 @@ from fnol_voice_agent.mcp.claims_server import (
     file_new_claim,
     vehicles_for_policy,
 )
+
+logger = logging.getLogger(__name__)
 
 # SLOT-DESIGN.md §1.1's elicitation priority order. injuries_present is not here -- DIALOGUE-POLICIES.md
 # §5's hard escalation preempts before this node is ever reached on an injury-flagged turn, so this node
@@ -249,6 +252,14 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
                 f"I ran into a problem filing that -- let me get you to someone who can help. ({exc})"
             )
         }
+
+    # Success event: proves a claim was filed at all, without linking the log line to which one.
+    # `bot.yaml.tftpl`'s ObfuscationSetting on claim_number and D70's "identifiers in logs are not
+    # removable" reasoning generalise past Lex's own transcripts -- an issued claim number is exactly as
+    # linkable to a policyholder's record as one recited back, so it (and every slot value) is deliberately
+    # excluded here. `contact_id` is the correlation key already used elsewhere (`api/lex_codehook.py`),
+    # not a claim/policy identifier.
+    logger.info("claim filed successfully contact=%s", state.get("contact_id"))
 
     # Success response: recap (2 facts) + claim number + next steps, one turn, templated -- not
     # generated. This system has exactly two generation paths (`CoverageQuestion`,
