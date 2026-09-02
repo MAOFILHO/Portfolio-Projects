@@ -8760,3 +8760,103 @@ Blocked on: nothing -- fix built, tested, diff shown pending Marco's review.
 Last apply + gate result: none by me this entry -- no Terraform touched, no AWS call made by me. Probe cost:
 ~$0.025 total across two probe runs tonight, both RecognizeText, both logged here.
 ```
+
+## Session log — 2026-09-02 (`D207`/`OI125` continued -- case fix deployed but did not close the live symptom; two temporary diagnostics added; root cause still open)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Deploy fact, not run by me**: the case-sensitivity fix (prior entry) was applied outside this session --
+`fnol-codehook`'s `CodeSha256` matched `0ru9Pm6rWEM9WWvexYpd0ODFC6zP7F9YyHhCL3xCRpo=` at 01:42. Two live
+calls minutes later still showed `insured_vehicle_vin_len=None` and escalated at the ceiling. **The case fix
+did not resolve the live symptom.** Reported as-is, per Marco's instruction not to explain it away.
+
+**Probe re-run against the fixed build**: `scripts/probe_d207_vin_delivery.py` re-run text-channel --
+resolution now succeeds via the probe. Same deployed Lambda, same window, real voice calls still fail
+identically. A genuine, unexplained channel-specific divergence (text-channel probe succeeds; voice calls
+fail) -- not yet explained, not rationalized away.
+
+**Lambda package check**: `data.archive_file.codehook`'s `source_dir` is the whole `src/` tree, excluded
+only `__pycache__`/`.pyc` -- `data/synthetic/` ships in full. Ruled out as a cause.
+
+**Diagnostic round 1** (committed `d69ea72`, deployed by Marco): logs `policy_number`, vehicle count on the
+policy, and match outcome from inside `resolve_vehicle_description`. Live contact `1ffc14f1-abf9-4bc2-978d-
+285306ee9568`: `policy_number='py4821' vehicles_on_policy=2 matched=False`. **This kills the ASR/policy-
+number theory** -- policy resolved, both vehicles loaded. The live failure is the vehicle-text match itself.
+
+**Diagnostic round 2, shape metrics** (committed alongside round 3 below): before extending, I was asked
+whether logging the raw transcribed vehicle text is acceptable under this project's own guardrail table.
+**Answer: no** -- `CLAUDE.md`'s "PII redaction on every transcript before it is persisted or logged" is
+blanket, not scoped to classified-PII fields, and this codebase's own `_log_turn_observability` already
+declines to log `response_text` verbatim for the same reason. Logged instead: `text_len`, `token_count`,
+and per-vehicle `{model, substring, word_boundary}` booleans against the known (non-secret) catalog model
+names -- describes the shape of what arrived and whether a known value appears in it, never the caller's
+own words. Verified locally: a plural suffix ("Meridians") shows `substring=True, word_boundary=False`,
+correctly separating "ASR heard the word with a suffix" from "ASR heard something unrelated."
+
+**Live result of round 2** (contact from 02:06, two turns, caller said "The Meridian" then "The Skiff"):
+**both turns logged `text_len=10 token_count=2`, byte-identical**, and neither vehicle's `substring`/
+`word_boundary` matched on either turn. Neither spoken phrase is 10 characters ("The Meridian" = 12, "The
+Skiff" = 9) -- two different real utterances producing an identical shape rules out ASR transcription
+variance as the explanation. Something is delivering a fixed-shape value regardless of what was said, or an
+un-mapped code path is substituting one.
+
+**Investigation of that finding, read-only, this entry**:
+- `_lex_interpreted_slots` (`api/lex_codehook.py`) reads only `slot.value.interpretedValue`, never
+  `originalValue`/`resolvedValues`. AWS's doc claim that `interpretedValue` equals the full utterance for
+  `AMAZON.FreeFormInput` has only ever been confirmed on the text channel (the probe) -- **no live voice
+  call has confirmed this holds for Connect/voice too.** Left open, not closed.
+- Grepped `bot.yaml.tftpl`, `flows/fnol-inbound.json.tftpl`, and the codehook for any fixed 10-character/
+  2-token string (default value, placeholder, canned test string) that could produce this constant --
+  found none.
+- Checked `observability/log_redaction.py` (the sink-level PII log filter) as a possible source of the
+  coincidence -- **ruled out**: `text_len`/`token_count` are integers computed before the log call, and the
+  filter passes non-string, non-container args through unchanged. It cannot manufacture this shape.
+
+**PII-filter gap found while checking the above -- filed here, not fixed**: `log_redaction.py`'s
+`_redact_value` walks a `list`/`tuple` and redacts each `str` element, but a `dict` element inside such a
+list passes through untouched (no recursion into dict values). Not exploitable today -- this diagnostic's
+own `vehicle_checks` list-of-dicts carries only booleans and catalog model names, nothing caller-supplied.
+Real gap if a future dict value in such a list ever carries caller text. One row, not fixed, per Marco's
+explicit instruction.
+
+**Diagnostic round 3, character-class fingerprint** (committed `a68a01a` -- diagnostic rounds 2 and 3 were
+both deployed once, uncommitted, before this commit; the deployed artifact was not reproducible from any
+commit for two deploys running until this one): extends the same log line with `alpha`/`digit`/`space`/
+`punct` character counts and a `case_shape` label (`upper`/`lower`/`mixed`/`empty`) -- still no caller
+words. Full suite: 31/31 in `test_mcp_claims_server.py`, same 2 pre-existing calendar-rollover failures
+elsewhere. `ruff`/`black`/`mypy --strict` clean.
+
+**Not fixed, assessed only, per Marco's explicit "I want the real string first"**: the `\b`-word-boundary
+exact-model-name regex matcher is brittle two ways -- (1) any trailing suffix (plural/possessive) breaks the
+closing `\b`, already demonstrated locally; (2) "Meridian" is an uncommon multi-syllable word over
+telephony-quality ASR, more likely than "Skiff" (short, common) to be mis-transcribed to something sharing
+no substring at all, which no regex tweak fixes. A more forgiving matcher, if the real string turns out
+close-but-not-exact: a suffix-tolerant boundary (`\bmodel\w*\b`) for the plural/possessive case; edit-
+distance or phonetic (Soundex/Metaphone) matching for genuine ASR drift -- bigger than a same-night change,
+not built.
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12, `D207`/`OI125` remediation, continued. The case-sensitivity fix (prior entry) is
+confirmed deployed but does NOT close the live symptom -- new finding, reported plainly. Root cause is now
+narrowed to the vehicle-description text delivery/match itself, not policy scoping.
+Open defects: D206/OI124 unchanged. D207/OI125 still open -- root cause not yet identified. The 2 calendar-
+rollover test failures unchanged, Marco to file.
+Deferred, not forgotten: central normalization boundary for Lex-delivered identifiers (unchanged from prior
+entry). The PII-log-filter dict-in-list gap, filed above, not fixed. Two temporary diagnostics (`d69ea72`
+policy/vehicle-count/match, `a68a01a` character-class fingerprint) both marked TEMPORARY, both to be
+reverted once the cause is found -- not yet reverted.
+C1 status: case-sensitivity fix deployed live (`0ru9Pm6rWEM9WWvexYpd0ODFC6zP7F9YyHhCL3xCRpo=`) but proven
+insufficient. Diagnostic rounds 1-2 deployed by Marco (hash `0NsXFVSoAVrs5B4RHRUftqclBgxubtF9UbRPn9vu2fE=`
+confirmed live). Diagnostic round 3 committed (`a68a01a`), planned (`0 to add, 1 to change, 0 to destroy`,
+new hash `p5ZxK6yxEavIrvxjZh01zkf5Td7+wH2Vwb2jnMFKC34=`), NOT applied by me.
+Blocked on: the next live call's fingerprint output, to determine whether the delivered text is a real
+(if oddly-shaped) transcript or something substituted before it reaches the resolver.
+Last apply + gate result: none by me this entry -- plan only, no apply, no AWS call made by me.
+```
