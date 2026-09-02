@@ -8,9 +8,7 @@
 ![Pydantic](https://img.shields.io/badge/Pydantic-v2.13-E92063?style=flat&labelColor=1a1a2e)
 ![AWS](https://img.shields.io/badge/AWS-Connect_·_Lex_V2_·_Bedrock-FF9900?style=flat&logo=amazonwebservices&logoColor=white&labelColor=1a1a2e)
 ![Terraform](https://img.shields.io/badge/Terraform-≥1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
-![pytest](https://img.shields.io/badge/pytest-259_passing-0A9EDC?style=flat&logo=pytest&logoColor=white&labelColor=1a1a2e)
 ![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2?style=flat&labelColor=1a1a2e)
-![Budget](https://img.shields.io/badge/Spend_to_date-$0.048_of_$25/mo-2ea043?style=flat&labelColor=1a1a2e)
 
 > **No CI badge yet, deliberately.** The workflows are authored in
 > `.github/workflows-for-monorepo-root/` but not installed — GitHub Actions reads workflows only from the
@@ -255,23 +253,11 @@ which `l1_safety_check` is not the sole successor of `START`.
 
 Stated plainly so nothing here reads as more finished than it is. **15 phases, gated individually.**
 
-| Phase | Status |
-|---|---|
-| 0 · Repo archaeology, merge matrix, workspace | ✅ complete |
-| 1 · Problem framing, six intents, success metrics **defined before building** | ✅ complete |
-| 2 · Architecture, 12 ADRs, cost model, threat model | ✅ complete |
-| 3 · Synthetic Ontario policy corpus, records, ingestion pipeline | ✅ complete |
-| 4 · Conversation design — taxonomy, slots, dialogue policies, prompt registry | ✅ complete |
-| 5 · Agent implementation — LangGraph, MCP servers, router, checkpointer | ✅ complete |
-| 6 · Evaluation harness, judge, baselines, CI regression gate | ✅ complete — three gates failing at their real values |
-| **7 · Responsible AI, red-teaming, router/L2 split** | 🟡 **in progress** |
-| 8 · Integration and telephony (Terraform, contact flows, Lex) | ⬜ not started |
-| 9 · Testing — coverage, LocalStack, load, cold-start vs the 1,800 ms budget | ⬜ not started |
-| 10 · CI/CD and progressive delivery | ⬜ not started |
-| 11 · Observability and operations | ⬜ not started |
-| 12 · Documentation and demo | ⬜ not started |
-| 13 · Continuous-improvement design | ⬜ not started |
-| 14 · Application observability and tracing (ADOT → X-Ray) | ⬜ **proposed, awaiting approval** — see the Architecture note above |
+**Phases 0–11 are complete. Phase 12 (documentation and demo) is underway** — this repo's recent commits
+(the D162–D208 dialogue-policy fix series, live telephony diagnosis, this session's claim-filed logging)
+are Phase 12 work. **Phase 13** (continuous-improvement design) has not started. **Phase 14** (application
+observability and tracing, ADOT → X-Ray) is proposed only — see the Architecture note above — and has not
+started; no work begins without an explicit `APPROVED: Phase 14`.
 
 **Known issues**
 
@@ -284,8 +270,10 @@ Stated plainly so nothing here reads as more finished than it is. **15 phases, g
 3. **`evals/` and `scripts/` were outside `make lint` and `make typecheck`** for six phases while every
    phase reported "strict clean". The claim was true about a scope nobody had stated. Fixed.
 
-**Live resources: none.** No billable resource has been provisioned by this project. The only accrual is
-the pre-existing Canada DID, which is protected and deliberately survives `make destroy`.
+**Live resources: a Lambda codehook, a Lex bot, and the DID's contact-flow association are deployed.** The
+DID (`+14169871547`) is routed to this system, and real calls have been placed against it. The Lambda, the
+Lex bot and the DID's contact-flow association are Terraform-managed and destroyable; the DID number itself
+is protected and deliberately survives `make destroy`.
 
 ## Agent orchestration
 
@@ -402,10 +390,8 @@ cp .env.example .env        # no secrets; SSM standard parameters are preferred 
 
 ## Quickstart
 
-This is the complete list of targets that exist today. The canonical names in
-[`CLAUDE.md`](CLAUDE.md) — `bootstrap`, `deploy`, `destroy`, `simulate`, `redteam`, `verify-billable` —
-are **not in the Makefile yet** and will report *"No rule to make target"* until the phase that builds
-them lands. They are named in advance as a contract, not shipped as stubs.
+`bootstrap`, `deploy`, `destroy` and `redteam` — canonical names from [`CLAUDE.md`](CLAUDE.md) — are now
+real Makefile targets. `simulate` and `verify-billable` are not; both report *"No rule to make target"*.
 
 ```bash
 make test        # 259 unit tests, no AWS credentials, no network
@@ -424,11 +410,10 @@ make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGE
 
 ### Named but not yet built
 
-| Target | Lands in |
+| Target | Status |
 |---|---|
-| `make redteam` | Phase 7 (in progress) |
-| `make bootstrap` · `make deploy` · `make destroy` · `make verify-billable` | Phase 8 |
-| `make simulate` | Phase 8 — needs the Lex bot to replay turns against |
+| `make simulate` | not yet built — needs the Lex bot to replay turns against |
+| `make verify-billable` | not yet built |
 | `make verify-traces` | Phase 14 (proposed, not approved) — asserts a recent X-Ray trace has the expected per-node span shape |
 
 ## Teardown
