@@ -81,6 +81,14 @@ def test_file_new_claim_rejects_an_unknown_policy_number() -> None:
         file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "policy_number": "PY0000"})  # type: ignore[arg-type]
 
 
+def test_file_new_claim_resolves_a_mis_heard_leading_letter_policy_number() -> None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02: ASR mis-hears policy_number's leading letter
+    ("PY4821" arrives as "uy4821"). Digits alone already identify PY4821 uniquely, so the claim files
+    instead of failing not-found."""
+    claim = file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "policy_number": "uy4821"})  # type: ignore[arg-type]
+    assert claim.policy_number == "PY4821"
+
+
 def test_file_new_claim_rejects_a_police_report_filed_without_a_report_number() -> None:
     with pytest.raises(InvalidNewClaimError):
         file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "police_report_filed": True})  # type: ignore[arg-type]
@@ -136,6 +144,14 @@ def test_get_claim_status_by_lowercase_claim_number() -> None:
     (`^CLM-\\d{2}\\d{2}-\\d{5}-\\d$`)."""
     claim = get_claim_status(claim_number="clm-2608-00042-4")
     assert claim.claim_number == "CLM-2608-00042-4"
+
+
+def test_get_claim_status_resolves_a_mis_heard_leading_letter_policy_number() -> None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02: ASR mis-hears policy_number's leading letter
+    ("PY4821" arrives as "uy4821"/"ty4821"). Digits alone already identify PY4821 uniquely, so the
+    lookup resolves instead of failing not-found."""
+    claim = get_claim_status(policy_number="uy4821")
+    assert claim.claim_number == "CLM-2608-00055-6"
 
 
 def test_get_claim_status_policy_number_with_no_open_claim_raises_no_open_claim_error() -> None:
@@ -238,6 +254,23 @@ def test_resolve_vehicle_description_matches_a_lowercase_policy_number() -> None
     corpus's own canonical case. Confirmed live (`scripts/probe_d207_vin_delivery.py`'s own diagnostic
     run, 2026-09-01): every one of tonight's two escalating calls carried exactly this shape."""
     assert resolve_vehicle_description("the Meridian", "py4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_resolves_a_mis_heard_leading_letter_policy_number() -> None:
+    """`D207`/`OI125` follow-up, live evidence, contacts `07ec07e6`/`f5cd57b9` (19:05/19:06):
+    ASR mis-hears policy_number's leading letter -- 'PY4821' arrived as 'uy4821'/'ty4821' -- and
+    `vehicles_for_policy` returned zero vehicles for either, blocking everything downstream. Digits
+    alone already identify PY4821 uniquely in this corpus."""
+    assert resolve_vehicle_description("the Meridian", "uy4821") == "9SYAB1239G1000101"
+    assert resolve_vehicle_description("the Meridian", "ty4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_does_not_resolve_a_truncated_policy_number() -> None:
+    """Same live evidence: 'py'/'py48' also arrived, truncated rather than mis-heard -- too few digits
+    to be unambiguous (no real policy's digit string is a prefix match, only an exact one), so these
+    stay unresolved rather than guessing."""
+    assert resolve_vehicle_description("the Meridian", "py") is None
+    assert resolve_vehicle_description("the Meridian", "py48") is None
 
 
 def test_resolve_vehicle_description_returns_none_on_no_match() -> None:

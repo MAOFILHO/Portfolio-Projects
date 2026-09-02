@@ -36,6 +36,14 @@ def test_get_policyholder_elections_accepts_a_lowercase_policy_number() -> None:
     assert result.policy_number == "PY4821"
 
 
+def test_get_policyholder_elections_resolves_a_mis_heard_leading_letter() -> None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02: ASR mis-hears policy_number's leading letter
+    ("PY4821" arrives as "uy4821"/"ty4821"). Digits alone already identify PY4821 uniquely in this
+    corpus, so the lookup resolves instead of failing not-found."""
+    result = get_policyholder_elections("uy4821")
+    assert result.policy_number == "PY4821"
+
+
 def test_get_policyholder_elections_raises_typed_error_on_unknown_policy() -> None:
     with pytest.raises(PolicyNotFoundError):
         get_policyholder_elections("PY9999")

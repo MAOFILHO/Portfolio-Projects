@@ -23,7 +23,7 @@ from fnol_voice_agent.models.claim import CLAIM_NUMBER_PATTERN
 from fnol_voice_agent.models.fnol import FileAutoClaimSlots
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
 from fnol_voice_agent.validation.coverage import rental_days_remaining
-from fnol_voice_agent.validation.identifiers import compute_claim_number
+from fnol_voice_agent.validation.identifiers import compute_claim_number, normalize_policy_number
 
 from ._paths import CLAIMS_PATH, POLICYHOLDERS_PATH, VEHICLES_PATH
 
@@ -125,16 +125,25 @@ def _load_vehicles() -> list[Vehicle]:
     return [Vehicle.model_validate(record) for record in payload["vehicles"]]
 
 
+def _real_policy_numbers() -> frozenset[str]:
+    """Every policy number in the synthetic corpus -- the authoritative "real policy" set for
+    `normalize_policy_number`'s digits-only fallback, sourced from `policyholders.json` rather than
+    `vehicles.json`: a policy's *existence* is a policyholder fact, not a vehicle-ownership fact."""
+    payload = json.loads(POLICYHOLDERS_PATH.read_text())
+    return frozenset(record["policy_number"] for record in payload["policyholders"])
+
+
 def vehicles_for_policy(policy_number: str) -> list[Vehicle]:
     """Every vehicle on `policy_number`'s policy, in corpus order -- the same order `resolve_vehicle_
     description`'s ordinal matcher counts from, and what `file_auto_claim.py`'s enumeration prompt reads
     back to the caller. Public (not `_`-prefixed): `file_auto_claim.py` needs this to build that prompt
     and to decide whether a policy has exactly one vehicle worth skipping the question for (`D207`/
     `OI125` direction 3) -- `resolve_vehicle_description`'s own scoping (below) is one caller of this,
-    not the only one, and this is the one site the policy-number-case-insensitivity fix (`D207`/`OI125`'s
-    earlier fix) lives for this specific lookup.
+    not the only one, and this is the one site both the policy-number-case-insensitivity fix and its
+    digits-only mis-heard-leading-letter follow-up (`D207`/`OI125`, live evidence 2026-09-02) live for
+    this specific lookup.
     """
-    policy_number_upper = policy_number.upper()
+    policy_number_upper = normalize_policy_number(policy_number, _real_policy_numbers())
     return [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
 
 
@@ -202,8 +211,18 @@ def get_claim_status(claim_number: str | None = None, policy_number: str | None 
     # `claim_number`/`policy_number` are both `AMAZON.AlphaNumeric` -- Lex lowercases both (confirmed
     # live). Normalized before `GetClaimStatusArgs` is built: its pattern fields are uppercase-only, so a
     # raw lowercase value fails validation before either comparison below is ever reached.
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears `policy_number`'s leading
+    # letter(s) ("py4821" arrives as "uy4821"/"ty4821"), scoped to `policy_number` only -- `claim_number`
+    # is not part of this fallback (`normalize_policy_number` returns the uppercased original unchanged
+    # when it can't resolve, so a value it doesn't fix reaches the format/not-found handling below
+    # exactly as it would have before).
     claim_number = claim_number.upper() if claim_number is not None else None
-    policy_number = policy_number.upper() if policy_number is not None else None
+    policy_number = (
+        normalize_policy_number(policy_number, _real_policy_numbers())
+        if policy_number is not None
+        else None
+    )
     try:
         args = GetClaimStatusArgs(claim_number=claim_number, policy_number=policy_number)
     except ValidationError as exc:
@@ -475,7 +494,12 @@ def file_new_claim(
     # pattern-gated to `^PY\d{4}$`, so a raw "py4821" fails Pydantic validation (`InvalidNewClaimError`)
     # before the policy/VIN comparisons below (`:346`/`:352`) are ever reached -- fixing those
     # comparisons alone would not have fixed this call path.
-    policy_number = policy_number.upper()
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears the leading letter(s)
+    # ("py4821" arrives as "uy4821"/"ty4821"), which uppercasing alone cannot fix. `normalize_
+    # policy_number` returns the uppercased original unchanged when it can't resolve, so a value it
+    # doesn't fix still reaches `FileAutoClaimSlots`' pattern gate exactly as it would have before.
+    policy_number = normalize_policy_number(policy_number, _real_policy_numbers())
     if injuries_present:
         raise InjuryPresentError(
             "file_new_claim called with injuries_present=True -- this must be handled by the injury "

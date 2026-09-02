@@ -65,6 +65,18 @@ def _is_answered(slot: str, value: Any) -> bool:
         return False
     if slot == "insured_vehicle_vin":
         return isinstance(value, str) and len(value) == _VIN_LENGTH
+    if slot == "policy_number":
+        # `D207`/`OI125` follow-up, live evidence 2026-09-02 (contacts `07ec07e6`/`f5cd57b9`): ASR
+        # mis-hears or truncates policy_number ('uy4821', 'py', 'py48') often enough that a non-None
+        # value here is not enough to call it answered -- `vehicles_for_policy`'s own normalize_
+        # policy_number fallback (case + digits-only) already resolves what CAN be resolved
+        # (`claims_server.py`), so a value that still comes back with zero vehicles genuinely does not
+        # name a real policy. Treating it as answered anyway is exactly the bug this fixes:
+        # `_vehicle_choices_prompt` would then fall through to its <2-vehicle branch and ask the open,
+        # unanswerable "Which vehicle...?" question for a policy number that never resolved, instead of
+        # re-asking the one slot that actually needs a new answer. Same shape as the VIN check above --
+        # a value that cannot possibly be real is not a filled slot.
+        return isinstance(value, str) and len(vehicles_for_policy(value)) > 0
     return True
 
 
@@ -111,8 +123,14 @@ def _vehicle_choices_prompt(filled: dict[str, Any]) -> str:
 
     Falls back to the static open question if the policy has zero or one vehicle -- one vehicle should
     already have been auto-filled by `_autofill_single_vehicle` before this is ever called, so that branch
-    is defensive, not a real path for this corpus; zero vehicles is a data problem this node has no better
-    answer for.
+    is defensive, not a real path for this corpus. Zero vehicles is now also defensive, not a real path:
+    `_is_answered`'s `policy_number` check (`D207`/`OI125` follow-up) already refuses to treat a
+    `policy_number` that resolves to zero vehicles as answered, so `_next_missing_slot` re-asks
+    `policy_number` itself before this function is ever called with one. Before that fix, an unresolvable
+    `policy_number` reached here and fell into this same branch, asking the caller an unanswerable open
+    vehicle question for a policy number that had never resolved -- this function's own contract (build a
+    prompt for a KNOWN policy's vehicles) never covered a policy that wasn't known to exist at all; that
+    was a caller-side bug in what got sent to it, not a gap in what this function itself does.
     """
     vehicles = vehicles_for_policy(filled["policy_number"])
     if len(vehicles) < 2:

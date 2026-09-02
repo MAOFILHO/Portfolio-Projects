@@ -67,6 +67,22 @@ def test_a_two_vehicle_policy_gets_an_enumerated_selection_prompt() -> None:
     assert result["response_text"] == "Is this about the 2022 Meridian, or the 2024 Skiff?"
 
 
+def test_an_unresolvable_policy_number_is_re_asked_not_the_vehicle_question() -> None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02 (contacts `07ec07e6`/`f5cd57b9`): 'py'/'py48'
+    (ASR-truncated) leave `vehicles_for_policy` empty -- zero vehicles, not one or two. Before this fix,
+    `_vehicle_choices_prompt`'s under-2-vehicle fallback treated that identically to a real single- or
+    zero-vehicle policy and asked the open vehicle question ("Which vehicle...?") -- unanswerable, since
+    the caller can never name a vehicle for a policy number that never resolved. `policy_number` itself
+    must be re-asked instead, the same way a malformed VIN is treated as unanswered rather than accepted.
+    """
+    result = file_auto_claim(
+        {"filled_slots": {"policy_number": "py48"}, "active_slot": "policy_number"}
+    )
+
+    assert result["active_slot"] == "policy_number"
+    assert result["response_text"] == "What's your policy number?"
+
+
 def test_a_single_vehicle_policy_is_never_asked_about_at_all() -> None:
     """`D207`/`OI125` direction 3, item 3: a policy with exactly one vehicle skips the question --
     filled and moved past in the same turn `policy_number` itself was answered."""

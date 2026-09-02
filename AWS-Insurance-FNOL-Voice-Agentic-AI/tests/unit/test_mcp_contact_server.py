@@ -52,6 +52,15 @@ def test_update_contact_info_accepts_a_lowercase_policy_number() -> None:
     assert result.updated is True
 
 
+def test_update_contact_info_resolves_a_mis_heard_leading_letter() -> None:
+    """`D207`/`OI125` follow-up, live evidence 2026-09-02: ASR mis-hears policy_number's leading letter
+    ("PY4821" arrives as "uy4821"/"ty4821"). Digits alone already identify PY4821 uniquely in this
+    corpus, so the write proceeds instead of failing not-found."""
+    result = update_contact_info("uy4821", ContactField.PHONE, "555-7777")
+    assert result.policy_number == "PY4821"
+    assert result.previous_value == "555-0142"
+
+
 def test_update_contact_info_unknown_policy_raises_typed_error() -> None:
     with pytest.raises(PolicyNotFoundError):
         update_contact_info("PY9999", ContactField.PHONE, "555-1234")

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from fnol_voice_agent.models import ContactField
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
+from fnol_voice_agent.validation.identifiers import normalize_policy_number
 
 from ._paths import POLICYHOLDERS_PATH
 
@@ -109,16 +110,23 @@ def update_contact_info(
         InvalidUpdateContactInfoError: `policy_number` fails its format, or `new_value` is blank.
         PolicyNotFoundError: `policy_number` is well-formed but matches no record.
     """
+    store = _get_store()
     # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
     # before `UpdateContactInfoArgs` is built: its pattern field is uppercase-only, so a raw "py4821"
     # fails validation before the dict lookup below is ever reached.
-    policy_number = policy_number.upper()
+    #
+    # `D207`/`OI125` follow-up, live evidence 2026-09-02: ASR also mis-hears the leading letter(s)
+    # ("py4821" arrives as "uy4821"/"ty4821"), which uppercasing alone cannot fix. `normalize_
+    # policy_number` tries a digits-only match against the real corpus first; if that resolves to
+    # exactly one policy it returns the corrected value, otherwise it returns the uppercased original
+    # unchanged, so a value it can't resolve reaches the format/not-found handling below exactly as it
+    # would have before this fallback existed.
+    policy_number = normalize_policy_number(policy_number, store)
     try:
         args = UpdateContactInfoArgs(policy_number=policy_number, field=field, new_value=new_value)
     except ValidationError as exc:
         raise InvalidUpdateContactInfoError(str(exc)) from exc
 
-    store = _get_store()
     record = store.get(args.policy_number)
     if record is None:
         raise PolicyNotFoundError(f"no policyholder found for policy_number={args.policy_number!r}")
