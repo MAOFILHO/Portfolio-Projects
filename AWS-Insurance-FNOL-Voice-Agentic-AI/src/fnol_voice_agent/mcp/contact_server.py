@@ -109,6 +109,10 @@ def update_contact_info(
         InvalidUpdateContactInfoError: `policy_number` fails its format, or `new_value` is blank.
         PolicyNotFoundError: `policy_number` is well-formed but matches no record.
     """
+    # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
+    # before `UpdateContactInfoArgs` is built: its pattern field is uppercase-only, so a raw "py4821"
+    # fails validation before the dict lookup below is ever reached.
+    policy_number = policy_number.upper()
     try:
         args = UpdateContactInfoArgs(policy_number=policy_number, field=field, new_value=new_value)
     except ValidationError as exc:

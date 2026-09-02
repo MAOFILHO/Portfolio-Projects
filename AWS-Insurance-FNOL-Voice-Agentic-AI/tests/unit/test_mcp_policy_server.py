@@ -29,6 +29,13 @@ def test_get_policyholder_elections_covers_a_liability_only_policyholder() -> No
     assert result.rental_endorsement.elected is False
 
 
+def test_get_policyholder_elections_accepts_a_lowercase_policy_number() -> None:
+    """`D207`/`OI125` follow-up: `policy_number` is `AMAZON.AlphaNumeric` and Lex lowercases its
+    interpretedValue (confirmed live) -- a real caller's "PY4821" arrives here as "py4821"."""
+    result = get_policyholder_elections("py4821")
+    assert result.policy_number == "PY4821"
+
+
 def test_get_policyholder_elections_raises_typed_error_on_unknown_policy() -> None:
     with pytest.raises(PolicyNotFoundError):
         get_policyholder_elections("PY9999")

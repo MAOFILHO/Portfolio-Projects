@@ -44,6 +44,14 @@ def test_update_contact_info_write_is_visible_on_a_subsequent_call_same_process(
     assert second.previous_value == "new@example.com"
 
 
+def test_update_contact_info_accepts_a_lowercase_policy_number() -> None:
+    """`D207`/`OI125` follow-up: `policy_number` is `AMAZON.AlphaNumeric` and Lex lowercases its
+    interpretedValue (confirmed live) -- a real caller's "PY4821" arrives here as "py4821"."""
+    result = update_contact_info("py4821", ContactField.PHONE, "555-7777")
+    assert result.previous_value == "555-0142"
+    assert result.updated is True
+
+
 def test_update_contact_info_unknown_policy_raises_typed_error() -> None:
     with pytest.raises(PolicyNotFoundError):
         update_contact_info("PY9999", ContactField.PHONE, "555-1234")

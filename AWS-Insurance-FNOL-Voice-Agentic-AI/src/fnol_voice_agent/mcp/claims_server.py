@@ -183,6 +183,11 @@ def get_claim_status(claim_number: str | None = None, policy_number: str | None 
         ClaimNotFoundError: `claim_number` supplied but matches no record.
         NoOpenClaimError: `policy_number` supplied but resolves to no open claim.
     """
+    # `claim_number`/`policy_number` are both `AMAZON.AlphaNumeric` -- Lex lowercases both (confirmed
+    # live). Normalized before `GetClaimStatusArgs` is built: its pattern fields are uppercase-only, so a
+    # raw lowercase value fails validation before either comparison below is ever reached.
+    claim_number = claim_number.upper() if claim_number is not None else None
+    policy_number = policy_number.upper() if policy_number is not None else None
     try:
         args = GetClaimStatusArgs(claim_number=claim_number, policy_number=policy_number)
     except ValidationError as exc:
@@ -254,7 +259,13 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     against the wrong vehicle.
     """
     candidate = text.strip().upper()
-    vehicles = [v for v in _load_vehicles() if v.policy_number == policy_number]
+    # `AMAZON.AlphaNumeric` (`policy_number`'s Lex slot type) lowercases its interpretedValue -- confirmed
+    # live, `scripts/probe_d207_vin_delivery.py` -- so the caller's own real policy number arrives as
+    # "py4821", not the corpus's canonical "PY4821". Normalized here, not upstream: this function has no
+    # Pydantic gate in front of it (unlike `file_new_claim`/`get_claim_status`/etc.), so it is the one
+    # site where a raw, un-normalized value reaches a comparison directly.
+    policy_number_upper = policy_number.upper()
+    vehicles = [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
 
     if len(candidate) == 17:
         for vehicle in vehicles:
@@ -306,6 +317,12 @@ def file_new_claim(
         PolicyNotFoundError / VehicleNotOnPolicyError: `policy_number`/`insured_vehicle_vin` don't
             resolve to a real, matching pair in the synthetic corpus.
     """
+    # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
+    # here, before `FileAutoClaimSlots` is ever constructed: that model's own `policy_number` field is
+    # pattern-gated to `^PY\d{4}$`, so a raw "py4821" fails Pydantic validation (`InvalidNewClaimError`)
+    # before the policy/VIN comparisons below (`:346`/`:352`) are ever reached -- fixing those
+    # comparisons alone would not have fixed this call path.
+    policy_number = policy_number.upper()
     if injuries_present:
         raise InjuryPresentError(
             "file_new_claim called with injuries_present=True -- this must be handled by the injury "

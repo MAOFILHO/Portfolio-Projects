@@ -74,6 +74,10 @@ def get_policyholder_elections(policy_number: str) -> Policyholder:
         InvalidPolicyNumberError: `policy_number` doesn't match the `PY####` format.
         PolicyNotFoundError: `policy_number` is well-formed but matches no record.
     """
+    # `AMAZON.AlphaNumeric` lowercases `policy_number`'s interpretedValue (confirmed live). Normalized
+    # before `GetPolicyholderElectionsArgs` is built: its pattern field is uppercase-only, so a raw
+    # "py4821" fails validation before the dict lookup below is ever reached.
+    policy_number = policy_number.upper()
     try:
         args = GetPolicyholderElectionsArgs(policy_number=policy_number)
     except ValidationError as exc:

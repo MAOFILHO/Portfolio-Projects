@@ -99,6 +99,16 @@ def test_file_new_claim_deductible_is_zero_for_a_dcpd_only_policyholder() -> Non
     assert claim.deductible_applied_cad == 0
 
 
+def test_file_new_claim_accepts_a_lowercase_policy_number() -> None:
+    """`D207`/`OI125` follow-up: the caller's real, live policy number arrives lowercased
+    (`AMAZON.AlphaNumeric`, confirmed live). `FileAutoClaimSlots.policy_number` is pattern-gated to
+    `^PY\\d{4}$` -- a raw "py4821" fails that pattern before this function's own policy/VIN comparisons
+    (`:340`/`:346`) are ever reached, so those comparisons alone can't fix this call path."""
+    claim = file_new_claim(**{**_VALID_NEW_CLAIM_KWARGS, "policy_number": "py4821"})  # type: ignore[arg-type]
+    assert claim.policy_number == "PY4821"
+    assert claim.status == "Reported"
+
+
 def test_get_claim_status_by_claim_number() -> None:
     claim = get_claim_status(claim_number="CLM-2608-00042-4")
     assert claim.policy_number == "PY4821"
@@ -111,6 +121,21 @@ def test_get_claim_status_by_policy_number_resolves_most_recent_open_claim() -> 
     # the most recent of the two open ones). Policy_number-only resolution must land on the latter.
     claim = get_claim_status(policy_number="PY4821")
     assert claim.claim_number == "CLM-2608-00055-6"
+
+
+def test_get_claim_status_by_lowercase_policy_number() -> None:
+    """`D207`/`OI125` follow-up: `GetClaimStatusArgs.policy_number` is pattern-gated the same way
+    `FileAutoClaimSlots.policy_number` is -- a raw "py4821" fails validation before `_most_recent_
+    open_claim`'s own comparison is ever reached."""
+    claim = get_claim_status(policy_number="py4821")
+    assert claim.claim_number == "CLM-2608-00055-6"
+
+
+def test_get_claim_status_by_lowercase_claim_number() -> None:
+    """`claim_number` is also `AMAZON.AlphaNumeric` -- same lowering, same pattern gate
+    (`^CLM-\\d{2}\\d{2}-\\d{5}-\\d$`)."""
+    claim = get_claim_status(claim_number="clm-2608-00042-4")
+    assert claim.claim_number == "CLM-2608-00042-4"
 
 
 def test_get_claim_status_policy_number_with_no_open_claim_raises_no_open_claim_error() -> None:
@@ -205,6 +230,14 @@ def test_resolve_vehicle_description_matches_year_make_and_model() -> None:
 
 def test_resolve_vehicle_description_is_case_insensitive() -> None:
     assert resolve_vehicle_description("THE MERIDIAN", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_matches_a_lowercase_policy_number() -> None:
+    """`D207`/`OI125` follow-up, live root cause: `policy_number` is `AMAZON.AlphaNumeric`, and Lex
+    lowercases it -- a real caller who said "PY4821" delivers `policy_number="py4821"` here, not the
+    corpus's own canonical case. Confirmed live (`scripts/probe_d207_vin_delivery.py`'s own diagnostic
+    run, 2026-09-01): every one of tonight's two escalating calls carried exactly this shape."""
+    assert resolve_vehicle_description("the Meridian", "py4821") == "9SYAB1239G1000101"
 
 
 def test_resolve_vehicle_description_returns_none_on_no_match() -> None:
