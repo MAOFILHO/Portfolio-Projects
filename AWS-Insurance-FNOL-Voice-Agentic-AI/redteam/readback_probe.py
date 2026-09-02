@@ -150,11 +150,26 @@ def _read_policy_excerpt() -> str:
 
 
 def _probe_file_auto_claim() -> dict[str, str]:
-    """Three real `file_auto_claim()` calls -- no Bedrock, no guardrail, this node never calls either --
-    covering its three dynamic sites: the confirmation summary (#3), the file-claim except branch (#5),
-    and the success readback (#6). `#2` (`_ELICITATION_PROMPTS[next_slot]`) is `kind="constant"` (every
-    value in that dict is a literal, `response_text_sites.py` resolves it statically) and needs no probe.
+    """Four real `file_auto_claim()` calls -- no Bedrock, no guardrail, this node never calls either --
+    covering its four dynamic sites: the vehicle-selection prompt (#2), the confirmation summary (#3),
+    the file-claim except branch (#5), and the success readback (#6).
+
+    `#2` used to be `_ELICITATION_PROMPTS[next_slot]`, `kind="constant"` (every value in that dict is a
+    literal). `D207`/`OI125` direction 3 made it a `Name` (`prompt`, built by `_vehicle_choices_prompt`
+    for `insured_vehicle_vin` specifically) -- `response_text_sites.py`'s own one-hop-only resolution
+    rule (module docstring: "an f-string, a function call... all fail to resolve") correctly reclassifies
+    that as `dynamic` now, a real coverage gap this probe closes rather than a false alarm to silence.
+    Probed with `PY4821` (the real corpus's one multi-vehicle policy) and no other slots filled, so the
+    node reaches the `insured_vehicle_vin` branch and builds the real enumerated text a caller would
+    hear -- vehicle year/model names only, nothing caller-supplied, so this is expected to pass cleanly.
     """
+    vehicle_choice_result = file_auto_claim(
+        {
+            "filled_slots": {"policy_number": _FAC_MISMATCHED_POLICY_NUMBER},
+            "active_slot": "policy_number",
+        }
+    )
+
     base_slots = {
         "policy_number": _FAC_POLICY_NUMBER,
         "insured_vehicle_vin": _FAC_VIN,
@@ -185,6 +200,9 @@ def _probe_file_auto_claim() -> dict[str, str]:
     )
 
     return {
+        "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#2": vehicle_choice_result[
+            "response_text"
+        ],
         "fnol_voice_agent.agents.nodes.file_auto_claim::file_auto_claim#3": confirm_result[
             "response_text"
         ],

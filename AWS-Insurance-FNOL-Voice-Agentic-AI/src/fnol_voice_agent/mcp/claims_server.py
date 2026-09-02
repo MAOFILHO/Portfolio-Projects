@@ -125,6 +125,19 @@ def _load_vehicles() -> list[Vehicle]:
     return [Vehicle.model_validate(record) for record in payload["vehicles"]]
 
 
+def vehicles_for_policy(policy_number: str) -> list[Vehicle]:
+    """Every vehicle on `policy_number`'s policy, in corpus order -- the same order `resolve_vehicle_
+    description`'s ordinal matcher counts from, and what `file_auto_claim.py`'s enumeration prompt reads
+    back to the caller. Public (not `_`-prefixed): `file_auto_claim.py` needs this to build that prompt
+    and to decide whether a policy has exactly one vehicle worth skipping the question for (`D207`/
+    `OI125` direction 3) -- `resolve_vehicle_description`'s own scoping (below) is one caller of this,
+    not the only one, and this is the one site the policy-number-case-insensitivity fix (`D207`/`OI125`'s
+    earlier fix) lives for this specific lookup.
+    """
+    policy_number_upper = policy_number.upper()
+    return [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
+
+
 def _load_deductible_for(policy_number: str) -> int:
     """The Section 7 (Loss-or-Damage) deductible is a fixed policy term, known at intake time even
     though the claim's eventual payout isn't -- looked up from the policyholder record rather than
@@ -249,6 +262,47 @@ def get_rental_status(claim_number: str) -> RentalStatus:
     return rental
 
 
+# Selection-answer matchers for `resolve_vehicle_description` -- `D207`/`OI125` direction 3. Each takes
+# the caller's raw text and the policy's own vehicle list (in corpus/prompt order, so "first"/"second"
+# line up with what `file_auto_claim.py`'s enumeration prompt just read back) and returns the one vehicle
+# a signal unambiguously picks out, or `None` if that signal wasn't present or didn't resolve to exactly
+# one vehicle. Deliberately no "one"/"two" cardinal-number aliases in `_ORDINAL_WORDS`: "the second one"
+# is a real example utterance, and "one" there is the filler noun ("the second [vehicle]"), not a
+# position -- aliasing it to index 0 would make that phrase ambiguous (positions {0, 1}) and return None
+# on exactly the case it must resolve.
+_ORDINAL_WORDS: dict[str, int] = {"first": 0, "1st": 0, "second": 1, "2nd": 1}
+
+
+def _match_by_ordinal(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    tokens = set(text.lower().split())
+    positions = {_ORDINAL_WORDS[token] for token in tokens if token in _ORDINAL_WORDS}
+    if len(positions) == 1:
+        (index,) = positions
+        if 0 <= index < len(vehicles):
+            return vehicles[index]
+    return None
+
+
+def _match_by_year(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    """Digit years only ("2022"), not spelled-out ones ("twenty twenty two") -- deliberately not built;
+    see `resolve_vehicle_description`'s own docstring for why."""
+    years = {int(year) for year in re.findall(r"\b(?:19|20)\d{2}\b", text)}
+    if len(years) == 1:
+        (year,) = years
+        matches = [v for v in vehicles if v.year == year]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
+def _match_by_make(text: str, vehicles: list[Vehicle]) -> Vehicle | None:
+    text_lower = text.lower()
+    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.make.lower())}\b", text_lower)]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     """Resolves a caller's free-text vehicle description to a VIN, scoped to one policy's own vehicle
     list -- `D207`/`OI125`'s fix, direction 2. Case-insensitive; matches on the vehicle's `model` name
@@ -256,6 +310,16 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     the text" in practice, since no single policy in the real corpus has two vehicles sharing a model
     name -- make/year only matter to disambiguate a collision if one ever exists). Also passes a real
     17-character VIN straight through if it already belongs to this policy.
+
+    `D207`/`OI125` direction 3 adds three more signals, tried in order after the model-name match, for
+    when the caller is answering `file_auto_claim.py`'s enumeration prompt ("Is this about the 2022
+    Meridian, or the 2024 Skiff?") rather than volunteering a model name: **ordinal/position** ("the
+    first one", "first"), **year** ("2022" -- digit form only; a spelled-out "twenty twenty two" is not
+    parsed, a real scoping gap, not an oversight -- word-to-number parsing is materially bigger than this
+    fix and was never asked for beyond "a bare year works"), and **make** ("the Example Motors one").
+    Each is independently ambiguity-safe (`_match_by_ordinal`/`_match_by_year`/`_match_by_make` each
+    return `None` unless exactly one vehicle matches) and only tried if every earlier signal came back
+    empty, never overriding a signal that already resolved.
 
     Returns None -- not an exception -- on no match or an ambiguous match (more than one vehicle on the
     policy matches), so the caller's slot stays unanswered and gets re-asked rather than filing a claim
@@ -267,8 +331,7 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     # "py4821", not the corpus's canonical "PY4821". Normalized here, not upstream: this function has no
     # Pydantic gate in front of it (unlike `file_new_claim`/`get_claim_status`/etc.), so it is the one
     # site where a raw, un-normalized value reaches a comparison directly.
-    policy_number_upper = policy_number.upper()
-    vehicles = [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
+    vehicles = vehicles_for_policy(policy_number)
 
     # TEMPORARY, `D207`/`OI125` follow-up diagnostic (Marco, 2026-09-02) -- NOT yet deployed as of this
     # commit; remove once the live-vs-probe divergence is explained. `policy_number` is logged as
@@ -290,6 +353,22 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
         ]
         if len(matches) == 1:
             result = matches[0].vin
+    if result is None:
+        # `D207`/`OI125` direction 3: telephony ASR cannot transcribe "Meridian" -- confirmed live over
+        # three diagnostic rounds, the model name never arrives. `file_auto_claim.py` now reads the
+        # policy's own vehicles back to the caller instead of asking an open question, so a selection
+        # answer needs its own matchers alongside the model-name one above.
+        ordinal_match = _match_by_ordinal(text, vehicles)
+        if ordinal_match is not None:
+            result = ordinal_match.vin
+    if result is None:
+        year_match = _match_by_year(text, vehicles)
+        if year_match is not None:
+            result = year_match.vin
+    if result is None:
+        make_match = _match_by_make(text, vehicles)
+        if make_match is not None:
+            result = make_match.vin
     # TEMPORARY, extended 2026-09-02 -- `policy_number`/`vehicles_on_policy` above already ruled out the
     # ASR/policy-number theory (contact `1ffc14f1-...`: resolved, 2 vehicles loaded, still `matched=False`).
     # The remaining question is the vehicle TEXT itself: did ASR transcribe something with no resemblance

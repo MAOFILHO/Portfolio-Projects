@@ -131,6 +131,7 @@ def probe_one(runtime: Any, *, bot_id: str, bot_alias_id: str, vehicle_text: str
         text=_POLICY_NUMBER,
     )
     precondition_ok = _slot_to_elicit(r2) == "insured_vehicle_vin"
+    raw_policy_number = _slot_interpreted_value(r2, "policy_number")
 
     r3 = runtime.recognize_text(
         botId=bot_id,
@@ -148,6 +149,7 @@ def probe_one(runtime: Any, *, bot_id: str, bot_alias_id: str, vehicle_text: str
         "session_id": session_id,
         "precondition_ok": precondition_ok,
         "turn2_slot_to_elicit": _slot_to_elicit(r2),
+        "raw_policy_number": raw_policy_number,
         "raw_interpreted_value": raw_value,
         "resolved": resolved,
         "turn3_slot_to_elicit": next_slot,
@@ -168,6 +170,7 @@ def main() -> None:
         result = probe_one(runtime, bot_id=bot_id, bot_alias_id=bot_alias_id, vehicle_text=phrasing)
         print(f"phrasing={phrasing!r}")
         print(f"  precondition (turn2 elicited insured_vehicle_vin): {result['precondition_ok']}")
+        print(f"  raw policy_number interpretedValue: {result['raw_policy_number']!r}")
         print(f"  raw interpretedValue Lex returned: {result['raw_interpreted_value']!r}")
         print(f"  resolved: {result['resolved']}")
         print(f"  turn3 slotToElicit: {result['turn3_slot_to_elicit']!r}")

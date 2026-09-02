@@ -25,6 +25,7 @@ from fnol_voice_agent.mcp.claims_server import (
     PolicyNotFoundErrorForNewClaim,
     VehicleNotOnPolicyError,
     file_new_claim,
+    vehicles_for_policy,
 )
 
 # SLOT-DESIGN.md §1.1's elicitation priority order. injuries_present is not here -- DIALOGUE-POLICIES.md
@@ -83,6 +84,44 @@ _ELICITATION_PROMPTS: dict[str, str] = {
 _CONFIRM_KEY = "confirm_file_claim"
 
 
+def _autofill_single_vehicle(filled: dict[str, Any]) -> None:
+    """`D207`/`OI125` direction 3, item 3: a policy with exactly one vehicle is never asked at all --
+    filled here, in place, before `_next_missing_slot` ever sees `insured_vehicle_vin` as outstanding.
+    83% of the real corpus's policies (5 of 6) have exactly one vehicle -- this is the common case, not
+    an edge case, and removes the question entirely for most callers rather than merely making it easier
+    to answer. No-op if `policy_number` isn't known yet (`_SLOT_ORDER` always asks it first, so this
+    only matters on the very turn it's answered) or if `insured_vehicle_vin` is already filled.
+    """
+    if "insured_vehicle_vin" in filled:
+        return
+    policy_number = filled.get("policy_number")
+    if not isinstance(policy_number, str):
+        return
+    vehicles = vehicles_for_policy(policy_number)
+    if len(vehicles) == 1:
+        filled["insured_vehicle_vin"] = vehicles[0].vin
+
+
+def _vehicle_choices_prompt(filled: dict[str, Any]) -> str:
+    """Builds "Is this about the 2022 Meridian, or the 2024 Skiff?" from the policy's own vehicles, in
+    place of the static `_ELICITATION_PROMPTS["insured_vehicle_vin"]` open question -- three live
+    diagnostic rounds (`D207`/`OI125`) confirmed telephony ASR cannot transcribe "Meridian" at all, so
+    the fix is reading the caller's own vehicles back rather than asking them to volunteer a model name.
+    `resolve_vehicle_description`'s ordinal matcher counts positions in this same order.
+
+    Falls back to the static open question if the policy has zero or one vehicle -- one vehicle should
+    already have been auto-filled by `_autofill_single_vehicle` before this is ever called, so that branch
+    is defensive, not a real path for this corpus; zero vehicles is a data problem this node has no better
+    answer for.
+    """
+    vehicles = vehicles_for_policy(filled["policy_number"])
+    if len(vehicles) < 2:
+        return _ELICITATION_PROMPTS["insured_vehicle_vin"]
+    names = [f"the {vehicle.year} {vehicle.model}" for vehicle in vehicles]
+    choices = ", ".join(names[:-1]) + f", or {names[-1]}"
+    return f"Is this about {choices}?"
+
+
 def _next_missing_slot(filled: dict[str, Any]) -> str | None:
     for slot in _SLOT_ORDER:
         if slot in _CONDITIONAL_ON:
@@ -128,12 +167,19 @@ def file_auto_claim(state: AgentState) -> dict[str, Any]:
         # We asked for `active_slot` last turn and it's still missing -- a no-match on this specific slot.
         return {"active_slot": active_slot, "response_text": None}
 
+    _autofill_single_vehicle(filled)
+
     next_slot = _next_missing_slot(filled)
     if next_slot is not None:
+        prompt = (
+            _vehicle_choices_prompt(filled)
+            if next_slot == "insured_vehicle_vin"
+            else _ELICITATION_PROMPTS[next_slot]
+        )
         return {
             "active_slot": next_slot,
             "filled_slots": filled,
-            "response_text": _ELICITATION_PROMPTS[next_slot],
+            "response_text": prompt,
         }
 
     if _CONFIRM_KEY not in filled:

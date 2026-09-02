@@ -415,7 +415,11 @@ def test_state_persists_across_two_turns_via_the_real_checkpointer(
         )
 
     assert r2["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
-    assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+    # `D207`/`OI125` direction 3: PY1103 has exactly one vehicle, so `insured_vehicle_vin` is now
+    # auto-filled rather than asked -- the next ElicitSlot after policy_number is `loss_datetime`. Still
+    # proves the property this test is named for: policy_number was merged in from turn 1 (otherwise
+    # turn 2 would re-ask "policy_number", not advance at all).
+    assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "loss_datetime"
 
 
 def test_file_auto_claim_reaches_fulfilment_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:

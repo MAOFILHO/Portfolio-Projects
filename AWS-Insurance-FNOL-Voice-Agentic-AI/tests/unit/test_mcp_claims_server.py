@@ -250,6 +250,35 @@ def test_resolve_vehicle_description_returns_none_for_a_vin_not_on_this_policy()
     assert resolve_vehicle_description("9SYCD4568G1000102", "PY4821") is None
 
 
+def test_resolve_vehicle_description_matches_by_ordinal_position() -> None:
+    """`D207`/`OI125` direction 3: telephony ASR cannot transcribe "Meridian" -- three live diagnostic
+    rounds confirmed the model name never arrives. The prompt now reads the caller's own vehicles back
+    (`file_auto_claim.py`'s `_vehicle_choices_prompt`, listed in policy order: Meridian first, Skiff
+    second) and lets them answer by position instead."""
+    assert resolve_vehicle_description("the first one", "PY4821") == "9SYAB1239G1000101"
+    assert resolve_vehicle_description("the second one", "PY4821") == "9SYNP3452H2000501"
+    assert resolve_vehicle_description("first", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_matches_by_bare_year() -> None:
+    """Year is the most ASR-robust signal (Marco): digits, not an uncommon proper noun. Only the digit
+    form is parsed -- see the function's own docstring for why "twenty twenty two" is out of scope.
+    """
+    assert resolve_vehicle_description("2022", "PY4821") == "9SYAB1239G1000101"
+    assert resolve_vehicle_description("the 2022 one", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_matches_by_make_alone() -> None:
+    assert resolve_vehicle_description("the Example Motors one", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_does_not_parse_a_spelled_out_year() -> None:
+    """`D207`/`OI125`'s original failure shape, still real: text with no model name, no ordinal, no
+    digit year, and no make must return None rather than guess -- never silently resolve to the wrong
+    vehicle just because a caller's answer sounded like it was trying to say something."""
+    assert resolve_vehicle_description("twenty twenty two", "PY4821") is None
+
+
 def test_resolve_vehicle_description_returns_none_when_ambiguous(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
