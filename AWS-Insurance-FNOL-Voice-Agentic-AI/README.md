@@ -150,11 +150,14 @@ All three were found the same way: by checking something that already looked set
   what a frightened person says at the roadside. **No recall figure here should be read as predicting
   real-world recall.** This is the largest gap between what is measured and what running a real line
   would need.
-- **No real caller has spoken to this system.** Containment, satisfaction and abandonment cannot be
-  estimated from author- and agent-generated text.
+- **One caller has spoken to this system, repeatedly, and he built it.** See "What happened when a real
+  caller finally dialled" below. Containment, satisfaction and abandonment are still unmeasured — a single
+  operator placing calls against his own system is not a caller population.
 - **Bias across name, accent and dialect, and accessibility for callers with speech differences, are not
   assessed** — a genuine equity gap in a voice-only system. A text-level paired-prompt check is in scope
-  for Phase 7; an ASR/accent audit needs audio and real callers and is not planned.
+  for Phase 7; an ASR/accent audit needs audio and real callers and is not planned. The live calls below
+  are the first hard evidence this gap is real, not theoretical: telephony ASR repeatedly failed to
+  transcribe an invented model name and a six-character alphanumeric identifier, for one speaker.
 - **`n` is small.** 26 held-out positives, one sample each, against a stochastic detector.
 - **Most green tests here were written against fixtures their own author invented — and that is the
   honest caveat on all of them.** A test whose inputs the author wrote measures the author's model of
@@ -167,6 +170,78 @@ All three were found the same way: by checking something that already looked set
   response: against an adversarial or generative source, at least one input must come **from the source
   itself**, and a behavioural property must be closed by a measurement, never by a test. Read a green
   suite in this repo as evidence that the known cases hold, not that the space is covered.
+
+## What happened when a real caller finally dialled
+
+The DID was routed on 2026-08-29. Everything above this line was measured against fixtures, simulated
+turns and a fake-LLM harness — 752 unit tests passing that day, 807 as of this section.
+
+**The early calls this system took failed for several distinct reasons, and not one of those reasons was
+reachable by any test in the suite.** Days later, a caller walked the full flow and filed a claim end to
+end.
+
+| | |
+|---|---|
+| First routed call | 2026-08-29 — escalated at the opener |
+| First call to reach fulfilment | 2026-09-02, contact `20f8d777-6d16-410f-bde5-6ecc2084e54f`, no escalation |
+| Evidence it filed | `claim filed successfully contact=4a3671c5-1c8d-4a21-86b4-94ab0baef554` — one live CloudWatch log line carrying no other identifier, for the reason given below |
+| Defects found this way | 7 (`D202`–`D208`): 3 fixes live-verified, 1 partial, 3 open, 1 diagnosed and deliberately deferred |
+
+### The seven defects, and why the suite could not have found them
+
+Each was traced to a mechanism at `file:line` from CloudWatch, not inferred from the call going wrong.
+
+| # | Defect | Mechanism | Why no test caught it |
+|---|---|---|---|
+| `D202` | A conversational non-answer mid-slot-fill killed the turn, and a related classifier bypass fixed a sibling failure | Caller said *"I don't have it handy now"* to `policy_number`. The router correctly returned `Ambiguous`; `_elicit_slot`'s guard correctly refused to send an illegal `ElicitSlot`; the blanket `except` then fell open to a bare `Delegate` — discarding a reprompt the graph had already computed. A related fix (bare Yes/No answers on an `AMAZON.Confirmation` slot were also misclassified `Ambiguous` and escalated the call) now bypasses the classifier entirely when Lex has already resolved the value | The guard was tested. The fail-open was tested. Nothing tested what the *caller hears* when both fire together |
+| `D203` | The L2 safety classifier fires on plain vehicle damage | Confirmed 3/3 live and 3/7 in a text probe, on utterances with no injury language and no human subject. The prompt conflates *injury* with *incident* | Held-out sets were agent-authored. Agents write euphemism; callers describe bumpers |
+| `D204` | Mid-conversation intent hijack | *"Comprehensive"*, answering the active `loss_type` slot, was classified as a fresh `CoverageQuestion`. `_CLASSIFY_TURN_SYSTEM_PROMPT` never mentioned `active_slot` at all — the slot was injected as an unweighted line in the user message, with no precedence rule | Every classifier test supplied a turn without dialogue state. The bug is *in* the state |
+| `D205` | Genuine mid-slot topic changes land on the wrong intent | 3 of 4 escapes landed on the wrong intent — 2 of those on `OutOfScope`, 1 on `CoverageQuestion`. `OutOfScope` is in `_INCONCLUSIVE_INTENTS`, so a caller who clearly asked for something else gets a generic reprompt twice, then a transfer | Surfaced only because a probe checked *what* the escapes resolved to, not merely that they escaped |
+| `D206` | The injury question is never asked | `injuries_present` is declared Lex priority 1 and deliberately excluded from the graph's `_SLOT_ORDER` on the stated assumption that something else asks it. **Nothing does.** The graph's `ElicitSlot` drives every ordinary turn; Lex's own priority walk only runs on a `Delegate` that the happy path never produces | Both components' comments describe the other one doing it |
+| `D207` | The vehicle slot was structurally unanswerable, and the caller's own policy/claim numbers arrived lowercased | The prompt asks *"Which of your vehicles is this about?"* — a description. The slot requires a 17-character VIN, and the system never asks for one anywhere in the call. Separately, `AMAZON.AlphaNumeric` lowercases its resolved value; every comparison against the corpus is case-sensitive, and five of six call sites reject a lowercase value at a Pydantic pattern gate *before* the comparison runs | `insured_vehicle_vin` was always supplied as a valid VIN by every fixture, and every test passed `"PY4821"` — the bot sends `"py4821"` |
+| `D208` | Keypad entry is truncated by configuration | `DTMFSpecification.MaxLength: 4` on a six-press identifier. Sibling slots count presses correctly; only this one was wrong | Diagnosed and TDD-confirmed, **not shipped** — the fix touches `bot.yaml.tftpl`, which forces a bot rebuild and a live phone-number association replacement. Deferred deliberately, batched with other pending edits to the same file |
+
+Under all of it sat one thing no unit test can hold: **telephony ASR does not reliably transcribe an
+invented proper noun or a six-character alphanumeric identifier.** `"Meridian"` arrived as two or three
+common words that shared no substring with it. `"P Y four eight two one"` arrived as `uy4821`, `ty4821`,
+`py`, and `py48`. The fix was not better matching. It was to stop asking questions whose answers a phone
+line cannot carry: read the caller's own vehicles back and let them pick by position, and resolve a
+policy number on its digits when they identify exactly one policy.
+
+### Diagnosing a live defect without reading the caller's words
+
+`CLAUDE.md` requires PII redaction on every transcript before it is persisted or logged — blanket, not
+scoped to fields classified as PII. That rule held while a production defect went undiagnosed for three
+sessions, and it shaped how the defect was found instead.
+
+| Round | Logged | Ruled out |
+|---|---|---|
+| 1 | `policy_number`, vehicle count on that policy, match outcome | The policy scoping theory — policy resolved, both vehicles loaded, still no match |
+| 2 | `text_len`, `token_count`, and per-vehicle `substring` / `word_boundary` against the known catalog model names | Suffix-tolerance — the model name was not present in any form, not merely bounded wrongly |
+| 3 | Character-class counts (`alpha` / `digit` / `space` / `punct`) and a case-shape label | Substitution — an all-lowercase, all-alpha, three-token transcript is a real transcription, not a placeholder |
+
+Three rounds narrowed *what arrived* to a single hypothesis without any round printing the caller's
+own words. The same discipline decided the closing question: the claim number issued on a successful
+filing is **not** logged, because an identifier's linkability to one policyholder's record does not
+depend on whether the caller recited it or the system minted it. What ships instead is a bare
+`claim filed successfully contact=<call id>` — proof a claim was filed, with nothing tying the line to
+whose claim it was.
+
+### What this changes about every number above
+
+**The suite was green throughout.** 752 tests passing when the first live call failed, 807 as of this
+section, and not one of the seven defects above was visible to either count. Three fixes were
+live-verified on subsequent real calls, one is a partial fix, three remain open, and one was diagnosed and
+deliberately deferred — all named here rather than closed quietly.
+
+This is the same pattern the Lessons table below already claims, now with the strongest available
+evidence attached: **a green suite is evidence that the known cases hold, not that the space is
+covered** — and the space a real caller occupies was not covered.
+
+The **Honest caveats** above are updated to match: one caller has spoken to this system, repeatedly, and
+he built it — not the caller population containment, satisfaction and abandonment need to be estimated
+from. The ASR failures above are the first hard evidence the accessibility gap named there is real, not
+theoretical.
 
 ## 🛠️ Tech Stack
 
@@ -185,7 +260,7 @@ All three were found the same way: by checking something that already looked set
 | **Data validation** | Pydantic v2.13 — claim schema, agent state, MCP tool I/O, router tool schema |
 | **Feature flags** | OpenFeature 0.10 — generation tier only; no code path reaches the safety layer |
 | **AWS SDK** | boto3 1.43 + `boto3-stubs` for typed Bedrock/DynamoDB clients |
-| **Testing** | pytest 8.3 — 259 unit tests plus lifecycle-phased pre/post-provision, post-run, post-teardown suites |
+| **Testing** | pytest 8.3 — unit tests plus `scripts/verify_*.py`, run through named `make verify-*` targets (`CLAUDE.md`, `D86`) |
 | **Linting / formatting** | Ruff 0.9 + Black 25.1 over `src tests evals scripts` |
 | **Type checking** | mypy 1.14 `--strict`, zero errors over `src evals scripts` |
 | **IaC** | Terraform ≥1.9; Lex bot via a nested `AWS::Lex::Bot` CloudFormation resource (`ADR-007`) |
@@ -394,7 +469,7 @@ cp .env.example .env        # no secrets; SSM standard parameters are preferred 
 real Makefile targets. `simulate` and `verify-billable` are not; both report *"No rule to make target"*.
 
 ```bash
-make test        # 259 unit tests, no AWS credentials, no network
+make test        # unit tests, no AWS credentials, no network
 make lint        # ruff + black over src tests evals scripts
 make typecheck   # mypy --strict over src evals scripts
 make eval        # Tier A evaluation report — $0.00, real Titan retrieval numbers from a fixture
@@ -418,7 +493,8 @@ make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGE
 
 ## Teardown
 
-**There is nothing to tear down yet** — no billable resource has been provisioned. When Phase 8 lands:
+**Live resources exist and are destroyable.** The Lambda codehook, the Lex bot, and the DID's contact-flow
+association are all Terraform-managed:
 
 ```bash
 make destroy     # returns the destroyable footprint to $0
@@ -432,12 +508,18 @@ re-claiming it, so the protection is structural rather than a convention.
 ## Testing
 
 ```bash
-make test                      # unit — no AWS credentials, no network
-pytest tests/pre_provision     # region, model access, quotas          (Phase 8)
-pytest tests/post_provision    # recording off, budget exists, SKUs     (Phase 8)
-pytest tests/post_run          # against live resources after a call    (Phase 9)
-pytest tests/post_teardown     # release gate: zero surviving resources (Phase 8)
+make test                      # unit tests -- no AWS credentials, no network
+make verify-lambda-execution   # 13-event live-Lex gate against the deployed codehook
+make verify-lex                # bot build/import checks
+make verify-destroy-scope      # confirms make destroy touches nothing in stacks/telephony
+make verify-inference           # Bedrock application-inference-profile region check
 ```
+
+This project deliberately diverges from its sibling's lifecycle-phased
+`tests/{pre_provision,post_provision,post_run,post_teardown}` layout (`CLAUDE.md`, `D86`) — real, cost-gated,
+lifecycle-scoped verification lives in `scripts/verify_*.py`, run through named `make verify-*` targets
+instead, because this project's cost-gate discipline needs a typed `APPROVED: <phase name>` and a per-run
+`COSTS.md` entry around a real AWS call, which a pytest fixture doesn't naturally carry.
 
 `tests/` is deliberately outside `mypy --strict`, and the reason is written in the Makefile rather than
 implied: langgraph's `StateGraph.add_node` and `Pregel.invoke` overloads reject plain callables and dict
@@ -463,9 +545,12 @@ Thirteen ADRs, immutable once accepted — superseded, never edited:
 
 ## Screenshots
 
-None yet. The React/Vite dashboard and the call simulator UI land in Phase 8, and a demo script with one
-deliberate failure plus a live injury escalation is Phase 12's deliverable. Screenshots of a system that
-has never taken a call would be a picture of a fake.
+None yet — no dashboard, no call simulator UI. Call recording is off by design (constraint 18), so a
+screenshot of an actual call will never exist. What replaces it is the real evidence in **"What happened
+when a real caller finally dialled"** above: a CloudWatch log line proving a claim filed, and seven
+diagnosed defects with `file:line` citations from real calls. The React/Vite dashboard and call simulator
+UI remain unbuilt; a demo script with one deliberate failure plus a live injury escalation is Phase 12's
+outstanding deliverable.
 
 ## Lessons learned
 
