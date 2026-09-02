@@ -139,6 +139,7 @@ from typing import Any, Literal
 
 from fnol_voice_agent.agents.l3_lexicon import detect_agent_override
 from fnol_voice_agent.agents.lexicon import detect_safety_trigger
+from fnol_voice_agent.mcp.claims_server import resolve_vehicle_description
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 from fnol_voice_agent.models.enums import Intent
 from fnol_voice_agent.observability.log_redaction import install_pii_log_filter
@@ -577,8 +578,31 @@ def _merged_filled_slots(previous: dict[str, Any], event: dict[str, Any]) -> dic
     simpler than tracking only "this turn's new answer," which would have to special-case the confirm
     slots (`D78`) that Lex's own dialog manager does not walk toward on its own.
     """
+    interpreted = _lex_interpreted_slots(event)
     merged = dict(previous)
-    merged.update(_lex_interpreted_slots(event))
+    merged.update(interpreted)
+
+    # `D207`/`OI125`: `insured_vehicle_vin`'s slot type is `AMAZON.FreeFormInput` -- Lex hands back
+    # whatever the caller said about their vehicle, not a VIN. Resolved here, against `merged`'s own
+    # `policy_number` (the accumulated answer, not just this turn's raw Lex slots -- `policy_number` is
+    # almost always a PRIOR turn's checkpointed value by the time this slot is reached), not in
+    # `agents/nodes/file_auto_claim.py` -- that node's contract is deciding what to ask next from
+    # already-interpreted values, not parsing raw speech (see its own module docstring).
+    if "insured_vehicle_vin" in interpreted:
+        policy_number = merged.get("policy_number")
+        resolved = (
+            resolve_vehicle_description(interpreted["insured_vehicle_vin"], policy_number)
+            if isinstance(policy_number, str)
+            else None
+        )
+        if resolved is not None:
+            merged["insured_vehicle_vin"] = resolved
+        else:
+            # No match, an ambiguous match, or no policy_number yet -- drop the raw text rather than
+            # let it masquerade as an answer. `file_auto_claim.py`'s shape check would otherwise accept
+            # a coincidentally-17-character value that isn't a real VIN (contact `33b36200-...`) or
+            # loop forever re-asking a description that can never validate (contact `0cac5d80-...`).
+            merged.pop("insured_vehicle_vin", None)
     return merged
 
 

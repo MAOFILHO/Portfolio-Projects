@@ -473,6 +473,93 @@ def test_file_auto_claim_reaches_fulfilment_and_closes(monkeypatch: pytest.Monke
     assert "your claim number is clm-" in response["messages"][0]["content"].lower()
 
 
+def test_a_vehicle_description_that_never_resolves_escalates_instead_of_looping_forever(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`D207`/`OI125` Change 2 -- the live caller trap: contact `0cac5d80-...` heard the SAME
+    `insured_vehicle_vin` prompt for six turns straight with no counter and no exit. Change 1
+    (`_merged_filled_slots`/`resolve_vehicle_description`) fixed the SIGNAL -- an unresolvable
+    description is now popped, not left in `filled_slots` masquerading as an answer -- but the signal
+    only matters if something downstream reads it. This test proves something does, with NO new
+    production code: `file_auto_claim.py:127-129`'s existing "still missing" branch already turns a
+    popped slot into `response_text=None`, which `agents/graph.py`'s existing `_after_intent_node`
+    already routes to the SAME shared ladder every other slot's no-match uses
+    (`repair.py.handle_no_match_or_barge_in` / `retry_ladder.py`, `RETRY_CEILING=2`, reused unmodified,
+    not a second counter). Full stack, real graph, real resolver -- no seam mocked out.
+
+    Turn-by-turn, one contact: elicit `policy_number` -> elicit `insured_vehicle_vin` -> two consecutive
+    descriptions matching neither of PY4821's two real vehicles (`Meridian`, `Skiff`) -> escalate on the
+    second, per the existing ceiling (not a new one built for this slot). A third unresolvable turn is
+    sent anyway, past escalation, to prove the ceiling stays tripped rather than silently resetting --
+    that is "three consecutive unresolvable answers escalate rather than loop," Marco's own phrasing:
+    escalation in fact lands on the second (this system's real, unchanged `RETRY_CEILING`, not 3), and
+    the third turn is the evidence that this is a permanent exit, not a one-turn blip back into the loop.
+    """
+    with mock_aws():
+        _install_fake_graph(
+            monkeypatch,
+            by_model={_ROUTER_MODEL: _classification("FileAutoClaim")},
+            table_suffix="vin-retry-ceiling",
+        )
+        contact = {"contactId": "c-vin-retry-ceiling"}
+
+        r1 = lex_codehook.handler(
+            _event(session_attributes=contact, transcript="I want to file a claim"), None
+        )
+        assert r1["sessionState"]["dialogAction"]["slotToElicit"] == "policy_number"
+
+        r2 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"policy_number": _slot("PY4821")},
+                transcript="my policy number is PY4821",
+            ),
+            None,
+        )
+        assert r2["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+
+        # 1st unresolvable answer: matches neither vehicle on PY4821 -> resolver returns None ->
+        # popped, not passed through -> reprompt, not escalation yet.
+        r3 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a blue truck")},
+                transcript="a blue truck",
+            ),
+            None,
+        )
+        assert r3["sessionState"]["dialogAction"]["type"] == "ElicitSlot"
+        assert r3["sessionState"]["dialogAction"]["slotToElicit"] == "insured_vehicle_vin"
+        assert r3["messages"][0]["content"] == GENERIC_REPROMPT
+
+        # 2nd unresolvable answer: `retry_counts["insured_vehicle_vin"]` reaches the existing
+        # `RETRY_CEILING` (2) -> the shared ladder escalates, exactly as it would for any other slot.
+        r4 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a green van")},
+                transcript="a green van",
+            ),
+            None,
+        )
+        assert r4["sessionState"]["dialogAction"]["type"] == "Close"
+        assert r4["sessionState"]["sessionAttributes"]["escalate"] == "true"
+        assert r4["sessionState"]["sessionAttributes"]["escalation_reason"] == "detection-graph"
+
+        # 3rd unresolvable answer, sent anyway: the ceiling stays tripped rather than resetting --
+        # this is the "not a loop" property, not a fresh escalation call (retry_counts only grows).
+        r5 = lex_codehook.handler(
+            _event(
+                session_attributes=contact,
+                slots={"insured_vehicle_vin": _slot("a white minivan")},
+                transcript="a white minivan",
+            ),
+            None,
+        )
+        assert r5["sessionState"]["dialogAction"]["type"] == "Close"
+        assert r5["sessionState"]["sessionAttributes"]["escalate"] == "true"
+
+
 # ---------------------------------------------------------------------------------------------------
 # `D84` -- `_elicit_slot()` names the GRAPH's own intent, never Lex's (possibly-disagreeing) echoed one
 # ---------------------------------------------------------------------------------------------------
@@ -1445,6 +1532,86 @@ def test_the_per_turn_log_line_reports_no_length_when_the_vin_is_unfilled(
     turn_records = [r for r in caplog.records if r.message.startswith("turn ")]
     assert len(turn_records) == 1
     assert "insured_vehicle_vin_len=None" in turn_records[0].message
+
+
+# ---------------------------------------------------------------------------------------------------
+# `D207`/`OI125`: `insured_vehicle_vin`'s elicitation prompt asks for a spoken vehicle description, not
+# a VIN -- resolved codehook-side, at `_merged_filled_slots`, the same slot-read boundary that already
+# folds Lex's per-turn slots onto the checkpointed `filled_slots`. `policy_number` is read from the
+# MERGED result, not just this turn's raw Lex slots, because it is almost always a prior turn's
+# checkpointed answer by the time this slot is reached. PY4821 (real corpus fixture) carries two
+# vehicles: a 2022 Example Motors Meridian (VIN 9SYAB1239G1000101) and a 2024 Harborline Skiff.
+# ---------------------------------------------------------------------------------------------------
+
+
+def test_merged_filled_slots_resolves_a_spoken_vehicle_description_to_a_vin() -> None:
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("the Meridian")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
+
+
+def test_merged_filled_slots_passes_a_real_vin_through_unchanged() -> None:
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("9SYAB1239G1000101")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
+
+
+def test_merged_filled_slots_drops_an_unresolvable_vehicle_description() -> None:
+    """Contact `0cac5d80-...`'s own repro: none of the six answers the caller actually gave were
+    trying to be a VIN. The slot must stay unanswered, not carry the raw text forward, so
+    `file_auto_claim.py`'s own shape check re-asks it."""
+    previous = {"policy_number": "PY4821"}
+    event = _event(intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("my scooter")})
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_drops_a_coincidentally_17_character_value_not_on_the_policy() -> None:
+    """Contact `33b36200-...`'s own repro: a 17-character value that passed the old shape check by
+    accident, was not a real VIN, and failed downstream at fulfillment instead."""
+    previous = {"policy_number": "PY4821"}
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("ABCDEFGHIJKLMNOPQ")}
+    )
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_drops_the_vehicle_slot_when_policy_number_is_not_yet_known() -> None:
+    """Defensive -- `_SLOT_ORDER` always asks `policy_number` first, but resolution has no policy to
+    scope against if it somehow runs before that answer is checkpointed."""
+    event = _event(
+        intent_name="FileAutoClaim", slots={"insured_vehicle_vin": _slot("the Meridian")}
+    )
+
+    merged = lex_codehook._merged_filled_slots({}, event)
+
+    assert "insured_vehicle_vin" not in merged
+
+
+def test_merged_filled_slots_keeps_an_already_resolved_vin_from_a_prior_turn() -> None:
+    """The common real-world shape: `insured_vehicle_vin` was resolved and checkpointed last turn, and
+    this turn's event carries some other slot's new answer, not this one."""
+    previous = {"policy_number": "PY4821", "insured_vehicle_vin": "9SYAB1239G1000101"}
+    event = _event(intent_name="FileAutoClaim", slots={"loss_location": _slot("Highway 401")})
+
+    merged = lex_codehook._merged_filled_slots(previous, event)
+
+    assert merged["insured_vehicle_vin"] == "9SYAB1239G1000101"
 
 
 def test_an_escalating_turn_logs_both_its_own_escalation_line_and_the_per_turn_line(

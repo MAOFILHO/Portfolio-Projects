@@ -4,9 +4,10 @@
 *when enough is known to file*, given whatever is already in `state["filled_slots"]` -- it does not parse
 raw speech into slot values itself. That is Lex's own NLU job (`ADR-001`: "Lex V2 remains the
 turn-manager"), not built until Phase 8; this graph receives already-interpreted values the way a real
-Lex codehook would. `insured_vehicle_vin` is assumed already resolved to a VIN by the time it reaches
-`filled_slots` (Lex's enum-disambiguation of "my Honda Civic" against the policy's vehicle list,
-`SLOT-DESIGN.md` §1.2) -- not re-resolved here.
+Lex codehook would. `insured_vehicle_vin` is resolved to a real VIN before it ever reaches `filled_slots`
+-- codehook-side, at `api/lex_codehook.py`'s `_merged_filled_slots` (`resolve_vehicle_description`,
+`D207`/`OI125`), not by a Lex slot-type enum (the Lex slot type stays `AMAZON.FreeFormInput`) and not
+re-resolved here.
 
 **Per-turn contract** (same as every intent node in this package): a falsy/missing `response_text` means
 "no new information this turn for the slot we were waiting on" -- `agents/graph.py` routes that to the

@@ -16,6 +16,7 @@ from fnol_voice_agent.mcp.claims_server import (
     file_new_claim,
     get_claim_status,
     get_rental_status,
+    resolve_vehicle_description,
 )
 
 _VALID_NEW_CLAIM_KWARGS: dict[str, object] = {
@@ -180,6 +181,73 @@ def test_get_rental_status_raises_when_claim_has_no_rental_block(
 
     with pytest.raises(RentalStatusUnavailableError):
         get_rental_status("CLM-2608-00042-4")
+
+
+def test_resolve_vehicle_description_passes_through_a_real_vin_on_the_policy() -> None:
+    assert resolve_vehicle_description("9SYAB1239G1000101", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_matches_model_name_alone() -> None:
+    # PY4821's two vehicles: 2022 Example Motors Meridian (9SYAB1239G1000101), 2024 Harborline Skiff.
+    assert resolve_vehicle_description("the Meridian", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_matches_make_and_model() -> None:
+    assert resolve_vehicle_description("my Harborline Skiff", "PY4821") == "9SYNP3452H2000501"
+
+
+def test_resolve_vehicle_description_matches_year_make_and_model() -> None:
+    assert (
+        resolve_vehicle_description("the 2022 Example Motors Meridian", "PY4821")
+        == "9SYAB1239G1000101"
+    )
+
+
+def test_resolve_vehicle_description_is_case_insensitive() -> None:
+    assert resolve_vehicle_description("THE MERIDIAN", "PY4821") == "9SYAB1239G1000101"
+
+
+def test_resolve_vehicle_description_returns_none_on_no_match() -> None:
+    assert resolve_vehicle_description("my scooter", "PY4821") is None
+
+
+def test_resolve_vehicle_description_returns_none_for_a_vin_not_on_this_policy() -> None:
+    # 9SYCD4568G1000102 is real, but belongs to PY1103, not PY4821 -- a 17-char coincidence must not
+    # pass through (this is D207's contact 33b36200-...'s own failure mode).
+    assert resolve_vehicle_description("9SYCD4568G1000102", "PY4821") is None
+
+
+def test_resolve_vehicle_description_returns_none_when_ambiguous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fnol_voice_agent.mcp.claims_server as claims_server
+    from fnol_voice_agent.models import Vehicle
+
+    same_model_twice = [
+        Vehicle(
+            vin="9SYAB1239G1000101",
+            vin_check_digit_note="n/a",
+            policy_number="PY4821",
+            year=2022,
+            make="Example Motors",
+            model="Meridian",
+            plate="KJH-4523",
+            actual_cash_value_cad=22000,
+        ),
+        Vehicle(
+            vin="9SYNP3452H2000501",
+            vin_check_digit_note="n/a",
+            policy_number="PY4821",
+            year=2024,
+            make="Harborline",
+            model="Meridian",
+            plate="TVN-2258",
+            actual_cash_value_cad=27500,
+        ),
+    ]
+    monkeypatch.setattr(claims_server, "_load_vehicles", lambda: same_model_twice)
+
+    assert resolve_vehicle_description("the Meridian", "PY4821") is None
 
 
 def test_importing_this_module_does_not_import_the_mcp_transport_package() -> None:

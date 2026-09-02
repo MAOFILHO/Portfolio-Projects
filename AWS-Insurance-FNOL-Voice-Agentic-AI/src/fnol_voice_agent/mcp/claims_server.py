@@ -12,6 +12,7 @@ rationale -- not repeated per-file here.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -238,6 +239,33 @@ def get_rental_status(claim_number: str) -> RentalStatus:
                 f"{recomputed_amount})"
             )
     return rental
+
+
+def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
+    """Resolves a caller's free-text vehicle description to a VIN, scoped to one policy's own vehicle
+    list -- `D207`/`OI125`'s fix, direction 2. Case-insensitive; matches on the vehicle's `model` name
+    alone, `make`+`model`, or `year`+`make`+`model` (all three collapse to "the model name appears in
+    the text" in practice, since no single policy in the real corpus has two vehicles sharing a model
+    name -- make/year only matter to disambiguate a collision if one ever exists). Also passes a real
+    17-character VIN straight through if it already belongs to this policy.
+
+    Returns None -- not an exception -- on no match or an ambiguous match (more than one vehicle on the
+    policy matches), so the caller's slot stays unanswered and gets re-asked rather than filing a claim
+    against the wrong vehicle.
+    """
+    candidate = text.strip().upper()
+    vehicles = [v for v in _load_vehicles() if v.policy_number == policy_number]
+
+    if len(candidate) == 17:
+        for vehicle in vehicles:
+            if vehicle.vin.upper() == candidate:
+                return vehicle.vin
+
+    text_lower = text.lower()
+    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)]
+    if len(matches) == 1:
+        return matches[0].vin
+    return None
 
 
 def file_new_claim(
