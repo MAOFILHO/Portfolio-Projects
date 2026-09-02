@@ -12,7 +12,6 @@ rationale -- not repeated per-file here.
 from __future__ import annotations
 
 import json
-import logging
 import re
 from datetime import UTC, datetime
 
@@ -26,8 +25,6 @@ from fnol_voice_agent.validation.coverage import rental_days_remaining
 from fnol_voice_agent.validation.identifiers import compute_claim_number, normalize_policy_number
 
 from ._paths import CLAIMS_PATH, POLICYHOLDERS_PATH, VEHICLES_PATH
-
-logger = logging.getLogger(__name__)
 
 # SLOT-DESIGN.md §3 / DIALOGUE-POLICIES.md's "most recent open claim" resolution treats these two
 # statuses as closed; every other `ClaimStatus` value counts as open.
@@ -352,103 +349,33 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     # site where a raw, un-normalized value reaches a comparison directly.
     vehicles = vehicles_for_policy(policy_number)
 
-    # TEMPORARY, `D207`/`OI125` follow-up diagnostic (Marco, 2026-09-02) -- NOT yet deployed as of this
-    # commit; remove once the live-vs-probe divergence is explained. `policy_number` is logged as
-    # received (pre-normalization) -- it is not obfuscated/PII per this project's own guardrail table,
-    # and this is the one value the live probe and the live voice calls disagree on having the same
-    # shape for. Vehicle count and match outcome, never the vehicle description text itself (that CAN
-    # restate the caller's own words, same discipline as `_log_turn_observability`'s `response_text_len`
-    # choice one layer up).
-    result = None
     if len(candidate) == 17:
         for vehicle in vehicles:
             if vehicle.vin.upper() == candidate:
-                result = vehicle.vin
-                break
-    if result is None:
-        text_lower = text.lower()
-        matches = [
-            v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)
-        ]
-        if len(matches) == 1:
-            result = matches[0].vin
-    if result is None:
-        # `D207`/`OI125` direction 3: telephony ASR cannot transcribe "Meridian" -- confirmed live over
-        # three diagnostic rounds, the model name never arrives. `file_auto_claim.py` now reads the
-        # policy's own vehicles back to the caller instead of asking an open question, so a selection
-        # answer needs its own matchers alongside the model-name one above.
-        ordinal_match = _match_by_ordinal(text, vehicles)
-        if ordinal_match is not None:
-            result = ordinal_match.vin
-    if result is None:
-        year_match = _match_by_year(text, vehicles)
-        if year_match is not None:
-            result = year_match.vin
-    if result is None:
-        make_match = _match_by_make(text, vehicles)
-        if make_match is not None:
-            result = make_match.vin
-    # TEMPORARY, extended 2026-09-02 -- `policy_number`/`vehicles_on_policy` above already ruled out the
-    # ASR/policy-number theory (contact `1ffc14f1-...`: resolved, 2 vehicles loaded, still `matched=False`).
-    # The remaining question is the vehicle TEXT itself: did ASR transcribe something with no resemblance
-    # to the model name at all, or something close that the `\b` word-boundary regex is too strict to
-    # catch (e.g. a plural/possessive suffix, which breaks a trailing `\b`)? Per Marco's own instruction,
-    # the caller's transcribed words are NOT logged verbatim -- `CLAUDE.md`'s "PII redaction on every
-    # transcript before it is persisted or logged" is blanket, not scoped to fields classified as PII, and
-    # this codebase's own precedent (`_log_turn_observability`'s `response_text_len`-only choice, same
-    # module docstring already cited above) already treats free-form caller speech this way. `text_len`/
-    # `token_count` describe the SHAPE of what arrived; `substring`/`word_boundary` per vehicle describe
-    # whether that KNOWN, non-secret catalog value (the model name) was found in it -- neither restates the
-    # caller's own words.
-    text_lower_for_shape = text.lower()
-    vehicle_checks = [
-        {
-            "model": vehicle.model,
-            "substring": vehicle.model.lower() in text_lower_for_shape,
-            "word_boundary": re.search(
-                rf"\b{re.escape(vehicle.model.lower())}\b", text_lower_for_shape
-            )
-            is not None,
-        }
-        for vehicle in vehicles
-    ]
-    # TEMPORARY, extended again 2026-09-02 -- two live calls (contact from 02:06) with different spoken
-    # answers ("The Meridian", "The Skiff") logged IDENTICAL text_len=10/token_count=2, matching neither
-    # utterance's real length (12 and 9 chars respectively). That rules out ASR mis-transcription-of-real-
-    # words as the sole explanation and raises a live-vs-probe delivery difference instead. This fingerprint
-    # narrows further without printing the caller's words: character-CLASS counts (never the characters
-    # themselves) plus a case-shape label. A real transcript of "the meridian" is all-alpha-plus-space; a
-    # canned/placeholder/attribute-substitution string is the more likely candidate if this comes back with
-    # digits or punctuation no spoken vehicle description would ever contain.
-    alpha_count = sum(1 for ch in text if ch.isalpha())
-    digit_count = sum(1 for ch in text if ch.isdigit())
-    space_count = sum(1 for ch in text if ch.isspace())
-    punct_count = len(text) - alpha_count - digit_count - space_count
-    if text.isupper():
-        case_shape = "upper"
-    elif text.islower():
-        case_shape = "lower"
-    elif text == "":
-        case_shape = "empty"
-    else:
-        case_shape = "mixed"
-    logger.info(
-        "resolve_vehicle_description policy_number=%r vehicles_on_policy=%d matched=%s "
-        "text_len=%d token_count=%d vehicle_checks=%s "
-        "alpha=%d digit=%d space=%d punct=%d case_shape=%s",
-        policy_number,
-        len(vehicles),
-        result is not None,
-        len(text),
-        len(text.split()),
-        vehicle_checks,
-        alpha_count,
-        digit_count,
-        space_count,
-        punct_count,
-        case_shape,
-    )
-    return result
+                return vehicle.vin
+
+    text_lower = text.lower()
+    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)]
+    if len(matches) == 1:
+        return matches[0].vin
+
+    # `D207`/`OI125` direction 3: telephony ASR cannot transcribe "Meridian" -- confirmed live over
+    # three diagnostic rounds, the model name never arrives. `file_auto_claim.py` now reads the
+    # policy's own vehicles back to the caller instead of asking an open question, so a selection
+    # answer needs its own matchers alongside the model-name one above.
+    ordinal_match = _match_by_ordinal(text, vehicles)
+    if ordinal_match is not None:
+        return ordinal_match.vin
+
+    year_match = _match_by_year(text, vehicles)
+    if year_match is not None:
+        return year_match.vin
+
+    make_match = _match_by_make(text, vehicles)
+    if make_match is not None:
+        return make_match.vin
+
+    return None
 
 
 def file_new_claim(
