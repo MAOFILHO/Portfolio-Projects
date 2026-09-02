@@ -12,6 +12,7 @@ rationale -- not repeated per-file here.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -25,6 +26,8 @@ from fnol_voice_agent.validation.coverage import rental_days_remaining
 from fnol_voice_agent.validation.identifiers import compute_claim_number
 
 from ._paths import CLAIMS_PATH, POLICYHOLDERS_PATH, VEHICLES_PATH
+
+logger = logging.getLogger(__name__)
 
 # SLOT-DESIGN.md §3 / DIALOGUE-POLICIES.md's "most recent open claim" resolution treats these two
 # statuses as closed; every other `ClaimStatus` value counts as open.
@@ -267,16 +270,33 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     policy_number_upper = policy_number.upper()
     vehicles = [v for v in _load_vehicles() if v.policy_number == policy_number_upper]
 
+    # TEMPORARY, `D207`/`OI125` follow-up diagnostic (Marco, 2026-09-02) -- NOT yet deployed as of this
+    # commit; remove once the live-vs-probe divergence is explained. `policy_number` is logged as
+    # received (pre-normalization) -- it is not obfuscated/PII per this project's own guardrail table,
+    # and this is the one value the live probe and the live voice calls disagree on having the same
+    # shape for. Vehicle count and match outcome, never the vehicle description text itself (that CAN
+    # restate the caller's own words, same discipline as `_log_turn_observability`'s `response_text_len`
+    # choice one layer up).
+    result = None
     if len(candidate) == 17:
         for vehicle in vehicles:
             if vehicle.vin.upper() == candidate:
-                return vehicle.vin
-
-    text_lower = text.lower()
-    matches = [v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)]
-    if len(matches) == 1:
-        return matches[0].vin
-    return None
+                result = vehicle.vin
+                break
+    if result is None:
+        text_lower = text.lower()
+        matches = [
+            v for v in vehicles if re.search(rf"\b{re.escape(v.model.lower())}\b", text_lower)
+        ]
+        if len(matches) == 1:
+            result = matches[0].vin
+    logger.info(
+        "resolve_vehicle_description policy_number=%r vehicles_on_policy=%d matched=%s",
+        policy_number,
+        len(vehicles),
+        result is not None,
+    )
+    return result
 
 
 def file_new_claim(
