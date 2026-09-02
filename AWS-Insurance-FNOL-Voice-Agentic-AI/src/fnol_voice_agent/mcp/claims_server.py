@@ -290,11 +290,65 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
         ]
         if len(matches) == 1:
             result = matches[0].vin
+    # TEMPORARY, extended 2026-09-02 -- `policy_number`/`vehicles_on_policy` above already ruled out the
+    # ASR/policy-number theory (contact `1ffc14f1-...`: resolved, 2 vehicles loaded, still `matched=False`).
+    # The remaining question is the vehicle TEXT itself: did ASR transcribe something with no resemblance
+    # to the model name at all, or something close that the `\b` word-boundary regex is too strict to
+    # catch (e.g. a plural/possessive suffix, which breaks a trailing `\b`)? Per Marco's own instruction,
+    # the caller's transcribed words are NOT logged verbatim -- `CLAUDE.md`'s "PII redaction on every
+    # transcript before it is persisted or logged" is blanket, not scoped to fields classified as PII, and
+    # this codebase's own precedent (`_log_turn_observability`'s `response_text_len`-only choice, same
+    # module docstring already cited above) already treats free-form caller speech this way. `text_len`/
+    # `token_count` describe the SHAPE of what arrived; `substring`/`word_boundary` per vehicle describe
+    # whether that KNOWN, non-secret catalog value (the model name) was found in it -- neither restates the
+    # caller's own words.
+    text_lower_for_shape = text.lower()
+    vehicle_checks = [
+        {
+            "model": vehicle.model,
+            "substring": vehicle.model.lower() in text_lower_for_shape,
+            "word_boundary": re.search(
+                rf"\b{re.escape(vehicle.model.lower())}\b", text_lower_for_shape
+            )
+            is not None,
+        }
+        for vehicle in vehicles
+    ]
+    # TEMPORARY, extended again 2026-09-02 -- two live calls (contact from 02:06) with different spoken
+    # answers ("The Meridian", "The Skiff") logged IDENTICAL text_len=10/token_count=2, matching neither
+    # utterance's real length (12 and 9 chars respectively). That rules out ASR mis-transcription-of-real-
+    # words as the sole explanation and raises a live-vs-probe delivery difference instead. This fingerprint
+    # narrows further without printing the caller's words: character-CLASS counts (never the characters
+    # themselves) plus a case-shape label. A real transcript of "the meridian" is all-alpha-plus-space; a
+    # canned/placeholder/attribute-substitution string is the more likely candidate if this comes back with
+    # digits or punctuation no spoken vehicle description would ever contain.
+    alpha_count = sum(1 for ch in text if ch.isalpha())
+    digit_count = sum(1 for ch in text if ch.isdigit())
+    space_count = sum(1 for ch in text if ch.isspace())
+    punct_count = len(text) - alpha_count - digit_count - space_count
+    if text.isupper():
+        case_shape = "upper"
+    elif text.islower():
+        case_shape = "lower"
+    elif text == "":
+        case_shape = "empty"
+    else:
+        case_shape = "mixed"
     logger.info(
-        "resolve_vehicle_description policy_number=%r vehicles_on_policy=%d matched=%s",
+        "resolve_vehicle_description policy_number=%r vehicles_on_policy=%d matched=%s "
+        "text_len=%d token_count=%d vehicle_checks=%s "
+        "alpha=%d digit=%d space=%d punct=%d case_shape=%s",
         policy_number,
         len(vehicles),
         result is not None,
+        len(text),
+        len(text.split()),
+        vehicle_checks,
+        alpha_count,
+        digit_count,
+        space_count,
+        punct_count,
+        case_shape,
     )
     return result
 
