@@ -320,7 +320,7 @@ Resources:
                 # `filled_slots` key is `insured_vehicle_vin`; this is the Lex-side declaration for it,
                 # not a separate field.
                 - Name: "insured_vehicle_vin"
-                  Description: "Resolved against the policy's vehicle list by the codehook (api/lex_codehook.py's _merged_filled_slots, calling resolve_vehicle_description -- D207/OI125). Slot type stays AMAZON.FreeFormInput; Lex does no enum-based disambiguation of its own."
+                  Description: "Resolved against the policy's vehicle list by the codehook."
                   SlotTypeName: "AMAZON.FreeFormInput"
                   ObfuscationSetting:
                     ObfuscationSettingType: DefaultObfuscation
