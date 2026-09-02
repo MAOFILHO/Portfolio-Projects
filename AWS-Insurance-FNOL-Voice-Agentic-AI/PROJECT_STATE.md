@@ -8688,3 +8688,75 @@ C1 status: not touched -- no deploy this session.
 Blocked on: nothing -- both D207/OI125 changes complete pending Marco's review of the shown diff.
 Last apply + gate result: none -- no Terraform touched, no AWS call made. Real spend this session: $0.
 ```
+
+---
+
+## Session log — 2026-09-01/02, later same night (`D207`/`OI125` real root cause -- case sensitivity, not phrasing)
+
+### STOP CONDITIONS — absolute, no exceptions
+
+- No phase begins without written exit criteria from the prior phase and my explicit approval.
+- No billable AWS resource is created without me typing `APPROVED: <phase name>`.
+- The Amazon Connect instance and DID already exist. Never create either.
+- `PROJECT_STATE.md` is updated before any session ends.
+
+**Deploy fact, not run by me**: the `stacks/main` plan from the prior entry (Lambda-only, `0 to add, 1 to
+change, 0 to destroy`) was applied outside this session -- `fnol-codehook`'s live `CodeSha256` matched the
+new hash (`3MggTMPTgYKPOIs6MhwtvpLk5Rh8pmTbo7+UkjfW2MQ=`) and `LastModified: 2026-09-02T00:59:15Z`, minutes
+before Marco's own two live test calls. Noted plainly to Marco at the time; not disputed.
+
+**D207/OI125's real root cause, corrected**: the VIN-prompt/description mismatch (direction 2, shipped
+earlier tonight) was real, but NOT what escalated tonight's two live calls
+(`625c1e55-9d0d-497d-8da1-0cfbc12ef8cc`, `0090b2e0-1938-4082-8d3a-be6978f31e96`). A live text probe
+(`scripts/probe_d207_vin_delivery.py`, real deployed bot, real `RecognizeText`, ~18 calls, ~$0.014) proved:
+Lex delivered the caller's exact spoken words for `insured_vehicle_vin` verbatim every time ("Meridian" ->
+`'Meridian'`) -- zero delivery loss, zero ASR distortion (text channel). Resolution still failed 5/5. A
+follow-up probe of `policy_number` (`AMAZON.AlphaNumeric`) found the actual cause: Lex lowercases it --
+"PY4821" spoken -> `interpretedValue: "py4821"`. `resolve_vehicle_description`'s policy-scoping comparison
+was case-sensitive against the corpus's canonical `"PY4821"`, so it found ZERO vehicles on the policy for
+every real call, regardless of what the caller said about their vehicle. `insured_vehicle_vin`
+(`FreeFormInput`) does NOT lowercase -- confirmed live, twice, mixed-case and lowercase text both echoed
+back unchanged.
+
+**Blast radius mapped before any fix** (Marco's explicit ask, so as not to fix one site and discover the
+next on a live call): 6 case-sensitive comparison sites across `claims_server.py` (`resolve_vehicle_
+description`, `file_new_claim`, `get_claim_status` x2 for `policy_number`/`claim_number`), `policy_server.py`
+(`get_policyholder_elections`), `contact_server.py` (`update_contact_info`). One further wrinkle found
+during mapping: 5 of the 6 sites sit behind a Pydantic `Field(pattern=...)` gate
+(`POLICY_NUMBER_PATTERN`/`CLAIM_NUMBER_PATTERN`, both uppercase-only) that rejects a lowercase value with a
+*format* error before the comparison is ever reached -- fixing the comparison alone would have been a no-op
+for those 5. Fix landed one line earlier at each: normalize to uppercase before the gated model is
+constructed, still per-function, no shared normalization module (Marco's explicit constraint -- "I have not
+mapped that boundary" -- reused unchanged for this entry too).
+
+**TDD**: 6 new tests, one per site, each using the value Lex actually sends (`"py4821"`, not `"PY4821"`) --
+the exact gap that let this ship undetected, since every existing test in the suite used canonical case.
+Red before green at every site. Full suite: 779 passed, same 2 pre-existing calendar-rollover failures
+(independently confirmed against a clean HEAD checkout two entries ago). `ruff`/`black`/`mypy --strict`
+clean on every touched file, including the new probe script.
+
+**Deliberately NOT built tonight, named as a real cost of the choice made**: normalizing at each of 6
+call-site entry points, rather than one shared boundary, means a 7th caller added later that also compares
+`policy_number`/`claim_number` against the corpus can silently reintroduce this exact bug -- there is no
+single place a future change is forced to go through. A central normalization layer (e.g. at the point
+Lex slot values first enter the system, or a shared validated-identifier type) is the durable fix, and is
+explicitly deferred, not forgotten -- Marco's own words, "a bigger change than tonight warrants and I have
+not mapped that boundary."
+
+**Report** (`REVIEW-CRITERIA.md` §3 header):
+
+```
+Phase/Stage: Phase 12, `D207`/`OI125` remediation (row 8's family). Root cause corrected: case sensitivity
+(policy_number/claim_number lowered by AMAZON.AlphaNumeric), not the originally-filed VIN-prompt mismatch
+alone -- that fix (Change 1) was real and necessary but not sufficient; tonight's two live escalations were
+this bug, confirmed via live probe, not the loop-guard path (which never engaged, since resolution failed
+before any repair-node retry logic mattered).
+Open defects: D206/OI124 unchanged. The 2 calendar-rollover test failures: Marco says he will file them.
+Deferred, not forgotten: central normalization boundary for Lex-delivered identifiers -- 6 call sites fixed
+individually tonight; a 7th added later without going through the same discipline reintroduces this bug.
+C1 status: Lambda already updated live (see deploy fact above) as of Change 1 + Change 2; tonight's
+case-sensitivity fix is NOT yet deployed as of this entry.
+Blocked on: nothing -- fix built, tested, diff shown pending Marco's review.
+Last apply + gate result: none by me this entry -- no Terraform touched, no AWS call made by me. Probe cost:
+~$0.025 total across two probe runs tonight, both RecognizeText, both logged here.
+```
