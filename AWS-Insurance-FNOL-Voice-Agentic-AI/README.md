@@ -624,6 +624,56 @@ Thirteen ADRs, immutable once accepted — superseded, never edited:
 <img width="1195" height="633" alt="Screenshot 2026-08-16 at 7 31 27 PM" src="https://github.com/user-attachments/assets/19c18157-e484-40d9-b967-69d12bdd6e2f" />
 
 
+## Sample call script
+
+**No audio sample exists, and none can.** Call recording is off by design (constraint 18) — there is no
+recording of a real call to share, ever. The phone number itself isn't published here either: it's a real,
+live line billed per minute against a $25/month cap, and this is a public repository.
+
+What follows instead is a real conversation this system actually has, word for word. The greeting is the
+literal live default (`infra/terraform/stacks/main/variables.tf`'s `greeting` variable, interpolated
+directly into the deployed contact flow). The `FileAutoClaim` turns below are the exact scenario
+`tests/unit/test_graph_integration.py::test_file_auto_claim_full_multi_turn_happy_path` asserts against —
+this transcript is not illustrative prose, it is what the shipped code does today, and you can run it
+yourself with no phone call and no AWS credentials:
+
+```bash
+pytest tests/unit/test_graph_integration.py -k test_file_auto_claim_full_multi_turn_happy_path -v
+```
+
+> **Agent:** Thanks for calling claims. Just so you know, you're speaking with an automated assistant, not
+> a person. If you'd like to speak with a person at any point, just say "agent." How can I help you today?
+> **Caller:** I want to file a claim.
+> **Agent:** What's your policy number?
+> **Caller:** My policy number is PY1103.
+> **Agent:** When did this happen?
+> **Caller:** This morning.
+> **Agent:** Where did it happen?
+> **Caller:** On Rue Principale in Ottawa.
+> **Agent:** Was this a collision, a comprehensive-type loss like theft or weather, or something else?
+> **Caller:** Comprehensive, a windshield crack.
+> **Agent:** Can you describe the damage?
+> **Caller:** Just the windshield.
+> **Agent:** Was another vehicle or driver involved?
+> **Caller:** No one else was involved.
+> **Agent:** Was a police report filed?
+> **Caller:** No police report.
+> **Agent:** Were you driving, or someone else?
+> **Caller:** I was driving.
+> **Agent:** So that's a Comprehensive loss on 2026-08-11T09:00:00-04:00 at Rue Principale, Ottawa, ON.
+> Should I go ahead and submit this claim?
+> **Caller:** Yes.
+> **Agent:** That's a Comprehensive loss on 2026-08-11T09:00:00-04:00. Your claim number is
+> CLM-YYMM-NNNNN-C. An adjuster will contact you within 2 business days. Call back anytime to check your
+> claim status.
+
+Two things worth naming rather than polishing away: the vehicle question never gets asked — `PY1103` has
+exactly one vehicle on file, auto-filled without a prompt (`D207`/`OI125` direction 3) — and the agent
+reads the loss date/time back as the raw resolved value (`2026-08-11T09:00:00-04:00`), not a rephrased
+"this morning". That's a real, current rough edge, not smoothed over here for the sake of a cleaner script.
+The claim number itself is a freshly minted identifier (`CLM-YYMM-NNNNN-C`) — this walkthrough can't show a
+fixed one, because a different one is issued every time this scenario actually runs.
+
 ## Lessons learned
 
 Most defects in this build were not found by reading code. They were found by measuring something that
