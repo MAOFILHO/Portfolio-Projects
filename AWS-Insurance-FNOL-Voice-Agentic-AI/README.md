@@ -630,9 +630,12 @@ Thirteen ADRs, immutable once accepted — superseded, never edited:
 
 ## Sample call script
 
-**No audio sample exists, and none can.** Call recording is off by design (constraint 18) — there is no
-recording of a real call to share, ever. The phone number itself isn't published here either: it's a real,
-live line billed per minute against a $25/month cap, and this is a public repository.
+🔊 [**Listen to a real call**](recordings/Call-with-AWS-FNOL-IVR-Agentic-AI.m4a) (1:40) — recorded
+externally, on the caller's own device, not by this system. Call recording stays off by design
+(constraint 18) — no
+contact flow may enable it, and none does; this file exists because nothing in Amazon Connect or Lex
+recorded it. The phone number itself still isn't published here: it's a real, live line billed per minute
+against a $25/month cap, and this is a public repository.
 
 What follows instead is a real conversation this system actually has, word for word. The greeting is the
 literal live default (`infra/terraform/stacks/main/variables.tf`'s `greeting` variable, interpolated
