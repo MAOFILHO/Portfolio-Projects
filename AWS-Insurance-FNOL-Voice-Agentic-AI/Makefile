@@ -1,6 +1,7 @@
 .PHONY: ingest test lint format typecheck eval redteam bootstrap verify-backend verify-inference \
         verify-destroy-scope verify-flows verify-lex verify-charset verify-lambda-execution \
         verify-project-root-scope verify-duplicate-identifiers verify-slot-legality-mapping \
+        verify-xray-trace-shape \
         install-hooks deploy provision destroy teardown
 
 # Only targets that are genuinely functional today are listed here. The Definition of Done's canonical
@@ -201,6 +202,22 @@ verify-lex:
 # output says which is which per event.
 verify-lambda-execution:
 	@$(VENV)/python scripts/verify_lambda_execution.py
+
+# `ADR-018`/Phase 14 criterion 6: pulls one real, recent X-Ray trace for fnol-codehook and asserts its
+# span shape -- the AWS::Lambda/AWS::Lambda::Function segments, fnol.turn nesting under them, every
+# fnol.node.* name real and registered, all four span classes present, correct bedrock./mcp. nesting
+# under a node span, no PII in any attribute anywhere in the trace, and the ADOT-before-codehook-deps
+# layer order. See scripts/verify_xray_trace_shape.py's own module docstring for what it does NOT check
+# (per-call cost is covered by ADR-018's own cost table; STT/TTS latency and the 1,800ms p95 budget
+# itself are separate, later criteria) and for its trace-shape parsing assumptions, unverified against a
+# live trace until a real deploy exists to read one from.
+#
+# Same posture as verify-lambda-execution: real (if small -- ADR-018's cost table puts trace retrieval at
+# $0.00 at this volume) AWS reads, deliberately NOT wired into any composite target. Run manually,
+# post-deploy, after a probe turn that actually reaches Bedrock and an MCP tool call (e.g. a
+# CoverageQuestion turn) has been placed.
+verify-xray-trace-shape:
+	@$(VENV)/python scripts/verify_xray_trace_shape.py
 
 # Chunk + embed the policy corpus, load it into the vector store. Free by default: mock embeddings + a
 # local in-memory table (see src/fnol_voice_agent/knowledge/ingest.py's module docstring). Real Bedrock

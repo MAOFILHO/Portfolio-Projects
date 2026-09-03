@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from fnol_voice_agent.models import ContactField
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
+from fnol_voice_agent.observability import tracing
 from fnol_voice_agent.validation.identifiers import normalize_policy_number
 
 from ._paths import POLICYHOLDERS_PATH
@@ -99,6 +100,7 @@ def _get_store() -> dict[str, dict[str, Any]]:
     return _store
 
 
+@tracing.traced_mcp_tool("UpdateContactInfo", "contact")
 def update_contact_info(
     policy_number: str, field: ContactField, new_value: str
 ) -> UpdateContactInfoResult:

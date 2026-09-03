@@ -35,6 +35,7 @@ that happens to run.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -61,6 +62,7 @@ from fnol_voice_agent.aws.bedrock_router import BedrockConverseCaller
 from fnol_voice_agent.guardrails.client import GuardrailClient
 from fnol_voice_agent.knowledge.ingest import DynamoVectorStore, Embedder
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
+from fnol_voice_agent.observability import tracing
 
 # Engineering default, not a tuned value (Phase 6 owns tuning against real evals) -- below this, the
 # merged router's intent classification is treated as inconclusive, same as an Ambiguous/OutOfScope
@@ -168,6 +170,35 @@ def _after_update_contact_info(state: AgentState) -> str:
     return "end" if state.get("response_text") else "handle_no_match_or_barge_in"
 
 
+def _add_traced_node(
+    builder: StateGraph[AgentState, Any, Any, Any],
+    name: str,
+    fn: Callable[[AgentState], dict[str, Any]],
+) -> None:
+    """`ADR-018` criterion 3 (a span per LangGraph node) -- ONE seam here, not twelve edits to
+    `agents/nodes/*.py`. `fn` is treated as an opaque callable: a plain top-level function
+    (`l1_safety_check`, `check_claim_status`, ...) and a closure returned by a `make_*_node` factory
+    (`make_route_and_classify_node(...)`, ...) both already coexist among the twelve call sites below, and
+    this works uniformly for either shape -- it never inspects `fn` beyond calling it.
+
+    `wrapper`'s signature is written out as a literal, concrete `Callable[[AgentState], dict[str, Any]]`
+    (a real nested `def`, not something routed through a `TypeVar`-generic decorator) on purpose: mypy's
+    `StateGraph.add_node` overloads resolve cleanly against a plain top-level-shaped function the same way
+    they did before this change, and do NOT resolve against a value typed only through the `NodeFn`
+    Callable alias -- which is exactly what used to need the `# type: ignore[arg-type]` comments on five of
+    these twelve registrations. Routing every node through this one concrete `wrapper` def removes that
+    friction for all twelve, not just the five that had it named -- confirmed by `make typecheck` staying
+    clean with every one of those ignores removed, not assumed.
+    """
+
+    def wrapper(state: AgentState) -> dict[str, Any]:
+        with tracing.traced_span(f"fnol.node.{name}") as span:
+            tracing.set_span_attribute(span, "fnol.node.name", name)
+            return fn(state)
+
+    builder.add_node(name, wrapper)
+
+
 def build_graph(
     *,
     vector_store: DynamoVectorStore,
@@ -190,41 +221,38 @@ def build_graph(
     """
     builder: StateGraph[AgentState, Any, Any, Any] = StateGraph(AgentState)
 
-    # mypy note: LangGraph's `add_node` overloads resolve cleanly against a plain top-level `def`, but not
-    # against a value typed through the `NodeFn` Callable alias (what every `make_*_node` factory returns)
-    # -- a typing-overload friction, not a runtime one: every one of these closures is exercised end-to-end
-    # by tests/unit/test_graph_integration.py against the real compiled graph. `# type: ignore[arg-type]`
-    # on each factory-returned node, not on the plain-function ones below, which need no ignore.
-    builder.add_node("l1_safety_check", l1_safety_check)
-    builder.add_node(
-        "guardrails_input_check",
-        make_guardrails_input_node(client=guardrail_client),  # type: ignore[arg-type]
+    # `ADR-018` criterion 3: every node registration goes through `_add_traced_node`, which wraps `fn` in
+    # a `fnol.node.<name>` span -- see that function's own docstring, including why this removed the
+    # `# type: ignore[arg-type]` comments the five factory-returned nodes used to need here.
+    _add_traced_node(builder, "l1_safety_check", l1_safety_check)
+    _add_traced_node(
+        builder, "guardrails_input_check", make_guardrails_input_node(client=guardrail_client)
     )
-    builder.add_node("guardrail_blocked_response", _guardrail_blocked_response)
-    builder.add_node(
-        "route_and_classify",
-        make_route_and_classify_node(caller=bedrock_caller),  # type: ignore[arg-type]
+    _add_traced_node(builder, "guardrail_blocked_response", _guardrail_blocked_response)
+    _add_traced_node(
+        builder, "route_and_classify", make_route_and_classify_node(caller=bedrock_caller)
     )
-    builder.add_node("injury_escalation", injury_escalation)
-    builder.add_node("handle_no_match_or_barge_in", handle_no_match_or_barge_in)
-    builder.add_node("file_auto_claim", file_auto_claim)
-    builder.add_node("check_claim_status", check_claim_status)
-    builder.add_node(
+    _add_traced_node(builder, "injury_escalation", injury_escalation)
+    _add_traced_node(builder, "handle_no_match_or_barge_in", handle_no_match_or_barge_in)
+    _add_traced_node(builder, "file_auto_claim", file_auto_claim)
+    _add_traced_node(builder, "check_claim_status", check_claim_status)
+    _add_traced_node(
+        builder,
         "coverage_question",
-        make_coverage_question_node(  # type: ignore[arg-type]
+        make_coverage_question_node(
             store=vector_store, embedder=embedder, bedrock_caller=bedrock_caller
         ),
     )
-    builder.add_node(
+    _add_traced_node(
+        builder,
         "rental_towing_entitlement",
-        make_rental_towing_node(  # type: ignore[arg-type]
+        make_rental_towing_node(
             store=vector_store, embedder=embedder, bedrock_caller=bedrock_caller
         ),
     )
-    builder.add_node("update_contact_info", update_contact_info_node)
-    builder.add_node(
-        "guardrails_output_check",
-        make_guardrails_output_node(client=guardrail_client),  # type: ignore[arg-type]
+    _add_traced_node(builder, "update_contact_info", update_contact_info_node)
+    _add_traced_node(
+        builder, "guardrails_output_check", make_guardrails_output_node(client=guardrail_client)
     )
 
     builder.add_edge(START, "l1_safety_check")

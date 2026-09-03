@@ -62,6 +62,19 @@ dev = [
     "types-python-dateutil==2.9.0.20260807",
     # types-PyYAML: same reason, for the golden-set loader.
     "types-PyYAML==6.0.12.20250915",
+    # opentelemetry-*: ADR-018/Phase 14 tracing. DEV-ONLY, deliberately not in [project]'s runtime
+    # `dependencies` above and not in the `fnol-codehook-deps` Lambda layer -- the real runtime gets these
+    # from the ADOT Lambda layer (`arn:...:layer:aws-otel-python-arm64-ver-1-32-0:7`) mounted at
+    # `/opt/python`, per infra/terraform/stacks/main/lambda.tf's `adot_python` layer and the same
+    # non-reproducible-layer posture already documented at that file's `codehook_deps` data source. Pinned
+    # here only so `tests/unit/test_tracing.py` can exercise the real package locally; a version drift
+    # between this pin and whatever the ADOT layer actually ships is a real, accepted risk of that split --
+    # not one this project's tooling can close without vendoring the layer's own lockfile.
+    "opentelemetry-api==1.44.0",
+    "opentelemetry-sdk==1.44.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "opentelemetry-propagator-aws-xray==1.0.2",
+    "opentelemetry-sdk-extension-aws==2.1.0",
 ]
 
 [tool.pytest.ini_options]

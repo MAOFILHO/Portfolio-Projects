@@ -266,7 +266,7 @@ theoretical.
 | **IaC** | Terraform ≥1.9; Lex bot via a nested `AWS::Lex::Bot` CloudFormation resource (`ADR-007`) |
 | **Cost control** | Simulator-first; per-run spend logged in [`COSTS.md`](COSTS.md); $25/mo hard ceiling |
 | **Observability — cost** | AWS Budgets + SNS + a Cost Explorer–pull Lambda, real CloudWatch dashboard (Phase 11) |
-| **Observability — tracing** | **Planned, not yet built** (Phase 14) — AWS Distro for OpenTelemetry (ADOT) Lambda layer → AWS X-Ray, chosen over Langfuse to keep trace data inside the AWS account boundary and avoid a new secret; see below |
+| **Observability — tracing** | **Live** (Phase 14, `ADR-018`) — AWS Distro for OpenTelemetry (ADOT) Lambda layer → AWS X-Ray, hand-placed spans per LangGraph node/Bedrock call/MCP tool call, chosen over Langfuse to keep trace data inside the AWS account boundary and avoid a new secret; see below |
 
 ## Architecture
 
@@ -312,17 +312,19 @@ the router call) and L3 (the caller's own "agent" barge-in) each escalate indepe
 another and nothing downstream can suppress the result. `agents/graph.py` refuses to build a graph in
 which `l1_safety_check` is not the sole successor of `START`.
 
-> **No tracing on this diagram yet, deliberately.** This project already has real observability, but only
-> one kind: cost (AWS Budgets, a CloudWatch dashboard, Phase 11 — see `docs/RESULTS.md`). Application-level
-> tracing — a span per LangGraph node, per Bedrock call, per MCP tool call, tied to the 1,800ms turn-latency
-> budget above — was named as a candidate in Phase 8 (`docs/phase8/EXISTING-INSTRUMENTS.md`), deferred to
-> Phase 11, and never built. **Phase 14** (`PROJECT_STATE.md`) proposes closing that gap with an AWS
-> Distro for OpenTelemetry (ADOT) Lambda layer exporting to AWS X-Ray — 100,000 traces recorded/mo free,
-> 1,000,000 traces retrieved-or-scanned/mo free, effectively $0 at this project's demo call volume. Chosen
-> over Langfuse specifically to keep trace data inside the AWS account boundary, the same boundary every
-> other sink in this project already respects (`ADR-011`), and to avoid provisioning a new external API
-> key. **Proposed, not approved, not built** — per this project's own STOP CONDITIONS, no Phase 14 work
-> starts without an explicit `APPROVED: Phase 14`.
+> **Tracing runs underneath this whole diagram, not drawn separately.** Every box above — `l1_safety_check`,
+> `ApplyGuardrail`, `classify_turn`, each of the six intent nodes, every MCP tool call inside them — emits
+> its own X-Ray span, hand-placed (`ADR-018`), nested under one trace per turn. This closes a gap named in
+> Phase 8 (`docs/phase8/EXISTING-INSTRUMENTS.md`), deferred to Phase 11, and finally built in **Phase 14**:
+> an AWS Distro for OpenTelemetry (ADOT) Lambda layer exporting to AWS X-Ray — no auto-instrumentation
+> wrapper (only ~149ms of headroom under the 1,800ms turn budget), so nothing traced here adds latency
+> beyond the spans themselves. Chosen over Langfuse to keep trace data inside the AWS account boundary,
+> the same boundary every other sink in this project already respects (`ADR-011`) — span attributes carry
+> IDs and metrics only (contact ID, node name, model ID, token counts, guardrail action), never caller
+> utterance or generated response text. **Live and verified** against a real deployed trace, 2026-09-03:
+> `scripts/verify_xray_trace_shape.py` passes 9/9 — all four span classes present and correctly nested,
+> zero PII-pattern hits across every span attribute. $0 at this project's demo call volume (100,000 traces
+> recorded/mo free, 1,000,000 retrieved-or-scanned/mo free).
 
 ## Build status
 
@@ -331,8 +333,8 @@ Stated plainly so nothing here reads as more finished than it is. **15 phases, g
 **Phases 0–11 are complete. Phase 12 (documentation and demo) is underway** — this repo's recent commits
 (the D162–D208 dialogue-policy fix series, live telephony diagnosis, this session's claim-filed logging)
 are Phase 12 work. **Phase 13** (continuous-improvement design) has not started. **Phase 14** (application
-observability and tracing, ADOT → X-Ray) is proposed only — see the Architecture note above — and has not
-started; no work begins without an explicit `APPROVED: Phase 14`.
+observability and tracing, ADOT → X-Ray) is **built and deployed** — see the Architecture note above —
+approved 2026-09-02, applied and verified against a real deployed trace 2026-09-03.
 
 **Known issues**
 
@@ -425,15 +427,17 @@ output in the Tier B eval harness (`evals/tier_b.py`) — it never runs on a liv
 never the sole evidence for a quality claim; every judge metric carries a human-reviewed sample
 (`evals/holdout_ledger.py`'s `HUMAN_REVIEW_SAMPLE_SIZE`).
 
-**Observability — read this before assuming traces exist, because none do yet.** Today this project has
-exactly one kind of observability: **cost** — AWS Budgets, SNS, a Cost Explorer–pull Lambda, and a real
-CloudWatch dashboard (Phase 11, built and live). **There is no application-level tracing.** No span per
-LangGraph node, no per-Bedrock-call trace, nothing tied to the 1,800ms turn-latency budget — that
-capability is named in the Architecture section above as **Phase 14: proposed, not approved, not built**
-(AWS Distro for OpenTelemetry (ADOT) Lambda layer → AWS X-Ray, chosen to keep trace data inside the AWS
-account boundary rather than an external tool like Langfuse). If Phase 14 ships, traces land in **AWS
-X-Ray**, in this same account, in `us-west-2` — but as of today, asking "where are the traces stored" has
-one honest answer: **nowhere, because nothing writes one yet.**
+**Observability — two kinds, both live.** **Cost** — AWS Budgets, SNS, a Cost Explorer–pull Lambda, and a
+real CloudWatch dashboard (Phase 11). **Application tracing** (Phase 14, `ADR-018`) — an AWS Distro for
+OpenTelemetry (ADOT) Lambda layer exporting to **AWS X-Ray**, in this same account, `us-west-2`. Every turn
+gets one trace: a span for `l1_safety_check`, each `ApplyGuardrail` call, `classify_turn`, whichever intent
+node ran, and every MCP tool call inside it — enough to answer "where inside the 1,800ms budget did this
+turn's time go," not just "did it run." Chosen over an external tool like Langfuse specifically to keep
+trace data inside the AWS account boundary, the same one every other sink here respects (`ADR-011`); span
+attributes carry IDs and metrics only (contact ID, node name, model ID, token counts, guardrail action) —
+never caller utterance or generated response text, checked by both a local test suite and a live
+`make verify-xray-trace-shape` gate that scans real span attributes for this project's own PII patterns.
+$0 at this project's demo call volume.
 
 ### The same graph, as a compact reference
 
@@ -576,7 +580,8 @@ make eval ARGS="--check-regression"    # what CI runs: gate breach OR >3pp TARGE
 |---|---|
 | `make simulate` | not yet built — needs the Lex bot to replay turns against |
 | `make verify-billable` | not yet built |
-| `make verify-traces` | Phase 14 (proposed, not approved) — asserts a recent X-Ray trace has the expected per-node span shape |
+
+`make verify-xray-trace-shape` (Phase 14, built and passing) moved out of this table — see Testing below.
 
 ## Teardown
 
@@ -600,6 +605,7 @@ make verify-lambda-execution   # 13-event live-Lex gate against the deployed cod
 make verify-lex                # bot build/import checks
 make verify-destroy-scope      # confirms make destroy touches nothing in stacks/telephony
 make verify-inference           # Bedrock application-inference-profile region check
+make verify-xray-trace-shape    # pulls a real X-Ray trace, asserts the ADR-018 span shape + no PII (Phase 14)
 ```
 
 This project deliberately diverges from its sibling's lifecycle-phased
@@ -655,6 +661,41 @@ Thirteen ADRs, immutable once accepted — superseded, never edited:
 | `\b` matches nothing before an apostrophe-t contraction, so `\bn't\b` never fires in `isn't` | Found **twice independently** — once in the third-party-status pattern, once in the negation cues, where it meant no contraction registered as negation at all |
 | A held-out set used to fix the detector is no longer held out | Generated by an isolated agent **before** any fix, sealed as an immutable baseline, and post-fix figures labelled contaminated by construction |
 | The script that produced the headline false-escalation number lived in a scratchpad | Recovered from the session transcript — luck, not process — and committed. **A number that appears in `RESULTS.md` must be reproducible from a clean checkout** |
+
+## Observability
+
+Two kinds, both live, both inside this AWS account — no third-party tool, no new secret.
+
+**Cost** (Phase 11) — AWS Budgets + SNS + a Cost Explorer–pull Lambda, a real CloudWatch dashboard.
+
+**Application tracing** (Phase 14, [`ADR-018`](docs/adr/ADR-018-application-tracing-adot-xray.md)) — an
+AWS Distro for OpenTelemetry (ADOT) Lambda layer exporting to **AWS X-Ray**. Every turn produces one trace
+with a span for the safety check, each guardrail call, the router's model call, whichever intent node ran,
+and every backend tool call inside it — enough to see where inside the 1,800ms turn budget the time went,
+not just that the call succeeded. Span attributes carry IDs and metrics only (contact ID, node name, model
+ID, token counts, guardrail action) — never caller speech or generated response text, checked by both a
+local test suite and a live `make verify-xray-trace-shape` gate that scans real span data for this
+project's own PII patterns. $0 at this project's demo call volume (100,000 traces recorded/month free).
+
+<!--
+  HOW TO ADD A REAL TRACE SCREENSHOT HERE (no image files committed to the repo — same pattern the
+  Screenshots section below uses):
+    1. AWS Console → X-Ray → Traces (search "X-Ray" in the top search bar, or CloudWatch → Application
+       monitoring → X-Ray traces in the left nav — both open the same trace list).
+    2. Filter: type `service("fnol-codehook")` into the filter box, or just widen the time range — every
+       trace in this account already belongs to this one function.
+    3. Click any recent trace. You'll see a timeline (a horizontal bar per span, nested by parent) and a
+       service map. The fnol.turn / fnol.node.* / bedrock.* / mcp.* names from ADR-018 are what you're
+       looking for in that timeline — that's the proof this section is describing.
+    4. Screenshot the timeline view (Cmd+Shift+4 on a Mac, drag to select).
+    5. Open this README in the GitHub web editor (github.com → this file → pencil/edit icon), then drag
+       the screenshot image directly into the text box right below this comment. GitHub uploads it and
+       inserts a line like:
+         <img width="1468" height="646" alt="X-Ray trace" src="https://github.com/user-attachments/assets/...">
+       That's it — no separate upload step, no image committed as a binary file in git history.
+    6. Commit directly from that editor, or copy the generated line out and paste it into your normal
+       git workflow instead.
+-->
 
 ## Screenshots
 

@@ -56,8 +56,9 @@ data "archive_file" "codehook" {
 # ---------------------------------------------------------------------------------------------------
 # Dependency layer -- `D80`/`D81`. `docs/phase8/STAGE4-LAMBDA-LAYER-PLAN.md` §2-§3 has the full account:
 # platform-matched wheels (Linux/`arm64`/`cp312`, not this dev machine's), the two real manylinux-tag
-# failures hit building it, and the size measurement (162 MB unzipped / 54.0 MB zipped -- over the 50 MB
-# direct-upload cap, hence S3 rather than `filename` below).
+# failures hit building it, and the size measurement (111.7 MiB / 117,101,626 bytes unzipped -- corrected
+# 2026-09-02, Phase 14 research pass; this comment previously said 162 MB, which was wrong -- / 54.0 MB
+# zipped -- over the 50 MB direct-upload cap, hence S3 rather than `filename` below).
 # ---------------------------------------------------------------------------------------------------
 
 /*
@@ -135,6 +136,34 @@ removed {
   }
 }
 
+/*
+ * ADOT (AWS Distro for OpenTelemetry) Python Lambda layer -- `ADR-018`, Phase 14. AWS-managed, not built
+ * or published by this project: puts `opentelemetry` api/sdk, the OTLP-HTTP exporter, the AWS X-Ray
+ * propagator/id-generator, and an X-Ray-exporting OTel collector Lambda extension on `/opt/python` and
+ * `/opt/extensions`, with ZERO change to `codehook_deps` above or to `pyproject.toml`'s runtime deps --
+ * see `src/fnol_voice_agent/observability/tracing.py`'s own module docstring for what runs on top of it.
+ *
+ * `layer_name` is given the layer's FULL ARN, not a bare name, because this layer is published in a
+ * DIFFERENT AWS account (`901920570463`, AWS's own ADOT distribution account) from this project's
+ * (`759316130780`) -- unlike `codehook_deps` above. The underlying `GetLayerVersion` API this data source
+ * calls accepts either form in the same parameter: a bare name resolves inside the CALLER's own account
+ * (which is what `codehook_deps` above relies on), and a full ARN reads whatever account published it --
+ * exactly how every AWS-managed public layer (this one, the Lambda Insights layer, ...) is meant to be
+ * referenced cross-account, with no separate cross-account IAM grant needed on this project's side
+ * (AWS's own resource policy on the layer is what makes it publicly readable). A same-account-only data
+ * source would have needed a hardcoded `local` ARN string instead, with the same reasoning stated inline
+ * -- the full-ARN `layer_name` form is used here specifically because it lets this stay a real data
+ * source (refreshed against the live API on every plan) rather than an untracked literal.
+ *
+ * `version = 7`, pinned explicitly -- same reasoning as `codehook_deps`'s own comment: omitting `version`
+ * resolves to "the latest available layer version," and this project does not want an AWS-side layer
+ * republish to silently change what this function ships on the next `apply`.
+ */
+data "aws_lambda_layer_version" "adot_python" {
+  layer_name = "arn:aws:lambda:${var.region}:901920570463:layer:aws-otel-python-arm64-ver-1-32-0"
+  version    = 7
+}
+
 # ---------------------------------------------------------------------------------------------------
 # Execution role
 # ---------------------------------------------------------------------------------------------------
@@ -158,12 +187,17 @@ resource "aws_iam_role" "codehook" {
 }
 
 /*
- * Scoped to named resources, not `Resource: "*"`.
+ * Scoped to named resources, not `Resource: "*"`, with two named exceptions -- stated here plainly rather
+ * than left for a reader to discover by grep.
  *
  * `docs/phase0/MERGE-MATRIX.md` records repo 8's IAM as the best example in the corpus and everything
- * else in it as over-broad; this is that example applied. The one wildcard is on the log STREAM under
- * this function's own log group, which cannot be named in advance because the stream name contains the
- * runtime's instance id.
+ * else in it as over-broad; this is that example applied. The FIRST wildcard is on the log STREAM under
+ * this function's own log group (`WriteOwnLogs` below), which cannot be named in advance because the
+ * stream name contains the runtime's instance id. The SECOND, added Phase 14/`ADR-018`, is on
+ * `WriteOwnTraceSegments`'s two X-Ray write actions (`xray:PutTraceSegments`/`xray:PutTelemetryRecords`)
+ * -- X-Ray's write API supports no resource-level scoping at all (AWS's own `AWSXRayDaemonWriteAccess`
+ * managed policy uses `Resource: ["*"]` for exactly these two actions), so there is no named-resource ARN
+ * to scope this statement to the way every other statement below is scoped.
  */
 data "aws_iam_policy_document" "codehook" {
   statement {
@@ -171,6 +205,17 @@ data "aws_iam_policy_document" "codehook" {
     effect    = "Allow"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.codehook.arn}:*"]
+  }
+
+  # `ADR-018`/Phase 14. What actually makes traces show up in X-Ray -- the ADOT collector extension
+  # (`data.aws_lambda_layer_version.adot_python`) exports OTLP-HTTP spans out to X-Ray via the classic
+  # `PutTraceSegments` API, from inside this same execution role, not a separate one.
+  statement {
+    sid       = "WriteOwnTraceSegments"
+    effect    = "Allow"
+    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+    resources = ["*"] # X-Ray write actions support no resource-level scoping -- see this policy
+    # document's own header comment for why this is the SECOND named exception.
   }
 
   statement {
@@ -284,7 +329,29 @@ resource "aws_lambda_function" "codehook" {
   # this now reads a DATA SOURCE pinned to a fixed version number -- a rebuild no longer flows anywhere
   # near this function's plan at all, on purpose. Bumping the version pin above is the only way this
   # value changes now, and that comment states exactly what must be true before it does.
-  layers = [data.aws_lambda_layer_version.codehook_deps.arn]
+  #
+  # `ADR-018`/Phase 14: ADOT LISTED FIRST, `codehook_deps` SECOND -- a real collision risk, not stylistic
+  # ordering. The two layers share roughly a dozen top-level paths under `python/` (`certifi`, `idna`,
+  # `charset_normalizer`, `requests`, `packaging`, `typing_extensions`, and their `.dist-info` dirs), and
+  # Lambda merges layers in LIST ORDER, with a LATER layer overwriting an earlier one at an identical
+  # path. Listing `codehook_deps` second means its own pinned, already-verified dependency versions
+  # (`D160`/`OI78`) win on every shared path; ADOT's copies of those same packages exist only to support
+  # its own bundled collector/exporter code, never to be what this function's application code imports.
+  layers = [
+    data.aws_lambda_layer_version.adot_python.arn,
+    data.aws_lambda_layer_version.codehook_deps.arn,
+  ]
+
+  # `ADR-018`/Phase 14: PassThrough (the prior implicit default) means X-Ray records a trace only if the
+  # INCOMING request already carries a sampled trace header -- Lex's own `lambda:Invoke` never does, so
+  # PassThrough was functionally equivalent to tracing being off for every real call this function ever
+  # serves. Active makes this function itself the one that decides to sample, which is what gives
+  # `observability/tracing.py`'s `fnol.turn` root span a real `AWS::Lambda::Function` X-Ray segment to
+  # nest under in the first place -- without this, that segment never exists for `_X_AMZN_TRACE_ID` to
+  # name in the first place.
+  tracing_config {
+    mode = "Active"
+  }
 
   /*
    * `ADR-016`: the application inference profile ARNs are supplied here, at deployment time, while
