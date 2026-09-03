@@ -381,6 +381,27 @@ flowchart TD
     ESC --> ENDE(["END"])
 ```
 
+### Why one graph, not multi-agent
+
+1. **Determinism, not autonomy, is the actual requirement.** Injury escalation can't be a decision an agent
+   *chooses* to make — `agents/graph.py` asserts at build time that no path can reach the model before the
+   safety check runs. A multi-agent design puts a routing decision inside an LLM's discretion; this system
+   measured exactly why that's dangerous: at temperature 0.7, **35 of 78 turns produced an unstable intent
+   and 13 flipped the safety verdict between identical runs** (0 at temperature 0.0). If an agent's own
+   judgment decides whether to hand off to "the escalation agent," that instability becomes a missed
+   escalation, not just a bad metric.
+
+2. **The task decomposition is already known and fixed.** Multi-agent earns its cost when the sub-tasks are
+   open-ended and have to be discovered at runtime (research, exploratory coding). Here there are exactly 6
+   intents, each with a bounded slot set, known in advance — that's a static graph, not something that
+   benefits from an agent dynamically deciding who does what.
+
+3. **Latency and cost are hard constraints, not preferences.** One caller, one live phone call, a 1,800ms
+   turn budget. Every agent-to-agent hop is another LLM round-trip against that budget and against the
+   per-minute telephony cost that already dominates the bill. This system makes exactly one router call per
+   turn and generates text in exactly two of eleven nodes — multi-agent chains add hops this budget can't
+   absorb.
+
 ### The models, and what each one is for
 
 | Role | Model | Notes |
