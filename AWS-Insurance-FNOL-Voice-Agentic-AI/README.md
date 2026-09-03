@@ -350,9 +350,71 @@ DID (`+14169871547`) is routed to this system, and real calls have been placed a
 Lex bot and the DID's contact-flow association are Terraform-managed and destroyable; the DID number itself
 is protected and deliberately survives `make destroy`.
 
-## Agent orchestration
+## Agentic AI Architecture
 
-The agentic layer decides **which tool runs and what gets said**. It does not decide whether to escalate.
+**Not a multi-agent system, and that's stated plainly rather than dressed up.** There is no orchestrator
+dispatching autonomous sub-agents, no agent-to-agent handoff, no agent that decides to spawn another agent.
+It is **one compiled LangGraph state graph**, assembled once at build time, with **11 nodes** — a
+deterministic pre-node, one LLM-backed router/classifier, six intent-handling nodes, two guardrail checks,
+and one shared repair node. `agents/graph.py` asserts the routing dominance rules at construction time —
+the graph refuses to build if a node could bypass the safety check or the output guardrail.
+
+```mermaid
+flowchart TD
+    START(["Caller turn"]) --> L1{{"l1_safety_check<br/>deterministic lexicon — 0 LLM calls, ~0ms"}}
+    L1 -->|"injury/fatality detected"| ESC["injury_escalation<br/>fixed script, no LLM"]
+    L1 -->|clear| GIN["guardrails_input_check<br/>Bedrock ApplyGuardrail — INPUT"]
+    GIN -->|blocked| GBLK["guardrail_blocked_response"] --> ENDB(["END"])
+    GIN -->|clear| ROUTE["route_and_classify<br/>1 Bedrock Converse call — Nova Micro, forced tool-use<br/>emits safety_flag + intent + confidence together"]
+    ROUTE -->|safety_flag| ESC
+    ROUTE -->|"Ambiguous / OutOfScope / low-confidence"| REPAIR["repair<br/>templated re-prompt"] --> ENDR(["END"])
+    ROUTE -->|FileAutoClaim| N1["file_auto_claim<br/>MCP fnol-claims: file_new_claim<br/>templated only"]
+    ROUTE -->|CheckClaimStatus| N2["check_claim_status<br/>MCP fnol-claims: get_claim_status<br/>templated only"]
+    ROUTE -->|CoverageQuestion| N3["coverage_question<br/>RAG: DynamoDB store, Titan Embed v2, brute-force cosine, top-3<br/>MCP fnol-policy: get_policyholder_elections<br/>generates with Nova Lite"]
+    ROUTE -->|RentalTowingEntitlement| N4["rental_towing<br/>RAG: DynamoDB store, Titan Embed v2, brute-force cosine, top-3<br/>MCP fnol-claims: get_rental_status<br/>generates with Nova Lite"]
+    ROUTE -->|UpdateContactInfo| N5["update_contact_info<br/>MCP fnol-contact: update_contact_info<br/>templated only"]
+    N1 & N2 & N3 & N4 -.->|no response_text| REPAIR
+    N5 -.->|no response_text| REPAIR
+    N1 & N2 & N3 & N4 --> GOUT["guardrails_output_check<br/>Bedrock ApplyGuardrail — OUTPUT"]
+    GOUT --> ENDG(["END"])
+    N5 -->|"ADR-017: bypasses OUTPUT guardrail<br/>(no LLM in this node — bounded exposure)"| END5(["END"])
+    ESC --> ENDE(["END"])
+```
+
+### The models, and what each one is for
+
+| Role | Model | Notes |
+|---|---|---|
+| Router / safety classifier | `us.amazon.nova-micro-v1:0` | One call per turn, forced tool-use, emits `safety_flag` **and** `intent` together — structurally unreachable by the generation-tier flag (`ADR-004`) |
+| Generation (default) | `us.amazon.nova-lite-v1:0` | Exactly two nodes call it: `coverage_question`, `rental_towing`. Every other spoken line is a fixed string or template substitution |
+| Generation (alternate, feature-flagged) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Same two nodes, behind an OpenFeature flag; never reaches the safety layer |
+| Embeddings | `amazon.titan-embed-text-v2:0` | Real vectors, committed as an eval fixture — retrieval reruns for $0 |
+| Eval judge | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | **Offline only, Tier B evaluation** — never in the live call path. Deliberately a different vendor from the models under test |
+
+**RAG, precisely:** `coverage_question` and `rental_towing` are the only two retrieval-backed nodes. Both
+call the same `search()` function — a DynamoDB single-table store (`CHUNK#<file>#<index>` items, text +
+embedding) scored by **exact brute-force cosine similarity, one vectorized matrix operation, top-3**
+(`ADR-002`) — not a managed vector-index service. That's a deliberate corpus-size trade-off, not a
+placeholder: `docs/adr/`'s own reasoning is that a managed vector DB (OpenSearch Serverless) is banned by
+default in this project's cost constraints, and brute-force cosine over this corpus's size costs nothing
+extra to be exact.
+
+**LLM-as-judge, precisely:** the judge scores groundedness and answer relevance against real generated
+output in the Tier B eval harness (`evals/tier_b.py`) — it never runs on a live call, and a judge score is
+never the sole evidence for a quality claim; every judge metric carries a human-reviewed sample
+(`evals/holdout_ledger.py`'s `HUMAN_REVIEW_SAMPLE_SIZE`).
+
+**Observability — read this before assuming traces exist, because none do yet.** Today this project has
+exactly one kind of observability: **cost** — AWS Budgets, SNS, a Cost Explorer–pull Lambda, and a real
+CloudWatch dashboard (Phase 11, built and live). **There is no application-level tracing.** No span per
+LangGraph node, no per-Bedrock-call trace, nothing tied to the 1,800ms turn-latency budget — that
+capability is named in the Architecture section above as **Phase 14: proposed, not approved, not built**
+(AWS Distro for OpenTelemetry (ADOT) Lambda layer → AWS X-Ray, chosen to keep trace data inside the AWS
+account boundary rather than an external tool like Langfuse). If Phase 14 ships, traces land in **AWS
+X-Ray**, in this same account, in `us-west-2` — but as of today, asking "where are the traces stored" has
+one honest answer: **nowhere, because nothing writes one yet.**
+
+### The same graph, as a compact reference
 
 | Node | Reaches | Model call |
 |---|---|---|
@@ -529,6 +591,32 @@ instead, because this project's cost-gate discipline needs a typed `APPROVED: <p
 implied: langgraph's `StateGraph.add_node` and `Pregel.invoke` overloads reject plain callables and dict
 payloads under strict mode. Silencing ~20 stub-friction errors with `type: ignore` would add noise without
 adding a single check.
+
+## CI/CD — GitHub Actions
+
+One workflow, [`AWS-Insurance-FNOL-Voice-Agentic-AI Eval Gate`](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml),
+runs on every push to `main` and every PR touching this project, and is a **required GitHub status check**
+— a PR cannot merge while it's red (`docs/runbooks/MANUAL-STEPS.md` §5, the one permitted manual repo
+setting).
+
+**What it checks, precisely — and just as importantly, what it doesn't:**
+
+| Step | What runs | What it catches |
+|---|---|---|
+| Unit tests | `pytest tests/unit` | Code-level regressions — 807 tests, no AWS credentials, no network |
+| Evaluation gate | `python -m evals.report --check-regression` | **Tier A only**: the deterministic L1 safety-recall `GATE` and the retrieval recall@5 `GATE`, both against real committed fixtures (real Titan vectors, a labelled golden set) — plus a check that nothing regressed >3pp against the last committed baseline |
+| Baseline freshness | Diff-scoped | On a PR, fails if a prompt/model-config file changed with no accompanying baseline update — the CI equivalent of "don't move the goalposts silently" |
+| Mechanism self-check | `CF6(b)/(c)`, offline | Confirms the regression tolerance itself is computed correctly — $0, does **not** gate this PR's own Tier B numbers |
+| Recording check | `scripts/check_flows.py` | Fails the build if any contact flow's `RecordingBehavior` isn't fully off (constraint 18) |
+
+**What it deliberately does not check: intent-classification accuracy, groundedness, or the false-escalation
+rate.** Those are Tier B — they need real Bedrock calls, cost money, and are stochastic (`README.md`'s own
+Results table documents run-to-run variance at temperature 0.7). Gating a PR on a stochastic, billed metric
+would make the build both expensive and flaky, so Tier B numbers enter CI only through the committed
+baseline file, measured by hand and versioned like code. **A green run here means "no regression on the
+free, repeatable checks" — not "the model is production-ready."** The three real GATE failures in the
+Results table above (macro-F1, false-escalation, and — at the time that table was last written — retrieval
+recall@5) are Tier B/live-measured facts this workflow was never built to catch, by design, not by gap.
 
 ## Engineering decisions
 
