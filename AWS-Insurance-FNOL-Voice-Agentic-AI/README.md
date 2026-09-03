@@ -636,6 +636,12 @@ setting).
 | Mechanism self-check | `CF6(b)/(c)`, offline | Confirms the regression tolerance itself is computed correctly — $0, does **not** gate this PR's own Tier B numbers |
 | Recording check | `scripts/check_flows.py` | Fails the build if any contact flow's `RecordingBehavior` isn't fully off (constraint 18) |
 
+
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1250" height="711" alt="Screenshot 2026-09-03 at 7 16 13 AM" src="https://github.com/user-attachments/assets/2b06b6cb-78d7-4a5c-bed9-56467ea660fa" />
+
 **What it deliberately does not check: intent-classification accuracy, groundedness, or the false-escalation
 rate.** Those are Tier B — they need real Bedrock calls, cost money, and are stochastic (`README.md`'s own
 Results table documents run-to-run variance at temperature 0.7). Gating a PR on a stochastic, billed metric
@@ -677,25 +683,19 @@ ID, token counts, guardrail action) — never caller speech or generated respons
 local test suite and a live `make verify-xray-trace-shape` gate that scans real span data for this
 project's own PII patterns. $0 at this project's demo call volume (100,000 traces recorded/month free).
 
-<!--
-  HOW TO ADD A REAL TRACE SCREENSHOT HERE (no image files committed to the repo — same pattern the
-  Screenshots section below uses):
-    1. AWS Console → X-Ray → Traces (search "X-Ray" in the top search bar, or CloudWatch → Application
-       monitoring → X-Ray traces in the left nav — both open the same trace list).
-    2. Filter: type `service("fnol-codehook")` into the filter box, or just widen the time range — every
-       trace in this account already belongs to this one function.
-    3. Click any recent trace. You'll see a timeline (a horizontal bar per span, nested by parent) and a
-       service map. The fnol.turn / fnol.node.* / bedrock.* / mcp.* names from ADR-018 are what you're
-       looking for in that timeline — that's the proof this section is describing.
-    4. Screenshot the timeline view (Cmd+Shift+4 on a Mac, drag to select).
-    5. Open this README in the GitHub web editor (github.com → this file → pencil/edit icon), then drag
-       the screenshot image directly into the text box right below this comment. GitHub uploads it and
-       inserts a line like:
-         <img width="1468" height="646" alt="X-Ray trace" src="https://github.com/user-attachments/assets/...">
-       That's it — no separate upload step, no image committed as a binary file in git history.
-    6. Commit directly from that editor, or copy the generated line out and paste it into your normal
-       git workflow instead.
--->
+<img width="1457" height="870" alt="Screenshot 2026-09-03 at 7 30 41 AM" src="https://github.com/user-attachments/assets/2d8766de-4fed-43f4-a802-914104e6b350" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1457" height="867" alt="Screenshot 2026-09-03 at 7 31 06 AM" src="https://github.com/user-attachments/assets/ace66f3e-19da-48b7-934d-9f9c5e7c5c7c" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1389" height="819" alt="Screenshot 2026-09-03 at 7 33 22 AM" src="https://github.com/user-attachments/assets/8123de8e-c845-4250-8cb4-6c6ceec986a7" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+<img width="1395" height="868" alt="Screenshot 2026-09-03 at 7 33 01 AM" src="https://github.com/user-attachments/assets/4d55bf2a-61c3-4fda-920f-aa2bf07b0bb5" />
+
+
+
 
 ## Screenshots
 
