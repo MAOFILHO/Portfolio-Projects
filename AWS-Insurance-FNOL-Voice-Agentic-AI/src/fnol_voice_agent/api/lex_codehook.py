@@ -142,6 +142,7 @@ from fnol_voice_agent.agents.lexicon import detect_safety_trigger
 from fnol_voice_agent.mcp.claims_server import resolve_vehicle_description
 from fnol_voice_agent.mcp.escalation_server import initiate_escalation
 from fnol_voice_agent.models.enums import Intent
+from fnol_voice_agent.observability import tracing
 from fnol_voice_agent.observability.log_redaction import install_pii_log_filter
 
 logger = logging.getLogger(__name__)
@@ -855,7 +856,14 @@ def _respond_from_graph_result(event: dict[str, Any], result: dict[str, Any]) ->
     return response
 
 
-def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
+def _dispatch(event: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Returns `(response, dispatch_path)`. `dispatch_path` is `ADR-018`/Phase 14's own small enum for
+    the `fnol.turn` root span's `fnol.dispatch_path` attribute -- `"l1_pregraph"`/`"slot_pregraph"`/
+    `"l3_pregraph"` for the three pre-graph checks below, `"graph"` once the real graph is invoked.
+    `handler()` is the only caller and is the one place that owns the span; this function does not import
+    or reference `tracing` at all, so it stays exactly as testable/AWS-independent as it was before this
+    field existed.
+    """
     contact_id = _contact_id_from(event)
     turn_input = _turn_input_from(event)
 
@@ -868,14 +876,17 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
         # AWS-independent property the module docstring claims for L1; routing this through
         # `graph.get_state()` first (an earlier version of this function did) would have made that claim
         # false for every raw-text match, not just the ones the checkpointer happens to be reachable for.
-        return _escalate(
-            event,
-            contact_id=contact_id,
-            triggering_layer="L1",
-            route=1,
-            message=_SAFETY_SCRIPT,
-            context={"triggering_utterance": turn_input, "matched_term": l1_term},
-            escalation_reason="detection-pregraph",
+        return (
+            _escalate(
+                event,
+                contact_id=contact_id,
+                triggering_layer="L1",
+                route=1,
+                message=_SAFETY_SCRIPT,
+                context={"triggering_utterance": turn_input, "matched_term": l1_term},
+                escalation_reason="detection-pregraph",
+            ),
+            "l1_pregraph",
         )
 
     # `D79`. Raw text alone didn't catch it -- the only way to know whether `injuries_present` was
@@ -905,73 +916,106 @@ def _dispatch(event: dict[str, Any]) -> dict[str, Any]:
     if filled_slots.get("injuries_present") is True:
         # Same script, same layer, same route as a raw-text L1 match -- DIALOGUE-POLICIES.md §5 step 1
         # does not distinguish how the disclosure arrived, and neither does this response.
-        return _escalate(
-            event,
-            contact_id=contact_id,
-            triggering_layer="L1",
-            route=1,
-            message=_SAFETY_SCRIPT,
-            context={
-                "filled_slots": filled_slots,
-                "triggering_utterance": turn_input,
-                "slot_confirmed": True,
-            },
-            escalation_reason="detection-pregraph",
+        return (
+            _escalate(
+                event,
+                contact_id=contact_id,
+                triggering_layer="L1",
+                route=1,
+                message=_SAFETY_SCRIPT,
+                context={
+                    "filled_slots": filled_slots,
+                    "triggering_utterance": turn_input,
+                    "slot_confirmed": True,
+                },
+                escalation_reason="detection-pregraph",
+            ),
+            "slot_pregraph",
         )
 
     if l3_fired:
-        return _escalate(
-            event,
-            contact_id=contact_id,
-            triggering_layer="L3",
-            route=2,
-            message=_AGENT_OVERRIDE_SCRIPT,
-            context={
-                "filled_slots": filled_slots,
-                "triggering_utterance": turn_input,
-                "matched_term": l3_term,
-            },
-            escalation_reason="detection-pregraph",
+        return (
+            _escalate(
+                event,
+                contact_id=contact_id,
+                triggering_layer="L3",
+                route=2,
+                message=_AGENT_OVERRIDE_SCRIPT,
+                context={
+                    "filled_slots": filled_slots,
+                    "triggering_utterance": turn_input,
+                    "matched_term": l3_term,
+                },
+                escalation_reason="detection-pregraph",
+            ),
+            "l3_pregraph",
         )
 
     result = _run_graph_turn(contact_id, turn_input, filled_slots, previous)
-    return _respond_from_graph_result(event, result)
+    return _respond_from_graph_result(event, result), "graph"
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Lambda entry point. `fnol_voice_agent.api.lex_codehook.handler`."""
-    if not isinstance(event, dict):
-        return _delegate({})
+    """Lambda entry point. `fnol_voice_agent.api.lex_codehook.handler`.
 
-    turn_input = _turn_input_from(event)
-    # Pre-graph, AWS-independent signal -- computed BEFORE the try/except so it is available to decide
-    # fail-open vs fail-closed even if everything downstream (the graph, the checkpointer, Bedrock) is
-    # unreachable. `D79`'s slot-level signal is deliberately NOT included here: reading it requires the
-    # checkpointer (`graph.get_state`), which is exactly the call most likely to be the thing that failed
-    # -- if it did, a raw-text check is the only signal this handler can still trust.
-    l1_fired, _ = detect_safety_trigger(turn_input)
-    l3_fired, l3_term = detect_agent_override(turn_input)
-    safety_signal_present = l1_fired or l3_fired
-
+    `ADR-018`/Phase 14: wraps its ENTIRE body -- including the fail-open/fail-closed `except` branch --
+    in the `fnol.turn` root span, per the ADR's own instruction that a trace wrapping only the happy path
+    would miss exactly the turns most worth seeing in X-Ray. `tracing.start_turn_span`/`end_turn_span`
+    are a start/end pair rather than a context manager here on purpose: `flush()` must run strictly AFTER
+    `end_turn_span` (a span not yet ended is not yet queued for export by `BatchSpanProcessor`), so the
+    `finally` block below does both, in that order, wrapping the whole function -- see `tracing.py`'s own
+    docstring for the full reasoning, including the empirically-found fix for a stuck-collector export
+    that used to ignore `flush()`'s own timeout budget.
+    """
+    span = tracing.start_turn_span(
+        contact_id=_contact_id_from(event) if isinstance(event, dict) else "unknown",
+        turn_input_len=len(_turn_input_from(event)) if isinstance(event, dict) else 0,
+    )
     try:
-        return _dispatch(event)
-    except Exception:  # noqa: BLE001 - see the module docstring on the fail-open/fail-closed split
-        logger.exception("codehook failed")
-        if not safety_signal_present:
-            return _delegate(event)
+        if not isinstance(event, dict):
+            tracing.set_span_attribute(span, "fnol.dispatch_path", "fail_open")
+            return _delegate({})
 
-        contact_id = _contact_id_from(event)
-        message = _UNAVAILABLE_SAFETY_SCRIPT if l1_fired else _UNAVAILABLE_OVERRIDE_SCRIPT
-        return _escalate(
-            event,
-            contact_id=contact_id,
-            triggering_layer="L1" if l1_fired else "L3",
-            route=1 if l1_fired else 2,
-            message=message,
-            context={
-                "triggering_utterance": turn_input,
-                "matched_term": l3_term if l3_fired and not l1_fired else None,
-                "reason": "graph_invocation_failed",
-            },
-            escalation_reason="fail-closed",
-        )
+        turn_input = _turn_input_from(event)
+        # Pre-graph, AWS-independent signal -- computed BEFORE the try/except so it is available to
+        # decide fail-open vs fail-closed even if everything downstream (the graph, the checkpointer,
+        # Bedrock) is unreachable. `D79`'s slot-level signal is deliberately NOT included here: reading
+        # it requires the checkpointer (`graph.get_state`), which is exactly the call most likely to be
+        # the thing that failed -- if it did, a raw-text check is the only signal this handler can still
+        # trust.
+        l1_fired, _ = detect_safety_trigger(turn_input)
+        l3_fired, l3_term = detect_agent_override(turn_input)
+        safety_signal_present = l1_fired or l3_fired
+
+        try:
+            response, dispatch_path = _dispatch(event)
+        except (
+            Exception
+        ):  # noqa: BLE001 - see the module docstring on the fail-open/fail-closed split
+            logger.exception("codehook failed")
+            if not safety_signal_present:
+                tracing.set_span_attribute(span, "fnol.dispatch_path", "fail_open")
+                return _delegate(event)
+
+            contact_id = _contact_id_from(event)
+            message = _UNAVAILABLE_SAFETY_SCRIPT if l1_fired else _UNAVAILABLE_OVERRIDE_SCRIPT
+            tracing.set_span_attribute(span, "fnol.dispatch_path", "fail_closed")
+            return _escalate(
+                event,
+                contact_id=contact_id,
+                triggering_layer="L1" if l1_fired else "L3",
+                route=1 if l1_fired else 2,
+                message=message,
+                context={
+                    "triggering_utterance": turn_input,
+                    "matched_term": l3_term if l3_fired and not l1_fired else None,
+                    "reason": "graph_invocation_failed",
+                },
+                escalation_reason="fail-closed",
+            )
+        else:
+            tracing.set_span_attribute(span, "fnol.dispatch_path", dispatch_path)
+            return response
+    finally:
+        tracing.end_turn_span(span)
+        tracing.flush(timeout_millis=200)

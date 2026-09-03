@@ -40,9 +40,12 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+import json
+
 import boto3
 
 from ..aws.mock_guard import assert_real_aws_allowed
+from ..observability import tracing
 
 from fnol_voice_agent.config.settings import DEFAULT_REGION
 
@@ -148,6 +151,7 @@ class BedrockGuardrailClient:
             self._client = boto3.client("bedrock-runtime", region_name=self._region)
         return self._client
 
+    @tracing.traced("bedrock.apply_guardrail")
     def apply_guardrail(self, source: GuardrailSource, text: str) -> GuardrailResult:
         client = self._get_client()
         response = client.apply_guardrail(
@@ -156,7 +160,23 @@ class BedrockGuardrailClient:
             source=source,
             content=[{"text": {"text": text}}],
         )
-        return _parse_response(response)
+        result = _parse_response(response)
+        # `ADR-018` criteria 3/4. `usage_json` mirrors `observability/guardrail_metrics.py::emit_
+        # guardrail_usage`'s own `json.dumps(dict(usage), sort_keys=True)` shape exactly, reusing
+        # `result.usage` -- the SAME parsed data that module already extracts from this response --
+        # rather than re-deriving anything from `response` a second time. See `tracing.py`'s
+        # `_ALLOWED_SPAN_ATTRIBUTES` comment for why this is one JSON-blob attribute, not one attribute
+        # per usage key.
+        tracing.annotate_current_span(
+            {
+                "fnol.guardrail.source": source,
+                "fnol.guardrail.action": result.raw_action,
+                "fnol.guardrail.blocked": result.blocked,
+                "fnol.guardrail.masked": result.masked,
+                "fnol.guardrail.usage_json": json.dumps(dict(result.usage), sort_keys=True),
+            }
+        )
+        return result
 
 
 def _parse_response(response: dict[str, Any]) -> GuardrailResult:

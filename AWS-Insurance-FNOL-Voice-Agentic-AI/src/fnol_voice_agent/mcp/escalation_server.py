@@ -19,6 +19,8 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
+from fnol_voice_agent.observability import tracing
+
 # DIALOGUE-POLICIES.md §8's full escalation-trigger table, not just the three safety-detection layers:
 # L1 (deterministic injury/fatality pre-node), L2 (merged router's recall-biased safety classification),
 # L3 (hard "agent"/"human" barge-in intent) are routes 1-2; "capability" (out-of-corpus, out-of-scope,
@@ -62,6 +64,7 @@ class EscalationResult(BaseModel):
     real_connect_transfer_executed: Literal[False] = False
 
 
+@tracing.traced_mcp_tool("InitiateEscalation", "escalation", contact_id_arg="contact_id")
 def initiate_escalation(
     contact_id: str, triggering_layer: str, context: dict[str, Any] | None = None
 ) -> EscalationResult:

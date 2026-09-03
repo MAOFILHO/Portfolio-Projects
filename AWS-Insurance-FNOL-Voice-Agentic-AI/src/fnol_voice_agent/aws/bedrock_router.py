@@ -42,6 +42,7 @@ from ..config.settings import (
     ROUTER_TEMPERATURE,
 )
 from ..models.routing import TurnClassification
+from ..observability import tracing
 from .mock_guard import assert_real_aws_allowed
 
 CLASSIFY_TURN_TOOL_NAME = "classify_turn"
@@ -149,6 +150,27 @@ def build_classify_turn_tool_spec() -> dict[str, Any]:
     }
 
 
+def _bedrock_call_attributes(
+    *, model_id: str, usage: Mapping[str, Any], stop_reason: Any
+) -> dict[str, Any]:
+    """The `ADR-018` criterion-3/4 attribute set shared by both Converse call paths (model id, real
+    token counts from the response's own `usage` block, stop reason) -- built here once so `classify_
+    turn` and `generate_response` don't each retype the same `None`-filtering. `usage`'s keys
+    (`inputTokens`/`outputTokens`) omitted, not sent as `None`, when the response didn't carry them --
+    OTel span attributes are IDs/metrics/strings/numbers/bools, never `None`, and a missing key is
+    honestly "unknown," not zero.
+    """
+    attributes: dict[str, Any] = {"bedrock.model_id": model_id}
+    if usage.get("inputTokens") is not None:
+        attributes["bedrock.input_tokens"] = usage["inputTokens"]
+    if usage.get("outputTokens") is not None:
+        attributes["bedrock.output_tokens"] = usage["outputTokens"]
+    if stop_reason is not None:
+        attributes["bedrock.stop_reason"] = stop_reason
+    return attributes
+
+
+@tracing.traced("bedrock.converse.classify_turn")
 def classify_turn(
     messages: Sequence[Mapping[str, Any]],
     *,
@@ -203,6 +225,17 @@ def classify_turn(
         },
         inferenceConfig=inference_config,
     )
+    # `ADR-018` criterion 3: annotated here, not by the `@tracing.traced` decorator above -- the decorator
+    # only ever sees this function's final return value (a `TurnClassification`, which has already
+    # discarded the raw Converse response's `usage`/`stopReason`), so the attributes have to be set from
+    # inside the function body, once the raw `response` this line just got back is actually in scope. See
+    # `tracing.annotate_current_span`'s own docstring.
+    usage = response.get("usage") or {}
+    tracing.annotate_current_span(
+        _bedrock_call_attributes(
+            model_id=ROUTER_MODEL_ID, usage=usage, stop_reason=response.get("stopReason")
+        )
+    )
     return _parse_classify_turn_response(response)
 
 
@@ -234,6 +267,7 @@ def _parse_classify_turn_response(response: Mapping[str, Any]) -> TurnClassifica
     return TurnClassification.model_validate(tool_use["input"])
 
 
+@tracing.traced("bedrock.converse.generate_response")
 def generate_response(
     system_prompt: str,
     user_message: str,
@@ -273,6 +307,15 @@ def generate_response(
         messages=[{"role": "user", "content": [{"text": user_message}]}],
         system=[{"text": system_prompt}],
         inferenceConfig=inference_config,
+    )
+    # See `classify_turn`'s identical comment -- the decorator can't see the raw Converse `response`,
+    # only this function's final `str` return value.
+    tracing.annotate_current_span(
+        _bedrock_call_attributes(
+            model_id=get_generation_model_id(),
+            usage=response.get("usage") or {},
+            stop_reason=response.get("stopReason"),
+        )
     )
     return _parse_generation_response(response)
 

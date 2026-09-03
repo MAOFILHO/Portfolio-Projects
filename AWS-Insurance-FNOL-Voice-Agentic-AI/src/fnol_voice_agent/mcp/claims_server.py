@@ -21,6 +21,7 @@ from fnol_voice_agent.models import Claim, ClaimStatus, KabcoCode, LossType, Ren
 from fnol_voice_agent.models.claim import CLAIM_NUMBER_PATTERN
 from fnol_voice_agent.models.fnol import FileAutoClaimSlots
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
+from fnol_voice_agent.observability import tracing
 from fnol_voice_agent.validation.coverage import rental_days_remaining
 from fnol_voice_agent.validation.identifiers import compute_claim_number, normalize_policy_number
 
@@ -195,6 +196,7 @@ def _most_recent_open_claim(claims: list[Claim], policy_number: str) -> Claim:
     return max(candidates, key=lambda c: datetime.fromisoformat(c.loss_datetime))
 
 
+@tracing.traced_mcp_tool("GetClaimStatus", "claims")
 def get_claim_status(claim_number: str | None = None, policy_number: str | None = None) -> Claim:
     """`claim_number` **or** `policy_number` -- either suffices (`SLOT-DESIGN.md` §3). When only
     `policy_number` is given, resolves to the most recent **open** claim on that policy, disambiguating
@@ -234,6 +236,7 @@ def get_claim_status(claim_number: str | None = None, policy_number: str | None 
     return _most_recent_open_claim(claims, args.policy_number)
 
 
+@tracing.traced_mcp_tool("GetRentalStatus", "claims")
 def get_rental_status(claim_number: str) -> RentalStatus:
     """`endorsements.md`'s rental arithmetic, resolved for one specific claim
     (`DIALOGUE-POLICIES.md` §3 step 2). The corpus already stores `days_remaining`/`amount_remaining_cad`
@@ -378,6 +381,7 @@ def resolve_vehicle_description(text: str, policy_number: str) -> str | None:
     return None
 
 
+@tracing.traced_mcp_tool("FileNewClaim", "claims")
 def file_new_claim(
     policy_number: str,
     insured_vehicle_vin: str,

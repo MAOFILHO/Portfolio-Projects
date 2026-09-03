@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fnol_voice_agent.models import Policyholder
 from fnol_voice_agent.models.policy import POLICY_NUMBER_PATTERN
+from fnol_voice_agent.observability import tracing
 from fnol_voice_agent.validation.identifiers import normalize_policy_number
 
 from ._paths import POLICYHOLDERS_PATH
@@ -58,6 +59,7 @@ def _load_policyholders() -> dict[str, Policyholder]:
     }
 
 
+@tracing.traced_mcp_tool("GetPolicyholderElections", "policy")
 def get_policyholder_elections(policy_number: str) -> Policyholder:
     """Returns the policyholder record for `policy_number`, keyed exactly as
     `DIALOGUE-POLICIES.md` §2 requires for the election-fact/optional-benefit branch of
