@@ -10,11 +10,7 @@
 ![Terraform](https://img.shields.io/badge/Terraform-≥1.9-7B42BC?style=flat&logo=terraform&logoColor=white&labelColor=1a1a2e)
 ![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2?style=flat&labelColor=1a1a2e)
 
-> **No CI badge yet, deliberately.** The workflows are authored in
-> `.github/workflows-for-monorepo-root/` but not installed — GitHub Actions reads workflows only from the
-> monorepo root, and copying them there is a Phase 10 change outside this project's directory that needs
-> its own approval. A badge pointing at a workflow that does not run would be the first false claim in
-> this file.
+[![Eval Gate](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml/badge.svg?branch=main)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/aws-insurance-fnol-voice-agentic-ai-eval-gate.yml)
 
 ## Project Description
 
@@ -630,7 +626,7 @@ setting).
 
 | Step | What runs | What it catches |
 |---|---|---|
-| Unit tests | `pytest tests/unit` | Code-level regressions — 807 tests, no AWS credentials, no network |
+| Unit tests | `pytest tests/unit` | Code-level regressions — 812 tests (6 added by Phase 14's tracing suite), no AWS credentials, no network |
 | Evaluation gate | `python -m evals.report --check-regression` | **Tier A only**: the deterministic L1 safety-recall `GATE` and the retrieval recall@5 `GATE`, both against real committed fixtures (real Titan vectors, a labelled golden set) — plus a check that nothing regressed >3pp against the last committed baseline |
 | Baseline freshness | Diff-scoped | On a PR, fails if a prompt/model-config file changed with no accompanying baseline update — the CI equivalent of "don't move the goalposts silently" |
 | Mechanism self-check | `CF6(b)/(c)`, offline | Confirms the regression tolerance itself is computed correctly — $0, does **not** gate this PR's own Tier B numbers |
