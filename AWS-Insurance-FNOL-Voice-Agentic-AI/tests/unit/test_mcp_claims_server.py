@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from fnol_voice_agent.mcp.claims_server import (
@@ -33,8 +35,16 @@ _VALID_NEW_CLAIM_KWARGS: dict[str, object] = {
 }
 
 
+_AUGUST_2026 = datetime(2026, 8, 15, tzinfo=UTC)
+
+
 def test_file_new_claim_produces_a_valid_reported_claim() -> None:
-    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    # filed_at pinned to a fixed month -- claim_number is minted from the real clock otherwise
+    # (`_next_claim_number(filed_at or datetime.now(UTC))`), which made this test's "CLM-2608-"
+    # expectation and the sibling sequence-number test below pass only in August 2026 and fail every
+    # month since (confirmed live: CI failed in September with `assert False` /
+    # `'CLM-2609-00004-3'.startswith('CLM-2608-')`).
+    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS, filed_at=_AUGUST_2026)  # type: ignore[arg-type]
     assert claim.status == "Reported"
     assert claim.claim_number.startswith("CLM-2608-")
     assert claim.kabco == "O"
@@ -49,8 +59,10 @@ def test_file_new_claim_produces_a_valid_reported_claim() -> None:
 
 def test_file_new_claim_sequence_numbers_never_collide_with_the_real_corpus() -> None:
     # The real corpus's highest August 2026 sequence is 00055 (CLM-2608-00055-6). A freshly-filed claim
-    # this same month must start above that, not restart at 00001.
-    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS)  # type: ignore[arg-type]
+    # this same month must start above that, not restart at 00001. filed_at pinned to August for the
+    # same reason as the test above -- this assertion is about August's own sequence, not "whichever
+    # month CI happens to run in".
+    claim = file_new_claim(**_VALID_NEW_CLAIM_KWARGS, filed_at=_AUGUST_2026)  # type: ignore[arg-type]
     _, _, seq, _ = claim.claim_number.split("-")
     assert int(seq) > 55
 
