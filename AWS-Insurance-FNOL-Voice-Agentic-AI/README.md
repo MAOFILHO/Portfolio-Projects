@@ -444,8 +444,12 @@ has no IaC path and is documented as one of exactly four permitted manual steps 
 - **Bedrock model access** for `us.amazon.nova-micro-v1:0`, `us.amazon.nova-lite-v1:0`,
   `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `amazon.titan-embed-text-v2:0`
 - **Terraform ≥ 1.9** — *not needed until Phase 8*
-- **An existing Amazon Connect instance and claimed DID.** This project **never creates either**.
-  Releasing and re-claiming a number risks a 180-day claim block.
+- **An existing Amazon Connect instance and claimed DID.** This project **never creates either** — the
+  telephony Terraform stack only imports the instance and number via a data source. To bring your own:
+  [create an instance](https://docs.aws.amazon.com/connect/latest/adminguide/tutorial1-create-instance.html)
+  and [claim a phone number](https://docs.aws.amazon.com/connect/latest/adminguide/claim-and-manage-phonenumbers.html)
+  through the AWS Connect console, then point `infra/terraform/stacks/telephony`'s variables at your own
+  instance ID and number. Releasing and re-claiming a number risks a 180-day claim block.
 
 Everything currently runnable works **without AWS credentials**. Retrieval metrics run offline against
 committed real Titan vectors; the agent runs against a fake-LLM harness and moto.
