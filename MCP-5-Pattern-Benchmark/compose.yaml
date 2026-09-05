@@ -1,0 +1,23 @@
+# Postgres + the /tickets HTTP API, run together for local dev and the
+# harness. Both server_wrapper and server_orchestrator point at the API's
+# port; the seed script resets/reloads the schema per task (see
+# src/mcp_services/tool_orchestrator/state_manager.py), so no init here.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tickets
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tickets
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
