@@ -1,4 +1,4 @@
-# mcp-pattern-benchmark
+# MCP-5-Pattern-Benchmark
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
 ![MCP](https://img.shields.io/badge/Protocol-MCP-6C3FC5)
