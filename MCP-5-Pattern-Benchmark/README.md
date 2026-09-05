@@ -84,15 +84,35 @@ Five pattern modules, each an A/B pair against a control, run at one fixed
 model with the same 8 tasks 3 times over:
 
 - **Tool Orchestrator** — one call does what the control's wrapper needs
-  several for
+  several for.
+  **Use when** a business operation is always the same fixed sequence of
+  dependent calls (create → attach → assign → notify) — collapsing a
+  sequence that never varies has no downside. Confirmed: -47% turns, -67%
+  tokens, same success.
 - **Domain Adapter** — the server resolves domain lookups the control's flat
-  API leaves to the agent
+  API leaves to the agent.
+  **Use when** the agent would otherwise have to resolve a business-domain
+  reference (a customer, a ticket by title) that the backend already knows
+  how to look up. Confirmed: -33% turns, -76% tokens, same success.
 - **Stateful Session Server** — the server holds working state so the agent
-  doesn't have to resend it every call
+  doesn't have to resend it every call.
+  **Use when** a session accumulates enough state that resending it every
+  turn would dominate cost. This benchmark's task (2-3 comments per review)
+  was too small to clear that bar — it's a **negative finding at this
+  scale**: +4% turns, +6% tokens for the same success. A longer-lived
+  session is where the thesis should hold; see Limitations.
 - **Proxy Aggregator** — one server fronts three backends' worth of tools
-  behind scoped discovery
+  behind scoped discovery.
+  **Use when** unifying multiple backends behind one server actually cuts
+  the agent's tool surface — but only if identifiers can be resolved
+  directly. This benchmark's result is a **negative finding**: +148% turns,
+  +92% tokens, -44% success, traced to an id-guessing gap shared by both
+  servers, not to the aggregation pattern itself; see Limitations.
 - **Resource Gateway** — `list_resources`/`read_resource` surface content the
-  control's tools only return raw
+  control's tools only return raw.
+  **Use when** an agent needs to discover and browse read-only reference
+  content (docs, runbooks) rather than fetch one already-known record.
+  Confirmed: +50% success, -9% tokens.
 
 
 
