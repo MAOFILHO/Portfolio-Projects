@@ -11,49 +11,62 @@ connection -- `client.connect_realtime()` does that for the real path, and `real
 CI, in milliseconds, with no Azure and no patching.
 """
 import asyncio
+import json
 import logging
 
 from fastapi import WebSocketDisconnect
 
-from ..agents.specs import SYSTEM_PROMPT
+from ..agents import specs
 from ..cost import caps
 from ..dispatch import gate
-from ..dispatch.tools import TOOLS, dispatch_tool_call
+from ..dispatch.tools import dispatch_tool_call
 from ..transport import acs
 
 log = logging.getLogger("bridge")
 
-SESSION_CONFIG = {
-    "type": "realtime",
-    "instructions": SYSTEM_PROMPT,
-    # output_modalities stays audio-only: the SDK's own field docs say audio and text can't both
-    # be requested, and audio-only already includes a spoken transcript
-    # (response.output_audio_transcript.delta, handled below) -- confirmed live, no need for
-    # "text" too.
-    "output_modalities": ["audio"],
-    "audio": {
-        # Set explicitly, not left to defaults: this is a paid call, not the earlier
-        # text-modality probe that confirmed these defaults. Values match that confirmed-live
-        # default exactly (session.created echo, 2026-08-29).
-        "input": {
-            "format": {"type": "audio/pcm", "rate": 24000},
-            "turn_detection": {
-                "type": "server_vad",
-                "threshold": 0.5,
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 200,
-                "create_response": True,
-                "interrupt_response": True,
-            },
-            # input_audio_transcription deliberately omitted: Azure requires the name of an
-            # existing transcription-model deployment for this field (not a bare model id like
-            # "whisper-1"), and this project has no such deployment -- only gpt-realtime-mini.
-            # Provisioning one is a new billable resource, out of scope here.
+# Set explicitly, not left to defaults: this is a paid call, not the earlier text-modality probe
+# that confirmed these defaults. Values match that confirmed-live default exactly (session.created
+# echo, 2026-08-29). Shared by every agent's session.update -- only instructions and tools change
+# on a handoff (issue #20), never the audio wire shape.
+_AUDIO_CONFIG = {
+    "input": {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 200,
+            "create_response": True,
+            "interrupt_response": True,
         },
-        "output": {"format": {"type": "audio/pcm", "rate": 24000}},
+        # input_audio_transcription deliberately omitted: Azure requires the name of an existing
+        # transcription-model deployment for this field (not a bare model id like "whisper-1"),
+        # and this project has no such deployment -- only gpt-realtime-mini. Provisioning one is a
+        # new billable resource, out of scope here.
     },
-    "tools": TOOLS,
+    "output": {"format": {"type": "audio/pcm", "rate": 24000}},
 }
+
+
+def _session_update(identity):
+    """The session.update message for handing (or opening) the call to `identity` -- instructions
+    and tools come from agents/specs.py's AgentSpec table; everything else about the wire shape is
+    fixed. Reconfigures the one existing session; issue #20's handoff never opens a second one."""
+    spec = specs.AGENTS[identity]
+    return {
+        "type": "session.update",
+        "session": {
+            "type": "realtime",
+            "instructions": spec.instructions,
+            # output_modalities stays audio-only: the SDK's own field docs say audio and text
+            # can't both be requested, and audio-only already includes a spoken transcript
+            # (response.output_audio_transcript.delta, handled below) -- confirmed live, no need
+            # for "text" too.
+            "output_modalities": ["audio"],
+            "audio": _AUDIO_CONFIG,
+            "tools": specs.tools_for(identity),
+        },
+    }
 
 
 async def run_call(transport, realtime):
@@ -66,15 +79,15 @@ async def run_call(transport, realtime):
     research-aoai-realtime-wire-format.md). No barge-in, no reconnection: ends when either side
     disconnects, or when a B4 cap trips.
     """
-    await realtime.send({"type": "session.update", "session": SESSION_CONFIG})
-
-    # Call-scoped B1 state. Both are fixed for the whole call in Phase 2: there is one agent, and
-    # there is no transition into AUTHENTICATED yet. Issue #20 makes `agent` change on handoff;
-    # Phase 4 makes `auth_state` change once KBA and the DTMF PIN exist. They are passed to every
-    # tool call rather than read from a module global so that a call's authorisation state can
-    # never be ambient -- it is always an argument the dispatcher had to be given.
-    agent = gate.BANKING_AGENT
+    # Call-scoped B1 state. `auth_state` is fixed for the whole call in Phase 2 -- there is no
+    # transition into AUTHENTICATED yet, that's Phase 4 once KBA and the DTMF PIN exist. `agent`
+    # starts on TRIAGE and changes on handoff (issue #20, model_to_transport below). Both are
+    # passed to every tool call rather than read from a module global so that a call's
+    # authorisation state can never be ambient -- it is always an argument the dispatcher had to
+    # be given.
+    agent = gate.TRIAGE_AGENT
     auth_state = gate.ANONYMOUS
+    await realtime.send(_session_update(agent))
 
     async def transport_to_model():
         while True:
@@ -96,11 +109,32 @@ async def run_call(transport, realtime):
     turn_count = 0
 
     async def model_to_transport():
-        nonlocal turn_count
+        nonlocal turn_count, agent
         async for event in realtime:
             if event.type == "response.output_audio.delta":
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "response.function_call_arguments.done":
+                handoff_target = specs.handoff_target(event.name)
+                if handoff_target is not None:
+                    # A handoff is routing, not a banking tool -- it never reaches
+                    # dispatch_tool_call or the gate (dispatch/gate.py's own docstring: agent
+                    # tool-scoping is defence in depth, not the control). Agent identities are
+                    # not sensitive (B2) -- safe to log which one the call moved to.
+                    log.info("handoff: %s -> %s", agent, handoff_target)
+                    agent = handoff_target
+                    await realtime.send({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "function_call_output",
+                            "call_id": event.call_id,
+                            "output": json.dumps({"result": f"transferred to {agent}"}),
+                        },
+                    })
+                    # Reconfigures the one existing session -- never opens a second one (issue
+                    # #20's acceptance criterion).
+                    await realtime.send(_session_update(agent))
+                    await realtime.send({"type": "response.create"})
+                    continue
                 # Tool name only, never the arguments (B2): they can carry account identifiers
                 # today, and Phase 4 puts PIN-adjacent data on this exact path --
                 # dispatch_tool_call's own docstring already promises not to log arguments; this

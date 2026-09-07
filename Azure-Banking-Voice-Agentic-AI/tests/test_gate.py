@@ -42,6 +42,15 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
         for tool in (t["name"] for t in tools.TOOLS):
             self.assertFalse(gate.is_allowed(gate.BANKING_AGENT, gate.AUTHENTICATED, tool))
 
+    def test_triage_agent_is_deny_all_same_as_banking(self):
+        # Issue #20 gave the gate a second real identity (a call starts on TRIAGE_AGENT, not
+        # BANKING_AGENT -- realtime/session.py). PERMISSIONS being empty already denies both, but
+        # this pins that fact for the identity that actually opens every call, not just the one
+        # that used to be the only one.
+        for tool in (t["name"] for t in tools.TOOLS):
+            self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.ANONYMOUS, tool))
+            self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.AUTHENTICATED, tool))
+
     def test_it_is_pure_same_answer_every_time(self):
         answers = {
             gate.is_allowed(gate.BANKING_AGENT, gate.ANONYMOUS, "get_balance")

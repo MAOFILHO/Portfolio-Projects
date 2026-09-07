@@ -119,6 +119,13 @@ class FakeRealtimeServer:
                 return m["session"]
         return None
 
+    @property
+    def session_configs(self):
+        """Every session.update payload sent, in order -- more than one means the call
+        reconfigured the session at least once (issue #20's handoff), always on this same
+        connection, never a second one."""
+        return [m["session"] for m in self.sent if m["type"] == "session.update"]
+
 
 class FakeRealtimeConnectCM:
     """Async context manager wrapper, matching what the real client's connect() returns."""

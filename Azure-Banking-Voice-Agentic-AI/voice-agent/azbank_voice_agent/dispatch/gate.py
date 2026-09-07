@@ -11,11 +11,13 @@ declared tool list without a corresponding permission entry is refused -- it fai
 is the whole point.
 
 **This is the control. Agent tool-scoping is not.** Narrowing which tools a given agent is even
-shown (issue #20's AgentSpec table) is defence in depth: it reduces what the model is likely to
-attempt, but the model can attempt anything, and an attempt is not a breach. Only this function
-decides whether an attempt *succeeds*. docs/PLAN.md states the split directly -- "Can an attacker
-make the model try a pre-auth balance call? — probabilistic, L3/L4, reported. Can that attempt
-succeed? — deterministic, L1, blocking."
+shown (agents/specs.py's AgentSpec table, issue #20) is defence in depth: it reduces what the
+model is likely to attempt, but the model can attempt anything -- a triage-agent session that
+still somehow emits a `transfer` call reaches this same function, on whatever `agent` value
+session.py passes -- and an attempt is not a breach. Only this function decides whether an attempt
+*succeeds*. docs/PLAN.md states the split directly -- "Can an attacker make the model try a
+pre-auth balance call? — probabilistic, L3/L4, reported. Can that attempt succeed? —
+deterministic, L1, blocking."
 
 Sequencing (docs/PLAN.md Phase 2): this ships now, before Phase 3 introduces a real network path
 to mock-core-banking, so that no phase ever exists in which that path is reachable with nothing in
@@ -28,8 +30,11 @@ front of it. Phase 4 only *adds permissions* here; it never introduces the contr
 ANONYMOUS = "anonymous"
 AUTHENTICATED = "authenticated"
 
-# The single agent that exists today. Issue #20 replaces this with the declarative AgentSpec table
-# and adds mid-call handoff; the gate keys on whatever identities that table introduces.
+# The agent identities issue #20's declarative AgentSpec table (agents/specs.py) introduces. A
+# call starts on TRIAGE_AGENT and is handed off to BANKING_AGENT mid-session for anything the
+# triage agent doesn't handle itself -- session.py's own agent variable is what actually changes;
+# these two constants are what the gate keys the permission table on.
+TRIAGE_AGENT = "triage"
 BANKING_AGENT = "banking"
 
 # --- the permission table: data, not logic -------------------------------------------------------
@@ -44,6 +49,12 @@ BANKING_AGENT = "banking"
 # moment Phase 3 lands, and relying on someone remembering to revert it before then is exactly the
 # kind of thing CLAUDE.md's never-auto-accept rule on this file exists to prevent. No caller is
 # permitted anything until Phase 4 adds a real AUTHENTICATED transition and rows for it.
+#
+# Keyed on (TRIAGE_AGENT | BANKING_AGENT, ANONYMOUS | AUTHENTICATED) once rows exist -- issue #20
+# gave the gate two real identities to key on instead of one, and this table is what makes that
+# keying mean something: is_allowed() below never branches on which agent is asking, it only ever
+# looks up this table, so a new agent (or a new specialist added to agents/specs.py later) needs a
+# row here to get anything, not a code change.
 PERMISSIONS: dict[tuple[str, str], frozenset[str]] = {}
 
 # What the caller hears when the gate refuses. Deliberately vague about *why*: a refusal that
