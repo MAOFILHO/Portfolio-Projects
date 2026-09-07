@@ -14,10 +14,13 @@ deliberately:
 When it is run deliberately it must FAIL on a misconfigured successor, never skip -- a rehearsal
 that silently declines to run is worse than no rehearsal, because it reads green.
 
-What this proves and what it does not: the code path accepts the successor identity, the boot
-guard admits it with the required warning, and a full call completes on it. It does NOT prove the
-successor is deployable in this subscription or priced as expected -- those need a real deployment,
-which is billable and out of scope here.
+What this proves and what it does not: the boot guard admits the successor identity with the
+required warning, and once admitted, a full call completes -- proved as one sequence, since
+model identity is a boot-time property this project's wire protocol never touches again mid-call
+(nothing here would distinguish a call running on the successor from one running on the active
+pin except that the guard was asked about the successor first). It does NOT prove the successor
+is deployable in this subscription or priced as expected -- those need a real deployment, which is
+billable and out of scope here.
 """
 import asyncio
 import json
@@ -71,8 +74,24 @@ class SuccessorBootRehearsal(unittest.TestCase):
             "booting on the successor must warn -- a silent migration is the thing B3 prevents",
         )
 
-    def test_a_full_turn_completes_on_the_successor(self):
-        # One complete turn: the caller speaks, the model answers, a tool runs, the turn closes.
+    def test_a_full_turn_completes_once_the_guard_has_admitted_the_successor(self):
+        # A full turn, by itself, proves nothing successor-specific: run_call is deployment-
+        # agnostic by design (model identity is a boot-time property, checked once in app.py's
+        # lifespan, before any call -- the relay never touches it again, and neither does the
+        # wire protocol FakeRealtimeServer replays). An earlier version of this test ran a call
+        # scripted with "successor-*" strings but never went through the guard at all -- it would
+        # have passed identically under the active pin, proving nothing (caught by /code-review
+        # of Phase 2, 2026-09-07). What T-B3-SUCCESSOR-BOOT actually claims, given that
+        # architecture, is sequential: the guard admits the successor, and only *given that*
+        # admission, a full turn completes -- so this test performs both steps in order, not one
+        # in isolation.
+        name, _ = boot.SUCCESSOR_REALTIME_MODEL
+        live = boot.assert_boot_safety(
+            reader=lambda deployment: boot.SUCCESSOR_REALTIME_MODEL,
+            env={"AOAI_DEPLOYMENT": name},
+        )
+        self.assertEqual(live, boot.SUCCESSOR_REALTIME_MODEL, "guard did not admit the successor")
+
         transport = FakeTransport(frames=[audio_frame("caller-on-successor")], hang=True)
         realtime = FakeRealtimeServer(
             events=[
