@@ -1,0 +1,118 @@
+"""One complete call, end to end, between two fakes -- no Azure, no credentials, no spend.
+
+This is the test docs/PLAN.md's Phase 2 exit criterion is written against: "full app runs
+end-to-end between two fakes in CI with zero Azure dependency". Nothing here patches a module
+attribute; `run_call` is handed both collaborators, which is the whole point of issue #18.
+
+Determinism note: the fake model holds its scripted events until the caller's audio has actually
+been forwarded (`respond_after_appends`), so the two relay tasks can't race. That also mirrors the
+real deployment, which answers after server-side turn detection fires -- not before.
+"""
+import asyncio
+import json
+import socket
+import unittest
+from unittest.mock import patch
+
+from azbank_voice_agent import accounts
+from azbank_voice_agent.realtime.fake import (
+    FakeRealtimeServer,
+    audio_delta,
+    function_call,
+    response_done,
+    transcript_delta,
+)
+from azbank_voice_agent.realtime.session import run_call
+from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame, unknown_frame
+
+
+def _balance_call():
+    """The Phase 1 demo, scripted: caller speaks, agent greets, checks a balance, answers."""
+    transport = FakeTransport(
+        frames=[audio_frame("caller-said-1"), audio_frame("caller-said-2")],
+        hang=True,  # the model's scripted events end this call, not the caller hanging up
+    )
+    realtime = FakeRealtimeServer(
+        events=[
+            audio_delta("agent-greeting"),
+            transcript_delta("Hi, how can I help?"),
+            function_call("get_balance", '{"account": "chequing"}'),
+            audio_delta("agent-says-balance"),
+            response_done(),
+        ],
+        respond_after_appends=2,
+    )
+    return transport, realtime
+
+
+class WholeCallAgainstBothFakes(unittest.TestCase):
+    def setUp(self):
+        accounts.ACCOUNTS.clear()
+        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+
+    def test_a_complete_call_runs_with_no_azure_and_no_patching(self):
+        transport, realtime = _balance_call()
+
+        asyncio.run(run_call(transport, realtime))
+
+        # The model heard the caller.
+        self.assertEqual(realtime.appended_audio, ["caller-said-1", "caller-said-2"])
+        # The caller heard the agent -- both spoken chunks, in order.
+        self.assertEqual(transport.sent_audio_payloads, ["agent-greeting", "agent-says-balance"])
+        # The tool actually ran, and its real result went back to the model.
+        self.assertEqual(len(realtime.tool_outputs), 1)
+        call_id, output = realtime.tool_outputs[0]
+        self.assertEqual(call_id, "call-1")
+        self.assertEqual(json.loads(output), {"result": 2400.0})
+        # The whole exchange, in order: configure, hear, answer the tool, ask for a new response.
+        self.assertEqual(realtime.sent_types, [
+            "session.update",
+            "input_audio_buffer.append",
+            "input_audio_buffer.append",
+            "conversation.item.create",
+            "response.create",
+        ])
+
+    def test_the_session_opens_with_every_declared_tool(self):
+        transport, realtime = _balance_call()
+        asyncio.run(run_call(transport, realtime))
+        declared = [tool["name"] for tool in realtime.session_config["tools"]]
+        self.assertEqual(sorted(declared), ["get_balance", "list_accounts", "transfer"])
+
+    def test_a_whole_call_never_opens_a_network_connection(self):
+        # The fakes are documented as never touching the network. This asserts it rather than
+        # trusting the docstring: any outbound connect attempt during a full call fails the test.
+        transport, realtime = _balance_call()
+        with patch.object(socket.socket, "connect", side_effect=AssertionError("network call")), \
+             patch.object(socket.socket, "connect_ex", side_effect=AssertionError("network call")):
+            asyncio.run(run_call(transport, realtime))
+        self.assertEqual(transport.sent_audio_payloads, ["agent-greeting", "agent-says-balance"])
+
+
+class WholeCallHandlesNonAudioFrames(unittest.TestCase):
+    def setUp(self):
+        accounts.ACCOUNTS.clear()
+        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+
+    def test_dtmf_tone_never_reaches_the_model_and_never_reaches_a_log_line(self):
+        # B2 (CLAUDE.md): the PIN never appears in any transcript, log line, or span attribute.
+        # Asserted at the whole-call seam, not just at the frame parser.
+        transport = FakeTransport(frames=[dtmf_frame("7"), audio_frame("real-audio")], hang=True)
+        realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
+
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime))
+
+        self.assertEqual(realtime.appended_audio, ["real-audio"])  # the tone was not forwarded
+        self.assertTrue(any("DTMF" in line for line in cm.output))  # arrival still logged
+        self.assertFalse(any("7" in line for line in cm.output))  # but never the tone itself
+
+    def test_an_unrecognised_frame_kind_is_ignored_not_crashed_on(self):
+        transport = FakeTransport(frames=[unknown_frame(), audio_frame("real-audio")], hang=True)
+        realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
+        asyncio.run(run_call(transport, realtime))
+        self.assertEqual(realtime.appended_audio, ["real-audio"])
+
+
+if __name__ == "__main__":
+    unittest.main()

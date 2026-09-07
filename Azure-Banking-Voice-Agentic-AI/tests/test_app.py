@@ -12,6 +12,7 @@ os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.i
 
 from azure.core.exceptions import HttpResponseError, ServiceRequestError  # noqa: E402
 from azbank_voice_agent import app  # noqa: E402
+from azbank_voice_agent.realtime.fake import FakeRealtimeConnectCM, FakeRealtimeServer  # noqa: E402
 
 
 def _incoming_call_event(correlation_id="corr-1", context="ctx-1"):
@@ -79,20 +80,22 @@ class FakeWebSocket:
 
 
 class MediaStreamDelegatesToBridge(unittest.TestCase):
-    def test_ws_handler_accepts_then_hands_off_to_bridge_run_bridge(self):
-        # /ws used to run its own echo loop; it now delegates the whole relay to the realtime
-        # session module -- this is the seam, not the frame-by-frame behavior, which is that
-        # module's own responsibility and already covered by tests/test_session.py.
+    def test_ws_handler_accepts_then_opens_a_connection_and_hands_off_the_call(self):
+        # /ws used to run its own echo loop; it now opens the realtime connection and delegates
+        # the whole relay -- this is the seam, not the frame-by-frame behavior, which is the
+        # relay's own responsibility and is covered end to end by tests/test_whole_call.py.
         calls = []
 
-        async def fake_run_bridge(ws):
-            calls.append(ws)
+        async def fake_run_call(transport, realtime):
+            calls.append((transport, realtime))
 
         fake_ws = FakeWebSocket()
-        with patch.object(app.session, "run_bridge", fake_run_bridge):
+        realtime = FakeRealtimeServer()
+        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(realtime)), \
+             patch.object(app, "run_call", fake_run_call):
             asyncio.run(app.media_stream(fake_ws))
         self.assertTrue(fake_ws.accepted)
-        self.assertEqual(calls, [fake_ws])
+        self.assertEqual(calls, [(fake_ws, realtime)])  # both collaborators reached the relay
 
 
 if __name__ == "__main__":

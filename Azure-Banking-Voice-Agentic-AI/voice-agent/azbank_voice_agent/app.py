@@ -26,7 +26,8 @@ from azure.communication.callautomation import (
     AudioFormat,
 )
 
-from .realtime import session
+from .realtime.client import connect_realtime
+from .realtime.session import run_call
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("app")
@@ -126,15 +127,19 @@ async def callbacks(request: Request):
 
 @app.websocket("/ws")
 async def media_stream(websocket: WebSocket):
-    """Hands the whole call off to the realtime session relay -- ACS media frames relay to/from
-    the AOAI realtime deployment. run_bridge already swallows WebSocketDisconnect internally
-    (ends the relay when either side hangs up), so this handler doesn't need its own try/except
-    for it."""
+    """Opens the realtime connection and hands the whole call to the relay -- ACS media frames
+    relay to/from the AOAI realtime deployment. run_call already swallows WebSocketDisconnect
+    internally (ends the relay when either side hangs up), so this handler doesn't need its own
+    try/except for it.
+
+    This is the only place the real connection is opened; the relay itself takes it as an
+    argument (issue #18), which is what lets a whole call run against fakes in CI."""
     correlation_id = websocket.headers.get("x-ms-call-correlation-id")
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    await session.run_bridge(websocket)
+    async with connect_realtime() as realtime:
+        await run_call(websocket, realtime)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 
