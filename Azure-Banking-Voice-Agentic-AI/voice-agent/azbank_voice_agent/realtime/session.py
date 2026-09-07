@@ -114,7 +114,14 @@ async def run_call(transport, realtime):
             if event.type == "response.output_audio.delta":
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "response.function_call_arguments.done":
-                handoff_target = specs.handoff_target(event.name)
+                # `agent` (not just event.name) matters here: handoff_target() checks the edge
+                # against the *calling* agent's own declared handoff_to, so a target that exists
+                # but isn't an edge this agent declares comes back None and falls through to the
+                # branch below -- an ordinary dispatch_tool_call, refused by the gate the same as
+                # any other unrecognised tool name (fixed 2026-09-07, /code-review of #20: this
+                # used to check only "does the target agent exist", not "did this agent declare
+                # this edge").
+                handoff_target = specs.handoff_target(event.name, agent)
                 if handoff_target is not None:
                     # A handoff is routing, not a banking tool -- it never reaches
                     # dispatch_tool_call or the gate (dispatch/gate.py's own docstring: agent

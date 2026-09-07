@@ -273,6 +273,37 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         self.assertTrue(any("handoff: triage -> banking" in line for line in cm.output))
         self.assertFalse(any("tool call: handoff_to_banking" in line for line in cm.output))
 
+    def test_a_handoff_the_calling_agent_has_no_declared_edge_to_is_refused_not_routed(self):
+        # BANKING.handoff_to is empty -- a handoff_to_triage call from BANKING must not silently
+        # reconfigure the session (fixed 2026-09-07, /code-review of #20: both axes independently
+        # found handoff_target() checked only "does the target agent exist", not "did the calling
+        # agent declare this edge"). It falls through to the ordinary dispatch path instead, where
+        # the gate refuses it exactly like any other unrecognised tool name -- there is no separate
+        # path that lets an undeclared edge succeed.
+        transport = FakeTransport(frames=[audio_frame("i-need-my-balance")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_banking", "{}", call_id="call-handoff-1"),
+                function_call("handoff_to_triage", "{}", call_id="call-handoff-2"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+
+        with self.assertLogs("dispatch", level="WARNING") as cm:
+            asyncio.run(run_call(transport, realtime))
+
+        # Exactly one reconfiguration happened -- the rejected second attempt never sent a second
+        # session.update (triage's opening config, then the one real handoff to banking).
+        self.assertEqual(len(realtime.session_configs), 2)
+        self.assertTrue(any("handoff_to_triage" in line for line in cm.output))
+
+        # The refused attempt still gets a spoken answer, same as any other refusal -- B1's
+        # "never silent" property applies here too, not just to real banking tools.
+        call_id, output = realtime.tool_outputs[1]
+        self.assertEqual(call_id, "call-handoff-2")
+        self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+
 
 if __name__ == "__main__":
     unittest.main()

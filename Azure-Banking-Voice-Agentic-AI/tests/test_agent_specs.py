@@ -35,23 +35,35 @@ class TheAgentTableIsDeclarative(unittest.TestCase):
 
 class HandoffTargetRecognisesOnlyRealHandoffTools(unittest.TestCase):
     def test_a_real_handoff_tool_resolves_to_its_target(self):
-        self.assertEqual(specs.handoff_target("handoff_to_banking"), gate.BANKING_AGENT)
+        self.assertEqual(
+            specs.handoff_target("handoff_to_banking", gate.TRIAGE_AGENT), gate.BANKING_AGENT
+        )
 
     def test_an_ordinary_banking_tool_is_not_a_handoff(self):
         for name in ("get_balance", "transfer", "list_accounts"):
             with self.subTest(tool=name):
-                self.assertIsNone(specs.handoff_target(name))
+                self.assertIsNone(specs.handoff_target(name, gate.TRIAGE_AGENT))
 
     def test_a_handoff_shaped_name_to_a_nonexistent_agent_is_not_recognised(self):
         # "handoff_to_" is only meaningful when what follows is a real entry in AGENTS -- a
         # lookalike name (typo, or a model hallucinating an agent) must not be treated as routing.
-        self.assertIsNone(specs.handoff_target("handoff_to_nonexistent"))
+        self.assertIsNone(specs.handoff_target("handoff_to_nonexistent", gate.TRIAGE_AGENT))
+
+    def test_a_target_the_calling_agent_has_no_declared_edge_to_is_rejected(self):
+        # BANKING.handoff_to is empty -- TRIAGE is a real agent, but BANKING has no declared edge
+        # to it. Without this check, a hallucinated handoff_to_triage call while on BANKING would
+        # still succeed (silently reconfiguring the session, never reaching the gate), making
+        # handoff_to purely cosmetic outside tools_for()'s tool-list generation -- found by
+        # /code-review of #20, 2026-09-07 (both Standards and Spec axes, independently).
+        self.assertIsNone(specs.handoff_target("handoff_to_triage", gate.BANKING_AGENT))
 
     def test_every_agents_handoff_tool_name_round_trips(self):
         for identity, spec in specs.AGENTS.items():
             for target in spec.handoff_to:
                 with self.subTest(identity=identity, target=target):
-                    self.assertEqual(specs.handoff_target(specs.handoff_tool_name(target)), target)
+                    self.assertEqual(
+                        specs.handoff_target(specs.handoff_tool_name(target), identity), target
+                    )
 
 
 if __name__ == "__main__":

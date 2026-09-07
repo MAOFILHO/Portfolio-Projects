@@ -80,14 +80,22 @@ def handoff_tool_name(target_identity):
     return f"{_HANDOFF_PREFIX}{target_identity}"
 
 
-def handoff_target(tool_name):
-    """The agent identity `tool_name` would hand the call off to, or None if it isn't a handoff
-    tool at all. session.py uses this to route a function call: a handoff never reaches
-    dispatch_tool_call, since it isn't a banking tool and has no gate opinion of its own."""
+def handoff_target(tool_name, from_identity):
+    """The agent identity `tool_name` would hand the call off to *from `from_identity`*, or None
+    if it isn't a handoff tool, names an agent that doesn't exist, or isn't an edge `from_identity`
+    actually declares in its own `handoff_to`. session.py uses this to route a function call: a
+    handoff never reaches dispatch_tool_call, since it isn't a banking tool and has no gate opinion
+    of its own -- which is exactly why this function, not the gate, has to be the thing that checks
+    the edge is real. Checking only "does the target exist in AGENTS" (dropped 2026-09-07,
+    /code-review of #20) would let any agent claim to hand off to any other agent regardless of
+    its own declared `handoff_to` -- BANKING has none, so a hallucinated handoff_to_triage call
+    while on BANKING would have silently reconfigured the session with no check at all."""
     if not tool_name.startswith(_HANDOFF_PREFIX):
         return None
     target = tool_name[len(_HANDOFF_PREFIX):]
-    return target if target in AGENTS else None
+    if target not in AGENTS:
+        return None
+    return target if target in AGENTS[from_identity].handoff_to else None
 
 
 def _handoff_tool_declaration(target_identity):
