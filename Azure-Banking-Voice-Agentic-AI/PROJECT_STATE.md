@@ -139,29 +139,31 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 1. **`/code-review` #20** — the six other Phase 2 tickets each got a Standards+Spec pass before
    being called reviewed; #20 hasn't yet. Do this before treating #20 as done the way #17-#19/21-23
    are.
-2. **This whole session's work is unpushed** — 20 commits ahead of `origin/azure-banking-work`.
-   Not a formal gate, but real risk: it all exists in one worktree only.
-3. **Before any Phase 2 deploy, two things are unverified and one will fail:**
-   - The container image build is **UNVERIFIED** — Docker was not running when #17 rewrote the
-     Dockerfile, and still isn't running in this session's environment either.
-     `docker build voice-agent/` is the check.
-   - B3's ARM reader has **never been run live**. Verify free and read-only, no deploy needed:
-     `AZURE_SUBSCRIPTION_ID=… AZURE_RESOURCE_GROUP=… AOAI_ACCOUNT_NAME=… AOAI_DEPLOYMENT=gpt-realtime-mini
-     python -m azbank_voice_agent.boot` under `az login`.
+2. **This whole session's work is unpushed** — 22 commits ahead of `origin/azure-banking-work`.
+   `git push origin azure-banking-work` from this session failed (`Permission denied (publickey)`
+   — no SSH access to Marco's GitHub key from this sandboxed environment); needs to be pushed from
+   a machine that has it. Not a formal gate, but real risk: it all exists in one worktree only.
+3. **Before any Phase 2 deploy, one thing is now verified, one still isn't, and one will fail:**
+   - **B3's ARM reader is now verified live** (2026-09-07, this session, under `az login`) — read
+     against the real `aoai-azure-banking-voice-cc` deployment, confirmed
+     `('gpt-realtime-mini', '2025-10-06')`, matching the active pin exactly. Free, read-only, no
+     resource created.
+   - The container image build is **still UNVERIFIED** — Docker isn't running in this session's
+     environment either (checked twice, 2026-09-07). `docker build voice-agent/` is the check,
+     needs a machine with Docker running.
    - The Container App has **no managed identity and no ARM permissions**, so the boot guard will
      correctly refuse to start the deployed app until that identity + role assignment + three env
      vars exist. That is B3 working, not a bug — but it is real infrastructure work
      (`docs/PLAN.md` puts managed identity in Phase 7) that nobody has done. This step needs
      Marco's hands (a live provisioning decision) — `/wizard` territory, not something to script
      unattended.
-4. **`ADR-003` is Proposed, not Accepted** — stay on the base `openai` SDK rather than adopting
-   `openai-agents`. Needs Marco's confirmation. Consequence if accepted: `docs/PLAN.md`'s
-   "pin `openai-agents >= 0.3.0`" line and Phase 2's "`RealtimeSession` via `model_config`"
-   phrasing are stale and need a separate approved edit.
-5. **#24: `APPROVED: Phase 2` is now typed** — item 3's prerequisites (image build, ARM reader,
-   managed identity) plus re-provisioned compute and a human to dial are what's left before the
-   provisional B5 latency figure (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit
-   paragraph makes this figure load-bearing for the phase's formal close, not optional. Dialing
-   the call itself is `/wizard` territory — Marco's hands/voice, not something Claude can do.
+4. **`ADR-003` — Accepted 2026-09-07.** Stay on the base `openai` SDK, do not adopt `openai-agents`.
+   `docs/PLAN.md`'s stale `openai-agents >= 0.3.0` pin instruction and `RealtimeSession`/
+   `model_config` phrasing are corrected (`05cb998`).
+5. **#24: `APPROVED: Phase 2` is typed.** What's left: item 3's remaining two prerequisites (image
+   build, managed identity), re-provisioned compute, and a human to dial, before the provisional
+   B5 latency figure (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit paragraph makes this
+   figure load-bearing for the phase's formal close, not optional. Dialing the call itself is
+   `/wizard` territory — Marco's hands/voice, not something Claude can do.
 6. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
