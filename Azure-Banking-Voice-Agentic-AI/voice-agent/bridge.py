@@ -17,6 +17,18 @@ import accounts
 
 log = logging.getLogger("bridge")
 
+# B4 (CLAUDE.md): no call exceeds 5 min / 20 turns, fails closed. This is a Phase-1-sized guard
+# only -- a bare per-call counter and wall-clock timeout. Full B4 (per-session AND daily caps, a
+# cost store, fail-closed if that store is unreachable, T-B4-FAILCLOSED) is Phase 5 scope
+# (docs/PLAN.md:621-624) -- not built here.
+MAX_CALL_TURNS = 20
+MAX_CALL_SECONDS = 5 * 60
+
+
+class _CallLimitExceeded(Exception):
+    """Raised internally when MAX_CALL_TURNS or MAX_CALL_SECONDS is hit. Ends the call -- not a
+    bridge failure, so run_bridge logs and returns instead of propagating this."""
+
 SYSTEM_PROMPT = (
     "You are a phone banking agent. Be brief and clear, like a real phone call. Always use the "
     "tools to check a balance or make a transfer -- never state a balance or confirm a transfer "
@@ -158,7 +170,10 @@ async def run_bridge(acs_ws):
                     "audio": msg["audioData"]["data"],
                 })
 
+        turn_count = 0
+
         async def aoai_to_acs():
+            nonlocal turn_count
             async for event in aoai:
                 if event.type == "response.output_audio.delta":
                     await acs_ws.send_text(json.dumps(
@@ -181,15 +196,26 @@ async def run_bridge(acs_ws):
                     # deployment (see the input_audio_transcription comment above) -- what the
                     # agent said, not what the caller said.
                     log.info("agent said: %s", event.delta)
+                elif event.type == "response.done":
+                    # One full model response cycle = one turn (B4).
+                    turn_count += 1
+                    if turn_count >= MAX_CALL_TURNS:
+                        log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", MAX_CALL_TURNS)
+                        raise _CallLimitExceeded(f"turn cap ({MAX_CALL_TURNS}) reached")
                 elif event.type == "error":
                     log.error("AOAI error event: %s", event)
 
         tasks = [asyncio.create_task(acs_to_aoai()), asyncio.create_task(aoai_to_acs())]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            tasks, timeout=MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
+        )
         for task in pending:
             task.cancel()
+        if not done:
+            # Timeout fired -- neither side disconnected and no turn cap tripped first (B4).
+            log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", MAX_CALL_SECONDS)
         for task in done:
             exc = task.exception()
-            if exc is not None and not isinstance(exc, WebSocketDisconnect):
+            if exc is not None and not isinstance(exc, (WebSocketDisconnect, _CallLimitExceeded)):
                 raise exc
     log.info("call ended")
