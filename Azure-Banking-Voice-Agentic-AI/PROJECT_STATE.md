@@ -6,15 +6,16 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 2 — Realtime session, agent core, gate, test harness. 6 of 8 tickets built, all six
-reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
+**Phase 2 — Realtime session, agent core, gate, test harness. 7 of 8 tickets built** (#17-#23,
+now #20 too); the six built before this update were reviewed and fixed, **#20 is built but not
+yet run through `/code-review`.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
 Phase 1 closed first — its exit criteria are met and written up in
 `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
-**No `APPROVED: Phase 2` has been typed.** Marco invoking `/implement Phase 2` on 2026-09-07 was
-read as go-ahead for the phase's non-billable work; the typed approval still gates anything
-billable, so **#24 was deliberately not started**. Nothing built this session touches Azure, costs
-money, or has been deployed.
+**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **#24 is still
+not started** — three prerequisites are unmet first (see Next actions): the container image build
+is unverified, B3's ARM reader has never run live, and the Container App has no managed identity.
+Nothing built this session touches Azure, costs money, or has been deployed.
 
 Built and committed (all local, unpushed):
 - **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
@@ -36,6 +37,14 @@ Built and committed (all local, unpushed):
   B3 static allowlist check. Checker now covers `docs/*/wizard/*.sh`, `Dockerfile`,
   `pyproject.toml` (not just the package), scans whole-file text (catches a pair literal wrapped
   across lines), and checks `(name, version)` pairs, not just names.
+- **#20 `bd005df`, not yet reviewed** — declarative `AgentSpec` table (`agents/specs.py`): identity,
+  instructions, tool scope. A call now opens on `gate.TRIAGE_AGENT` (was `BANKING_AGENT`); a
+  `handoff_to_banking` function call reconfigures the one existing session onto the banking
+  agent's instructions/tools rather than opening a second one, and never touches
+  `dispatch_tool_call` or the gate (routing, not a banking action). `dispatch/gate.py` gained the
+  `TRIAGE_AGENT` constant only — `PERMISSIONS` is still `{}`, `is_allowed()`'s logic unchanged.
+  All 5 of #20's acceptance criteria met; needs `/code-review` before being called reviewed, same
+  as the other six.
 
 Two rounds of `/code-review` ran this session (`5288f8a..40a39b5`, then `40a39b5..HEAD`), each
 producing Standards + Spec findings; every actionable finding from both is fixed as of `38dec8c`.
@@ -52,9 +61,9 @@ rehearsal patches the gate open on purpose (proving the call completes is orthog
 policy); CI does not auto-run the successor rehearsal (it's designed to be run deliberately, not
 routinely).
 
-**81 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. Not built: **#20** (agent table + handoff — was blocked on #19's review, which
-is now done, so **#20 is unblocked**) and **#24** (needs the typed approval and a human to dial).
+**93 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
+`make lint` clean. Not built: **#24** (typed approval now in hand, but real infra work — see Next
+actions — and a human to dial are still needed first).
 
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
@@ -127,31 +136,32 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Build #20** (agent table + mid-call handoff) — now unblocked, since #19's review (the same
-   permission table #20 extends) is done and its findings fixed. Note: `docs/PLAN.md`'s own Phase
-   2 Exit paragraph does not name #20 as an exit criterion (it's listed among the phase's
-   deliverables above that line, not the Exit line itself) — worth an explicit call with Marco on
-   whether Phase 2 can close without it, or whether #16's ticket breakdown makes it required
-   regardless.
-2. **This whole session's work is unpushed** — 18 commits ahead of `origin/azure-banking-work`.
+1. **`/code-review` #20** — the six other Phase 2 tickets each got a Standards+Spec pass before
+   being called reviewed; #20 hasn't yet. Do this before treating #20 as done the way #17-#19/21-23
+   are.
+2. **This whole session's work is unpushed** — 20 commits ahead of `origin/azure-banking-work`.
    Not a formal gate, but real risk: it all exists in one worktree only.
 3. **Before any Phase 2 deploy, two things are unverified and one will fail:**
    - The container image build is **UNVERIFIED** — Docker was not running when #17 rewrote the
-     Dockerfile. `docker build voice-agent/` is the check.
+     Dockerfile, and still isn't running in this session's environment either.
+     `docker build voice-agent/` is the check.
    - B3's ARM reader has **never been run live**. Verify free and read-only, no deploy needed:
      `AZURE_SUBSCRIPTION_ID=… AZURE_RESOURCE_GROUP=… AOAI_ACCOUNT_NAME=… AOAI_DEPLOYMENT=gpt-realtime-mini
      python -m azbank_voice_agent.boot` under `az login`.
    - The Container App has **no managed identity and no ARM permissions**, so the boot guard will
      correctly refuse to start the deployed app until that identity + role assignment + three env
      vars exist. That is B3 working, not a bug — but it is real infrastructure work
-     (`docs/PLAN.md` puts managed identity in Phase 7) that nobody has done.
+     (`docs/PLAN.md` puts managed identity in Phase 7) that nobody has done. This step needs
+     Marco's hands (a live provisioning decision) — `/wizard` territory, not something to script
+     unattended.
 4. **`ADR-003` is Proposed, not Accepted** — stay on the base `openai` SDK rather than adopting
    `openai-agents`. Needs Marco's confirmation. Consequence if accepted: `docs/PLAN.md`'s
    "pin `openai-agents >= 0.3.0`" line and Phase 2's "`RealtimeSession` via `model_config`"
    phrasing are stale and need a separate approved edit.
-5. **#24 needs `APPROVED: Phase 2` typed**, plus re-provisioned compute and a human to dial, for
-   the provisional B5 latency figure (≥100 real turns). `docs/PLAN.md`'s Exit paragraph makes this
-   figure load-bearing for the phase's formal close, not optional — it's sequenced last because
-   it's the only part of Phase 2 that costs money, not because it's skippable.
+5. **#24: `APPROVED: Phase 2` is now typed** — item 3's prerequisites (image build, ARM reader,
+   managed identity) plus re-provisioned compute and a human to dial are what's left before the
+   provisional B5 latency figure (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit
+   paragraph makes this figure load-bearing for the phase's formal close, not optional. Dialing
+   the call itself is `/wizard` territory — Marco's hands/voice, not something Claude can do.
 6. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
