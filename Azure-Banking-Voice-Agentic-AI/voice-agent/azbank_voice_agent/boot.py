@@ -111,10 +111,15 @@ def assert_boot_safety(reader=read_live_model, env=None):
     except Exception as e:
         # Fails closed: an unreadable deployment is an unapproved deployment. Never "assume the
         # config was right and carry on" -- that is exactly the trust this guard exists to remove.
+        #
+        # The blind catch is the point, not an oversight: this must refuse on *any* failure to
+        # prove what is deployed -- an auth error, a DNS failure, a schema change, a timeout, a
+        # library raising something undocumented. Enumerating exception types here would mean
+        # every unenumerated one boots the app on an unverified model, which is fail-open.
         raise SystemExit(
             f"B3: could not read the live model for deployment {deployment_name!r} ({e}). "
             "Refusing to start: an unverifiable deployment is treated as an unapproved one."
-        )
+        ) from e
 
     if live not in ALLOWED_REALTIME_MODELS:
         raise SystemExit(

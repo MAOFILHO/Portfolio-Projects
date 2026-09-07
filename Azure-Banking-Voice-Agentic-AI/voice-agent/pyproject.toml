@@ -24,5 +24,37 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+# `make lint` only. Kept out of the runtime dependencies so nothing here ships in the image.
+dev = [
+    "ruff==0.16.6",
+    "mypy==2.3.1",
+]
+
 [tool.setuptools.packages.find]
 include = ["azbank_voice_agent*"]
+
+[tool.ruff]
+# 120, not 100: the package source wraps at 100 by hand, but scripts/check_project_root_scope.py
+# (Phase 0, not written to a limit) sits in the 101-110 range throughout. A cap is a cap, not a
+# target -- picking one that reformats a working Phase 0 script would be churn, not lint.
+line-length = 120
+# Both deployables plus the tests and helper scripts, run from the project root.
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Deliberately more than the default: bugbear and blind-except catch real defects rather than
+# style, and E402 is enabled because a test in this project genuinely needs imports after
+# environment setup -- enabling it makes that file's `noqa` markers meaningful rather than dead.
+select = ["E", "F", "I", "UP", "B", "BLE", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+# Deliberately not strict. This codebase is largely untyped by choice (docs/PLAN.md's own layout
+# predates any typing decision), so strict mode would produce hundreds of findings that say
+# nothing about correctness. What is enabled here catches the errors that are real: calls that
+# cannot work, and attributes that do not exist.
+ignore_missing_imports = true
+warn_unreachable = true
+warn_redundant_casts = true
+no_implicit_optional = true

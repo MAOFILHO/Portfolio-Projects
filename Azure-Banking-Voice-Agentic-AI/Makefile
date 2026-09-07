@@ -1,4 +1,4 @@
-.PHONY: install-hooks verify-project-root-scope install test
+.PHONY: install-hooks verify-project-root-scope install test lint
 
 # Only targets that are genuinely functional today are listed here -- mirrors FNOL's own Makefile
 # discipline (AWS-Insurance-FNOL-Voice-Agentic-AI/Makefile: "nothing may be stubbed out and labeled
@@ -30,6 +30,19 @@ install:
 # adding one.
 test: install
 	@$(VENV)/python -m unittest discover -s tests -v
+
+# docs/PLAN.md's Verification section: "make lint runs ruff + mypy. CI static check enforces B3's
+# allowlist across the tree." Added in the phase that makes all three actually pass (issue #23),
+# per this Makefile's standing rule against stubbing a target ahead of its work.
+#
+# The B3 static check is deliberately separate from the runtime boot guard: the guard proves what
+# is deployed is approved, this proves what is written in the source is approved. Neither covers
+# the other's gap.
+lint: install
+	@$(VENV)/pip install -q -e "voice-agent[dev]"
+	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent tests scripts
+	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent
+	@$(VENV)/python scripts/check_b3_allowlist.py
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to

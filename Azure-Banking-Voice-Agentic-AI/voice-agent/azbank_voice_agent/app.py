@@ -16,16 +16,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket
-from azure.core.exceptions import AzureError
 from azure.communication.callautomation import (
+    AudioFormat,
     CallAutomationClient,
+    MediaStreamingAudioChannelType,
+    MediaStreamingContentType,
     MediaStreamingOptions,
     StreamingTransportType,
-    MediaStreamingContentType,
-    MediaStreamingAudioChannelType,
-    AudioFormat,
 )
+from azure.core.exceptions import AzureError
+from fastapi import FastAPI, Request, WebSocket
 
 from .boot import assert_boot_safety
 from .realtime.client import connect_realtime

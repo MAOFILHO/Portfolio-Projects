@@ -10,9 +10,9 @@ from unittest.mock import patch
 os.environ.setdefault("ACS_CONNECTION_STRING", "endpoint=https://fake.communication.azure.com/;accesskey=ZmFrZWtleQ==")
 os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.io")
 
-from azure.core.exceptions import HttpResponseError, ServiceRequestError  # noqa: E402
-from azbank_voice_agent import app  # noqa: E402
-from azbank_voice_agent.realtime.fake import FakeRealtimeConnectCM, FakeRealtimeServer  # noqa: E402
+from azbank_voice_agent import app
+from azbank_voice_agent.realtime.fake import FakeRealtimeConnectCM, FakeRealtimeServer
+from azure.core.exceptions import HttpResponseError, ServiceRequestError
 
 
 def _incoming_call_event(correlation_id="corr-1", context="ctx-1"):

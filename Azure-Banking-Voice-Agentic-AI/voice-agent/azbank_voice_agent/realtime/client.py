@@ -10,7 +10,8 @@ the deployment goes in `model=`, and there is no api-version parameter. The `?ap
 deployment=…` form is the deprecated beta path.
 """
 import os
-from typing import Any, AsyncIterator, Protocol
+from collections.abc import AsyncIterator
+from typing import Any, Protocol
 
 from openai import AsyncOpenAI
 
