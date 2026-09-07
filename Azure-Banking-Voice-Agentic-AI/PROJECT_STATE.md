@@ -11,10 +11,9 @@ reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 
 Phase 1 closed first — its exit criteria are met and written up in
 `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
-**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **#24 is still
-not started** — three prerequisites are unmet first (see Next actions): the container image build
-is unverified, B3's ARM reader has never run live, and the Container App has no managed identity.
-Nothing built this session touches Azure, costs money, or has been deployed.
+**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **The Phase 2
+image is now deployed and its B3 guard has run live, successfully** — the last blocker on #24 is a
+human dialing in for the B5 turn count (`/wizard` territory, see Next actions).
 
 Built and committed (all local, unpushed):
 - **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
@@ -63,8 +62,9 @@ policy); CI does not auto-run the successor rehearsal (it's designed to be run d
 routinely).
 
 **95 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. Not built: **#24** (typed approval now in hand, but real infra work — see Next
-actions — and a human to dial are still needed first).
+`make lint` clean. **#24 not yet closed**: the deploy is done and B3 verified live (see Phase 0
+"Resources live now" and Next actions), but the provisional B5 figure still needs a human to
+actually dial in for ≥100 real turns.
 
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
@@ -83,18 +83,30 @@ teardown is not the current resource state. Full narrative: `docs/phase0/finding
 **Resources live now**: resource group `rg-azure-banking-voice-agentic-ai`; AOAI
 `aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
 `acs-azure-banking-voice`; phone number `+17059100383` (owned, $1.00/mo, R-09 — never released);
-Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0` running
-Phase 1's `voice-agent` bridge (min-replicas=1, billing now, IDLE per the measurement above; still
-`docker.io/maofilho/azbank-echo-p0:latest`, still authenticating to AOAI via the `AOAI_KEY` secret
-— unaffected by the identity work below); two Log Analytics workspaces (`...aiCS` real/linked,
-`...aixC` orphan, left in place).
+Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0`
+(min-replicas=1, billing now) running the **Phase 2** image `docker.io/maofilho/azbank-echo-p0:p2`
+as of 2026-09-07 (was Phase 1's `:latest` before this session's deploy, see below); data-plane auth
+to AOAI (the realtime connection itself) is still via the `AOAI_KEY` secret — only the B3 ARM read
+uses the managed identity; two Log Analytics workspaces (`...aiCS` real/linked, `...aixC` orphan,
+left in place).
 
 **System-assigned managed identity added to `ca-azbank-echo-p0` 2026-09-07** (this session, Marco
 confirmed the plan first): principal `5e09fe34-8913-4aa2-80ac-618af308a88f`, granted `Reader` —
 scoped only to the `aoai-azure-banking-voice-cc` resource, nothing broader — which is what
 `boot.read_live_model()`'s one ARM `GET .../deployments/{name}` call needs. Free, no new billable
-resource. Inert against the currently-running Phase 1 image; only matters once the Phase 2 image
-is actually deployed with this env config.
+resource.
+
+**Phase 2 image deployed 2026-09-07** (Marco built+pushed on his laptop, confirmed `linux/amd64`;
+Claude confirmed the `az containerapp update` command before running it): `ca-azbank-echo-p0` now
+runs `docker.io/maofilho/azbank-echo-p0:p2`, plus the three env vars `boot.read_live_model()` needs
+(`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AOAI_ACCOUNT_NAME` — added via `--set-env-vars`,
+additive, confirmed the 5 pre-existing vars were untouched). New revision
+`ca-azbank-echo-p0--0000001`, `Healthy`/`RunningAtMaxScale`. **B3's boot guard ran live for the
+first time and passed** — confirmed from actual container logs (not inferred from health state):
+managed identity acquired a token, `GET .../deployments/gpt-realtime-mini` returned `200 OK`, and
+the app logged `B3: deployed model ('gpt-realtime-mini', '2025-10-06') matches the active pin.`
+before `Application startup complete.` Single-revision mode, so this replaced the running Phase 1
+container — flagged to Marco as a real risk (no automatic fallback on a bad boot) before running.
 
 ## Open items
 
@@ -146,23 +158,15 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Before any Phase 2 deploy, two things are now verified, two are not:**
-   - **B3's ARM reader: verified live** (2026-09-07) — confirmed `('gpt-realtime-mini',
-     '2025-10-06')` against the real deployment, matching the active pin.
-   - **Managed identity + RBAC: done** (2026-09-07) — `ca-azbank-echo-p0` has a system-assigned
-     identity with `Reader` scoped to `aoai-azure-banking-voice-cc` only (see Phase 0 "Resources
-     live now" above). The boot guard's ARM-permission prerequisite is met.
-   - **Still not set**: the three env vars `boot.read_live_model()` needs (`AZURE_SUBSCRIPTION_ID`,
-     `AZURE_RESOURCE_GROUP`, `AOAI_ACCOUNT_NAME` — `AOAI_DEPLOYMENT` is already set). Deliberately
-     not set yet: doing so is part of the actual deploy (new image + new env config together, not
-     env vars added ahead of an image that doesn't read them).
-   - **Still UNVERIFIED**: the container image build — Docker isn't running in this session's
-     environment (checked three times, 2026-09-07). `docker build voice-agent/` is the check,
-     needs a machine with Docker running.
-2. **#24: `APPROVED: Phase 2` is typed.** What's left: build+verify the Phase 2 image, deploy it
-   with the three env vars above, then a human to dial, before the provisional B5 latency figure
-   (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit paragraph makes this figure
-   load-bearing for the phase's formal close, not optional. Dialing the call itself is `/wizard`
-   territory — Marco's hands/voice, not something Claude can do.
+1. **Everything up to the deploy is now done and verified (2026-09-07):** image built (Marco's
+   laptop) and confirmed `linux/amd64`; managed identity + `Reader` RBAC live; the three env vars
+   set; `ca-azbank-echo-p0` deployed on `:p2`; B3's guard ran live and passed, confirmed from actual
+   container logs (see Phase 0 "Resources live now" above for the log lines).
+2. **#24: only the human step is left.** Dial `+17059100383`, talk to the deployed agent, accumulate
+   ≥100 real turns for the provisional B5 latency figure. `docs/PLAN.md`'s Exit paragraph makes this
+   figure load-bearing for the phase's formal close, not optional. This is `/wizard` territory —
+   Marco's hands/voice, not something Claude can do. Watch `az containerapp logs show -n
+   ca-azbank-echo-p0 -g rg-azure-banking-voice-agentic-ai --follow` during the first call in case
+   anything in the new handoff/gate path misbehaves live for the first time.
 3. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
