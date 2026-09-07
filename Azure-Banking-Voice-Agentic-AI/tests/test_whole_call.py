@@ -28,7 +28,9 @@ from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_f
 
 
 def _balance_call():
-    """The Phase 1 demo, scripted: caller speaks, agent greets, checks a balance, answers."""
+    """Caller speaks, agent greets, attempts a balance check. The gate is deny-all until Phase 4
+    (2026-09-07 review of dispatch/gate.py), so the tool call is refused rather than answered --
+    this scenario now exercises that refusal at the whole-call seam, not a successful lookup."""
     transport = FakeTransport(
         frames=[audio_frame("caller-said-1"), audio_frame("caller-said-2")],
         hang=True,  # the model's scripted events end this call, not the caller hanging up
@@ -60,11 +62,12 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         self.assertEqual(realtime.appended_audio, ["caller-said-1", "caller-said-2"])
         # The caller heard the agent -- both spoken chunks, in order.
         self.assertEqual(transport.sent_audio_payloads, ["agent-greeting", "agent-says-balance"])
-        # The tool actually ran, and its real result went back to the model.
+        # The tool call reached the dispatcher and was refused by the real (deny-all) table --
+        # no patching, this is what an anonymous caller actually gets in Phase 2.
         self.assertEqual(len(realtime.tool_outputs), 1)
         call_id, output = realtime.tool_outputs[0]
         self.assertEqual(call_id, "call-1")
-        self.assertEqual(json.loads(output), {"result": 2400.0})
+        self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
         # The whole exchange, in order: configure, hear, answer the tool, ask for a new response.
         self.assertEqual(realtime.sent_types, [
             "session.update",

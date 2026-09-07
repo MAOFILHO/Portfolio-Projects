@@ -23,8 +23,10 @@ import asyncio
 import json
 import os
 import unittest
+from unittest.mock import patch
 
 from azbank_voice_agent import accounts, boot
+from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
     audio_delta,
@@ -47,6 +49,11 @@ class SuccessorBootRehearsal(unittest.TestCase):
     def setUp(self):
         accounts.ACCOUNTS.clear()
         accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # This rehearsal proves the call *completes* on the successor, independent of B1 gate
+        # policy (empty until Phase 4) -- patched open so the two concerns don't conflate.
+        self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
+        self._gate_patcher.start()
+        self.addCleanup(self._gate_patcher.stop)
 
     def test_the_boot_guard_admits_the_successor_and_says_so(self):
         name, version = boot.SUCCESSOR_REALTIME_MODEL

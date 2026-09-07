@@ -36,19 +36,15 @@ BANKING_AGENT = "banking"
 #
 # Phase 4 adds authenticated permissions by adding rows here. It does not touch is_allowed().
 #
-# Why these three tools are permitted to an ANONYMOUS caller, deliberately, in Phase 2:
-# nothing real is behind them. They read and mutate an in-memory dict that resets on restart
-# (accounts.py) -- no network client, no persistence, no real account, no real money. Phase 1
-# shipped exactly this as a demonstrable prototype and its six exit-test rows depend on it.
-#
-# **This entry must be revisited the moment Phase 3 lands.** Phase 3 replaces the in-memory dict
-# with a real network call to mock-core-banking, which is precisely the condition that makes an
-# anonymous permission wrong. The justification above is "there is nothing behind these tools",
-# not "these tools are safe" -- when that stops being true, this row moves to AUTHENTICATED and
-# the anonymous caller gets nothing until Phase 4's transition exists.
-PERMISSIONS = {
-    (BANKING_AGENT, ANONYMOUS): frozenset({"get_balance", "transfer", "list_accounts"}),
-}
+# Empty by design. An earlier version of this table granted get_balance/transfer/list_accounts to
+# an ANONYMOUS caller on the reasoning that nothing real was behind them yet (accounts.py is an
+# in-memory dict). That reasoning was reviewed and rejected 2026-09-07: #16 specifies a gate that
+# "refuses nearly everything", and an anonymous-allow row is a real deviation from that, not a
+# detail -- the row's own justification ("nothing real is behind these tools") stops holding the
+# moment Phase 3 lands, and relying on someone remembering to revert it before then is exactly the
+# kind of thing CLAUDE.md's never-auto-accept rule on this file exists to prevent. No caller is
+# permitted anything until Phase 4 adds a real AUTHENTICATED transition and rows for it.
+PERMISSIONS: dict[tuple[str, str], frozenset[str]] = {}
 
 # What the caller hears when the gate refuses. Deliberately vague about *why*: a refusal that
 # explains which state would have permitted the action is a probing oracle. The model speaks this

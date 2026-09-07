@@ -46,13 +46,8 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
     def test_the_permission_table_is_exactly_what_was_reviewed(self):
         # A pinned table, not a smoke test. Every widening of B1 has to edit this literal, which
         # means it shows up in a diff and cannot be an accident. CLAUDE.md: a diff touching
-        # dispatch/gate.py never gets auto-accepted.
-        self.assertEqual(
-            gate.PERMISSIONS,
-            {(gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(
-                {"get_balance", "transfer", "list_accounts"}
-            )},
-        )
+        # dispatch/gate.py never gets auto-accepted. Empty until Phase 4 adds AUTHENTICATED rows.
+        self.assertEqual(gate.PERMISSIONS, {})
 
 
 class EveryDeclaredToolIsBehindTheGate(unittest.TestCase):

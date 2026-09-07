@@ -5,15 +5,22 @@ the code they cover into dispatch/. Intent unchanged from Phase 1 -- same cases,
 """
 import json
 import unittest
+from unittest.mock import patch
 
 from azbank_voice_agent import accounts
-from azbank_voice_agent.dispatch import tools
+from azbank_voice_agent.dispatch import gate, tools
 
 
 class DispatchToolCall(unittest.TestCase):
+    """Dispatcher/accounts logic only -- the gate is patched open so these cases don't depend on
+    B1 policy (empty until Phase 4; see tests/test_gate.py for the gate itself)."""
+
     def setUp(self):
         accounts.ACCOUNTS.clear()
         accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
+        self._gate_patcher.start()
+        self.addCleanup(self._gate_patcher.stop)
 
     def test_get_balance_returns_result(self):
         out = json.loads(tools.dispatch_tool_call("get_balance", '{"account": "chequing"}'))
