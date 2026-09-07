@@ -1,10 +1,11 @@
-"""Answers incoming ACS calls and bridges the media WebSocket to the AOAI realtime deployment —
-NOT production code.
+"""Answers incoming ACS calls and bridges the media WebSocket to the AOAI realtime deployment.
 
 Handles the Event Grid webhook (subscription-validation handshake + IncomingCall), starts
 bidirectional media streaming to /ws with DTMF tones enabled, and hands the accepted WebSocket to
-bridge.run_bridge (voice-agent/bridge.py) for the whole ACS <-> AOAI realtime relay — audio is no
-longer echoed back.
+the realtime session module for the whole ACS <-> AOAI relay.
+
+Moved here from docs/echo-app/ in the Phase 2.1 restructure (issue #17) — it is the application
+entry point, not documentation, and had been sitting under docs/ since Phase 0.
 
 VERIFY before running: the exact MediaStreamingOptions field/enum names against the installed
 azure-communication-callautomation version. Written from docs/PLAN.md's verified protocol facts
@@ -25,7 +26,7 @@ from azure.communication.callautomation import (
     AudioFormat,
 )
 
-import bridge
+from .realtime import session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("app")
@@ -125,15 +126,15 @@ async def callbacks(request: Request):
 
 @app.websocket("/ws")
 async def media_stream(websocket: WebSocket):
-    """Hands the whole call off to bridge.run_bridge (voice-agent/bridge.py) -- ACS media frames
-    relay to/from the AOAI realtime deployment instead of being echoed. run_bridge already
-    swallows WebSocketDisconnect internally (ends the relay when either side hangs up), so this
-    handler doesn't need its own try/except for it."""
+    """Hands the whole call off to the realtime session relay -- ACS media frames relay to/from
+    the AOAI realtime deployment. run_bridge already swallows WebSocketDisconnect internally
+    (ends the relay when either side hangs up), so this handler doesn't need its own try/except
+    for it."""
     correlation_id = websocket.headers.get("x-ms-call-correlation-id")
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    await bridge.run_bridge(websocket)
+    await session.run_bridge(websocket)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 

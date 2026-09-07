@@ -1,112 +1,44 @@
-"""Phase 1 relay between ACS media streaming and the AOAI realtime deployment.
+"""Relay between ACS media streaming and the AOAI realtime deployment.
 
 Wire format confirmed live against aoai-azure-banking-voice-cc (gpt-realtime-mini, 2025-10-06,
 Canada Central) -- see docs/phase1/research-aoai-realtime-wire-format.md and the two probes that
 corrected it (tool-calling support, and the response.output_audio.delta event name). Not re-derived
 here.
+
+Phase 2.1 restructure (issue #17): the tool table, the cost caps, the prompt, and the ACS frame
+shapes moved to their own modules; what stays here is the session configuration and the relay
+itself. Behaviour is unchanged. Issue #18 makes the transport and the realtime client injectable
+so a whole call can run against fakes with no patching -- today this still constructs its own
+client from the environment.
 """
 import asyncio
-import json
 import logging
 import os
 
 from fastapi import WebSocketDisconnect
 from openai import AsyncOpenAI
 
-import accounts
+from ..agents.specs import SYSTEM_PROMPT
+from ..cost import caps
+from ..dispatch.tools import TOOLS, dispatch_tool_call
+from ..transport import acs
 
 log = logging.getLogger("bridge")
-
-# B4 (CLAUDE.md): no call exceeds 5 min / 20 turns, fails closed. This is a Phase-1-sized guard
-# only -- a bare per-call counter and wall-clock timeout. Full B4 (per-session AND daily caps, a
-# cost store, fail-closed if that store is unreachable, T-B4-FAILCLOSED) is Phase 5 scope
-# (docs/PLAN.md:621-624) -- not built here.
-MAX_CALL_TURNS = 20
-MAX_CALL_SECONDS = 5 * 60
-
-
-class _CallLimitExceeded(Exception):
-    """Raised internally when MAX_CALL_TURNS or MAX_CALL_SECONDS is hit. Ends the call -- not a
-    bridge failure, so run_bridge logs and returns instead of propagating this."""
-
-SYSTEM_PROMPT = (
-    "You are a phone banking agent. Be brief and clear, like a real phone call. Always use the "
-    "tools to check a balance or make a transfer -- never state a balance or confirm a transfer "
-    "without calling the matching tool first. If a transfer can't go through, say why and state "
-    "the actual available amount."
-)
-
-_ACCOUNT_ENUM = {"type": "string", "enum": list(accounts.ACCOUNTS)}
-
-TOOLS = [
-    {
-        "type": "function",
-        "name": "get_balance",
-        "description": "Get the current balance of one of the caller's accounts.",
-        "parameters": {
-            "type": "object",
-            "properties": {"account": _ACCOUNT_ENUM},
-            "required": ["account"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "transfer",
-        "description": "Transfer money between the caller's accounts.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "from_account": _ACCOUNT_ENUM,
-                "to_account": _ACCOUNT_ENUM,
-                "amount": {"type": "number"},
-            },
-            "required": ["from_account", "to_account", "amount"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "list_accounts",
-        "description": "List the caller's accounts.",
-        "parameters": {"type": "object", "properties": {}, "required": []},
-    },
-]
-
-_DISPATCH = {
-    "get_balance": lambda args: accounts.get_balance(args["account"]),
-    "transfer": lambda args: accounts.transfer(
-        args["from_account"], args["to_account"], args["amount"]
-    ),
-    "list_accounts": lambda args: accounts.list_accounts(),
-}
-
-
-def dispatch_tool_call(name, arguments_json):
-    """Run one tool call, returning the JSON string for a function_call_output. Never raises --
-    an unknown tool name, a missing argument, or an accounts.py error (bad account, non-positive
-    amount) all come back as {"error": "..."} so the model can say something sensible instead of
-    the call going silent."""
-    try:
-        args = json.loads(arguments_json) if arguments_json else {}
-        result = _DISPATCH[name](args)
-    except (KeyError, ValueError) as e:
-        return json.dumps({"error": str(e) or f"unknown tool: {name}"})
-    return json.dumps({"result": result})
 
 
 async def run_bridge(acs_ws):
     """Relay one call: ACS media WebSocket <-> AOAI realtime WebSocket.
 
     No resampling -- both sides are pcm16/24kHz/mono, confirmed live (docs/phase1/
-    research-aoai-realtime-wire-format.md). turn_detection and audio format are left unset:
-    the deployment's own defaults are already server_vad and audio/pcm@24000, confirmed live via
-    the session.created echo in this project's probe -- no need to restate them. No barge-in, no
-    reconnection: ends when either side disconnects.
+    research-aoai-realtime-wire-format.md). No barge-in, no reconnection: ends when either side
+    disconnects, or when a B4 cap trips.
     """
     api_key = os.environ["AOAI_KEY"]
     endpoint = os.environ["AOAI_ENDPOINT"]
     # No default: matches AOAI_KEY/AOAI_ENDPOINT above, and fails closed on a missing pin rather
     # than silently falling back to some other deployment (B3, CLAUDE.md) -- a pin rotation is
-    # then a config change in 01-provision.sh, not a bridge.py edit.
+    # then a config change in 01-provision.sh, not an edit here. The boot-time (name, version)
+    # guard that makes B3 real is issue #21's deliverable.
     deployment = os.environ["AOAI_DEPLOYMENT"]
     base_url = endpoint.replace("https://", "wss://").rstrip("/") + "/openai/v1"
     client = AsyncOpenAI(api_key=api_key, websocket_base_url=base_url)
@@ -150,24 +82,19 @@ async def run_bridge(acs_ws):
 
         async def acs_to_aoai():
             while True:
-                raw = await acs_ws.receive_text()
-                msg = json.loads(raw)
-                # Inbound keys are lowercase ("kind"/"audioData"/"data"), outbound keys are
-                # capitalized ("Kind"/"AudioData"/"Data") -- a real, verified ACS asymmetry, not a
-                # bug: docs/PLAN.md's "Key protocol facts (verified)" states it explicitly, and
-                # docs/echo-app/app.py uses exactly this casing on both sides in the code that
-                # answered and echoed all 3 real Phase 0 test calls.
-                if msg.get("kind") == "DtmfData":
-                    # Arrival only, no raw tone value (B2) -- Phase 0's R-03 question (does DTMF
-                    # arrive during active bidirectional streaming) is already answered, so this
-                    # doesn't need elapsed-time-since-stream-start the way app.py's old log did.
+                kind, audio_payload = acs.classify_inbound(await acs_ws.receive_text())
+                if kind == acs.DTMF:
+                    # Arrival only, no raw tone value (B2) -- classify_inbound never returns it.
+                    # Phase 0's R-03 question (does DTMF arrive during active bidirectional
+                    # streaming) is already answered, so this doesn't need the elapsed-time-since-
+                    # stream-start the Phase 0 app's log carried.
                     log.info("DTMF frame arrived, ignored by realtime relay (out of scope for Phase 1)")
                     continue
-                if msg.get("kind") != "AudioData":
-                    continue  # anything else: out of scope for Phase 1, ignored not crashed on
+                if kind != acs.AUDIO:
+                    continue  # anything else: out of scope, ignored not crashed on
                 await aoai.send({
                     "type": "input_audio_buffer.append",
-                    "audio": msg["audioData"]["data"],
+                    "audio": audio_payload,
                 })
 
         turn_count = 0
@@ -176,9 +103,7 @@ async def run_bridge(acs_ws):
             nonlocal turn_count
             async for event in aoai:
                 if event.type == "response.output_audio.delta":
-                    await acs_ws.send_text(json.dumps(
-                        {"Kind": "AudioData", "AudioData": {"Data": event.delta}}
-                    ))
+                    await acs_ws.send_text(acs.outbound_audio_frame(event.delta))
                 elif event.type == "response.function_call_arguments.done":
                     log.info("tool call: %s(%s)", event.name, event.arguments)
                     output = dispatch_tool_call(event.name, event.arguments)
@@ -199,23 +124,27 @@ async def run_bridge(acs_ws):
                 elif event.type == "response.done":
                     # One full model response cycle = one turn (B4).
                     turn_count += 1
-                    if turn_count >= MAX_CALL_TURNS:
-                        log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", MAX_CALL_TURNS)
-                        raise _CallLimitExceeded(f"turn cap ({MAX_CALL_TURNS}) reached")
+                    if turn_count >= caps.MAX_CALL_TURNS:
+                        log.warning(
+                            "call hit MAX_CALL_TURNS=%d, ending call (B4)", caps.MAX_CALL_TURNS
+                        )
+                        raise caps.CallLimitExceeded(f"turn cap ({caps.MAX_CALL_TURNS}) reached")
                 elif event.type == "error":
                     log.error("AOAI error event: %s", event)
 
         tasks = [asyncio.create_task(acs_to_aoai()), asyncio.create_task(aoai_to_acs())]
         done, pending = await asyncio.wait(
-            tasks, timeout=MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
+            tasks, timeout=caps.MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
         )
         for task in pending:
             task.cancel()
         if not done:
             # Timeout fired -- neither side disconnected and no turn cap tripped first (B4).
-            log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", MAX_CALL_SECONDS)
+            log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", caps.MAX_CALL_SECONDS)
         for task in done:
             exc = task.exception()
-            if exc is not None and not isinstance(exc, (WebSocketDisconnect, _CallLimitExceeded)):
+            if exc is not None and not isinstance(
+                exc, (WebSocketDisconnect, caps.CallLimitExceeded)
+            ):
                 raise exc
     log.info("call ended")

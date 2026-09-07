@@ -16,17 +16,18 @@ verify-project-root-scope:
 	@if [ -x "$(VENV)/python" ]; then $(VENV)/python scripts/check_project_root_scope.py; \
 	else python3 scripts/check_project_root_scope.py; fi
 
-# Installs everything `make test` needs. Two subprojects have their own requirements.txt today --
-# voice-agent/ (bridge.py: fastapi/openai) and docs/echo-app/ (app.py: fastapi/uvicorn/
-# azure-communication-callautomation) -- and tests/ imports both. .venv/ is gitignored, so a fresh
-# clone has neither the venv nor these packages until this runs; creates the venv if missing so
-# `make test` works right after clone with no separate manual step to remember.
+# Installs everything `make test` needs: the voice-agent package, editable, with its dependencies.
+# The two separate requirements.txt files this project carried through Phase 1 were consolidated
+# into voice-agent/pyproject.toml by the Phase 2.1 restructure (issue #17). Installing the package
+# is also what lets tests/ import it normally -- no sys.path manipulation. .venv/ is gitignored, so
+# a fresh clone has neither the venv nor these packages until this runs; creates the venv if
+# missing so `make test` works right after clone with no separate manual step to remember.
 install:
 	@test -x "$(VENV)/python" || python3 -m venv .venv
-	@$(VENV)/pip install -q -r voice-agent/requirements.txt -r docs/echo-app/requirements.txt
+	@$(VENV)/pip install -q -e voice-agent
 
-# Phase 1's voice-agent tests, now covering docs/echo-app/ too. Stdlib unittest, not pytest -- no
-# test runner was installed and a handful of tests didn't justify adding one.
+# Stdlib unittest, not pytest -- no test runner was installed and a handful of tests didn't justify
+# adding one.
 test: install
 	@$(VENV)/python -m unittest discover -s tests -v
 

@@ -1,25 +1,17 @@
 import asyncio
 import os
-import pathlib
-import sys
 import unittest
 from unittest.mock import patch
 
-# docs/echo-app/ is a standalone containerized app (own requirements.txt), not an importable
-# package -- same sys.path pattern as voice-agent/ in test_accounts.py/test_bridge.py.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "docs" / "echo-app"))
-# app.py now imports bridge (voice-agent/bridge.py) -- in the built image this is PYTHONPATH
-# (Dockerfile), here it's the same sys.path insert test_bridge.py already relies on.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "voice-agent"))
-
-# app.py reads these at import time (os.environ[...], no default) and constructs a
+# app reads these at import time (os.environ[...], no default) and constructs a
 # CallAutomationClient from the connection string -- that parses the string locally with no
-# network call, so a syntactically valid fake is enough to import the module under test.
+# network call, so a syntactically valid fake is enough to import the module under test. This
+# must happen before the import below, hence the import order.
 os.environ.setdefault("ACS_CONNECTION_STRING", "endpoint=https://fake.communication.azure.com/;accesskey=ZmFrZWtleQ==")
 os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.io")
 
 from azure.core.exceptions import HttpResponseError, ServiceRequestError  # noqa: E402
-import app  # noqa: E402
+from azbank_voice_agent import app  # noqa: E402
 
 
 def _incoming_call_event(correlation_id="corr-1", context="ctx-1"):
@@ -88,16 +80,16 @@ class FakeWebSocket:
 
 class MediaStreamDelegatesToBridge(unittest.TestCase):
     def test_ws_handler_accepts_then_hands_off_to_bridge_run_bridge(self):
-        # /ws used to run its own echo loop; it now delegates the whole relay to bridge.run_bridge
-        # (voice-agent/bridge.py) -- this is the seam, not the frame-by-frame behavior, which is
-        # bridge.py's own responsibility and already covered by tests/test_bridge.py.
+        # /ws used to run its own echo loop; it now delegates the whole relay to the realtime
+        # session module -- this is the seam, not the frame-by-frame behavior, which is that
+        # module's own responsibility and already covered by tests/test_session.py.
         calls = []
 
         async def fake_run_bridge(ws):
             calls.append(ws)
 
         fake_ws = FakeWebSocket()
-        with patch.object(app.bridge, "run_bridge", fake_run_bridge):
+        with patch.object(app.session, "run_bridge", fake_run_bridge):
             asyncio.run(app.media_stream(fake_ws))
         self.assertTrue(fake_ws.accepted)
         self.assertEqual(calls, [fake_ws])

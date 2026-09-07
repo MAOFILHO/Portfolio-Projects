@@ -1,17 +1,23 @@
+"""Relay tests -- one whole call, driven by hand-rolled doubles for both sides.
+
+Phase 2.1 restructure (issue #17): the dispatch cases moved to test_tools.py; what stays here is
+everything that exercises the relay itself. Intent unchanged from Phase 1 -- same cases, same
+assertions, retargeted at the modules the code now lives in.
+
+The two doubles below are the seed of issue #18's real FakeTransport and FakeRealtimeServer. They
+stay test-local until that ticket promotes them into importable modules.
+"""
 import asyncio
 import json
 import os
-import pathlib
-import sys
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "voice-agent"))
+from fastapi import WebSocketDisconnect
 
-import accounts  # noqa: E402
-import bridge  # noqa: E402
-from fastapi import WebSocketDisconnect  # noqa: E402
+from azbank_voice_agent.cost import caps
+from azbank_voice_agent.realtime import session
 
 _ENV = {
     "AOAI_KEY": "fake-key",
@@ -100,101 +106,54 @@ class _FakeAcsWs:
         self.sent.append(text)
 
 
-class DispatchToolCall(unittest.TestCase):
-    def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
-
-    def test_get_balance_returns_result(self):
-        out = json.loads(bridge.dispatch_tool_call("get_balance", '{"account": "chequing"}'))
-        self.assertEqual(out, {"result": 2400.0})
-
-    def test_transfer_mutates_and_returns_confirmation(self):
-        out = json.loads(bridge.dispatch_tool_call(
-            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": 150.0}'
-        ))
-        self.assertIn("150", out["result"])
-        self.assertEqual(accounts.get_balance("chequing"), 2250.0)
-
-    def test_list_accounts_returns_result(self):
-        out = json.loads(bridge.dispatch_tool_call("list_accounts", "{}"))
-        self.assertEqual(out, {"result": {"chequing": 2400.0, "savings": 500.0}})
-
-    def test_unknown_account_comes_back_as_error_not_exception(self):
-        out = json.loads(bridge.dispatch_tool_call("get_balance", '{"account": "bitcoin"}'))
-        self.assertIn("error", out)
-
-    def test_non_positive_amount_comes_back_as_error_not_exception(self):
-        out = json.loads(bridge.dispatch_tool_call(
-            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": -500.0}'
-        ))
-        self.assertIn("error", out)
-
-    def test_unknown_tool_name_comes_back_as_error_not_exception(self):
-        out = json.loads(bridge.dispatch_tool_call("delete_account", "{}"))
-        self.assertIn("error", out)
-
-    def test_missing_argument_comes_back_as_error_not_exception(self):
-        out = json.loads(bridge.dispatch_tool_call("get_balance", "{}"))
-        self.assertIn("error", out)
-
-
-class ToolsMatchDispatch(unittest.TestCase):
-    def test_every_declared_tool_is_dispatchable_and_vice_versa(self):
-        # TOOLS is what the model sees; _DISPATCH is what actually runs. If they drift, the model
-        # calls something that doesn't exist and the call fails mid-conversation.
-        declared = {tool["name"] for tool in bridge.TOOLS}
-        dispatchable = set(bridge._DISPATCH)
-        self.assertEqual(declared, dispatchable)
-
-
 class RunBridgeUsesConfiguredDeployment(unittest.TestCase):
     """run_bridge must read the realtime deployment name from AOAI_DEPLOYMENT at call time, the
     same way it already reads AOAI_KEY/AOAI_ENDPOINT -- not a hardcoded module constant. B3
     (CLAUDE.md) treats a pin rotation as an expected, scheduled event; a hardcoded deployment name
-    would mean rotating the pin requires editing bridge.py itself."""
+    would mean rotating the pin requires editing the relay itself."""
 
     def test_connect_is_called_with_the_env_deployment_name_not_a_hardcoded_one(self):
         models_connected, connections = [], []
         env = dict(_ENV, AOAI_DEPLOYMENT="gpt-realtime-mini-successor")
         with patch.dict(os.environ, env), \
-             patch.object(bridge, "AsyncOpenAI", _fake_async_openai_factory(models_connected, connections)):
-            asyncio.run(bridge.run_bridge(_FakeAcsWs([])))
+             patch.object(session, "AsyncOpenAI", _fake_async_openai_factory(models_connected, connections)):
+            asyncio.run(session.run_bridge(_FakeAcsWs([])))
         self.assertEqual(models_connected, ["gpt-realtime-mini-successor"])
 
 
 class AcsToAoaiDtmfFrames(unittest.TestCase):
     """DTMF frames must never reach AOAI (out of scope for realtime audio input, unchanged), but
-    arrival should still be logged -- the Phase 0 R-03 evidence log's replacement, minus the raw
-    tone value (B2) and minus the Phase-0-specific elapsed-time-since-stream-start, since R-03
-    itself is already answered (docs/phase1/research-aoai-realtime-wire-format.md)."""
+    arrival should still be logged -- minus the raw tone value (B2). Since the Phase 2.1
+    restructure the tone value cannot reach this module at all: transport/acs.py's
+    classify_inbound never returns it."""
 
     def test_dtmf_frame_is_logged_and_never_forwarded_to_aoai(self):
         models_connected, connections = [], []
         frames = [json.dumps({"kind": "DtmfData", "dtmfData": {"data": "5"}})]
         with patch.dict(os.environ, _ENV), \
-             patch.object(bridge, "AsyncOpenAI", _fake_async_openai_factory(models_connected, connections)), \
-             self.assertLogs(bridge.log, level="INFO") as cm:
-            asyncio.run(bridge.run_bridge(_FakeAcsWs(frames)))
+             patch.object(session, "AsyncOpenAI", _fake_async_openai_factory(models_connected, connections)), \
+             self.assertLogs(session.log, level="INFO") as cm:
+            asyncio.run(session.run_bridge(_FakeAcsWs(frames)))
         self.assertTrue(any("DTMF" in line for line in cm.output))
+        self.assertFalse(any('"5"' in line or "tone 5" in line for line in cm.output))
         sent_types = [m["type"] for m in connections[0].sent]
         self.assertEqual(sent_types, ["session.update"])  # never input_audio_buffer.append
 
 
 class RunBridgeEnforcesB4Caps(unittest.TestCase):
     """B4 (CLAUDE.md): no call exceeds 20 turns / 5 minutes, fails closed. This is a Phase-1-sized
-    guard only -- a bare per-call counter and wall-clock timeout in bridge.py, not the full
-    cost-store/daily-cap system (docs/PLAN.md Phase 5, `cost/caps.py`, `T-B4-FAILCLOSED`)."""
+    guard only -- a bare per-call counter and wall-clock timeout, not the full cost-store/daily-cap
+    system (docs/PLAN.md Phase 5, `cost/caps.py`'s own docstring, `T-B4-FAILCLOSED`)."""
 
     def test_turn_cap_ends_the_call_without_draining_every_queued_event(self):
         models_connected, connections = [], []
         events = [SimpleNamespace(type="response.done") for _ in range(5)]
         with patch.dict(os.environ, _ENV), \
-             patch.object(bridge, "AsyncOpenAI",
+             patch.object(session, "AsyncOpenAI",
                            _fake_async_openai_factory(models_connected, connections, events=events)), \
-             patch.object(bridge, "MAX_CALL_TURNS", 2), \
-             self.assertLogs(bridge.log, level="WARNING") as cm:
-            asyncio.run(bridge.run_bridge(_FakeAcsWs([])))
+             patch.object(caps, "MAX_CALL_TURNS", 2), \
+             self.assertLogs(session.log, level="WARNING") as cm:
+            asyncio.run(session.run_bridge(_FakeAcsWs([])))
         # Stopped at the cap (2), not after draining all 5 queued events.
         self.assertEqual(connections[0].consumed, 2)
         self.assertTrue(any("MAX_CALL_TURNS" in line for line in cm.output))
@@ -202,9 +161,13 @@ class RunBridgeEnforcesB4Caps(unittest.TestCase):
     def test_duration_cap_ends_a_call_that_never_hits_the_turn_cap(self):
         models_connected, connections = [], []
         with patch.dict(os.environ, _ENV), \
-             patch.object(bridge, "AsyncOpenAI",
+             patch.object(session, "AsyncOpenAI",
                            _fake_async_openai_factory(models_connected, connections, hang=True)), \
-             patch.object(bridge, "MAX_CALL_SECONDS", 0.05), \
-             self.assertLogs(bridge.log, level="WARNING") as cm:
-            asyncio.run(bridge.run_bridge(_FakeAcsWs([], hang=True)))
+             patch.object(caps, "MAX_CALL_SECONDS", 0.05), \
+             self.assertLogs(session.log, level="WARNING") as cm:
+            asyncio.run(session.run_bridge(_FakeAcsWs([], hang=True)))
         self.assertTrue(any("MAX_CALL_SECONDS" in line for line in cm.output))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1004,12 +1004,16 @@ note "Both ADRs use the R-06 result and the R-05 inventory finding measured earl
 note "before committing — the DataZone error block and the purchased number are templated from this"
 note "run's actual results, not assumed."
 
-# ── Stage 11: verify the echo WebSocket app is present and reviewed ──────────
-stage "Verify the echo WebSocket app (docs/echo-app/) is present and git-tracked"
-say "This stage no longer generates the echo app from a frozen template. The real, human-reviewed"
-say "app lives in docs/echo-app/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK"
-say "version (1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
-say "build-time pip-freeze assertion. This stage only verifies that file is where it should be."
+# ── Stage 11: verify the voice-agent app is present and reviewed ─────────────
+stage "Verify the voice-agent app (voice-agent/) is present and git-tracked"
+say "This stage no longer generates the app from a frozen template. The real, human-reviewed app"
+say "lives in voice-agent/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK version"
+say "(1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
+say "build-time pip-freeze assertion. This stage only verifies those files are where they should be."
+say ""
+say "Paths updated by the Phase 2.1 restructure (issue #17): the app moved out of docs/echo-app/ and"
+say "voice-agent/ became one installable package, so this stage now checks a single directory and"
+say "Stage 12 builds from a single context -- no --build-context bridging."
 
 # Anchored to the git repo root via `git rev-parse`, not a relative "$SCRIPT_DIR/../..." chain --
 # that class of path is exactly what caused the ECHO_DIR misdirection this project already shipped
@@ -1022,34 +1026,34 @@ REPO_TOPLEVEL="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" || {
   err "could not resolve the git repo root from $SCRIPT_DIR -- refusing to guess where the echo app lives"
   on_error 1
 }
-ECHO_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/docs/echo-app"
-VOICE_AGENT_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/voice-agent"
+APP_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/voice-agent"
 
-# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked AND clean, or the script
+# Hard assertion, not a soft check: APP_DIR must exist AND be git-tracked AND clean, or the script
 # stops here. This is the guard that would have caught the ECHO_DIR misdirection the moment it
 # happened, instead of silently building whatever sat at the wrong path. There is deliberately no
 # "generate it if missing" fallback left in this script -- a wrong path must stop the script, never
 # regenerate from a template.
-if [[ ! -f "$ECHO_DIR/app.py" ]]; then
-  err "ECHO_DIR=$ECHO_DIR has no app.py. Either this path is wrong or the file was moved/deleted --"
-  err "either way, refusing to proceed without it. Fix docs/echo-app/ directly, never via this script."
-  on_error 1
-fi
-assert_tracked_and_clean "$ECHO_DIR" app.py requirements.txt Dockerfile || on_error 1
-ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present, git-tracked, and clean"
-
-# Same guard, extended to voice-agent/ -- Stage 12 now bridges this directory into the image via
-# `docker buildx build --build-context voice-agent=...` and the Dockerfile's `COPY --from=voice-agent`
-# (added alongside this check). Nothing outside docs/echo-app/ was previously covered by any
-# git-tracked-or-clean assertion; an uncommitted edit to bridge.py would otherwise pass silently into
-# a pushed image the same way the original ECHO_DIR misdirection did.
-if [[ ! -f "$VOICE_AGENT_DIR/bridge.py" ]]; then
-  err "VOICE_AGENT_DIR=$VOICE_AGENT_DIR has no bridge.py. Either this path is wrong or the file was"
+#
+# One directory now covers what used to need two guards: the Phase 2.1 restructure (issue #17)
+# folded the app, the relay, and their dependency declaration into one installable package, so a
+# single tracked-and-clean assertion covers everything that reaches the image. An uncommitted edit
+# to any module still cannot pass silently into a pushed image.
+if [[ ! -f "$APP_DIR/azbank_voice_agent/app.py" ]]; then
+  err "APP_DIR=$APP_DIR has no azbank_voice_agent/app.py. Either this path is wrong or the file was"
   err "moved/deleted -- refusing to proceed without it. Fix voice-agent/ directly, never via this script."
   on_error 1
 fi
-assert_tracked_and_clean "$VOICE_AGENT_DIR" bridge.py accounts.py requirements.txt || on_error 1
-ok "$VOICE_AGENT_DIR verified: bridge.py/accounts.py/requirements.txt present, git-tracked, and clean"
+assert_tracked_and_clean "$APP_DIR" \
+  pyproject.toml \
+  Dockerfile \
+  azbank_voice_agent/app.py \
+  azbank_voice_agent/accounts.py \
+  azbank_voice_agent/agents/specs.py \
+  azbank_voice_agent/cost/caps.py \
+  azbank_voice_agent/dispatch/tools.py \
+  azbank_voice_agent/realtime/session.py \
+  azbank_voice_agent/transport/acs.py || on_error 1
+ok "$APP_DIR verified: pyproject.toml/Dockerfile and every azbank_voice_agent module present, git-tracked, and clean"
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
@@ -1086,8 +1090,7 @@ ok "logged in to docker.io as $DOCKERHUB_USERNAME"
 # Azure tolerates it costs a billable `containerapp create`. Verified manually 2026-08-21: with these
 # flags, `docker buildx imagetools inspect` shows a single linux/amd64 manifest, no second entry.
 docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
-  --build-context voice-agent="$VOICE_AGENT_DIR" \
-  -t "$IMAGE" --push "$ECHO_DIR"
+  -t "$IMAGE" --push "$APP_DIR"
 ok "built for linux/amd64 and pushed $IMAGE"
 
 # Fail loudly here, before any Azure spend, if the pushed image isn't actually linux/amd64 --

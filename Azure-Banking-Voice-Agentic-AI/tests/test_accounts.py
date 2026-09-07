@@ -1,12 +1,6 @@
-import pathlib
-import sys
 import unittest
 
-# voice-agent/ has a hyphen, so it can't be a normal importable package name yet
-# (matches docs/PLAN.md's "Project layout" — not introduced by this test).
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "voice-agent"))
-
-import accounts  # noqa: E402
+from azbank_voice_agent import accounts
 
 
 class ListAccounts(unittest.TestCase):

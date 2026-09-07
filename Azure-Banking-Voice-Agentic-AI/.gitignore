@@ -35,3 +35,6 @@ docs/phase0/evidence/loganalytics-export/
 # permanently in commit 07faf3b; untracked 2026-08-28 to stop it recommitting larger.
 # Summary: docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21-SUMMARY.md
 docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl
+
+# Editable-install build artifacts (voice-agent/pyproject.toml, added Phase 2.1)
+*.egg-info/

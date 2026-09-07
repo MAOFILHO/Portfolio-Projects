@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "azbank-voice-agent"
+version = "0.2.0"
+description = "Banking voice agent — ACS telephony bridged to an Azure OpenAI realtime deployment"
+requires-python = ">=3.12"
+
+# Consolidated from the two requirements.txt files this project carried through Phase 1
+# (voice-agent/ and docs/echo-app/), per issue #17. Same pins, one place. The container build
+# still records the fully resolved graph -- transitive included -- via pip freeze at image build
+# time; these top-level pins are not that record and never were.
+dependencies = [
+    "fastapi==0.115.14",
+    "uvicorn[standard]==0.32.1",
+    "openai==3.6.0",
+    "azure-communication-callautomation==1.4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["azbank_voice_agent*"]
