@@ -131,7 +131,15 @@ async def run_call(transport, realtime):
                     log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", caps.MAX_CALL_TURNS)
                     raise caps.CallLimitExceeded(f"turn cap ({caps.MAX_CALL_TURNS}) reached")
             elif event.type == "error":
-                log.error("AOAI error event: %s", event)
+                # Arrival only, never event content (B2): this project has never observed a real
+                # error event live (docs/phase1/research-aoai-realtime-wire-format.md -- "zero
+                # error events end to end"), so no field of it is verified safe to log. A
+                # validation error can echo the offending request back in its message (e.g. bad
+                # tool arguments), which is exactly the content B2 forbids -- the earlier fix to
+                # the tool-call and transcript lines above missed this one because it logged the
+                # whole event object, not a field (caught by /code-review, 2026-09-07). Detailed,
+                # redaction-aware error observability is Phase 6's job, not Phase 2's.
+                log.error("AOAI error event received")
 
     tasks = [
         asyncio.create_task(transport_to_model()),

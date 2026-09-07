@@ -19,6 +19,7 @@ from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
     audio_delta,
+    error_event,
     function_call,
     response_done,
     transcript_delta,
@@ -96,6 +97,25 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         self.assertTrue(any("tool call: get_balance" in line for line in cm.output))
         self.assertFalse(any("chequing" in line for line in cm.output))
         self.assertFalse(any("Hi, how can I help" in line for line in cm.output))
+
+    def test_an_error_event_is_logged_without_its_content(self):
+        # B2 (CLAUDE.md): an AOAI error event can echo the offending request back in its message
+        # (e.g. a validation error on bad tool arguments) -- exactly the content B2 forbids in any
+        # log line. An earlier fix (b9140fb) closed the tool-call and transcript lines but missed
+        # this one, since it logged the whole event object rather than a field (caught by
+        # /code-review, 2026-09-07).
+        transport = FakeTransport(frames=[audio_frame("real-audio")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[error_event("account 1234-5678-90 overdrawn"), response_done()],
+            respond_after_appends=1,
+        )
+
+        with self.assertLogs("bridge", level="ERROR") as cm:
+            asyncio.run(run_call(transport, realtime))
+
+        self.assertTrue(any("error event" in line for line in cm.output))
+        self.assertFalse(any("1234-5678-90" in line for line in cm.output))
+        self.assertFalse(any("overdrawn" in line for line in cm.output))
 
     def test_a_whole_call_never_opens_a_network_connection(self):
         # The fakes are documented as never touching the network. This asserts it rather than
