@@ -6,31 +6,55 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 2 — Realtime session, agent core, gate, test harness. 6 of 8 tickets built, none reviewed.**
-Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16). Phase 1 closed first — its exit
-criteria are met and written up in `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
+**Phase 2 — Realtime session, agent core, gate, test harness. 6 of 8 tickets built, all six
+reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
+Phase 1 closed first — its exit criteria are met and written up in
+`docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
 **No `APPROVED: Phase 2` has been typed.** Marco invoking `/implement Phase 2` on 2026-09-07 was
 read as go-ahead for the phase's non-billable work; the typed approval still gates anything
 billable, so **#24 was deliberately not started**. Nothing built this session touches Azure, costs
 money, or has been deployed.
 
-Built and committed (all local, unpushed, **none reviewed by a human yet**):
+Built and committed (all local, unpushed):
 - **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
   `voice-agent/azbank_voice_agent/` is now one installable package with the module boundaries
   `docs/PLAN.md` specifies. Mechanical, no behaviour change, same test count before and after.
 - **#18 `703c74d`** — a whole call runs end-to-end against `FakeTransport` + `FakeRealtimeServer`,
   no Azure, no patching. **This is `docs/PLAN.md`'s Phase 2 headline exit criterion, met.**
-- **#19 `3e82d69`** — `dispatch/gate.py`, deny-all by default, plus the structural proof that it is
-  in front of every declared tool. **B1 surface — needs a human look (see Next actions).**
+- **#19 `3e82d69`, reviewed, gate now denies everyone (`0bf1d03`)** — `dispatch/gate.py`'s
+  `PERMISSIONS` table was reviewed per CLAUDE.md's never-auto-accept rule and emptied: no
+  agent/state pair is permitted anything until Phase 4 adds a real `AUTHENTICATED` transition.
+  Demo call now gets refused rather than answered, as intended.
 - **#21 `e79f50c`** — B3 boot guard, keyed on (name, version) together, reading the live deployment
-  at boot, failing closed. **Cannot deploy as-is (see Next actions).**
-- **#22 `464a4e5`** — `T-B3-SUCCESSOR-BOOT`, skip-by-default.
-- **#23 `7dbbdcb`** — `make lint` (ruff + mypy) and the B3 static allowlist check, all passing.
+  at boot, failing closed. Guard code itself unchanged this session. **Cannot deploy as-is (see
+  Next actions).**
+- **#22 `464a4e5`, reviewed and fixed (`0ce99d5`)** — `T-B3-SUCCESSOR-BOOT` now proves a real
+  sequence (guard admits the successor, then a full turn completes), not two disconnected facts.
+  Still skip-by-default; run deliberately with `AZBANK_RUN_SUCCESSOR_BOOT=1`.
+- **#23 `7dbbdcb`, reviewed and fixed (`a1106b4`, `5179c5e`)** — `make lint` (ruff + mypy) and the
+  B3 static allowlist check. Checker now covers `docs/*/wizard/*.sh`, `Dockerfile`,
+  `pyproject.toml` (not just the package), scans whole-file text (catches a pair literal wrapped
+  across lines), and checks `(name, version)` pairs, not just names.
 
-**69 tests green, 0.19s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. Not built: **#20** (agent table + handoff — blocked on #19 being reviewed, since
-it extends the same permission table) and **#24** (needs the typed approval and a human to dial).
+Two rounds of `/code-review` ran this session (`5288f8a..40a39b5`, then `40a39b5..HEAD`), each
+producing Standards + Spec findings; every actionable finding from both is fixed as of `38dec8c`.
+Also fixed, not tied to a single ticket: the B2 leak in `realtime/session.py` (tool arguments,
+agent transcript, and AOAI error events all now log arrival only, never content — `b9140fb`,
+`9197651`), and a CI workflow now exists (`ca53cae`,
+`.github/workflows/azure-banking-voice-agentic-ai-ci.yml` at the monorepo root, approved by Marco
+by exact absolute path since it falls outside `PROJECT_ROOT`).
+
+Findings raised but deliberately not actioned, with reasoning recorded in the commits/session, not
+silently dropped: the B3 static checker still cannot catch a model pin split across unrelated
+variables (e.g. bash) — that's the runtime boot guard's job, not this checker's; the successor
+rehearsal patches the gate open on purpose (proving the call completes is orthogonal to B1
+policy); CI does not auto-run the successor rehearsal (it's designed to be run deliberately, not
+routinely).
+
+**81 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
+`make lint` clean. Not built: **#20** (agent table + handoff — was blocked on #19's review, which
+is now done, so **#20 is unblocked**) and **#24** (needs the typed approval and a human to dial).
 
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
@@ -103,17 +127,14 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Review the two diffs `CLAUDE.md` says never get auto-accepted**, before anything is built on
-   top of them:
-   - **`3e82d69` (#19, B1 gate).** One judgement call to confirm or reverse: `PERMISSIONS` grants
-     `get_balance`/`transfer`/`list_accounts` to an **anonymous** caller. Rationale in the module —
-     nothing real is behind those tools (an in-memory dict), and Phase 1's six exit rows depend on
-     them. The justification is "there is nothing behind these tools", not "these tools are safe",
-     and it expires the moment Phase 3 adds a real network path. Denying them instead is a one-line
-     change that breaks the demo call until Phase 4.
-   - **`e79f50c` (#21, B3 guard).** Also touches the DTMF-adjacent boot path indirectly.
-2. **#20 is deliberately blocked on that review** — it extends the same permission table, and
-   stacking a second unreviewed B1 change was avoided on purpose.
+1. **Build #20** (agent table + mid-call handoff) — now unblocked, since #19's review (the same
+   permission table #20 extends) is done and its findings fixed. Note: `docs/PLAN.md`'s own Phase
+   2 Exit paragraph does not name #20 as an exit criterion (it's listed among the phase's
+   deliverables above that line, not the Exit line itself) — worth an explicit call with Marco on
+   whether Phase 2 can close without it, or whether #16's ticket breakdown makes it required
+   regardless.
+2. **This whole session's work is unpushed** — 18 commits ahead of `origin/azure-banking-work`.
+   Not a formal gate, but real risk: it all exists in one worktree only.
 3. **Before any Phase 2 deploy, two things are unverified and one will fail:**
    - The container image build is **UNVERIFIED** — Docker was not running when #17 rewrote the
      Dockerfile. `docker build voice-agent/` is the check.
@@ -129,6 +150,8 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    "pin `openai-agents >= 0.3.0`" line and Phase 2's "`RealtimeSession` via `model_config`"
    phrasing are stale and need a separate approved edit.
 5. **#24 needs `APPROVED: Phase 2` typed**, plus re-provisioned compute and a human to dial, for
-   the provisional B5 latency figure (≥100 real turns).
+   the provisional B5 latency figure (≥100 real turns). `docs/PLAN.md`'s Exit paragraph makes this
+   figure load-bearing for the phase's formal close, not optional — it's sequenced last because
+   it's the only part of Phase 2 that costs money, not because it's skippable.
 6. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
