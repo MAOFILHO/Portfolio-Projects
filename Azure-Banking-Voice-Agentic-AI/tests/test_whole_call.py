@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import patch
 
 from azbank_voice_agent import accounts
+from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
     audio_delta,
@@ -112,6 +113,55 @@ class WholeCallHandlesNonAudioFrames(unittest.TestCase):
         realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
         asyncio.run(run_call(transport, realtime))
         self.assertEqual(realtime.appended_audio, ["real-audio"])
+
+
+class WholeCallWithTheGateClosed(unittest.TestCase):
+    """B1 at the whole-call seam: a refused tool must not run, and the caller must be told rather
+    than left in silence."""
+
+    def setUp(self):
+        accounts.ACCOUNTS.clear()
+        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+
+    def _transfer_call(self):
+        transport = FakeTransport(frames=[audio_frame("move-my-money")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(
+                    "transfer",
+                    '{"from_account": "chequing", "to_account": "savings", "amount": 100.0}',
+                ),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        return transport, realtime
+
+    def test_a_refused_transfer_moves_no_money_and_the_caller_is_told(self):
+        transport, realtime = self._transfer_call()
+
+        with patch.object(gate, "is_allowed", return_value=False):
+            asyncio.run(run_call(transport, realtime))
+
+        _, output = realtime.tool_outputs[0]
+        self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+        # The money did not move.
+        self.assertEqual(accounts.ACCOUNTS["chequing"], 2400.0)
+        self.assertEqual(accounts.ACCOUNTS["savings"], 500.0)
+        # And the model was asked for a new response, so the refusal is spoken, not silent.
+        self.assertIn("response.create", realtime.sent_types)
+
+    def test_a_tool_the_real_table_does_not_permit_is_refused_without_patching_anything(self):
+        # The gate as actually configured, not a forced-closed one: a tool nobody granted is
+        # refused on a real call path.
+        transport = FakeTransport(frames=[audio_frame("do-something-else")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[function_call("drain_account", "{}"), response_done()],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime))
+        _, output = realtime.tool_outputs[0]
+        self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
 
 
 if __name__ == "__main__":

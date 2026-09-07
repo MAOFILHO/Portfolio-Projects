@@ -2,15 +2,18 @@
 
 Moved out of the Phase 1 relay module unchanged (Phase 2.1 restructure, issue #17).
 
-B1 note: there is no gate here yet. `dispatch/gate.py` -- deny-all-by-default, every tool
-refused unless explicitly allowlisted for the current (agent, auth_state) pair -- is issue
-#19's deliverable and lands beside this module, in front of `dispatch_tool_call`. Until then
-every declared tool executes unconditionally, which is only survivable because `accounts` is
-an in-memory dict with nothing real behind it (docs/PLAN.md Phase 1, "Out of scope").
+B1: `dispatch_tool_call` is the single choke point -- the only path from "the model asked for a
+tool" to "the tool ran" -- and the first thing it does is consult the gate. There is deliberately
+no second path: nothing else in this package calls into `_DISPATCH`, and tests/test_gate.py proves
+that tool by tool, driven off the declared tool list rather than a hand-maintained one.
 """
 import json
+import logging
 
 from .. import accounts
+from . import gate
+
+log = logging.getLogger("dispatch")
 
 _ACCOUNT_ENUM = {"type": "string", "enum": list(accounts.ACCOUNTS)}
 
@@ -56,11 +59,24 @@ _DISPATCH = {
 }
 
 
-def dispatch_tool_call(name, arguments_json):
+def dispatch_tool_call(name, arguments_json, agent=gate.BANKING_AGENT, auth_state=gate.ANONYMOUS):
     """Run one tool call, returning the JSON string for a function_call_output. Never raises --
     an unknown tool name, a missing argument, or an accounts error (bad account, non-positive
     amount) all come back as {"error": "..."} so the model can say something sensible instead of
-    the call going silent."""
+    the call going silent.
+
+    Every call passes the gate first (B1). A refusal comes back in the same {"error": ...} shape,
+    so the caller hears a spoken refusal rather than silence.
+
+    The defaults are the *least* privileged values on purpose: a caller that forgets to pass an
+    auth_state gets ANONYMOUS, so forgetting fails closed rather than open.
+    """
+    if not gate.is_allowed(agent, auth_state, name):
+        # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
+        # The tool name is safe to log; arguments are not logged here -- they can carry account
+        # identifiers, and Phase 4 puts PIN-adjacent data on this path (B2).
+        log.warning("gate refused tool %r for (agent=%s, auth_state=%s)", name, agent, auth_state)
+        return json.dumps({"error": gate.REFUSAL})
     try:
         args = json.loads(arguments_json) if arguments_json else {}
         result = _DISPATCH[name](args)

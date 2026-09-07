@@ -17,6 +17,7 @@ from fastapi import WebSocketDisconnect
 
 from ..agents.specs import SYSTEM_PROMPT
 from ..cost import caps
+from ..dispatch import gate
 from ..dispatch.tools import TOOLS, dispatch_tool_call
 from ..transport import acs
 
@@ -67,6 +68,14 @@ async def run_call(transport, realtime):
     """
     await realtime.send({"type": "session.update", "session": SESSION_CONFIG})
 
+    # Call-scoped B1 state. Both are fixed for the whole call in Phase 2: there is one agent, and
+    # there is no transition into AUTHENTICATED yet. Issue #20 makes `agent` change on handoff;
+    # Phase 4 makes `auth_state` change once KBA and the DTMF PIN exist. They are passed to every
+    # tool call rather than read from a module global so that a call's authorisation state can
+    # never be ambient -- it is always an argument the dispatcher had to be given.
+    agent = gate.BANKING_AGENT
+    auth_state = gate.ANONYMOUS
+
     async def transport_to_model():
         while True:
             kind, audio_payload = acs.classify_inbound(await transport.receive_text())
@@ -93,7 +102,7 @@ async def run_call(transport, realtime):
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "response.function_call_arguments.done":
                 log.info("tool call: %s(%s)", event.name, event.arguments)
-                output = dispatch_tool_call(event.name, event.arguments)
+                output = dispatch_tool_call(event.name, event.arguments, agent, auth_state)
                 await realtime.send({
                     "type": "conversation.item.create",
                     "item": {
