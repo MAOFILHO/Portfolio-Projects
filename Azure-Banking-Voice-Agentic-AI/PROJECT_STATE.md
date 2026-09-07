@@ -6,9 +6,8 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 2 — Realtime session, agent core, gate, test harness. 7 of 8 tickets built** (#17-#23,
-now #20 too); the six built before this update were reviewed and fixed, **#20 is built but not
-yet run through `/code-review`.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
+**Phase 2 — Realtime session, agent core, gate, test harness. 7 of 8 tickets built, all seven
+reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
 Phase 1 closed first — its exit criteria are met and written up in
 `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
@@ -37,14 +36,16 @@ Built and committed (all local, unpushed):
   B3 static allowlist check. Checker now covers `docs/*/wizard/*.sh`, `Dockerfile`,
   `pyproject.toml` (not just the package), scans whole-file text (catches a pair literal wrapped
   across lines), and checks `(name, version)` pairs, not just names.
-- **#20 `bd005df`, not yet reviewed** — declarative `AgentSpec` table (`agents/specs.py`): identity,
-  instructions, tool scope. A call now opens on `gate.TRIAGE_AGENT` (was `BANKING_AGENT`); a
-  `handoff_to_banking` function call reconfigures the one existing session onto the banking
-  agent's instructions/tools rather than opening a second one, and never touches
+- **#20 `bd005df`, reviewed and fixed (`e33edea`)** — declarative `AgentSpec` table
+  (`agents/specs.py`): identity, instructions, tool scope. A call now opens on `gate.TRIAGE_AGENT`
+  (was `BANKING_AGENT`); a `handoff_to_banking` function call reconfigures the one existing session
+  onto the banking agent's instructions/tools rather than opening a second one, and never touches
   `dispatch_tool_call` or the gate (routing, not a banking action). `dispatch/gate.py` gained the
   `TRIAGE_AGENT` constant only — `PERMISSIONS` is still `{}`, `is_allowed()`'s logic unchanged.
-  All 5 of #20's acceptance criteria met; needs `/code-review` before being called reviewed, same
-  as the other six.
+  All 5 of #20's acceptance criteria met. Review fix: `handoff_target()` now checks the *calling*
+  agent's own declared `handoff_to`, not just that the named target exists — both review axes
+  independently caught that a hallucinated `handoff_to_triage` from `BANKING` (whose `handoff_to`
+  is empty) would have silently succeeded. TDD, verified red against the pre-fix code.
 
 Two rounds of `/code-review` ran this session (`5288f8a..40a39b5`, then `40a39b5..HEAD`), each
 producing Standards + Spec findings; every actionable finding from both is fixed as of `38dec8c`.
@@ -61,7 +62,7 @@ rehearsal patches the gate open on purpose (proving the call completes is orthog
 policy); CI does not auto-run the successor rehearsal (it's designed to be run deliberately, not
 routinely).
 
-**93 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
+**95 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
 `make lint` clean. Not built: **#24** (typed approval now in hand, but real infra work — see Next
 actions — and a human to dial are still needed first).
 
@@ -136,14 +137,11 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **`/code-review` #20** — the six other Phase 2 tickets each got a Standards+Spec pass before
-   being called reviewed; #20 hasn't yet. Do this before treating #20 as done the way #17-#19/21-23
-   are.
-2. **This whole session's work is unpushed** — 22 commits ahead of `origin/azure-banking-work`.
+1. **This whole session's work is unpushed** — 24 commits ahead of `origin/azure-banking-work`.
    `git push origin azure-banking-work` from this session failed (`Permission denied (publickey)`
    — no SSH access to Marco's GitHub key from this sandboxed environment); needs to be pushed from
    a machine that has it. Not a formal gate, but real risk: it all exists in one worktree only.
-3. **Before any Phase 2 deploy, one thing is now verified, one still isn't, and one will fail:**
+2. **Before any Phase 2 deploy, one thing is now verified, one still isn't, and one will fail:**
    - **B3's ARM reader is now verified live** (2026-09-07, this session, under `az login`) — read
      against the real `aoai-azure-banking-voice-cc` deployment, confirmed
      `('gpt-realtime-mini', '2025-10-06')`, matching the active pin exactly. Free, read-only, no
@@ -157,13 +155,10 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
      (`docs/PLAN.md` puts managed identity in Phase 7) that nobody has done. This step needs
      Marco's hands (a live provisioning decision) — `/wizard` territory, not something to script
      unattended.
-4. **`ADR-003` — Accepted 2026-09-07.** Stay on the base `openai` SDK, do not adopt `openai-agents`.
-   `docs/PLAN.md`'s stale `openai-agents >= 0.3.0` pin instruction and `RealtimeSession`/
-   `model_config` phrasing are corrected (`05cb998`).
-5. **#24: `APPROVED: Phase 2` is typed.** What's left: item 3's remaining two prerequisites (image
+3. **#24: `APPROVED: Phase 2` is typed.** What's left: item 2's remaining two prerequisites (image
    build, managed identity), re-provisioned compute, and a human to dial, before the provisional
    B5 latency figure (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit paragraph makes this
    figure load-bearing for the phase's formal close, not optional. Dialing the call itself is
    `/wizard` territory — Marco's hands/voice, not something Claude can do.
-6. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
+4. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
