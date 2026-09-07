@@ -13,8 +13,8 @@ WHAT IT CHECKS
 
     Every staged path (`git diff --cached --name-only`) must start with `PROJECT_ROOT` (this project's
     own directory, relative to the git repo root) -- with an exception only for a path named in
-    `ALLOWLIST`, each with its own recorded, absolute-path approval. `ALLOWLIST` starts empty: no
-    exception has been asked for or granted yet. Do not add one in advance of an actual approval.
+    `ALLOWLIST`, each with its own recorded, absolute-path approval cited inline next to the entry
+    that licenses it. Do not add an entry in advance of an actual approval.
 
 RUNS AS
 

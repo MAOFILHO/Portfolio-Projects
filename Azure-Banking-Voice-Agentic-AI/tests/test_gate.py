@@ -26,7 +26,13 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
         for tool in (t["name"] for t in tools.TOOLS):
             self.assertFalse(gate.is_allowed(gate.BANKING_AGENT, "no-such-state", tool))
 
-    def test_an_unknown_tool_is_refused_even_for_a_permitted_pair(self):
+    def test_an_unknown_tool_is_refused_for_a_recognized_agent_and_state(self):
+        # A distinct axis from the two tests above: (BANKING_AGENT, ANONYMOUS) is a real,
+        # recognized pair (not garbage like "no-such-agent"/"no-such-state") -- refused here
+        # because the tool name itself is unrecognized, not because the pair is unrecognized.
+        # Renamed from "...even_for_a_permitted_pair" (found stale by /code-review of Phase 2
+        # follow-up, 2026-09-07): PERMISSIONS is empty now, so no pair is "permitted" for
+        # anything -- the old name implied a precondition this diff removed.
         self.assertFalse(gate.is_allowed(gate.BANKING_AGENT, gate.ANONYMOUS, "drain_account"))
 
     def test_authenticated_has_no_permissions_yet(self):
