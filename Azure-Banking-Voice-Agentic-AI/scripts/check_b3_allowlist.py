@@ -23,23 +23,34 @@ docs/phase0/findings.md, "Model pin reconsideration"):
      which check 1 alone cannot: the name in isolation is legitimate.
 
 **What check 2 does not cover, by design:** a name and version living in separate, unrelated
-variables (e.g. two `bash` assignments several lines apart) has no literal pair for this pattern
-to find. That gap is real but not this control's to close -- it is exactly what the *runtime*
-boot guard exists for, since it reads the live deployment's actual (name, version) at boot
-regardless of what any script's variables say. The two controls are complementary on purpose
-(see the guard-only/static-only split above); this scanner does not attempt cross-variable
-correlation, which would mean parsing each language's assignment semantics for a case the
-runtime guard already closes for real.
+variables -- concretely, `docs/phase0/wizard/01-provision.sh`'s `MODEL_NAME=`/`MODEL_VERSION=`
+bash assignments, several lines apart, with `MODEL_VERSION_OLD="2025-12-15"` (an unapproved
+version) sitting nearby unflagged -- has no literal pair for this pattern to find. That gap is
+real but not this control's to close -- it is exactly what the *runtime* boot guard exists for,
+since it reads the live deployment's actual (name, version) at boot regardless of what any
+script's variables say. The two controls are complementary on purpose (see the guard-only/
+static-only split above); this scanner does not attempt cross-variable correlation, which would
+mean parsing each language's assignment semantics for a case the runtime guard already closes
+for real. (Found still open by /code-review of Phase 2 follow-up, 2026-09-07 -- named here
+explicitly rather than left as a vague caveat, since the earlier wording didn't say which file or
+which residual value.)
 
-Scope: the package source, plus the provisioning wizard scripts under `docs/*/wizard/*.sh` --
-the one place outside the package that can actually name a model for `az ... deployment create`
-(found missing in /code-review of Phase 2, 2026-09-07). Narrative docs (`docs/**/*.md`) are
-deliberately excluded: `docs/phase0/findings.md` and `docs/phase1/research-*.md` legitimately
-discuss the whole model catalog as research record, not executable configuration, and scanning
-them would just be noise nobody could act on. Tests are excluded for a different reason --
-test_boot.py has to name rejected models (`gpt-4o-realtime-preview`, and the 2025-12-15 version
-of the pinned name) in order to prove they are rejected. A checker that failed on those would be
-forbidding the tests that prove the guard works.
+Both patterns scan each file's *whole text*, not line by line, so a literal pair split across
+lines (a multi-line tuple) is still caught -- line-by-line scanning would have missed it (also
+found by that same follow-up review).
+
+Scope: the package source, the provisioning wizard scripts under `docs/*/wizard/*.sh` -- the one
+place outside the package that can actually name a model for `az ... deployment create` (found
+missing in /code-review of Phase 2, 2026-09-07) -- and `voice-agent/Dockerfile` /
+`voice-agent/pyproject.toml`, the two files that describe the built image. Narrative docs
+(`docs/**/*.md`) are deliberately excluded: `docs/phase0/findings.md` and
+`docs/phase1/research-*.md` legitimately discuss the whole model catalog as research record, not
+executable configuration, and scanning them would just be noise nobody could act on. Tests are
+excluded for a different reason -- test_boot.py has to name rejected models
+(`gpt-4o-realtime-preview`, and the 2025-12-15 version of the pinned name) in order to prove they
+are rejected. `scripts/` (this file's own directory) is excluded for the identical reason: this
+docstring, two paragraphs up, names `gpt-4o-realtime-preview` as a worked example. A checker that
+failed on either would be forbidding the thing that explains what it does.
 
 Exit code 0 = clean, 1 = a disallowed model name or an unapproved (name, version) pair is present.
 """
@@ -54,7 +65,9 @@ PACKAGE_ROOT = REPO_ROOT / "voice-agent" / "azbank_voice_agent"
 MODEL_PATTERN = re.compile(r"\bgpt-[a-z0-9.\-]*realtime[a-z0-9.\-]*\b", re.IGNORECASE)
 
 # A model id and a date-shaped version written together as a literal pair, quoted either way --
-# the shape ACTIVE_REALTIME_MODEL / SUCCESSOR_REALTIME_MODEL are declared in, in boot.py.
+# the shape ACTIVE_REALTIME_MODEL / SUCCESSOR_REALTIME_MODEL are declared in, in boot.py. `\s`
+# spans newlines too, so a pair split across lines (e.g. a wrapped tuple literal) still matches --
+# matched against each file's whole text, not scanned line by line (see main()).
 PAIR_PATTERN = re.compile(
     r"""["'](gpt-[a-z0-9.\-]*realtime[a-z0-9.\-]*)["']\s*,\s*["'](\d{4}-\d{2}-\d{2})["']""",
     re.IGNORECASE,
@@ -62,9 +75,26 @@ PAIR_PATTERN = re.compile(
 
 
 def scan_targets():
-    """Every file this check reads: the package source, plus the wizard scripts. Sorted so a run
-    is deterministic and a violations list is stable across machines."""
-    return sorted(PACKAGE_ROOT.rglob("*.py")) + sorted(REPO_ROOT.glob("docs/*/wizard/*.sh"))
+    """Every file this check reads: the package source, the wizard scripts, and the two files
+    describing the built image. Sorted so a run is deterministic and a violations list is stable
+    across machines."""
+    return sorted([
+        *PACKAGE_ROOT.rglob("*.py"),
+        *REPO_ROOT.glob("docs/*/wizard/*.sh"),
+        REPO_ROOT / "voice-agent" / "Dockerfile",
+        REPO_ROOT / "voice-agent" / "pyproject.toml",
+    ])
+
+
+def _lineno(text, offset):
+    """1-indexed line number of a character offset -- so a match spanning multiple lines (a
+    literal pair wrapped across lines) still gets a sensible line to point at: where it starts."""
+    return text.count("\n", 0, offset) + 1
+
+
+def _flatten(snippet):
+    """Collapse whitespace/newlines in a matched snippet to one line, for display only."""
+    return " ".join(snippet.split())
 
 
 def allowed_names():
@@ -91,15 +121,18 @@ def main():
 
     for path in scan_targets():
         rel = path.relative_to(REPO_ROOT)
-        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            for match in PAIR_PATTERN.finditer(line):
-                name, version = match.group(1), match.group(2)
-                if (name.lower(), version) not in pairs_ok:
-                    reason = f"{name!r} paired with unapproved version {version!r}"
-                    violations.append((rel, lineno, reason, line.strip()))
-            for match in MODEL_PATTERN.finditer(line):
-                if match.group(0).lower() not in names_ok:
-                    violations.append((rel, lineno, repr(match.group(0)), line.strip()))
+        text = path.read_text()
+
+        for match in PAIR_PATTERN.finditer(text):
+            name, version = match.group(1), match.group(2)
+            if (name.lower(), version) not in pairs_ok:
+                reason = f"{name!r} paired with unapproved version {version!r}"
+                violations.append((rel, _lineno(text, match.start()), reason, _flatten(match.group(0))))
+
+        for match in MODEL_PATTERN.finditer(text):
+            if match.group(0).lower() not in names_ok:
+                found = repr(match.group(0))
+                violations.append((rel, _lineno(text, match.start()), found, _flatten(match.group(0))))
 
     if violations:
         print("B3 STATIC CHECK FAILED -- realtime model named outside the allowlist:\n")

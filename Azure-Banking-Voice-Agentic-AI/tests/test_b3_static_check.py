@@ -65,6 +65,18 @@ class TheCheckerActuallyDetects(unittest.TestCase):
         result = _run_checker()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_a_pair_split_across_lines_still_fails_the_check(self):
+        # Line-by-line scanning would have missed this -- found by /code-review of Phase 2
+        # follow-up, 2026-09-07. Both patterns now scan each file's whole text (see
+        # check_b3_allowlist.py's module docstring).
+        allowed_name = boot.ACTIVE_REALTIME_MODEL[0]
+        self.TARGET.write_text(
+            self._original + f'\nBAD = (\n    "{allowed_name}",\n    "2025-12-15",\n)\n'
+        )
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unapproved version", result.stdout)
+
 
 class TheCheckerCoversTheWizardScripts(unittest.TestCase):
     """The provisioning script is the one place outside the package that can actually name a
@@ -83,6 +95,33 @@ class TheCheckerCoversTheWizardScripts(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("gpt-4o-realtime-preview", result.stdout)
         self.assertIn("01-provision.sh", result.stdout)
+
+
+class TheCheckerCoversTheImageDescriptionFiles(unittest.TestCase):
+    """Dockerfile and pyproject.toml are the two files that describe the built image -- found
+    unscanned by /code-review of Phase 2 follow-up, 2026-09-07. Same always-restore discipline."""
+
+    def test_a_disallowed_model_name_in_the_dockerfile_fails_the_check(self):
+        target = REPO_ROOT / "voice-agent" / "Dockerfile"
+        original = target.read_text()
+        self.addCleanup(target.write_text, original)
+
+        target.write_text(original + '\n# BAD gpt-4o-realtime-preview\n')
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("gpt-4o-realtime-preview", result.stdout)
+        self.assertIn("Dockerfile", result.stdout)
+
+    def test_a_disallowed_model_name_in_pyproject_toml_fails_the_check(self):
+        target = REPO_ROOT / "voice-agent" / "pyproject.toml"
+        original = target.read_text()
+        self.addCleanup(target.write_text, original)
+
+        target.write_text(original + '\n# BAD gpt-4o-realtime-preview\n')
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("gpt-4o-realtime-preview", result.stdout)
+        self.assertIn("pyproject.toml", result.stdout)
 
 
 class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
@@ -122,14 +161,34 @@ class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.groups(), ("gpt-realtime-mini", "2025-10-06"))
 
-    def test_scan_targets_include_the_package_and_the_wizard_scripts(self):
+    def test_the_pair_pattern_matches_across_lines(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import check_b3_allowlist
+
+        match = check_b3_allowlist.PAIR_PATTERN.search(
+            'X = (\n    "gpt-realtime-mini",\n    "2025-10-06",\n)'
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.groups(), ("gpt-realtime-mini", "2025-10-06"))
+
+    def test_scan_targets_include_the_package_wizard_scripts_and_image_files(self):
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import check_b3_allowlist
 
         targets = check_b3_allowlist.scan_targets()
         self.assertTrue(any(p.name == "boot.py" for p in targets))
         self.assertTrue(any(p.name == "01-provision.sh" for p in targets))
-        self.assertFalse(any("tests" in p.parts for p in targets))
+        self.assertTrue(any(p.name == "Dockerfile" for p in targets))
+        self.assertTrue(any(p.name == "pyproject.toml" for p in targets))
+
+        # Concrete, not structural: a real file under tests/ (which scan_targets never globs
+        # today) must not appear -- catches a future accident like widening PACKAGE_ROOT.rglob to
+        # REPO_ROOT.rglob, which a purely-structural "no 'tests' in any part" check could not
+        # (found tautological -- PACKAGE_ROOT/docs/*/wizard can never contain "tests" by
+        # construction -- by /code-review of Phase 2 follow-up, 2026-09-07).
+        self.assertNotIn(REPO_ROOT / "tests" / "test_boot.py", targets)
+        # scripts/ is deliberately unscanned (this file's own docstring names a rejected model).
+        self.assertNotIn(REPO_ROOT / "scripts" / "check_b3_allowlist.py", targets)
 
 
 if __name__ == "__main__":
