@@ -14,6 +14,7 @@ current SDK signature.
 """
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket
 from azure.core.exceptions import AzureError
@@ -26,6 +27,7 @@ from azure.communication.callautomation import (
     AudioFormat,
 )
 
+from .boot import assert_boot_safety
 from .realtime.client import connect_realtime
 from .realtime.session import run_call
 
@@ -56,7 +58,25 @@ APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<reg
 CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
 WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_app):
+    """B3 runs here, before the first call can arrive -- and deliberately not at import time, so
+    that importing this module (tests, tooling) never reaches for ARM.
+
+    It fails closed: if the live deployed model cannot be read, or is not on the allowlist, the
+    process exits rather than serving calls on an unapproved model.
+
+    PREREQUISITES FOR A DEPLOY (issue #21): the guard reads ARM, so the Container App needs a
+    managed identity with reader access to the Azure OpenAI account, plus AZURE_SUBSCRIPTION_ID,
+    AZURE_RESOURCE_GROUP and AOAI_ACCOUNT_NAME in its environment. None of that is provisioned
+    today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
+    `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
+    """
+    assert_boot_safety()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 call_automation_client = CallAutomationClient.from_connection_string(ACS_CONNECTION_STRING)
 
 

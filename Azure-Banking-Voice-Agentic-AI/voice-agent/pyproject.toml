@@ -17,6 +17,11 @@ dependencies = [
     "uvicorn[standard]==0.32.1",
     "openai==3.6.0",
     "azure-communication-callautomation==1.4.0",
+    # B3's boot guard reads the live deployment's model version from ARM (issue #21). httpx is
+    # already present transitively via openai; declared explicitly because this package imports it
+    # directly rather than relying on someone else's dependency.
+    "azure-identity==1.19.0",
+    "httpx>=0.27",
 ]
 
 [tool.setuptools.packages.find]

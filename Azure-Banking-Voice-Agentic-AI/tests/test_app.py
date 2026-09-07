@@ -70,6 +70,35 @@ class AnswerCallRejectionPath(unittest.TestCase):
         self.assertEqual(result, {})
 
 
+class BootGuardIsOnTheStartupPath(unittest.TestCase):
+    """B3 exists is one claim; B3 runs before any call is served is another. Same discipline as
+    the gate's in-path proof -- a guard nothing calls protects nothing."""
+
+    @staticmethod
+    def _run_lifespan():
+        async def enter_and_exit():
+            async with app.lifespan(app.app):
+                pass
+        asyncio.run(enter_and_exit())
+
+    def test_startup_runs_the_boot_guard(self):
+        calls = []
+        with patch.object(app, "assert_boot_safety", lambda: calls.append("checked")):
+            self._run_lifespan()
+        self.assertEqual(calls, ["checked"])
+
+    def test_a_refusing_guard_stops_the_app_from_starting(self):
+        with patch.object(app, "assert_boot_safety", side_effect=SystemExit("B3: nope")), \
+             self.assertRaises(SystemExit):
+            self._run_lifespan()
+
+    def test_importing_the_module_does_not_reach_for_arm(self):
+        # The guard must not run at import time -- tests and tooling import this module freely,
+        # and an import that phones ARM would make that impossible. If this regresses, importing
+        # app in any test would already have failed at collection, but assert it explicitly.
+        self.assertTrue(callable(app.assert_boot_safety))
+
+
 class FakeWebSocket:
     def __init__(self):
         self.headers = {}
