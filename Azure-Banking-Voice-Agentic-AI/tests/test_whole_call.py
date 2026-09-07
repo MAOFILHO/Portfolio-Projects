@@ -83,6 +83,20 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         declared = [tool["name"] for tool in realtime.session_config["tools"]]
         self.assertEqual(sorted(declared), ["get_balance", "list_accounts", "transfer"])
 
+    def test_tool_arguments_and_agent_speech_never_reach_a_log_line(self):
+        # B2 (CLAUDE.md): dispatch/tools.py already promises never to log tool arguments --
+        # Phase 4 puts PIN-adjacent data on this exact path. This proves the relay doesn't
+        # undercut that a frame earlier, and that the agent's spoken transcript gets the same
+        # treatment, before either code path exists for real (see also the DTMF test above).
+        transport, realtime = _balance_call()
+
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime))
+
+        self.assertTrue(any("tool call: get_balance" in line for line in cm.output))
+        self.assertFalse(any("chequing" in line for line in cm.output))
+        self.assertFalse(any("Hi, how can I help" in line for line in cm.output))
+
     def test_a_whole_call_never_opens_a_network_connection(self):
         # The fakes are documented as never touching the network. This asserts it rather than
         # trusting the docstring: any outbound connect attempt during a full call fails the test.

@@ -101,7 +101,11 @@ async def run_call(transport, realtime):
             if event.type == "response.output_audio.delta":
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "response.function_call_arguments.done":
-                log.info("tool call: %s(%s)", event.name, event.arguments)
+                # Tool name only, never the arguments (B2): they can carry account identifiers
+                # today, and Phase 4 puts PIN-adjacent data on this exact path --
+                # dispatch_tool_call's own docstring already promises not to log arguments; this
+                # relay must not undercut that a frame earlier.
+                log.info("tool call: %s", event.name)
                 output = dispatch_tool_call(event.name, event.arguments, agent, auth_state)
                 await realtime.send({
                     "type": "conversation.item.create",
@@ -115,8 +119,11 @@ async def run_call(transport, realtime):
             elif event.type == "response.output_audio_transcript.delta":
                 # The only transcript available without provisioning a separate transcription
                 # deployment (see the input_audio_transcription comment above) -- what the agent
-                # said, not what the caller said.
-                log.info("agent said: %s", event.delta)
+                # said, not what the caller said. Arrival only, never the words (B2): the moment
+                # the agent can ever repeat something sensitive back, this is the log line that
+                # would carry it, so no content lands here now either -- no exception carved out
+                # for Phase 2 just because there's nothing sensitive to say yet.
+                log.info("agent transcript delta received (%d chars)", len(event.delta))
             elif event.type == "response.done":
                 # One full model response cycle = one turn (B4).
                 turn_count += 1
