@@ -1,8 +1,8 @@
 # ADR-003 — Realtime SDK: base `openai` client, not `openai-agents`
 
-Status: **Proposed** — pending Marco's explicit confirmation, same as any other architecture
-decision in this project. Recorded now because issue #18's acceptance criteria require the choice
-to be written down with a reason before the relay is built on either path.
+Status: **Accepted** — confirmed by Marco 2026-09-07. Recorded now because issue #18's acceptance
+criteria require the choice to be written down with a reason before the relay is built on either
+path.
 Date: 2026-09-07
 
 ## Context
@@ -50,10 +50,10 @@ Reasons, in the order they actually weigh:
 
 ## Consequences
 
-- `docs/PLAN.md`'s Architecture section is now **stale on this point** and should be corrected: the
+- `docs/PLAN.md`'s Architecture section described a path this project is not taking (the
   `openai-agents >= 0.3.0` floor-pin instruction, and Phase 2's "`RealtimeSession` … via
-  `model_config` override" phrasing, both describe a path this project is not taking. Correcting it
-  is a separate approved edit, not done here.
+  `model_config` override" phrasing) — corrected in place alongside this ADR's acceptance
+  (2026-09-07), not left stale now that the decision is confirmed rather than proposed.
 - The relay owns the protocol directly: `realtime/client.py` builds the connection,
   `realtime/session.py` speaks events. Both are small, and both are covered by fakes that replay
   the event names confirmed live.

@@ -122,7 +122,7 @@ WebSocket with no realtime session, so it can only measure **transport RTT**, no
 calls is not a sample size a percentile can be drawn from. So:
 - Phase 0 exit reports **transport RTT baseline** (ACS ingress/egress only), stated with its actual
   sample size — turns, not calls.
-- After Phase 2 (first real turns through `RealtimeSession`, **N≥100 turns**), B5 gets a
+- After Phase 2 (first real turns through a live realtime connection, **N≥100 turns**), B5 gets a
   **provisional** p95 with the turn count that backs it.
 - After Phase 5 (tool calls to `mock-core-banking` now in the hot path for authenticated intents),
   B5 is **frozen** — this is the realistic number, since tool calls are the slowest leg.
@@ -204,7 +204,7 @@ Azure Communication Services ──Event Grid──► POST /api/incoming-call
                           (Entra ID, scope https://ai.azure.com/.default)
                                                    │
                                     ┌──────────────┴──────────────┐
-                                    │  RealtimeSession            │
+                                    │  Realtime relay (session.py)│
                                     │  session.update → agent swap│
                                     └──────────────┬──────────────┘
                                                    │ tool call
@@ -228,10 +228,12 @@ Azure Communication Services ──Event Grid──► POST /api/incoming-call
   deprecated beta path.
 - Realtime max session duration **60 min** (watch `expires_at` on `session.created`) — comfortably
   outside B4's 5-min cap.
-- **`openai-agents` can target Azure.** Verified in source (`src/agents/realtime/openai_realtime.py`):
+- **`openai-agents` can target Azure** — verified in source (`src/agents/realtime/openai_realtime.py`):
   `api.openai.com` is only the default for `options.get("url", …)`, and supplying `headers` via
-  `model_config` bypasses the `OPENAI_API_KEY` requirement. Added in v0.2.11 (PR #1633).
-  **Pin `openai-agents >= 0.3.0` as a floor in `pyproject.toml`**, not a comment.
+  `model_config` bypasses the `OPENAI_API_KEY` requirement. Added in v0.2.11 (PR #1633). **Not taken:
+  ADR-003 (accepted 2026-09-07) stays on the base `openai` SDK instead** — the relay owns the
+  protocol directly (`realtime/client.py`, `realtime/session.py`), no `openai-agents` dependency is
+  pinned in `pyproject.toml`. This bullet is left as the verified finding it was, not deleted.
 - **The text seam exists inside the protocol**: `conversation.item.input_audio_transcription.completed`,
   `response.audio_transcript.delta`/`.done`, `response.function_call_arguments.done`,
   `input_audio_buffer.speech_started`/`speech_stopped`. This is what makes deterministic CI possible.
@@ -587,7 +589,8 @@ webhook, call lifecycle, barge-in via `StopAudio`, WS close-on-hangup (decision 
 billable compute.
 
 ### Phase 2 — Realtime session + agent core + gate + test harness ⛔ *control ships here*
-`RealtimeSession` against Azure via `model_config` override; `AgentSpec` table; `session.update`
+The base `openai` SDK's realtime client against Azure (ADR-003: not `RealtimeSession` /
+`model_config` — the relay owns the protocol directly); `AgentSpec` table; `session.update`
 agent swap; `FakeTransport` + `FakeRealtimeServer`; L0/L1 suites; **B3 startup guard — must validate
 (deployment name, model version) together, reading the live deployment's actual model version via the
 AOAI API at boot rather than trusting config alone; a name-only check is insufficient (promoted from a
@@ -600,7 +603,7 @@ a gate already in front of it. Phase 4 only *adds permissions* to an existing co
 introduces one.
 **Exit:** full app runs end-to-end between two fakes in CI with zero Azure dependency; gate defaults
 closed and is provably in front of every tool, even stub ones. **B5 provisional** after N≥100 real
-turns through a live `RealtimeSession`, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
+turns through a live realtime connection, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
 2026-08-20, decision 14): boots `SUCCESSOR_REALTIME_MODEL` (`gpt-realtime-1.5` as of Phase 0) against
 `FakeRealtimeServer` and completes one turn, skip-by-default so it never runs in normal CI — it's Phase
 2's own deliverable because it's the first phase where `FakeRealtimeServer` exists to boot anything
@@ -663,8 +666,10 @@ to supply API keys). Every figure below is quoted from a live fetch of the vendo
 - Officially the recommended code-based instrumentation path (Microsoft Learn,
   `azure-monitor/app/opentelemetry-overview`), with a **built-in OTel agent for Azure Container Apps**
   specifically — this project's own compute layer — and documented tracing support for the **OpenAI
-  Agents SDK** by name, which matters because `docs/PLAN.md` (Architecture) already plans to pin
-  `openai-agents >= 0.3.0`.
+  Agents SDK** by name. This finding was recorded when the Architecture section still planned to pin
+  `openai-agents >= 0.3.0`; ADR-003 (accepted 2026-09-07) stayed on the base `openai` SDK instead, so
+  this specific point of overlap no longer applies — the Container Apps OTel-agent support still
+  does, on its own.
 - Application Insights (workspace-based) bills through the same Log Analytics ingestion meter as the
   workspace Stage 12 queried live this session (`docs/phase0/findings.md`, "Stage 12 — auto-created
   Log Analytics workspace"). That check established the workspace exists and its per-GB rate from
