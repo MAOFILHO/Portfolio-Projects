@@ -83,9 +83,18 @@ teardown is not the current resource state. Full narrative: `docs/phase0/finding
 **Resources live now**: resource group `rg-azure-banking-voice-agentic-ai`; AOAI
 `aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
 `acs-azure-banking-voice`; phone number `+17059100383` (owned, $1.00/mo, R-09 — never released);
-Container Apps environment `cae-azure-banking-voice-p0`; Container App running Phase 1's
-`voice-agent` bridge (min-replicas=1, billing now, IDLE per the measurement above); two Log
-Analytics workspaces (`...aiCS` real/linked, `...aixC` orphan, left in place).
+Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0` running
+Phase 1's `voice-agent` bridge (min-replicas=1, billing now, IDLE per the measurement above; still
+`docker.io/maofilho/azbank-echo-p0:latest`, still authenticating to AOAI via the `AOAI_KEY` secret
+— unaffected by the identity work below); two Log Analytics workspaces (`...aiCS` real/linked,
+`...aixC` orphan, left in place).
+
+**System-assigned managed identity added to `ca-azbank-echo-p0` 2026-09-07** (this session, Marco
+confirmed the plan first): principal `5e09fe34-8913-4aa2-80ac-618af308a88f`, granted `Reader` —
+scoped only to the `aoai-azure-banking-voice-cc` resource, nothing broader — which is what
+`boot.read_live_model()`'s one ARM `GET .../deployments/{name}` call needs. Free, no new billable
+resource. Inert against the currently-running Phase 1 image; only matters once the Phase 2 image
+is actually deployed with this env config.
 
 ## Open items
 
@@ -137,28 +146,23 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **This whole session's work is unpushed** — 24 commits ahead of `origin/azure-banking-work`.
-   `git push origin azure-banking-work` from this session failed (`Permission denied (publickey)`
-   — no SSH access to Marco's GitHub key from this sandboxed environment); needs to be pushed from
-   a machine that has it. Not a formal gate, but real risk: it all exists in one worktree only.
-2. **Before any Phase 2 deploy, one thing is now verified, one still isn't, and one will fail:**
-   - **B3's ARM reader is now verified live** (2026-09-07, this session, under `az login`) — read
-     against the real `aoai-azure-banking-voice-cc` deployment, confirmed
-     `('gpt-realtime-mini', '2025-10-06')`, matching the active pin exactly. Free, read-only, no
-     resource created.
-   - The container image build is **still UNVERIFIED** — Docker isn't running in this session's
-     environment either (checked twice, 2026-09-07). `docker build voice-agent/` is the check,
+1. **Before any Phase 2 deploy, two things are now verified, two are not:**
+   - **B3's ARM reader: verified live** (2026-09-07) — confirmed `('gpt-realtime-mini',
+     '2025-10-06')` against the real deployment, matching the active pin.
+   - **Managed identity + RBAC: done** (2026-09-07) — `ca-azbank-echo-p0` has a system-assigned
+     identity with `Reader` scoped to `aoai-azure-banking-voice-cc` only (see Phase 0 "Resources
+     live now" above). The boot guard's ARM-permission prerequisite is met.
+   - **Still not set**: the three env vars `boot.read_live_model()` needs (`AZURE_SUBSCRIPTION_ID`,
+     `AZURE_RESOURCE_GROUP`, `AOAI_ACCOUNT_NAME` — `AOAI_DEPLOYMENT` is already set). Deliberately
+     not set yet: doing so is part of the actual deploy (new image + new env config together, not
+     env vars added ahead of an image that doesn't read them).
+   - **Still UNVERIFIED**: the container image build — Docker isn't running in this session's
+     environment (checked three times, 2026-09-07). `docker build voice-agent/` is the check,
      needs a machine with Docker running.
-   - The Container App has **no managed identity and no ARM permissions**, so the boot guard will
-     correctly refuse to start the deployed app until that identity + role assignment + three env
-     vars exist. That is B3 working, not a bug — but it is real infrastructure work
-     (`docs/PLAN.md` puts managed identity in Phase 7) that nobody has done. This step needs
-     Marco's hands (a live provisioning decision) — `/wizard` territory, not something to script
-     unattended.
-3. **#24: `APPROVED: Phase 2` is typed.** What's left: item 2's remaining two prerequisites (image
-   build, managed identity), re-provisioned compute, and a human to dial, before the provisional
-   B5 latency figure (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit paragraph makes this
-   figure load-bearing for the phase's formal close, not optional. Dialing the call itself is
-   `/wizard` territory — Marco's hands/voice, not something Claude can do.
-4. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
+2. **#24: `APPROVED: Phase 2` is typed.** What's left: build+verify the Phase 2 image, deploy it
+   with the three env vars above, then a human to dial, before the provisional B5 latency figure
+   (≥100 real turns) can be measured. `docs/PLAN.md`'s Exit paragraph makes this figure
+   load-bearing for the phase's formal close, not optional. Dialing the call itself is `/wizard`
+   territory — Marco's hands/voice, not something Claude can do.
+3. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
