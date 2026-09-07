@@ -1,0 +1,39 @@
+name: Azure-Banking-Voice-Agentic-AI CI
+
+# Runs on every push/PR touching this project's folder, scoped to main so it never fires on an
+# unrelated sibling project's changes. Zero Azure dependency: make test runs entirely against
+# FakeTransport/FakeRealtimeServer and make lint's checks are all static -- no credentials needed,
+# no spend possible (docs/PLAN.md "Verification": "make test runs L0+L1+L2 with zero Azure
+# dependency ... CI static check enforces B3's allowlist across the tree").
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Azure-Banking-Voice-Agentic-AI/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Azure-Banking-Voice-Agentic-AI/**"
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Lint + test (zero Azure dependency)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Azure-Banking-Voice-Agentic-AI
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: Azure-Banking-Voice-Agentic-AI/voice-agent/pyproject.toml
+
+      - name: make lint (ruff + mypy + B3 static allowlist check)
+        run: make lint
+
+      - name: make test (L0+L1+L2, no Azure dependency)
+        run: make test
