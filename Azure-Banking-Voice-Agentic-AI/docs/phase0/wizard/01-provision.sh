@@ -1037,7 +1037,13 @@ APP_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/voice-agent"
 # One directory now covers what used to need two guards: the Phase 2.1 restructure (issue #17)
 # folded the app, the relay, and their dependency declaration into one installable package, so a
 # single tracked-and-clean assertion covers everything that reaches the image. An uncommitted edit
-# to any module still cannot pass silently into a pushed image.
+# to any module still cannot pass silently into a pushed image -- the list below is app.py's own
+# import graph (transitively, via realtime/session.py and dispatch/tools.py), not a hand-picked
+# subset: dispatch/gate.py (B1) and boot.py (B3) were missing here until /code-review of Phase 2
+# caught it (2026-09-07) -- exactly the two files CLAUDE.md says a diff must never auto-accept,
+# left outside the one guard whose whole job is catching an unreviewed edit before it ships.
+# transport/protocol.py is deliberately absent: nothing in app.py's import graph actually imports
+# it (grep confirms only docstring references), so it never reaches the image either way.
 if [[ ! -f "$APP_DIR/azbank_voice_agent/app.py" ]]; then
   err "APP_DIR=$APP_DIR has no azbank_voice_agent/app.py. Either this path is wrong or the file was"
   err "moved/deleted -- refusing to proceed without it. Fix voice-agent/ directly, never via this script."
@@ -1047,10 +1053,13 @@ assert_tracked_and_clean "$APP_DIR" \
   pyproject.toml \
   Dockerfile \
   azbank_voice_agent/app.py \
+  azbank_voice_agent/boot.py \
   azbank_voice_agent/accounts.py \
   azbank_voice_agent/agents/specs.py \
   azbank_voice_agent/cost/caps.py \
+  azbank_voice_agent/dispatch/gate.py \
   azbank_voice_agent/dispatch/tools.py \
+  azbank_voice_agent/realtime/client.py \
   azbank_voice_agent/realtime/session.py \
   azbank_voice_agent/transport/acs.py || on_error 1
 ok "$APP_DIR verified: pyproject.toml/Dockerfile and every azbank_voice_agent module present, git-tracked, and clean"
