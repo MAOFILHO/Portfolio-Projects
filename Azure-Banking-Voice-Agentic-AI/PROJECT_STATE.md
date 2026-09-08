@@ -195,12 +195,15 @@ so in code (`e12a86f`).
 **Call 3 (2026-09-08, on `:p3`):** same shape again — handoff fired, `list_accounts`/`get_balance`
 refused, clean hangup, no `AnswerFailed`. Richer call, 6 samples: 495, 290, 247, 459, 616, 276ms.
 
-**Still open across all three calls**: ~5.6-11s of dead air before the agent speaks first — caller
-has to say something before the agent greets. `session.py` never sends an initial
+**Call 4 (2026-09-08, on `:p3`):** same shape, 5 samples: 345, 571, 669, 629, 337ms. Dead air only
+~2.5s this time (was 5.6-11s on Calls 1-3) — first sign it may vary, not fixed either way.
+
+**Still open across all four calls**: dead air before the agent speaks first (2.5-11s so far) —
+caller has to say something before the agent greets. `session.py` never sends an initial
 `response.create`; TRIAGE's instructions say to greet first but nothing triggers it. Not fixed
 yet, Marco's call on timing (before/after continuing to accumulate B5 samples).
 
-**B5 running tally: N=10 / ≥100** (4 + 6). Marco confirmed 2026-09-08: keep dialing across
+**B5 running tally: N=15 / ≥100** (4 + 6 + 5). Marco confirmed 2026-09-08: keep dialing across
 multiple sessions rather than changing call length or the N≥100 bar itself.
 
 ## Next actions (in order)
