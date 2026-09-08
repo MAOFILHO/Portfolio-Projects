@@ -200,12 +200,15 @@ refused, clean hangup, no `AnswerFailed`. Richer call, 6 samples: 495, 290, 247,
 caller happened to talk (confirms the gap's real cause: it's exactly how long the caller waits
 before speaking, since nothing ever prompts the agent to speak first).
 
-**Still open across all four calls**: the agent never speaks first — `session.py` sends no initial
+**Call 5 (2026-09-08, on `:p3`):** same shape, 4 samples: 798, 918, 636, 291ms — the first two are
+the slowest seen so far, still sub-second.
+
+**Still open across all five calls**: the agent never speaks first — `session.py` sends no initial
 `response.create`, so the greeting only happens once the caller talks and VAD detects their turn
 ending. TRIAGE's instructions say to greet first but nothing triggers it. Not fixed yet, Marco's
 call on timing (before/after continuing to accumulate B5 samples).
 
-**B5 running tally: N=15 / ≥100** (4 + 6 + 5). Marco confirmed 2026-09-08: keep dialing across
+**B5 running tally: N=19 / ≥100** (4 + 6 + 5 + 4). Marco confirmed 2026-09-08: keep dialing across
 multiple sessions rather than changing call length or the N≥100 bar itself.
 
 ## Next actions (in order)
