@@ -11,12 +11,17 @@ reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 
 Phase 1 closed first — its exit criteria are met and written up in
 `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
-**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. Call 1 happened
-2026-09-08 and the deploy/B3/handoff/gate all proved out live — but it also surfaced a real B5
-instrumentation gap (now fixed in code, not yet redeployed) and a couple of open questions. See
-"#24 — Call 1" and Next actions below before more calls.
+**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **All three of
+Phase 2's exit criteria are now met** (`docs/PLAN.md`'s Phase 2 Exit line): fakes-only CI with the
+gate provably deny-all (#17-23), `T-B3-SUCCESSOR-BOOT` exists (#22), and **B5's provisional
+figure — p95=932ms, N=106 — landed 2026-09-08** (8 real phone calls + `scripts/b5_probe.py`'s
+automated AOAI-direct batch, both pools stated, not silently merged — full detail
+`docs/phase2/evidence/b5-call-log.md`). #24 itself isn't formally closed as a ticket (the dead-air
+UX gap below is still open, not exit-blocking) but the phase's own gate criteria are satisfied.
+**This needs Marco's own review/sign-off before Phase 3 can start** — CLAUDE.md's stop condition,
+not something this file self-certifies.
 
-Built and committed (all local, unpushed):
+Built, committed, and pushed:
 - **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
   `voice-agent/azbank_voice_agent/` is now one installable package with the module boundaries
   `docs/PLAN.md` specifies. Mechanical, no behaviour change, same test count before and after.
@@ -63,9 +68,8 @@ policy); CI does not auto-run the successor rehearsal (it's designed to be run d
 routinely).
 
 **98 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. **#24 not yet closed**: Call 1 happened (findings below), B5 instrumentation
-was found missing and fixed (`42e02c5`), but the *deployed* image doesn't have that fix yet — a
-redeploy is needed before more calls produce usable B5 data. See "#24 — Call 1" below.
+`make lint` clean. **B5's provisional figure landed 2026-09-08: p95=932ms, N=106** — see "#24 — B5
+call log" below and `docs/phase2/evidence/b5-call-log.md` for full detail.
 
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
@@ -173,31 +177,31 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## #24 — B5 call log
 
-**N = 31 / ≥100.** Full per-call detail (findings, latency samples, open items) moved to
-`docs/phase2/evidence/b5-call-log.md` 2026-09-08 to keep this file's size down (decision 18) —
-append new calls there, not here. Still open, not fixed: dead air before the agent speaks first
-(2.5-11s, varies with how fast the caller talks — `session.py` sends no initial `response.create`,
-so nothing prompts the greeting until the caller talks first). The earlier odd second-call
-oddities (Call 1's `AnswerFailed`, Call 6's empty connect) are resolved as of Call 8 — a
-deliberate immediate callback worked completely normally, so it was most likely Marco's
-phone/carrier, not the app. Marco confirmed 2026-09-08: keep dialing across multiple sessions
-toward N≥100 rather than changing call length or the bar itself.
+**Done: p95=932ms, N=106 (31 real phone calls + 75 from `scripts/b5_probe.py`, both pools
+stated).** Full detail (per-call findings, all samples, the transfer-utterance latency finding)
+in `docs/phase2/evidence/b5-call-log.md` — this file keeps only the headline result (decision 18).
 
-**`scripts/b5_probe.py` also exists now** — an AOAI-direct automation (real connection, no
-ACS/phone) Marco asked for after N=31 felt slow; reuses `run_call()` unchanged. Found and fixed a
-real bug before any sample existed (synthetic transport gave VAD nothing to detect silence from —
-see the evidence file). Verified working, 1 sample so far (365ms). **Tracked as a separate pool
-from the real-call N above** (only exercises the AOAI leg, not the full ACS round trip) — see
-`docs/phase2/evidence/b5-call-log.md`'s probe section for the full record and next step
-(`--calls ~75`).
+`b5_probe.py`: an AOAI-direct automation (real connection, no ACS/phone) built after Marco asked
+whether dozens of real calls were really necessary. Reuses `run_call()` unchanged. Found and fixed
+a real bug before any sample existed (synthetic transport gave VAD nothing to detect silence from
+— server-side VAD measures silence from the audio stream itself, so simply stopping sends after
+the spoken utterance never let `speech_stopped` fire). Its batch run also surfaced a genuine
+finding, not noise: every outlier (4 slow, 1 no-response) was the same transfer-intent utterance —
+independent confirmation of `docs/PLAN.md`'s own prediction that tool calls are the slowest leg.
+
+Still open, not exit-blocking: dead air before the agent speaks first (2.5-11s on real calls —
+`session.py` sends no initial `response.create`, nothing prompts the greeting until the caller
+talks first). The earlier odd second-call oddities (Call 1's `AnswerFailed`, Call 6's empty
+connect) resolved as of Call 8 — a deliberate immediate callback worked normally, most likely
+Marco's phone/carrier, not the app.
 
 ## Next actions (in order)
 
-1. **Redeploy done** (2026-09-08) — `:p3` is live, B5 log lines are in the running container now.
-2. Decide on the ~11s dead-air gap above before or after more calls (Marco's call).
-3. **#24**: more calls toward ≥100 real turns for the provisional B5 figure —
-   `docs/PLAN.md`'s Exit paragraph makes this load-bearing for the phase's formal close. `/wizard`
-   territory — Marco's hands/voice. Pull each call's logs via `az monitor log-analytics query
-   --workspace bf520f2c-e2bc-4488-8965-9317a7922c74` (the live-stream endpoint may still be down).
-4. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
-   Phase 0's 79.2 figure).
+1. **Marco to review and sign off that Phase 2's exit criteria actually hold** (CLAUDE.md stop
+   condition — no phase transition self-certifies). `/code-review` is the named skill for this,
+   Marco's call to invoke, not Claude's.
+2. Decide on the ~11s dead-air gap (still open, not exit-blocking) before opening Phase 3.
+3. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
+   Phase 0's 79.2 figure) — not exit-blocking either, just stale.
+4. Once 1-2 are settled: `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` before
+   Phase 3 design work begins (CLAUDE.md's phase-boundary discipline).

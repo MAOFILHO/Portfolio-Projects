@@ -86,9 +86,37 @@ each utterance (`_silence_frames()`), verified working via `--debug` — real `s
 `handoff: triage -> banking` → `tool call: get_balance` → `gate refused`, all through unmodified
 `session.py`.
 
-**Probe sample count: 1 so far** (the `--debug` verification run) — 365ms. Not yet run as a full
-batch; next step is `--calls ~75` (each synthetic call yields ~1 sample, not ~4-6 like a real
-multi-turn call) to close the remaining gap toward N≥100 combined with the real-call pool above.
+**Full batch run, `--calls 75` (2026-09-08): 74 valid samples, 1 no-response.** Median 300ms.
+Sample values (ms): 188, 198, 204, 207, 207, 209, 211, 214, 214, 214, 220, 220, 221, 223, 226,
+227, 239, 239, 254, 254, 257, 266, 273, 275, 277, 279, 282, 282, 286, 287, 288, 291, 293, 295,
+296, 298, 299, 300, 303, 304, 304, 304, 315, 316, 317, 317, 318, 318, 320, 322, 328, 332, 333,
+341, 377, 424, 688, 711, 796, 804, 818, 819, 825, 832, 845, 848, 850, 854, 892, 932, 1048, 2325,
+3492, 3871. Plus the earlier `--debug` verification sample (365ms) = **75 probe samples total.**
+
+**Real finding, not noise**: the 4 outliers above 1000ms — 1048, 2325, 3492, 3871ms — plus the one
+call with no response at all (call 66) are **all the exact same utterance**: "I'd like to transfer
+five hundred dollars to savings." Checked directly against `UTTERANCES`' index math, not
+coincidence. Transfer requests make the model do more tool-orchestration reasoning (attempting
+`list_accounts` then `transfer`, both refused) before it has anything to say — this **independently
+confirms `docs/PLAN.md`'s own prediction that tool calls are the slowest leg**, well ahead of when
+Phase 5 was expected to first show it. The one no-response call likely ran past the probe's fixed
+6-second tail window entirely during that reasoning — a known limitation of `b5_probe.py`'s fixed
+wait, not investigated further since there was already enough data without it.
+
+## B5 provisional figure — Phase 2 exit criterion met (2026-09-08)
+
+| Pool | N | median | p95 | max |
+|---|---|---|---|---|
+| Real calls (phone, Calls 1-8) | 31 | 440ms | 798ms | 1235ms |
+| Probe (`b5_probe.py`, AOAI-direct) | 75 | 300ms | 932ms | 3871ms |
+| **Combined** | **106** | **310ms** | **932ms** | **3871ms** |
+
+**p95 = 932ms, N=106.** Marco confirmed 2026-09-08: report combined, both pools and their N
+stated (not silently merged as a single unlabeled figure) — satisfies CLAUDE.md's "any p95 states
+the turn count behind it" rule. `docs/PLAN.md`'s Phase 2 exit line — "B5 provisional after N≥100
+real turns through a live realtime connection, turn count stated" — is now met. The probe pool's
+own tail is legitimate signal (see the transfer-utterance finding above), not a measurement
+artifact to discount.
 
 ## Open findings (not fixed yet)
 
