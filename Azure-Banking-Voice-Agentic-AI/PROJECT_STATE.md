@@ -196,12 +196,14 @@ so in code (`e12a86f`).
 refused, clean hangup, no `AnswerFailed`. Richer call, 6 samples: 495, 290, 247, 459, 616, 276ms.
 
 **Call 4 (2026-09-08, on `:p3`):** same shape, 5 samples: 345, 571, 669, 629, 337ms. Dead air only
-~2.5s this time (was 5.6-11s on Calls 1-3) — first sign it may vary, not fixed either way.
+~2.5s this time — Marco spoke immediately rather than waiting; not code variability, just when the
+caller happened to talk (confirms the gap's real cause: it's exactly how long the caller waits
+before speaking, since nothing ever prompts the agent to speak first).
 
-**Still open across all four calls**: dead air before the agent speaks first (2.5-11s so far) —
-caller has to say something before the agent greets. `session.py` never sends an initial
-`response.create`; TRIAGE's instructions say to greet first but nothing triggers it. Not fixed
-yet, Marco's call on timing (before/after continuing to accumulate B5 samples).
+**Still open across all four calls**: the agent never speaks first — `session.py` sends no initial
+`response.create`, so the greeting only happens once the caller talks and VAD detects their turn
+ending. TRIAGE's instructions say to greet first but nothing triggers it. Not fixed yet, Marco's
+call on timing (before/after continuing to accumulate B5 samples).
 
 **B5 running tally: N=15 / ≥100** (4 + 6 + 5). Marco confirmed 2026-09-08: keep dialing across
 multiple sessions rather than changing call length or the N≥100 bar itself.
