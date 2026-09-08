@@ -183,6 +183,14 @@ deliberate immediate callback worked completely normally, so it was most likely 
 phone/carrier, not the app. Marco confirmed 2026-09-08: keep dialing across multiple sessions
 toward N≥100 rather than changing call length or the bar itself.
 
+**`scripts/b5_probe.py` also exists now** — an AOAI-direct automation (real connection, no
+ACS/phone) Marco asked for after N=31 felt slow; reuses `run_call()` unchanged. Found and fixed a
+real bug before any sample existed (synthetic transport gave VAD nothing to detect silence from —
+see the evidence file). Verified working, 1 sample so far (365ms). **Tracked as a separate pool
+from the real-call N above** (only exercises the AOAI leg, not the full ACS round trip) — see
+`docs/phase2/evidence/b5-call-log.md`'s probe section for the full record and next step
+(`--calls ~75`).
+
 ## Next actions (in order)
 
 1. **Redeploy done** (2026-09-08) — `:p3` is live, B5 log lines are in the running container now.

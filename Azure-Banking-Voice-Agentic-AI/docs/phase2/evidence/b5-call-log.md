@@ -66,6 +66,30 @@ Connected and worked completely normally — resolves the Call 1/Call 6 mystery 
 alarming, one data point). One `caller turn ended` discarded as another interrupted/aborted
 response (same barge-in pattern as Call 6).
 
+## AOAI-direct probe (`scripts/b5_probe.py`) — separate pool, do not merge with the calls above
+
+Marco asked (2026-09-08): why isn't N=31 real enough, and can this be automated? Answered: p95
+needs a real tail (same "3 calls isn't a sample size" reasoning `docs/PLAN.md` gives for Phase 0),
+and yes, partially — `b5_probe.py` reuses `run_call()`/`connect_realtime()` completely unchanged,
+feeding synthesized (macOS `say`+`afconvert`) real speech instead of a phone call, one utterance
+per synthetic call. **Deliberately kept separate from the table above**: it only exercises the
+AOAI leg, not the full ACS-media-relay round trip a real caller experiences — mixing pools would
+overstate what's actually been measured.
+
+**Bug found and fixed before any valid sample existed**: the first 4 attempts (3 silent, 1 with
+diagnostic event logging added) produced 0 samples — `speech_started` fired but `speech_stopped`
+never did. Root cause: server-side VAD measures silence *from the audio stream itself*, and the
+original transport simply stopped sending anything after the spoken utterance. A real ACS call
+streams continuously, silence included. Fixed by feeding 1.0s of genuine digital silence after
+each utterance (`_silence_frames()`), verified working via `--debug` — real `session.update` →
+`speech_started` → `speech_stopped` → `response.created` → `response.output_audio.delta` →
+`handoff: triage -> banking` → `tool call: get_balance` → `gate refused`, all through unmodified
+`session.py`.
+
+**Probe sample count: 1 so far** (the `--debug` verification run) — 365ms. Not yet run as a full
+batch; next step is `--calls ~75` (each synthetic call yields ~1 sample, not ~4-6 like a real
+multi-turn call) to close the remaining gap toward N≥100 combined with the real-call pool above.
+
 ## Open findings (not fixed yet)
 
 - **Dead air before the agent speaks first**, every call so far (2.5-11s, varies with how quickly
