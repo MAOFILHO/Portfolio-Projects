@@ -99,10 +99,28 @@ def _chunk_to_frames(pcm_bytes):
     return frames
 
 
+def _silence_frames(seconds):
+    """`seconds` of genuine digital-silence PCM16 frames, same shape as `_chunk_to_frames`.
+
+    First real run (2026-09-08) proved why this is needed, not assumed: `speech_started` fired
+    correctly (the synthesized speech is real, recognized audio) but `speech_stopped` never did,
+    across 3 full calls -- server-side VAD measures silence *from the audio stream itself*, so it
+    needs to keep receiving frames (even silent ones) to notice ~200ms of near-zero amplitude has
+    passed. A real ACS call streams continuously, silence included; simply stopping sends after
+    the spoken utterance (the original bug here) gives the server nothing to measure a pause from
+    at all, so no turn ever ends and no B5 latency anchor ever fires."""
+    bytes_per_frame = int(_SAMPLE_RATE * _FRAME_MS / 1000) * 2
+    n_frames = int(seconds * 1000 / _FRAME_MS)
+    b64_silence = base64.b64encode(b"\x00" * bytes_per_frame).decode("ascii")
+    frame = json.dumps({"kind": "AudioData", "audioData": {"data": b64_silence}})
+    return [frame] * n_frames
+
+
 class _SyntheticTransport:
-    """One synthetic call: streams one utterance's frames at real-time pace, waits long enough
-    for a reply, then disconnects -- mirrors transport/fake.py's FakeTransport contract exactly,
-    just with real audio content and real timing instead of scripted placeholder frames."""
+    """One synthetic call: streams one utterance's frames (speech + a trailing silence tail, see
+    `_silence_frames`) at real-time pace, waits long enough for a reply, then disconnects --
+    mirrors transport/fake.py's FakeTransport contract exactly, just with real audio content and
+    real timing instead of scripted placeholder frames."""
 
     def __init__(self, frames, tail_seconds=6.0):
         self._frames = list(frames)
@@ -145,22 +163,30 @@ class _DebugRealtime:
             yield event
 
 
-async def _run_one(frames):
+async def _run_one(frames, debug):
     async with connect_realtime() as realtime:
-        await run_call(_SyntheticTransport(frames), _DebugRealtime(realtime))
+        if debug:
+            realtime = _DebugRealtime(realtime)
+        await run_call(_SyntheticTransport(frames), realtime)
 
 
-async def _main(calls):
+_SILENCE_TAIL_SECONDS = 1.0  # > silence_duration_ms (200ms, session.py's _AUDIO_CONFIG) with margin
+
+
+async def _main(calls, debug):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     log.info("synthesizing %d utterance(s)...", len(UTTERANCES))
-    frame_sets = [_chunk_to_frames(_synthesize_pcm16(text)) for text in UTTERANCES]
+    silence_tail = _silence_frames(_SILENCE_TAIL_SECONDS)
+    frame_sets = [
+        _chunk_to_frames(_synthesize_pcm16(text)) + silence_tail for text in UTTERANCES
+    ]
 
     completed, failed = 0, 0
     for i in range(calls):
         frames = frame_sets[i % len(frame_sets)]
         log.info("--- synthetic call %d/%d ---", i + 1, calls)
         try:
-            await _run_one(frames)
+            await _run_one(frames, debug)
             completed += 1
         except Exception:
             log.exception("synthetic call %d failed, continuing", i + 1)
@@ -171,8 +197,12 @@ async def _main(calls):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--calls", type=int, default=20, help="number of synthetic calls to run")
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="log every event.type sent/received -- verbose, use with a small --calls",
+    )
     args = parser.parse_args()
     for var in ("AOAI_KEY", "AOAI_ENDPOINT", "AOAI_DEPLOYMENT"):
         if var not in os.environ:
             sys.exit(f"b5_probe: {var} is not set -- see this script's own docstring.")
-    asyncio.run(_main(args.calls))
+    asyncio.run(_main(args.calls, args.debug))
