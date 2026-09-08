@@ -11,9 +11,10 @@ reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 
 Phase 1 closed first — its exit criteria are met and written up in
 `docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
 
-**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **The Phase 2
-image is now deployed and its B3 guard has run live, successfully** — the last blocker on #24 is a
-human dialing in for the B5 turn count (`/wizard` territory, see Next actions).
+**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. Call 1 happened
+2026-09-08 and the deploy/B3/handoff/gate all proved out live — but it also surfaced a real B5
+instrumentation gap (now fixed in code, not yet redeployed) and a couple of open questions. See
+"#24 — Call 1" and Next actions below before more calls.
 
 Built and committed (all local, unpushed):
 - **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
@@ -61,10 +62,10 @@ rehearsal patches the gate open on purpose (proving the call completes is orthog
 policy); CI does not auto-run the successor rehearsal (it's designed to be run deliberately, not
 routinely).
 
-**95 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. **#24 not yet closed**: the deploy is done and B3 verified live (see Phase 0
-"Resources live now" and Next actions), but the provisional B5 figure still needs a human to
-actually dial in for ≥100 real turns.
+**98 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
+`make lint` clean. **#24 not yet closed**: Call 1 happened (findings below), B5 instrumentation
+was found missing and fixed (`42e02c5`), but the *deployed* image doesn't have that fix yet — a
+redeploy is needed before more calls produce usable B5 data. See "#24 — Call 1" below.
 
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
@@ -87,8 +88,16 @@ Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azban
 (min-replicas=1, billing now) running the **Phase 2** image `docker.io/maofilho/azbank-echo-p0:p2`
 as of 2026-09-07 (was Phase 1's `:latest` before this session's deploy, see below); data-plane auth
 to AOAI (the realtime connection itself) is still via the `AOAI_KEY` secret — only the B3 ARM read
-uses the managed identity; two Log Analytics workspaces (`...aiCS` real/linked, `...aixC` orphan,
-left in place).
+uses the managed identity.
+
+**Correction 2026-09-08: there are three Log Analytics workspaces, not two.** `...aiCS`
+(`2a41795f-...`, Phase 0's documented "real/linked" one) and `...aixC` (`e42c142b-...`, documented
+orphan) were the only two on record — but the container app's diagnostic setting
+(`azbank-p0-console-logs`) actually targets a **third, undocumented one**:
+`workspace-rgazurebankingvoiceagenticai1D` (`bf520f2c-e2bc-4488-8965-9317a7922c74`). `...aiCS` has
+been stale since 2026-08-25 without anyone noticing; `...ai1D` is the live one — confirmed by
+querying it and finding real rows from today's calls. Query `...ai1D`, not `...aiCS`, for
+anything current. `...aixC` is still the orphan.
 
 **System-assigned managed identity added to `ca-azbank-echo-p0` 2026-09-07** (this session, Marco
 confirmed the plan first): principal `5e09fe34-8913-4aa2-80ac-618af308a88f`, granted `Reader` —
@@ -156,17 +165,48 @@ Phase 0 (~79–114 demo runs/month, gate passes) but stale as of the 2026-09-01 
 recomputing, not done.** **R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
 
+## #24 — Call 1 (2026-09-08), real findings
+
+First live call against the Phase 2 deploy. Full timeline pulled from Log Analytics (`...ai1D`,
+`az containerapp logs show --follow`/`--tail` is currently unreachable from Marco's network
+entirely — TCP connect to `canadacentral.azurecontainerapps.dev:443` times out, confirmed from
+both this session and Marco's own terminal; not a sandbox issue, cause unknown, Log Analytics is
+the working fallback with its normal few-minute ingestion delay).
+
+- **Confirmed real**: ~11s of silence before the agent spoke (caller had to say "hello" first) —
+  `session.py` never sends an initial `response.create`; the model only speaks once VAD detects
+  the *caller's* turn ending. TRIAGE's instructions say to greet first; nothing triggers it. **Not
+  fixed yet** — needs a decision (add an initial response.create, or accept it).
+- **Confirmed real**: `handoff: triage -> banking` fired correctly on the balance request.
+- **Confirmed real, and notable**: the model attempted `handoff_to_banking` *again* while already
+  on `banking` — refused, because `BANKING.handoff_to` is empty. This is the exact scenario
+  2026-09-07's `/code-review` fix (`handoff_target()` checking the calling agent's own edges) was
+  written for, firing live for the first time.
+- **Confirmed real**: `get_balance`, `list_accounts` (model resolving account names before the
+  transfer attempt), and `transfer` were all refused by the gate, each with a spoken refusal —
+  matches Marco's account of hearing "I can't do that" both times.
+- **Call ended clean**: caller hangup at 82s real duration, no B4 cap hit.
+- **Unexplained, not yet investigated**: a second incoming call ~43s after Call 1 ended got
+  `Microsoft.Communication.AnswerFailed`. Unknown if Marco tried calling back or this was
+  something else — check on the next call attempt.
+- **B5 instrumentation gap found and fixed this session** (`42e02c5`): the logs above have tool
+  calls and handoffs but no timestamp pair to compute turn latency from at all — no line marks
+  when the caller's turn ended or when the agent's audio started. Fixed: two new arrival-only log
+  lines (`caller turn ended` / `agent audio started`, B2-safe), 3 new tests (98 total). **`speech_stopped`'s
+  event name is not yet confirmed live** — Azure's docs describe it for `server_vad` (which this
+  project uses), but this project's own wire-format research never checked it directly. Confirm on
+  the next call: if `"caller turn ended"` never appears in the logs, the event name or shape is wrong.
+
 ## Next actions (in order)
 
-1. **Everything up to the deploy is now done and verified (2026-09-07):** image built (Marco's
-   laptop) and confirmed `linux/amd64`; managed identity + `Reader` RBAC live; the three env vars
-   set; `ca-azbank-echo-p0` deployed on `:p2`; B3's guard ran live and passed, confirmed from actual
-   container logs (see Phase 0 "Resources live now" above for the log lines).
-2. **#24: only the human step is left.** Dial `+17059100383`, talk to the deployed agent, accumulate
-   ≥100 real turns for the provisional B5 latency figure. `docs/PLAN.md`'s Exit paragraph makes this
-   figure load-bearing for the phase's formal close, not optional. This is `/wizard` territory —
-   Marco's hands/voice, not something Claude can do. Watch `az containerapp logs show -n
-   ca-azbank-echo-p0 -g rg-azure-banking-voice-agentic-ai --follow` during the first call in case
-   anything in the new handoff/gate path misbehaves live for the first time.
-3. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
+1. **Redeploy is required before the next call** — `ca-azbank-echo-p0` is still running the image
+   built before `42e02c5`, so today's B5 log lines don't exist in the running container yet. Build
+   `:p3` on Marco's laptop (same process as `:p2`), `az containerapp update --image
+   docker.io/maofilho/azbank-echo-p0:p3` (no env var changes needed this time).
+2. Decide on the ~11s dead-air gap above before or after more calls (Marco's call).
+3. **#24: after redeploy**, more calls toward ≥100 real turns for the provisional B5 figure —
+   `docs/PLAN.md`'s Exit paragraph makes this load-bearing for the phase's formal close. `/wizard`
+   territory — Marco's hands/voice. Pull each call's logs via `az monitor log-analytics query
+   --workspace bf520f2c-e2bc-4488-8965-9317a7922c74` (the live-stream endpoint may still be down).
+4. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
    Phase 0's 79.2 figure).
