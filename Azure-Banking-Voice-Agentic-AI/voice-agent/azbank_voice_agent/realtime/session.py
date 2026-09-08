@@ -125,8 +125,8 @@ async def run_call(transport, realtime):
                     log.info("agent audio started")
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "input_audio_buffer.speech_stopped":
-                # Server VAD's turn-ended signal -- see realtime/fake.py's speech_stopped() for
-                # this event's live-confirmation status.
+                # Server VAD's turn-ended signal -- confirmed live 2026-09-08, see
+                # realtime/fake.py's speech_stopped().
                 log.info("caller turn ended")
             elif event.type == "response.function_call_arguments.done":
                 # `agent` (not just event.name) matters here: handoff_target() checks the edge

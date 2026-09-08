@@ -39,11 +39,9 @@ def function_call(name, arguments_json, call_id="call-1"):
 
 
 def speech_stopped():
-    """Server VAD's turn-ended signal, server -> client. NOT independently confirmed live against
-    this project's own deployment (docs/phase1/research-aoai-realtime-wire-format.md flags
-    input_audio_buffer.* events as unconfirmed specifically for server_vad -- only a semantic_vad
-    community report was checked) -- shape assumed from Azure's documented server_vad behaviour.
-    Confirm event name and shape on the next real call before trusting B5 numbers built on it."""
+    """Server VAD's turn-ended signal, server -> client. **Confirmed live 2026-09-08** (Call 2,
+    PROJECT_STATE.md): the real deployment emits this exact event type and shape, and it produced
+    real B5 turn-latency numbers (297/570/440/280ms) paired against the next audio delta."""
     return SimpleNamespace(type="input_audio_buffer.speech_stopped")
 
 
