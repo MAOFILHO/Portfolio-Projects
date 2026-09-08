@@ -54,6 +54,11 @@ own precondition (below).
 
 9. **Bicep module and Dockerfile written and reviewed; nothing provisioned.** No billable resource
    was created, which is why no `APPROVED: Phase 3` was required.
+   **PARTIAL, recorded honestly (2026-09-08):** the Dockerfile is exercised by nothing yet and the
+   Bicep module is *unvalidated* — no `bicep` CLI is available in this environment, and `infra/`
+   contains only this one module, so #32's "consistent with the existing modules' shape" has
+   nothing to be consistent with. Validating it is a precondition of the provisioning step, which
+   is where it would first matter.
 
 10. **`docs/phase3/` records that B5 was deliberately not re-measured, and why** (below).
 

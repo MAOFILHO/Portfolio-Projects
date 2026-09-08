@@ -6,7 +6,10 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 3 — mock-core-banking. Built 2026-09-08, all seven tickets. Not yet reviewed.**
+**Phase 3 — mock-core-banking. Built and reviewed 2026-09-08, all seven tickets.**
+`/code-review` ran both axes (`d697baf..HEAD`, spec = #25); every actionable finding is fixed
+(`0dec63e`, `HEAD`). **Marco's own sign-off on the exit criteria has not happened** — that is the
+stop condition, and this file does not self-certify it.
 Spec: GitHub issue **#25**. Tickets: **#26-32** (sub-issues of #25). Written exit criteria:
 `docs/phase3/exit-criteria.md`.
 
@@ -23,6 +26,30 @@ clean, B3 static check passes, zero cloud dependency. Built:
 - **#30** one real-network test (spawns the service, real socket) + `make test`/`install` across
   both suites.
 - **#31** these docs. **#32** `infra/modules/mock-core-banking.bicep`, written unapplied.
+
+**`/code-review` findings, all fixed, each with a test verified red against the pre-fix code:**
+1. **The caller was being read the service's internal URL.** An unknown account produced "There's
+   no `http://ca-azbank-core-banking.internal:8001/accounts/bitcoin` account on this profile."
+   Both axes found it independently. The test had asserted `assertIn("bitcoin", error)` — and the
+   URL contains "bitcoin", so the substring check could not tell the right answer from the wrong
+   one. Fixed at the source: the service now names the unknown account in its 404 body (it is the
+   only thing that knows *which* of a transfer's two accounts was bad); assertions are now exact
+   sentences.
+2. **A half-open probe on a read issued two requests, not one** — `READ_RETRIES` applied to the
+   probe, against #27's own acceptance criterion, doubling load on a backend already believed sick.
+3. **A malformed request spoke the service's internal wording** ("core banking rejected the request
+   with 422"). Now a composed sentence; the raw text is logged, not spoken.
+4. **The tool schema still named the accounts in prose** ("e.g. chequing or savings") after the
+   enum was dropped — the same stale answer back in front of the model in another form.
+5. The fake raised `ValueError` where the real client raises `CoreBankingRequestError` for the same
+   scenario — a divergence that made tests passing against the fake say something untrue about
+   production (#25's own user story 10). The fake now fails the way the service does.
+
+**Known-partial, not fixed:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no
+`bicep` CLI is available here, and `infra/` contains only this one module (no `main.bicep`), so
+"consistent with the existing modules' shape" has nothing to be consistent with yet. Also
+unenforced: #26's "runs without the voice agent installed" is true by construction (no cross-
+imports) but `make test` uses one shared venv, so nothing proves it.
 
 **Two deviations from the tickets as written, both deliberate:**
 1. `tests/test_gate.py` could not pass *literally* unchanged (#28's criterion 7) — the dispatcher

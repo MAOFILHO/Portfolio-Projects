@@ -285,6 +285,29 @@ class CircuitBreaker(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(cb.CoreBankingUnavailable):
             await client.transfer("chequing", "savings", 1.00)
 
+    async def test_the_half_open_probe_on_a_read_is_exactly_one_request(self):
+        # #27 AC6 says "one half-open probe is issued". Reads normally get a retry, so without
+        # clamping, the probe would be two requests against a backend already believed sick --
+        # and "one probe" would be a claim the code did not keep (/code-review, 2026-09-08).
+        recorder = Recorder(
+            *[httpx.ConnectError("refused")] * cb.BREAKER_FAILURE_THRESHOLD,
+            httpx.ConnectError("refused"),  # the probe -- and the only response left
+        )
+        client = _client(recorder, self.clock)
+        await self._fail_until_open(client, recorder)
+        requests_before_probe = recorder.count
+
+        self.clock.advance(cb.BREAKER_OPEN_SECONDS + 1)
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await client.get_balance("chequing")
+        self.assertEqual(recorder.count - requests_before_probe, 1)
+
+    async def test_a_read_still_retries_once_the_breaker_is_closed_again(self):
+        # The clamp above must apply to the probe only -- an ordinary read keeps its retry.
+        recorder = Recorder(httpx.ReadTimeout("slow"), _CHEQUING)
+        self.assertEqual(await _client(recorder, self.clock).get_balance("chequing"), 2400.00)
+        self.assertEqual(recorder.count, 2)
+
     async def test_the_open_window_is_respected(self):
         recorder = Recorder(*[httpx.ConnectError("refused")] * cb.BREAKER_FAILURE_THRESHOLD)
         client = _client(recorder, self.clock)

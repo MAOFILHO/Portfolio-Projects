@@ -21,7 +21,11 @@ from what was, in effect, the system of record.
 import json
 import logging
 
-from ..core_banking import CoreBankingUnavailable, UnknownAccountError
+from ..core_banking import (
+    CoreBankingRequestError,
+    CoreBankingUnavailable,
+    UnknownAccountError,
+)
 from . import gate
 
 log = logging.getLogger("dispatch")
@@ -31,13 +35,25 @@ log = logging.getLogger("dispatch")
 #: with a remembered, cached, or defaulted balance (CLAUDE.md's silent-fallback exclusion).
 UNAVAILABLE = "I can't reach the banking system right now, so I can't check that."
 
+#: What the caller hears when the request itself was malformed -- a bad amount, a field the service
+#: rejected. Composed here like every other caller-facing sentence: the service's own wording for
+#: this ("core banking rejected the request with 422") is diagnostic text for a log, and it was
+#: reaching the caller verbatim before /code-review caught it (2026-09-08).
+MALFORMED = "I can't do that with those details -- could you say that again?"
+
 # No account enum. Phase 1 built one from the in-memory dict at import time, which made the *tool
 # schema* the authority on which accounts exist -- and meant the model refused an unknown account
 # from its own reasoning rather than from anything authoritative (Phase 1's exit row 6 passed
 # exactly that way, which is a weaker guarantee than it looked). mock-core-banking is the system of
 # record now; `list_accounts` is how you find out what it holds, and asking for something that
 # isn't there is answered by the service, not guessed at from a schema.
-_ACCOUNT = {"type": "string", "description": "The account name, e.g. chequing or savings."}
+# The description names no accounts either. Dropping the enum but leaving "e.g. chequing or
+# savings" in the description would put the same stale answer back in front of the model in prose
+# form (/code-review, 2026-09-08) -- list_accounts is how the model finds out what exists.
+_ACCOUNT = {
+    "type": "string",
+    "description": "The account name. Call list_accounts first if you don't already know it.",
+}
 
 TOOLS = [
     {
@@ -140,6 +156,10 @@ async def dispatch_tool_call(
             f"There's no {account} account on this profile." if account
             else "I can't find that account on this profile."
         )})
+    except CoreBankingRequestError as e:
+        # The exception's own message is diagnostic and internal -- log it, never speak it.
+        log.warning("core banking rejected tool %r as malformed: %s", name, e)
+        return json.dumps({"error": MALFORMED})
     except CoreBankingUnavailable:
         # Deliberately no figure of any kind in this branch. Never a cached balance, never a
         # default, never a "last known" number.

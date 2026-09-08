@@ -79,7 +79,9 @@ class CoreBankingRequestError(ValueError):
     """The service rejected the request as malformed -- our bug, not the caller's problem.
 
     Subclasses ValueError so the dispatcher's existing error handling turns it into a spoken
-    error rather than an unhandled exception mid-call.
+    error rather than an unhandled exception mid-call. **Its message is diagnostic, for logs --
+    the dispatcher composes what the caller actually hears** (/code-review, 2026-09-08: the raw
+    string "core banking rejected the request with 422" was reaching the caller).
     """
 
 
@@ -154,7 +156,12 @@ class _CircuitBreaker:
         self._probe_in_flight = False
 
     def before_request(self):
-        """Raises CoreBankingUnavailable instead of letting a doomed request through."""
+        """Raises CoreBankingUnavailable instead of letting a doomed request through.
+
+        Returns True when this call is the half-open probe, so the caller can hold it to a single
+        attempt: a probe that quietly retried would put two requests on a backend we already
+        believe is sick, and "one half-open probe" would stop being true.
+        """
         if self._state == _OPEN:
             if self._clock() - self._opened_at < BREAKER_OPEN_SECONDS:
                 raise CoreBankingUnavailable(
@@ -164,8 +171,10 @@ class _CircuitBreaker:
             self._state = _HALF_OPEN
             self._probe_in_flight = True
             log.info("core banking circuit half-open: probing")
-        elif self._state == _HALF_OPEN and self._probe_in_flight:
+            return True
+        if self._state == _HALF_OPEN and self._probe_in_flight:
             raise CoreBankingUnavailable("core banking circuit is probing -- not piling on")
+        return False
 
     def record_success(self):
         if self._state != _CLOSED:
@@ -252,7 +261,11 @@ class HttpCoreBankingClient:
         return await self._send("POST", path, json=body, attempts=1)
 
     async def _send(self, method, path, json, attempts):
-        self._breaker.before_request()
+        if self._breaker.before_request():
+            # The half-open probe is one request, never one-plus-a-retry (#27 AC6). Retrying a
+            # probe would double the load on a backend already believed to be sick, and would make
+            # "one probe" a claim the code did not actually keep.
+            attempts = 1
         last_error = None
         for attempt in range(attempts):
             try:

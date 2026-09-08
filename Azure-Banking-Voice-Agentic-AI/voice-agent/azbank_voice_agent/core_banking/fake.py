@@ -13,7 +13,7 @@ call* seam, where what matters is what the caller ends up hearing. The client's 
 breaker behaviour is not tested through here; that is tests/test_core_banking_client.py's job,
 against httpx.MockTransport.
 """
-from .client import TransferOutcome, UnknownAccountError
+from .client import CoreBankingRequestError, TransferOutcome, UnknownAccountError
 
 #: Same accounts and balances as the service seeds, in dollars (the units this side of the seam
 #: speaks). Cents are the service's business; see client.py's module docstring.
@@ -49,7 +49,11 @@ class FakeCoreBankingClient:
             if account not in self.accounts:
                 raise UnknownAccountError(account)
         if amount <= 0:
-            raise ValueError(f"transfer amount must be positive, got {amount!r}")
+            # CoreBankingRequestError, not ValueError: the real service answers this with a 422,
+            # which the real client turns into exactly this type. A fake that failed differently
+            # would make tests passing against it say something untrue about production
+            # (/code-review, 2026-09-08 -- issue #25's own user story 10).
+            raise CoreBankingRequestError(f"transfer amount must be positive, got {amount!r}")
         available = self.accounts[from_account]
         if amount > available:
             # Declined, not raised: a normal outcome of a working system (CONTEXT.md).

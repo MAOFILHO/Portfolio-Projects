@@ -57,6 +57,17 @@ class DispatchToolCall(DispatchCase):
         )
         self.assertIn("error", out)
 
+    async def test_a_malformed_request_never_speaks_the_services_own_wording(self):
+        # The service answers a bad amount with a 422 and the client's message for it is
+        # "core banking rejected the request with 422" -- diagnostic text for a log, which was
+        # reaching the caller verbatim (/code-review, 2026-09-08).
+        out = await self.dispatch(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": -500.0}'
+        )
+        self.assertEqual(out, {"error": tools.MALFORMED})
+        for internal in ("422", "core banking", "rejected"):
+            self.assertNotIn(internal, out["error"])
+
 
 class TheThreeOutcomesStayDistinct(DispatchCase):
     """CONTEXT.md's three outcomes, at the dispatcher. Each gets its own spoken answer -- the whole
@@ -141,6 +152,15 @@ class ToolsMatchDispatch(unittest.TestCase):
             for parameter in tool["parameters"]["properties"].values():
                 with self.subTest(tool=tool["name"]):
                     self.assertNotIn("enum", parameter)
+
+    def test_no_tool_schema_names_an_account_in_prose_either(self):
+        # Dropping the enum but leaving "e.g. chequing or savings" in the description puts the same
+        # stale answer back in front of the model in prose form (/code-review, 2026-09-08). The
+        # seeded account names are the ones that would drift, so they are the ones asserted on.
+        schema = json.dumps(tools.TOOLS).lower()
+        for account in ("chequing", "savings"):
+            with self.subTest(account=account):
+                self.assertNotIn(account, schema)
 
 
 if __name__ == "__main__":
