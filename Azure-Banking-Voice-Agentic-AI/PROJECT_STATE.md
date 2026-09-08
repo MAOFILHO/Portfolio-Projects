@@ -192,14 +192,16 @@ below) and a second incoming call ~43s later got `Microsoft.Communication.Answer
 numbers**: 297ms, 570ms, 440ms, 280ms (all sub-second). `speech_stopped` confirmed live — marked
 so in code (`e12a86f`).
 
-**Still open across both calls**: ~6-11s of dead air before the agent speaks first — caller has to
-say something before the agent greets. `session.py` never sends an initial `response.create`;
-TRIAGE's instructions say to greet first but nothing triggers it. Not fixed yet, Marco's call on
-timing (before/after continuing to accumulate B5 samples).
+**Call 3 (2026-09-08, on `:p3`):** same shape again — handoff fired, `list_accounts`/`get_balance`
+refused, clean hangup, no `AnswerFailed`. Richer call, 6 samples: 495, 290, 247, 459, 616, 276ms.
 
-**B5 running tally: N=4 / ≥100.** ~4 usable samples per call (once per real thing the caller said,
-not per tool round-trip) — Marco confirmed 2026-09-08: keep dialing across multiple sessions
-rather than changing call length or the N≥100 bar itself. Expect ~20-25 calls total.
+**Still open across all three calls**: ~5.6-11s of dead air before the agent speaks first — caller
+has to say something before the agent greets. `session.py` never sends an initial
+`response.create`; TRIAGE's instructions say to greet first but nothing triggers it. Not fixed
+yet, Marco's call on timing (before/after continuing to accumulate B5 samples).
+
+**B5 running tally: N=10 / ≥100** (4 + 6). Marco confirmed 2026-09-08: keep dialing across
+multiple sessions rather than changing call length or the N≥100 bar itself.
 
 ## Next actions (in order)
 
