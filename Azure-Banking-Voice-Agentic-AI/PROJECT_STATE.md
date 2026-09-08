@@ -74,9 +74,13 @@ call log" below and `docs/phase2/evidence/b5-call-log.md` for full detail.
 **Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
 per-call caps and B2's tone handling, both still covered by their own tests.
 
-**Step 5 operating-mode verdict: IDLE.** Container settles back to its ~189 KB in/~118 KB out per-
-15min baseline within one bucket after a call, across both real calls. R-08's demo-runs/month figure
-(79.2, from Phase 0) is stale against this measurement and needs recomputing — not done yet.
+**Operating-mode verdict: IDLE, reconfirmed 2026-09-08** against R-04's original method
+(`az monitor metrics` `Replicas`/`RxBytes`/`TxBytes`) over the window covering all 8 real B5 calls
+plus the `b5_probe.py` batch — settles to idle within one 15-min bucket every time, sustained 2h
+since the last activity, same ~189KB/118KB baseline as Phase 0/1. Full detail:
+`docs/phase2/evidence/b5-call-log.md`'s "R-04 reconfirmation" section. R-08's demo-runs/month
+figure (79.2, from Phase 0) is still stale and needs recomputing — not done yet, separately tracked
+below.
 
 ## Phase 0 — closed
 

@@ -118,6 +118,32 @@ real turns through a live realtime connection, turn count stated" — is now met
 own tail is legitimate signal (see the transfer-utterance finding above), not a measurement
 artifact to discount.
 
+## R-04 reconfirmation — operating mode after real calls (2026-09-08)
+
+Issue #24's own acceptance criterion: "Operating mode is measured after the calls and compared
+against the standing idle verdict." Caught missing by `/code-review`'s Spec axis (this file
+previously just carried forward the stale 2026-09-01 line) — measured properly now, same method
+R-04 originally used (`docs/phase0/findings.md` "R-04 — Container Apps compute cost"):
+`az monitor metrics list --metric Replicas --aggregation Maximum --interval PT15M` and
+`--metric RxBytes,TxBytes --aggregation Total --interval PT15M`, same >1,000 B/s active threshold
+(PLAN.md's own: 24kHz PCM16 = 48,000 B/s during a real call).
+
+**Window**: 2026-09-08T15:30Z-21:00Z (22 fifteen-minute buckets, covering all 8 real calls and the
+`b5_probe.py` batch). **Replicas**: 22/22 buckets at `Replicas=1`, zero gaps — `min-replicas=1`
+held throughout, no scale-to-zero. **RxBytes/TxBytes**: 18 idle buckets (270 min), 4 active buckets
+(60 min) exactly matching the two real activity windows (the phone calls, then the probe batch) —
+idle baseline **~189KB in / ~118KB out per 15min**, matching R-04's original figure exactly. Every
+active window settled back to idle **within one bucket** after activity ended, both times — no
+lingering warmth from in-call tool-call round-trips, directly answering `PLAN.md`'s own stated
+concern ("whether tool-call latency or lingering session state keeps the replica warm past ACS's
+own between-calls closure"). Sustained idle for the 2 hours since the last activity through the
+end of the measurement window.
+
+**Verdict: IDLE, reconfirmed.** Matches R-04's standing verdict under Phase 2's real conversational
++ tool-call workload — the $25/mo ceiling's cost basis holds unchanged. R-08's demo-runs/month
+figure is still separately flagged as stale in `PROJECT_STATE.md`'s Next actions (not this
+criterion's job to recompute, just to confirm the IDLE verdict it depends on still holds).
+
 ## Open findings (not fixed yet)
 
 - **Dead air before the agent speaks first**, every call so far (2.5-11s, varies with how quickly
