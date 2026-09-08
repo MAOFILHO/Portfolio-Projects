@@ -122,9 +122,32 @@ class _SyntheticTransport:
         pass  # agent audio discarded -- run_call() already logs "agent audio started" for B5
 
 
+class _DebugRealtime:
+    """Wraps a real realtime connection to log every event.type as it arrives -- diagnostic only,
+    isolated to this script (never touches session.py, the file this project treats with the most
+    care). Added 2026-09-08: the first real run produced 0 caller-turn/audio-started lines across
+    3 calls, meaning either no events arrived at all or something upstream of run_call()'s own
+    handling is the gap -- this answers which, without guessing."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    async def send(self, message):
+        log.info("-> sent %s", message.get("type"))
+        await self._inner.send(message)
+
+    def __aiter__(self):
+        return self._iter()
+
+    async def _iter(self):
+        async for event in self._inner:
+            log.info("<- received %s", getattr(event, "type", event))
+            yield event
+
+
 async def _run_one(frames):
     async with connect_realtime() as realtime:
-        await run_call(_SyntheticTransport(frames), realtime)
+        await run_call(_SyntheticTransport(frames), _DebugRealtime(realtime))
 
 
 async def _main(calls):
