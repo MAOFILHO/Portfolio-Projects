@@ -171,37 +171,35 @@ Phase 0 (~79–114 demo runs/month, gate passes) but stale as of the 2026-09-01 
 recomputing, not done.** **R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
 
-## #24 — Call 1 (2026-09-08), real findings
+## #24 — call log
 
-First live call against the Phase 2 deploy. Full timeline pulled from Log Analytics (`...ai1D`,
-`az containerapp logs show --follow`/`--tail` is currently unreachable from Marco's network
-entirely — TCP connect to `canadacentral.azurecontainerapps.dev:443` times out, confirmed from
-both this session and Marco's own terminal; not a sandbox issue, cause unknown, Log Analytics is
-the working fallback with its normal few-minute ingestion delay).
+Both calls' timelines pulled from Log Analytics (`...ai1D`) — `az containerapp logs show
+--follow`/`--tail` is unreachable from Marco's network entirely (TCP connect to
+`canadacentral.azurecontainerapps.dev:443` times out, confirmed from both this session and
+Marco's own terminal; cause unknown, not a sandbox issue). Log Analytics is the working fallback,
+with its normal few-minute ingestion delay.
 
-- **Confirmed real**: ~11s of silence before the agent spoke (caller had to say "hello" first) —
-  `session.py` never sends an initial `response.create`; the model only speaks once VAD detects
-  the *caller's* turn ending. TRIAGE's instructions say to greet first; nothing triggers it. **Not
-  fixed yet** — needs a decision (add an initial response.create, or accept it).
-- **Confirmed real**: `handoff: triage -> banking` fired correctly on the balance request.
-- **Confirmed real, and notable**: the model attempted `handoff_to_banking` *again* while already
-  on `banking` — refused, because `BANKING.handoff_to` is empty. This is the exact scenario
-  2026-09-07's `/code-review` fix (`handoff_target()` checking the calling agent's own edges) was
-  written for, firing live for the first time.
-- **Confirmed real**: `get_balance`, `list_accounts` (model resolving account names before the
-  transfer attempt), and `transfer` were all refused by the gate, each with a spoken refusal —
-  matches Marco's account of hearing "I can't do that" both times.
-- **Call ended clean**: caller hangup at 82s real duration, no B4 cap hit.
-- **Unexplained, not yet investigated**: a second incoming call ~43s after Call 1 ended got
-  `Microsoft.Communication.AnswerFailed`. Unknown if Marco tried calling back or this was
-  something else — check on the next call attempt.
-- **B5 instrumentation gap found and fixed this session** (`42e02c5`): the logs above have tool
-  calls and handoffs but no timestamp pair to compute turn latency from at all — no line marks
-  when the caller's turn ended or when the agent's audio started. Fixed: two new arrival-only log
-  lines (`caller turn ended` / `agent audio started`, B2-safe), 3 new tests (98 total). **`speech_stopped`'s
-  event name is not yet confirmed live** — Azure's docs describe it for `server_vad` (which this
-  project uses), but this project's own wire-format research never checked it directly. Confirm on
-  the next call: if `"caller turn ended"` never appears in the logs, the event name or shape is wrong.
+**Call 1 (2026-09-08, on `:p2`, before B5 logging existed):** `handoff: triage -> banking` fired
+correctly; the model attempted `handoff_to_banking` *again* while already on `banking` and was
+refused (`BANKING.handoff_to` is empty — this is 2026-09-07's `/code-review` fix firing live for
+the first time); `get_balance`, `list_accounts`, `transfer` all refused with a spoken reply; clean
+hangup at 82s, no B4 cap hit. Found: no B5 timestamp pair existed at all (fixed, `42e02c5`, see
+below) and a second incoming call ~43s later got `Microsoft.Communication.AnswerFailed`
+(unexplained, didn't recur on Call 2).
+
+**Call 2 (2026-09-08, on `:p3`, B5 logging live):** same shape as Call 1 — handoff fired,
+`get_balance`/`list_accounts` refused, clean hangup, no `AnswerFailed` this time. **First real B5
+numbers**: 297ms, 570ms, 440ms, 280ms (all sub-second). `speech_stopped` confirmed live — marked
+so in code (`e12a86f`).
+
+**Still open across both calls**: ~6-11s of dead air before the agent speaks first — caller has to
+say something before the agent greets. `session.py` never sends an initial `response.create`;
+TRIAGE's instructions say to greet first but nothing triggers it. Not fixed yet, Marco's call on
+timing (before/after continuing to accumulate B5 samples).
+
+**B5 running tally: N=4 / ≥100.** ~4 usable samples per call (once per real thing the caller said,
+not per tool round-trip) — Marco confirmed 2026-09-08: keep dialing across multiple sessions
+rather than changing call length or the N≥100 bar itself. Expect ~20-25 calls total.
 
 ## Next actions (in order)
 
