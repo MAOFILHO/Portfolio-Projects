@@ -22,6 +22,7 @@ from azbank_voice_agent.realtime.fake import (
     error_event,
     function_call,
     response_done,
+    speech_stopped,
     transcript_delta,
 )
 from azbank_voice_agent.realtime.session import run_call
@@ -303,6 +304,66 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         call_id, output = realtime.tool_outputs[1]
         self.assertEqual(call_id, "call-handoff-2")
         self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+
+
+class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
+    """B5 (CLAUDE.md's constraints table) needs a real round-trip to measure -- Call 1's real
+    logs (2026-09-08) had tool-call and handoff events but no timestamp pair to compute turn
+    latency from at all. Arrival only (B2): these lines carry no audio, no transcript, nothing
+    but that the event happened."""
+
+    def setUp(self):
+        accounts.ACCOUNTS.clear()
+        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+
+    def test_a_plain_turn_logs_caller_ended_then_agent_started(self):
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[speech_stopped(), audio_delta("hi there"), response_done()],
+            respond_after_appends=1,
+        )
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime))
+        ended_idx = next(i for i, line in enumerate(cm.output) if "caller turn ended" in line)
+        started_idx = next(i for i, line in enumerate(cm.output) if "agent audio started" in line)
+        self.assertLess(ended_idx, started_idx)
+
+    def test_only_the_first_audio_delta_of_a_response_is_logged(self):
+        # Real audio deltas arrive many per response (Call 1's real logs: 8-30+ per turn) -- one
+        # log line per response, not per chunk, or B5 latency data would be swamped by noise.
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                speech_stopped(),
+                audio_delta("a"), audio_delta("b"), audio_delta("c"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime))
+        self.assertEqual(sum(1 for line in cm.output if "agent audio started" in line), 1)
+
+    def test_a_tool_round_trip_still_pairs_with_the_original_caller_turn(self):
+        # The function-call-only response has no audio -- response.done still resets the flag,
+        # but no new "caller turn ended" happens in between, so the eventual audio after the
+        # tool round-trip still measures against the real turn boundary, not a false-short one
+        # starting from the tool response's own (nonexistent) speech_stopped.
+        transport = FakeTransport(frames=[audio_frame("balance-please")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                speech_stopped(),
+                function_call("get_balance", '{"account": "chequing"}'),
+                response_done(),
+                audio_delta("refusal"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime))
+        self.assertEqual(sum(1 for line in cm.output if "caller turn ended" in line), 1)
+        self.assertEqual(sum(1 for line in cm.output if "agent audio started" in line), 1)
 
 
 if __name__ == "__main__":

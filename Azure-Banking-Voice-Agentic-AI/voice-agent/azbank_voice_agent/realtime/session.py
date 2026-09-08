@@ -110,9 +110,24 @@ async def run_call(transport, realtime):
 
     async def model_to_transport():
         nonlocal turn_count, agent
+        # B5 latency anchors (arrival only, no audio/content -- B2): "caller turn ended" pairs
+        # with the *next* "agent audio started" to give a real round-trip turn latency, tool
+        # round-trips included -- a tool-call-only response has no audio, so response.done resets
+        # this flag below without a fresh "caller turn ended" in between, and the eventual audio
+        # after the round-trip still measures against the real turn boundary. Added 2026-09-08:
+        # Call 1's real logs had tool-call and handoff events but no timestamp pair to compute
+        # turn latency from at all.
+        audio_started = False
         async for event in realtime:
             if event.type == "response.output_audio.delta":
+                if not audio_started:
+                    audio_started = True
+                    log.info("agent audio started")
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
+            elif event.type == "input_audio_buffer.speech_stopped":
+                # Server VAD's turn-ended signal -- see realtime/fake.py's speech_stopped() for
+                # this event's live-confirmation status.
+                log.info("caller turn ended")
             elif event.type == "response.function_call_arguments.done":
                 # `agent` (not just event.name) matters here: handoff_target() checks the edge
                 # against the *calling* agent's own declared handoff_to, so a target that exists
@@ -167,6 +182,7 @@ async def run_call(transport, realtime):
                 log.info("agent transcript delta received (%d chars)", len(event.delta))
             elif event.type == "response.done":
                 # One full model response cycle = one turn (B4).
+                audio_started = False  # B5: next audio delta is a new response cycle's first.
                 turn_count += 1
                 if turn_count >= caps.MAX_CALL_TURNS:
                     log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", caps.MAX_CALL_TURNS)
