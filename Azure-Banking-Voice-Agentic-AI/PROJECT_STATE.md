@@ -6,9 +6,32 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 3 — mock-core-banking. Opened 2026-09-08, design settled, nothing built yet.**
-Spec: GitHub issue **#25**. Tickets: **#26-32** (sub-issues of #25), all `ready-for-agent`.
-Written exit criteria: `docs/phase3/exit-criteria.md`.
+**Phase 3 — mock-core-banking. Built 2026-09-08, all seven tickets. Not yet reviewed.**
+Spec: GitHub issue **#25**. Tickets: **#26-32** (sub-issues of #25). Written exit criteria:
+`docs/phase3/exit-criteria.md`.
+
+**152 tests green** (129 voice-agent incl. 3 skipped by design, 23 mock-core-banking), `make lint`
+clean, B3 static check passes, zero cloud dependency. Built:
+- **#26** `mock-core-banking/` — FastAPI + SQLite, own package/pyproject/Dockerfile/tests, integer
+  cents, seeded-if-empty, REST-resource routes with the 404/200-declined/422 status mapping.
+- **#27** `core_banking/client.py` — the protocol, the async httpx client, 1.0s timeout, one retry
+  on reads only, and a per-process breaker (5 failures → 30s → half-open probe) for the whole
+  service. Failure paths tested via `httpx.MockTransport`; the breaker's clock is injected.
+- **#28** the seam — `FakeCoreBankingClient`, `accounts.py` **deleted**, the account enum dropped
+  from the tool schema, `dispatch_tool_call` async and awaited by the relay.
+- **#29** boot guard refuses to start without `CORE_BANKING_URL`.
+- **#30** one real-network test (spawns the service, real socket) + `make test`/`install` across
+  both suites.
+- **#31** these docs. **#32** `infra/modules/mock-core-banking.bicep`, written unapplied.
+
+**Two deviations from the tickets as written, both deliberate:**
+1. `tests/test_gate.py` could not pass *literally* unchanged (#28's criterion 7) — the dispatcher
+   is a coroutine now, so its in-path class had to become async. **What it asserts is unchanged,
+   and `dispatch/gate.py` itself is byte-identical**, which is the half that was actually load-
+   bearing. The policy class (`GateIsAPureDenyAllFunction`) is untouched.
+2. The client is built once in `app.lifespan()` and read from a module-level accessor, **not
+   constructed per call** — a first pass did the latter, which would have given every call its own
+   circuit breaker that could never trip. Q13 settled per-process; this is that decision, enforced.
 
 Scope: `mock-core-banking` becomes its own deployable (FastAPI + SQLite, own package/Dockerfile/
 tests), reached through one new seam -- a `CoreBankingClient` protocol with a real async httpx
@@ -149,18 +172,15 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Build Phase 3**, tickets in order: #26 (service) → #27 (client) → #28 (the seam change) →
-   #29 (boot guard) → #30 (real-network test + Makefile) → #31 (docs) → #32 (Bicep, unapplied).
-   #28 is the one that touches the relay and dispatcher together — **never auto-accept that diff**
-   (CLAUDE.md), even though it deliberately leaves `gate.py`'s policy alone.
-2. `/code-review` before Phase 3's exit gate (Marco's call to invoke), then check
-   `docs/phase3/exit-criteria.md` actually holds.
-3. **Only after 1–2**: recompute R-08 against a two-Container-App fixed cost, and if it still clears
-   the gate, `APPROVED: Phase 3` for the provisioning step itself. Provisioning is not part of
-   Phase 3's own scope.
-4. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
+1. **`/code-review` Phase 3** (Marco's call to invoke), then check `docs/phase3/exit-criteria.md`
+   actually holds. The diff to look at hardest is #28's — it touches the relay and the dispatcher
+   together, and CLAUDE.md's never-auto-accept rule covers that directory even though `gate.py`'s
+   own policy is deliberately untouched.
+2. **Only after 1**: recompute R-08 against a two-Container-App fixed cost. If it still clears the
+   gate, `APPROVED: Phase 3` for the **provisioning step itself** — which is not part of Phase 3's
+   scope and has its own diff (`infra/modules/mock-core-banking.bicep`) to review first.
+3. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
 
-**Uncommitted as of 2026-09-08:** `CONTEXT.md` (new, the project glossary) and
-`docs/phase3/exit-criteria.md` (new), plus this file's Phase 3 rewrite. The root `CONTEXT-MAP.md`
-that `docs/agents/domain.md` calls for is **not** written — it sits outside `PROJECT_ROOT` and needs
-Marco's approval by absolute path, same as the CI workflow did.
+**Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls
+for. It sits outside `PROJECT_ROOT` and needs approval by absolute path, same as the CI workflow
+did. `CONTEXT.md` (this project's own glossary) is written and committed.

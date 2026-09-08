@@ -2,7 +2,8 @@
 
 This is the test docs/PLAN.md's Phase 2 exit criterion is written against: "full app runs
 end-to-end between two fakes in CI with zero Azure dependency". Nothing here patches a module
-attribute; `run_call` is handed both collaborators, which is the whole point of issue #18.
+attribute; `run_call` is handed all three collaborators, which is the whole point of issue #18 (and of
+issue #28, which added the third).
 
 Determinism note: the fake model holds its scripted events until the caller's audio has actually
 been forwarded (`respond_after_appends`), so the two relay tasks can't race. That also mirrors the
@@ -14,7 +15,7 @@ import socket
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent import accounts
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -56,13 +57,14 @@ def _balance_call():
 
 class WholeCallAgainstBothFakes(unittest.TestCase):
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # The third injected collaborator (issue #28). Same shape as the other two fakes: a real
+        # module, never a network call, handed to run_call rather than patched in.
+        self.core_banking = FakeCoreBankingClient()
 
     def test_a_complete_call_runs_with_no_azure_and_no_patching(self):
         transport, realtime = _balance_call()
 
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
 
         # The model heard the caller.
         self.assertEqual(realtime.appended_audio, ["caller-said-1", "caller-said-2"])
@@ -87,7 +89,7 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         # Issue #20: tool scope is per-agent now, not one static list every call opens with. A
         # call starts on TRIAGE, which has no banking tools of its own -- only a way to hand off.
         transport, realtime = _balance_call()
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
         declared = [tool["name"] for tool in realtime.session_config["tools"]]
         self.assertEqual(declared, ["handoff_to_banking"])
 
@@ -99,7 +101,7 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         transport, realtime = _balance_call()
 
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
 
         self.assertTrue(any("tool call: get_balance" in line for line in cm.output))
         self.assertFalse(any("chequing" in line for line in cm.output))
@@ -118,7 +120,7 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         )
 
         with self.assertLogs("bridge", level="ERROR") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
 
         self.assertTrue(any("error event" in line for line in cm.output))
         self.assertFalse(any("1234-5678-90" in line for line in cm.output))
@@ -130,14 +132,15 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         transport, realtime = _balance_call()
         with patch.object(socket.socket, "connect", side_effect=AssertionError("network call")), \
              patch.object(socket.socket, "connect_ex", side_effect=AssertionError("network call")):
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(transport.sent_audio_payloads, ["agent-greeting", "agent-says-balance"])
 
 
 class WholeCallHandlesNonAudioFrames(unittest.TestCase):
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # The third injected collaborator (issue #28). Same shape as the other two fakes: a real
+        # module, never a network call, handed to run_call rather than patched in.
+        self.core_banking = FakeCoreBankingClient()
 
     def test_dtmf_tone_never_reaches_the_model_and_never_reaches_a_log_line(self):
         # B2 (CLAUDE.md): the PIN never appears in any transcript, log line, or span attribute.
@@ -146,7 +149,7 @@ class WholeCallHandlesNonAudioFrames(unittest.TestCase):
         realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
 
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
 
         self.assertEqual(realtime.appended_audio, ["real-audio"])  # the tone was not forwarded
         self.assertTrue(any("DTMF" in line for line in cm.output))  # arrival still logged
@@ -155,7 +158,7 @@ class WholeCallHandlesNonAudioFrames(unittest.TestCase):
     def test_an_unrecognised_frame_kind_is_ignored_not_crashed_on(self):
         transport = FakeTransport(frames=[unknown_frame(), audio_frame("real-audio")], hang=True)
         realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(realtime.appended_audio, ["real-audio"])
 
 
@@ -164,8 +167,9 @@ class WholeCallWithTheGateClosed(unittest.TestCase):
     than left in silence."""
 
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # The third injected collaborator (issue #28). Same shape as the other two fakes: a real
+        # module, never a network call, handed to run_call rather than patched in.
+        self.core_banking = FakeCoreBankingClient()
 
     def _transfer_call(self):
         transport = FakeTransport(frames=[audio_frame("move-my-money")], hang=True)
@@ -185,13 +189,13 @@ class WholeCallWithTheGateClosed(unittest.TestCase):
         transport, realtime = self._transfer_call()
 
         with patch.object(gate, "is_allowed", return_value=False):
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
 
         _, output = realtime.tool_outputs[0]
         self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
         # The money did not move.
-        self.assertEqual(accounts.ACCOUNTS["chequing"], 2400.0)
-        self.assertEqual(accounts.ACCOUNTS["savings"], 500.0)
+        self.assertEqual(self.core_banking.accounts["chequing"], 2400.0)
+        self.assertEqual(self.core_banking.accounts["savings"], 500.0)
         # And the model was asked for a new response, so the refusal is spoken, not silent.
         self.assertIn("response.create", realtime.sent_types)
 
@@ -203,7 +207,7 @@ class WholeCallWithTheGateClosed(unittest.TestCase):
             events=[function_call("drain_account", "{}"), response_done()],
             respond_after_appends=1,
         )
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
         _, output = realtime.tool_outputs[0]
         self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
 
@@ -214,8 +218,9 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
     second session ever being opened."""
 
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # The third injected collaborator (issue #28). Same shape as the other two fakes: a real
+        # module, never a network call, handed to run_call rather than patched in.
+        self.core_banking = FakeCoreBankingClient()
 
     def _handoff_then_balance_call(self):
         transport = FakeTransport(frames=[audio_frame("i-need-my-balance")], hang=True)
@@ -231,7 +236,7 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
 
     def test_the_call_opens_on_triage_and_hands_off_to_banking_on_one_session(self):
         transport, realtime = self._handoff_then_balance_call()
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
 
         # Exactly one connection was ever used -- the same fake `realtime` received every
         # message, including both configurations. A second session would mean a second
@@ -259,7 +264,7 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         # control's own record of which agent asked).
         transport, realtime = self._handoff_then_balance_call()
         with self.assertLogs("dispatch", level="WARNING") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertTrue(any("agent=banking" in line for line in cm.output))
         self.assertFalse(any("agent=triage" in line for line in cm.output))
 
@@ -270,7 +275,7 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         # not the control -- a handoff isn't even attempting a controlled action).
         transport, realtime = self._handoff_then_balance_call()
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertTrue(any("handoff: triage -> banking" in line for line in cm.output))
         self.assertFalse(any("tool call: handoff_to_banking" in line for line in cm.output))
 
@@ -292,7 +297,7 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         )
 
         with self.assertLogs("dispatch", level="WARNING") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
 
         # Exactly one reconfiguration happened -- the rejected second attempt never sent a second
         # session.update (triage's opening config, then the one real handoff to banking).
@@ -313,8 +318,9 @@ class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
     but that the event happened."""
 
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        # The third injected collaborator (issue #28). Same shape as the other two fakes: a real
+        # module, never a network call, handed to run_call rather than patched in.
+        self.core_banking = FakeCoreBankingClient()
 
     def test_a_plain_turn_logs_caller_ended_then_agent_started(self):
         transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
@@ -323,7 +329,7 @@ class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
             respond_after_appends=1,
         )
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         ended_idx = next(i for i, line in enumerate(cm.output) if "caller turn ended" in line)
         started_idx = next(i for i, line in enumerate(cm.output) if "agent audio started" in line)
         self.assertLess(ended_idx, started_idx)
@@ -341,7 +347,7 @@ class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
             respond_after_appends=1,
         )
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(sum(1 for line in cm.output if "agent audio started" in line), 1)
 
     def test_a_tool_round_trip_still_pairs_with_the_original_caller_turn(self):
@@ -361,7 +367,7 @@ class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
             respond_after_appends=1,
         )
         with self.assertLogs("bridge", level="INFO") as cm:
-            asyncio.run(run_call(transport, realtime))
+            asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(sum(1 for line in cm.output if "caller turn ended" in line), 1)
         self.assertEqual(sum(1 for line in cm.output if "agent audio started" in line), 1)
 

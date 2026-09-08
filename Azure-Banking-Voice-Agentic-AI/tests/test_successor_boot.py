@@ -28,7 +28,8 @@ import os
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent import accounts, boot
+from azbank_voice_agent import boot
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -50,8 +51,7 @@ _skip_unless_deliberate = unittest.skipUnless(
 @_skip_unless_deliberate
 class SuccessorBootRehearsal(unittest.TestCase):
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        self.core_banking = FakeCoreBankingClient()
         # This rehearsal proves the call *completes* on the successor, independent of B1 gate
         # policy (empty until Phase 4) -- patched open so the two concerns don't conflate.
         self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
@@ -103,7 +103,7 @@ class SuccessorBootRehearsal(unittest.TestCase):
             respond_after_appends=1,
         )
 
-        asyncio.run(run_call(transport, realtime))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
 
         self.assertEqual(
             transport.sent_audio_payloads, ["successor-greeting", "successor-answers"]

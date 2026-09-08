@@ -69,11 +69,13 @@ def _session_update(identity):
     }
 
 
-async def run_call(transport, realtime):
-    """Relay one call: media transport <-> realtime connection.
+async def run_call(transport, realtime, core_banking):
+    """Relay one call: media transport <-> realtime connection, with core banking behind the gate.
 
     `transport` satisfies transport.protocol.MediaTransport; `realtime` satisfies
-    realtime.client.RealtimeConnection. Neither is constructed here.
+    realtime.client.RealtimeConnection; `core_banking` satisfies core_banking.CoreBankingClient.
+    None of the three is constructed here -- that is what lets a whole call run against fakes with
+    no patching (issue #18, extended to the third collaborator by issue #28).
 
     No resampling -- both sides are pcm16/24kHz/mono, confirmed live (docs/phase1/
     research-aoai-realtime-wire-format.md). No barge-in, no reconnection: ends when either side
@@ -162,7 +164,13 @@ async def run_call(transport, realtime):
                 # dispatch_tool_call's own docstring already promises not to log arguments; this
                 # relay must not undercut that a frame earlier.
                 log.info("tool call: %s", event.name)
-                output = dispatch_tool_call(event.name, event.arguments, agent, auth_state)
+                # Awaited since Phase 3 (issue #28): this now does real network I/O against
+                # mock-core-banking. Calling it synchronously would block this event loop for the
+                # client's whole timeout budget -- audio would stop being relayed in both
+                # directions and barge-in would stop working while it waited.
+                output = await dispatch_tool_call(
+                    event.name, event.arguments, agent, auth_state, core_banking=core_banking
+                )
                 await realtime.send({
                     "type": "conversation.item.create",
                     "item": {

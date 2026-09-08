@@ -9,8 +9,12 @@ from unittest.mock import patch
 # must happen before the import below, hence the import order.
 os.environ.setdefault("ACS_CONNECTION_STRING", "endpoint=https://fake.communication.azure.com/;accesskey=ZmFrZWtleQ==")
 os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.io")
+# Read by lifespan() rather than at import, but the guard behind it has no default (issue #29) --
+# so a test that exercises startup has to supply one, the same as a real deployment does.
+os.environ.setdefault("CORE_BANKING_URL", "http://core-banking.test:8001")
 
 from azbank_voice_agent import app
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.realtime.fake import FakeRealtimeConnectCM, FakeRealtimeServer
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
 
@@ -115,16 +119,28 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         # relay's own responsibility and is covered end to end by tests/test_whole_call.py.
         calls = []
 
-        async def fake_run_call(transport, realtime):
-            calls.append((transport, realtime))
+        async def fake_run_call(transport, realtime, core_banking):
+            calls.append((transport, realtime, core_banking))
 
         fake_ws = FakeWebSocket()
         realtime = FakeRealtimeServer()
+        core_banking = FakeCoreBankingClient()
+        # The process-wide client lifespan() would have built (issue #28). Patched rather than
+        # constructed per call, because per-call construction is exactly what the design rules out.
         with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(realtime)), \
+             patch.object(app, "_core_banking", core_banking), \
              patch.object(app, "run_call", fake_run_call):
             asyncio.run(app.media_stream(fake_ws))
         self.assertTrue(fake_ws.accepted)
-        self.assertEqual(calls, [(fake_ws, realtime)])  # both collaborators reached the relay
+        # All three collaborators reached the relay.
+        self.assertEqual(calls, [(fake_ws, realtime, core_banking)])
+
+    def test_the_handler_refuses_to_run_without_an_initialised_client(self):
+        # A handler called outside the app's lifespan must fail loudly rather than quietly
+        # building a per-call client, which would give every call its own circuit breaker.
+        with patch.object(app, "_core_banking", None), \
+             self.assertRaises(RuntimeError):
+            app.core_banking()
 
 
 if __name__ == "__main__":

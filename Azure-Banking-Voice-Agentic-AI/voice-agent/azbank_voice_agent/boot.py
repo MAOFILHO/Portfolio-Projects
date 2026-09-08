@@ -41,7 +41,29 @@ ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_M
 # what this project configured. It is not a check on AOAI_KEY, which is legitimately set today.
 AMBIENT_SDK_KEY_VAR = "AZURE_OPENAI_API_KEY"
 
+#: Where mock-core-banking lives. No default, ever -- see core_banking_url() below.
+CORE_BANKING_URL_VAR = "CORE_BANKING_URL"
+
 _ARM_API_VERSION = "2023-05-01"
+
+
+def core_banking_url(env=None):
+    """The configured mock-core-banking address, or a refusal to start (issue #29).
+
+    No default. A misconfigured deployment should die at startup, where a health check catches it
+    and the revision never takes traffic -- not mid-call, in front of a caller, on the first tool
+    call of the day. Same fail-closed reasoning as the model pin above and as the realtime client's
+    own configuration: this project does not guess at values it was not given.
+    """
+    env = os.environ if env is None else env
+    url = env.get(CORE_BANKING_URL_VAR)
+    if not url:
+        raise SystemExit(
+            f"{CORE_BANKING_URL_VAR} is not set -- refusing to start without an address for "
+            "mock-core-banking. There is no default: an unconfigured backend must fail at boot, "
+            "not on the first tool call."
+        )
+    return url
 
 
 def parse_deployment_response(payload):
@@ -105,6 +127,13 @@ def assert_boot_safety(reader=read_live_model, env=None):
     if not deployment_name:
         # Same fail-closed reasoning as the client's own missing-pin behaviour: no default, ever.
         raise SystemExit("B3: AOAI_DEPLOYMENT is not set -- refusing to start without a named pin.")
+
+    # Checked here as well as read in app.py, so that "the app started" means "every piece of
+    # configuration it needs was present", rather than deferring the discovery to the first tool
+    # call. After the B3 checks above and before the network read below: B3 is the named
+    # constraint and keeps first claim on the failure message, and neither check should be paid
+    # for over the network when a local one can refuse first.
+    core_banking_url(env)
 
     try:
         live = reader(deployment_name)

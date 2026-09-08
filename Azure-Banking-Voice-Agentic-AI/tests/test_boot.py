@@ -10,7 +10,13 @@ import unittest
 
 from azbank_voice_agent import boot
 
-_ENV = {"AOAI_DEPLOYMENT": "gpt-realtime-mini"}
+#: A valid environment. CORE_BANKING_URL joined it in Phase 3 (issue #29): the guard now refuses
+#: to start without an address for mock-core-banking, so an env fixture without one is no longer a
+#: valid environment.
+_ENV = {
+    "AOAI_DEPLOYMENT": "gpt-realtime-mini",
+    "CORE_BANKING_URL": "http://core-banking.internal:8001",
+}
 
 
 def _reader_returning(pair):
@@ -138,6 +144,41 @@ class ParsingTheLiveResponse(unittest.TestCase):
             boot.parse_deployment_response(
                 {"properties": {"model": {"name": "gpt-realtime-mini"}}}
             )
+
+
+class BootRefusesAnUnconfiguredCoreBanking(unittest.TestCase):
+    """Issue #29. A misconfigured deployment should die at startup, where a health check catches it
+    and the revision never takes traffic -- not mid-call, in front of a caller, on the first tool
+    call of the day. Same fail-closed reasoning as the model pin: no defaults, ever."""
+
+    def test_a_missing_core_banking_url_is_refused(self):
+        env = {k: v for k, v in _ENV.items() if k != "CORE_BANKING_URL"}
+        with self.assertRaises(SystemExit) as caught:
+            boot.assert_boot_safety(
+                reader=_reader_returning(boot.ACTIVE_REALTIME_MODEL), env=env
+            )
+        self.assertIn("CORE_BANKING_URL", str(caught.exception))
+
+    def test_an_empty_core_banking_url_is_refused(self):
+        # An empty string is not a configured value -- it is the shape a misconfigured deployment
+        # actually takes when a template renders a variable that was never set.
+        with self.assertRaises(SystemExit):
+            boot.assert_boot_safety(
+                reader=_reader_returning(boot.ACTIVE_REALTIME_MODEL),
+                env={**_ENV, "CORE_BANKING_URL": ""},
+            )
+
+    def test_the_url_is_returned_when_configured(self):
+        self.assertEqual(
+            boot.core_banking_url(env=dict(_ENV)), "http://core-banking.internal:8001"
+        )
+
+    def test_it_fails_at_startup_not_per_tool_call(self):
+        # The distinction that matters: this is a SystemExit out of the boot guard, so the process
+        # never starts, rather than something a tool call discovers later.
+        env = {k: v for k, v in _ENV.items() if k != "CORE_BANKING_URL"}
+        with self.assertRaises(SystemExit):
+            boot.core_banking_url(env=env)
 
 
 if __name__ == "__main__":

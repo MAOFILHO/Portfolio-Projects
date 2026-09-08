@@ -380,10 +380,12 @@ Azure-Banking-Voice-Agentic-AI/
 │   ├── realtime/                 client.py, events.py, session.py
 │   ├── agents/                   specs.py (AgentSpec table), prompts/
 │   ├── dispatch/                 gate.py           ◄── B1 lives here
+│   ├── core_banking/             client.py, fake.py  ◄── the network seam (Phase 3)
 │   ├── audio/                    dtmf.py, degrade.py
 │   ├── cost/                     caps.py           ◄── B4, fail-closed
 │   └── boot.py                   ◄── B3 startup guard
-├── mock-core-banking/            pyproject.toml, Dockerfile, SQLite
+├── mock-core-banking/            azbank_core_banking/ (app.py, db.py), pyproject.toml,
+│                                 Dockerfile, tests/ — own suite, runs without the voice agent
 ├── infra/                        main.bicep + modules/ (one file per resource)
 ├── src/azbank_deploy/            Typer CLI, deployment_state.json
 ├── tests/                        L0 units, L1 fakes, L2 cassettes
@@ -614,6 +616,21 @@ FastAPI + SQLite, own Container App, own Dockerfile. Timeouts, retries, circuit-
 client. `T-UNKNOWN-ACCT`. The real network path this phase introduces sits behind Phase 2's gate from
 the moment it exists — never in front of it.
 **Exit:** tool calls are real network calls with modelled failure paths, all still deny-all by default.
+
+**Scoped 2026-09-08** (spec: issue #25, tickets #26–32; written exit criteria:
+`docs/phase3/exit-criteria.md`). Three decisions from that scoping are worth stating here because
+they constrain later phases rather than just this one:
+- **Nothing is provisioned by this phase.** Code and tests are the exit bar; the Dockerfile and the
+  Bicep module are written and left unapplied. Provisioning is a separately approved step, and its
+  precondition is recomputing R-08 against a **two**-Container-App fixed cost — this would be the
+  project's second always-on replica, and fixed cost is what the $25/month ceiling turns on.
+- **`transfer` is never retried.** It is not idempotent, and retrying a POST that timed out after
+  the service committed is a double-spend. A timed-out transfer is reported as unavailable, which
+  is the honest answer. Phase 5 owns idempotency keys and may revisit it.
+- **B5 is deliberately not re-measured here**, though this phase puts a network hop inside every
+  tool call: the gate refuses every tool so no real call can exercise the path, and nothing is
+  deployed to measure against. That this phase changes the latency picture is exactly why B5
+  freezes in Phase 5 rather than Phase 2.
 
 ### Phase 4 — Auth gate permissions ⛔ *B1/B2 threshold*
 KBA (card last-4 + DOB) + DTMF PIN. Adds the `Authenticated` transition and the permissions it

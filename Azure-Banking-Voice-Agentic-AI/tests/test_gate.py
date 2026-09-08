@@ -13,7 +13,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent import accounts
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 
 
@@ -65,13 +65,18 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
         self.assertEqual(gate.PERMISSIONS, {})
 
 
-class EveryDeclaredToolIsBehindTheGate(unittest.TestCase):
+class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
     """The in-path proof. Driven off the declared tool list, so a tool added later is covered
-    automatically -- there is no second list to keep in sync."""
+    automatically -- there is no second list to keep in sync.
+
+    Async since Phase 3 (issue #28): the dispatcher does network I/O now and so is a coroutine.
+    **What these tests assert is unchanged** -- only how they call the dispatcher, and what
+    "nothing mutated" is measured against (the injected fake, rather than the deleted in-memory
+    module). dispatch/gate.py itself is byte-identical to its pre-Phase-3 state.
+    """
 
     def setUp(self):
-        accounts.ACCOUNTS.clear()
-        accounts.ACCOUNTS.update({"chequing": 2400.0, "savings": 500.0})
+        self.core_banking = FakeCoreBankingClient()
 
     def _arguments_for(self, tool_name):
         return {
@@ -80,43 +85,48 @@ class EveryDeclaredToolIsBehindTheGate(unittest.TestCase):
             "list_accounts": "{}",
         }[tool_name]
 
-    def test_no_declared_tool_executes_when_the_gate_says_no(self):
+    async def test_no_declared_tool_executes_when_the_gate_says_no(self):
         # Force the gate closed and try every declared tool. Nothing may run, and nothing may
         # mutate. If a tool ever gets a code path that skips the gate, this is what catches it.
-        before = dict(accounts.ACCOUNTS)
+        before = dict(self.core_banking.accounts)
         with patch.object(gate, "is_allowed", return_value=False):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(tool=tool):
-                    out = json.loads(
-                        tools.dispatch_tool_call(tool, self._arguments_for(tool))
-                    )
+                    out = json.loads(await tools.dispatch_tool_call(
+                        tool, self._arguments_for(tool), core_banking=self.core_banking
+                    ))
                     self.assertEqual(out, {"error": gate.REFUSAL})
-        self.assertEqual(accounts.ACCOUNTS, before)  # no tool mutated anything
+        self.assertEqual(self.core_banking.accounts, before)  # no tool mutated anything
+        # Stronger than "no mutation": a refused tool never reached core banking at all.
+        self.assertEqual(self.core_banking.calls, [])
 
-    def test_every_declared_tool_is_reachable_when_the_gate_says_yes(self):
+    async def test_every_declared_tool_is_reachable_when_the_gate_says_yes(self):
         # The mirror image: the gate is the only thing standing in the way, so opening it must
         # let every declared tool through. Without this, a tool could be permanently broken and
         # the test above would still pass.
         with patch.object(gate, "is_allowed", return_value=True):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(tool=tool):
-                    out = json.loads(
-                        tools.dispatch_tool_call(tool, self._arguments_for(tool))
-                    )
+                    out = json.loads(await tools.dispatch_tool_call(
+                        tool, self._arguments_for(tool), core_banking=self.core_banking
+                    ))
                     self.assertNotIn("error", out)
 
-    def test_a_refusal_is_logged_at_warning(self):
+    async def test_a_refusal_is_logged_at_warning(self):
         with patch.object(gate, "is_allowed", return_value=False), \
              self.assertLogs("dispatch", level="WARNING") as cm:
-            tools.dispatch_tool_call("get_balance", '{"account": "chequing"}')
+            await tools.dispatch_tool_call(
+                "get_balance", '{"account": "chequing"}', core_banking=self.core_banking
+            )
         self.assertTrue(any("gate refused" in line for line in cm.output))
 
-    def test_a_refusal_does_not_leak_why_it_was_refused(self):
+    async def test_a_refusal_does_not_leak_why_it_was_refused(self):
         # The spoken refusal must not tell a caller which state would have worked -- that turns
         # the gate into a probing oracle.
-        out = json.loads(
-            tools.dispatch_tool_call("get_balance", "{}", gate.BANKING_AGENT, "no-such-state")
-        )
+        out = json.loads(await tools.dispatch_tool_call(
+            "get_balance", "{}", gate.BANKING_AGENT, "no-such-state",
+            core_banking=self.core_banking,
+        ))
         self.assertEqual(out, {"error": gate.REFUSAL})
         for leak in ("authenticated", "anonymous", "permission", "auth_state"):
             self.assertNotIn(leak, out["error"].lower())

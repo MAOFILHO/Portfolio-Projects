@@ -27,7 +27,8 @@ from azure.communication.callautomation import (
 from azure.core.exceptions import AzureError
 from fastapi import FastAPI, Request, WebSocket
 
-from .boot import assert_boot_safety
+from .boot import assert_boot_safety, core_banking_url
+from .core_banking import HttpCoreBankingClient
 from .realtime.client import connect_realtime
 from .realtime.session import run_call
 
@@ -58,6 +59,27 @@ APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<reg
 CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
 WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
 
+#: The process-wide core-banking client, built once in lifespan(). Module-level rather than on
+#: app.state so that reading it does not depend on the WebSocket carrying a reference back to its
+#: application -- the relay's collaborators are handed in, and this is where one of them comes from.
+_core_banking = None
+
+
+def core_banking():
+    """The process-wide client, or a loud failure if the app was never started properly.
+
+    Never lazily constructs one: a client built here would be built *per call*, which is exactly
+    the per-call breaker issue #25 (Q13) ruled out -- a breaker thrown away with the call can
+    never trip.
+    """
+    if _core_banking is None:
+        raise RuntimeError(
+            "core banking client is not initialised -- lifespan() did not run. The app must be "
+            "started through its ASGI lifespan, not by calling handlers directly."
+        )
+    return _core_banking
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """B3 runs here, before the first call can arrive -- and deliberately not at import time, so
@@ -72,8 +94,18 @@ async def lifespan(_app):
     today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
+    global _core_banking
     assert_boot_safety()
-    yield
+    # One core-banking client for the life of the process, deliberately -- **not one per call.**
+    # The circuit breaker's whole job is to notice the same failure repeating, and a breaker that
+    # is thrown away when a call ends can never trip: it would start every call fresh and pay the
+    # full timeout budget again on a backend that is known to be down (issue #25, Q13).
+    _core_banking = HttpCoreBankingClient(base_url=core_banking_url())
+    try:
+        yield
+    finally:
+        await _core_banking.aclose()
+        _core_banking = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -159,7 +191,7 @@ async def media_stream(websocket: WebSocket):
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
     async with connect_realtime() as realtime:
-        await run_call(websocket, realtime)
+        await run_call(websocket, realtime, core_banking())
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 

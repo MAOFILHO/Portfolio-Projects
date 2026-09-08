@@ -25,11 +25,16 @@ verify-project-root-scope:
 install:
 	@test -x "$(VENV)/python" || python3 -m venv .venv
 	@$(VENV)/pip install -q -e voice-agent
+	@$(VENV)/pip install -q -e "mock-core-banking[dev]"
 
 # Stdlib unittest, not pytest -- no test runner was installed and a handful of tests didn't justify
 # adding one.
+# Both deployables, one command. They stay separate suites -- docs/PLAN.md decision 9 is
+# "shared-nothing", and mock-core-banking's tests must run without the voice agent installed
+# (issue #30). This target is the convenience of running both, not a merging of them.
 test: install
 	@$(VENV)/python -m unittest discover -s tests -v
+	@$(VENV)/python -m unittest discover -s mock-core-banking/tests -v
 
 # docs/PLAN.md's Verification section: "make lint runs ruff + mypy. CI static check enforces B3's
 # allowlist across the tree." Added in the phase that makes all three actually pass (issue #23),
@@ -40,8 +45,8 @@ test: install
 # the other's gap.
 lint: install
 	@$(VENV)/pip install -q -e "voice-agent[dev]"
-	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent tests scripts
-	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent
+	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent mock-core-banking tests scripts
+	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking
 	@$(VENV)/python scripts/check_b3_allowlist.py
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
