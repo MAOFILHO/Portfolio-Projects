@@ -43,14 +43,29 @@ caller waits before speaking, since nothing ever prompts the agent to speak firs
 **Call 5 (2026-09-08, on `:p3`).** Same shape, 4 samples: 798, 918, 636, 291ms — the first two are
 the slowest seen so far, still sub-second.
 
+**Call 6 (2026-09-08, on `:p3`).** Handoff fired, `get_balance` refused twice (model retried it
+within the same reply, model's spoken refusal recommended the banking app or a branch instead — a
+natural paraphrase, not a code change), clean hangup. 3 samples: 639, 545, 263ms. **New pairing
+rule found**: Marco's first utterance produced a `caller turn ended` with no reply before he spoke
+again — the model started responding, got interrupted (barge-in) when he kept talking, and that
+response never completed (no audio, no second `caller turn ended` paired to it). Correctly
+excluded from the sample count: whenever two `caller turn ended` lines appear back-to-back with no
+`agent audio started` between them, the earlier one is an aborted/interrupted response, not a real
+round-trip — discard it, only pair the later one. **New, unexplained**: ~55s after Call 6 ended, a
+second `IncomingCall` connected and disconnected in ~2.3s with zero conversation (no `caller turn
+ended`, no `agent audio started` at all) — cause unknown, didn't recur before this. Second
+unexplained near-empty/failed call now on record (Call 1 had `AnswerFailed`, this one connected
+but had no content) — watch for a third before treating this as a real pattern.
+
 ## Open findings (not fixed yet)
 
 - **Dead air before the agent speaks first**, every call so far (2.5-11s, varies with how quickly
   the caller talks): `session.py` sends no initial `response.create`, so the greeting only happens
   once the caller talks and VAD detects their turn ending. TRIAGE's instructions say to greet
   first but nothing triggers it. Marco's call on timing this fix.
-- **Call 1's `AnswerFailed`** on a second incoming call ~43s later — never recurred on Calls 2-5,
-  still unexplained.
+- **Odd second incoming calls, twice now, different shapes**: Call 1's follow-up got
+  `AnswerFailed`; Call 6's follow-up connected but had zero conversation (~2.3s, no turn-ended, no
+  audio). Neither recurred immediately after. Not yet a confirmed pattern — watch for a third.
 
 ## Running sample count
 
@@ -61,5 +76,6 @@ the slowest seen so far, still sub-second.
 | 3 | 6 | 495, 290, 247, 459, 616, 276 |
 | 4 | 5 | 345, 571, 669, 629, 337 |
 | 5 | 4 | 798, 918, 636, 291 |
+| 6 | 3 | 639, 545, 263 |
 
-**N = 19 / ≥100.** Add new calls as new table rows plus a short paragraph above, same format.
+**N = 22 / ≥100.** Add new calls as new table rows plus a short paragraph above, same format.
