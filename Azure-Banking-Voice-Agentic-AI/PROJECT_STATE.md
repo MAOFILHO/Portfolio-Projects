@@ -173,14 +173,15 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## #24 — B5 call log
 
-**N = 22 / ≥100.** Full per-call detail (findings, latency samples, open items) moved to
+**N = 31 / ≥100.** Full per-call detail (findings, latency samples, open items) moved to
 `docs/phase2/evidence/b5-call-log.md` 2026-09-08 to keep this file's size down (decision 18) —
 append new calls there, not here. Still open, not fixed: dead air before the agent speaks first
 (2.5-11s, varies with how fast the caller talks — `session.py` sends no initial `response.create`,
-so nothing prompts the greeting until the caller talks first); two odd near-empty second-calls
-following the real one, different shapes, neither recurring immediately (watch for a third before
-treating as a pattern). Marco confirmed 2026-09-08: keep dialing across multiple sessions toward
-N≥100 rather than changing call length or the bar itself.
+so nothing prompts the greeting until the caller talks first). The earlier odd second-call
+oddities (Call 1's `AnswerFailed`, Call 6's empty connect) are resolved as of Call 8 — a
+deliberate immediate callback worked completely normally, so it was most likely Marco's
+phone/carrier, not the app. Marco confirmed 2026-09-08: keep dialing across multiple sessions
+toward N≥100 rather than changing call length or the bar itself.
 
 ## Next actions (in order)
 

@@ -55,7 +55,16 @@ round-trip — discard it, only pair the later one. **New, unexplained**: ~55s a
 second `IncomingCall` connected and disconnected in ~2.3s with zero conversation (no `caller turn
 ended`, no `agent audio started` at all) — cause unknown, didn't recur before this. Second
 unexplained near-empty/failed call now on record (Call 1 had `AnswerFailed`, this one connected
-but had no content) — watch for a third before treating this as a real pattern.
+but had no content) — see Call 8 below: resolved.
+
+**Call 7 (2026-09-08, on `:p3`).** Real conversation, no discards. 6 samples: 333, 487, 449, 285,
+268, 269ms.
+
+**Call 8 (2026-09-08, on `:p3`), Marco's deliberate immediate callback right after Call 7.**
+Connected and worked completely normally — resolves the Call 1/Call 6 mystery (see Open findings).
+3 samples: 343, 1235, 273ms — the 1235ms is the slowest single sample seen so far (still not
+alarming, one data point). One `caller turn ended` discarded as another interrupted/aborted
+response (same barge-in pattern as Call 6).
 
 ## Open findings (not fixed yet)
 
@@ -63,9 +72,10 @@ but had no content) — watch for a third before treating this as a real pattern
   the caller talks): `session.py` sends no initial `response.create`, so the greeting only happens
   once the caller talks and VAD detects their turn ending. TRIAGE's instructions say to greet
   first but nothing triggers it. Marco's call on timing this fix.
-- **Odd second incoming calls, twice now, different shapes**: Call 1's follow-up got
-  `AnswerFailed`; Call 6's follow-up connected but had zero conversation (~2.3s, no turn-ended, no
-  audio). Neither recurred immediately after. Not yet a confirmed pattern — watch for a third.
+- ~~Odd second incoming calls (Call 1's `AnswerFailed`, Call 6's empty connect)~~ — **resolved
+  2026-09-08**: Marco called back deliberately right after Call 7 (Call 8, below) and it connected
+  and worked completely normally. Most likely his phone/carrier doing something right after a
+  hangup, not an app defect. Not tracking further unless it recurs unprompted.
 
 ## Running sample count
 
@@ -77,5 +87,7 @@ but had no content) — watch for a third before treating this as a real pattern
 | 4 | 5 | 345, 571, 669, 629, 337 |
 | 5 | 4 | 798, 918, 636, 291 |
 | 6 | 3 | 639, 545, 263 |
+| 7 | 6 | 333, 487, 449, 285, 268, 269 |
+| 8 | 3 | 343, 1235, 273 |
 
-**N = 22 / ≥100.** Add new calls as new table rows plus a short paragraph above, same format.
+**N = 31 / ≥100.** Add new calls as new table rows plus a short paragraph above, same format.
