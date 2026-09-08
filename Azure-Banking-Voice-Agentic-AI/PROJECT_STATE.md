@@ -6,81 +6,45 @@ is ≤400 lines/~20KB; move the oldest closed material out first if an addition 
 
 ## Current phase
 
-**Phase 2 — Realtime session, agent core, gate, test harness. 7 of 8 tickets built, all seven
-reviewed and their findings fixed.** Spec: GitHub issue #16. Tickets: #17–#24 (sub-issues of #16).
-Phase 1 closed first — its exit criteria are met and written up in
-`docs/phase1/EXIT-AND-PHASE2-ENTRY.md`.
+**Phase 3 — mock-core-banking. Opened 2026-09-08, design settled, nothing built yet.**
+Spec: GitHub issue **#25**. Tickets: **#26-32** (sub-issues of #25), all `ready-for-agent`.
+Written exit criteria: `docs/phase3/exit-criteria.md`.
 
-**`APPROVED: Phase 2` was typed by Marco 2026-09-07**, gating #24's billable work. **All three of
-Phase 2's exit criteria are now met** (`docs/PLAN.md`'s Phase 2 Exit line): fakes-only CI with the
-gate provably deny-all (#17-23), `T-B3-SUCCESSOR-BOOT` exists (#22), and **B5's provisional
-figure — p95=932ms, N=106 — landed 2026-09-08** (8 real phone calls + `scripts/b5_probe.py`'s
-automated AOAI-direct batch, both pools stated, not silently merged — full detail
-`docs/phase2/evidence/b5-call-log.md`). #24 itself isn't formally closed as a ticket (the dead-air
-UX gap below is still open, not exit-blocking) but the phase's own gate criteria are satisfied.
-**This needs Marco's own review/sign-off before Phase 3 can start** — CLAUDE.md's stop condition,
-not something this file self-certifies.
+Scope: `mock-core-banking` becomes its own deployable (FastAPI + SQLite, own package/Dockerfile/
+tests), reached through one new seam -- a `CoreBankingClient` protocol with a real async httpx
+client and a deterministic fake, mirroring how `transport/` and `realtime/` already pair a real
+system with its fake. `accounts.py` is deleted. `dispatch_tool_call` goes async so a network call
+never stalls the audio loop. **`dispatch/gate.py` does not change** -- `PERMISSIONS` stays `{}`;
+this phase adds a path *behind* the control, Phase 4 adds permissions.
 
-Built, committed, and pushed:
-- **#17 `6261e78`** — restructure into the planned package layout. App out of `docs/echo-app/`;
-  `voice-agent/azbank_voice_agent/` is now one installable package with the module boundaries
-  `docs/PLAN.md` specifies. Mechanical, no behaviour change, same test count before and after.
-- **#18 `703c74d`** — a whole call runs end-to-end against `FakeTransport` + `FakeRealtimeServer`,
-  no Azure, no patching. **This is `docs/PLAN.md`'s Phase 2 headline exit criterion, met.**
-- **#19 `3e82d69`, reviewed, gate now denies everyone (`0bf1d03`)** — `dispatch/gate.py`'s
-  `PERMISSIONS` table was reviewed per CLAUDE.md's never-auto-accept rule and emptied: no
-  agent/state pair is permitted anything until Phase 4 adds a real `AUTHENTICATED` transition.
-  Demo call now gets refused rather than answered, as intended.
-- **#21 `e79f50c`** — B3 boot guard, keyed on (name, version) together, reading the live deployment
-  at boot, failing closed. Guard code itself unchanged this session. **Cannot deploy as-is (see
-  Next actions).**
-- **#22 `464a4e5`, reviewed and fixed (`0ce99d5`)** — `T-B3-SUCCESSOR-BOOT` now proves a real
-  sequence (guard admits the successor, then a full turn completes), not two disconnected facts.
-  Still skip-by-default; run deliberately with `AZBANK_RUN_SUCCESSOR_BOOT=1`.
-- **#23 `7dbbdcb`, reviewed and fixed (`a1106b4`, `5179c5e`)** — `make lint` (ruff + mypy) and the
-  B3 static allowlist check. Checker now covers `docs/*/wizard/*.sh`, `Dockerfile`,
-  `pyproject.toml` (not just the package), scans whole-file text (catches a pair literal wrapped
-  across lines), and checks `(name, version)` pairs, not just names.
-- **#20 `bd005df`, reviewed and fixed (`e33edea`)** — declarative `AgentSpec` table
-  (`agents/specs.py`): identity, instructions, tool scope. A call now opens on `gate.TRIAGE_AGENT`
-  (was `BANKING_AGENT`); a `handoff_to_banking` function call reconfigures the one existing session
-  onto the banking agent's instructions/tools rather than opening a second one, and never touches
-  `dispatch_tool_call` or the gate (routing, not a banking action). `dispatch/gate.py` gained the
-  `TRIAGE_AGENT` constant only — `PERMISSIONS` is still `{}`, `is_allowed()`'s logic unchanged.
-  All 5 of #20's acceptance criteria met. Review fix: `handoff_target()` now checks the *calling*
-  agent's own declared `handoff_to`, not just that the named target exists — both review axes
-  independently caught that a hallucinated `handoff_to_triage` from `BANKING` (whose `handoff_to`
-  is empty) would have silently succeeded. TDD, verified red against the pre-fix code.
+**No `APPROVED: Phase 3` is required for this scope -- it creates no billable Azure resource.**
+Nothing is provisioned: the Dockerfile and Bicep module are written and left unapplied, and the
+live container app is not redeployed. Provisioning is a separately approved step afterwards, with
+its own precondition (R-08, below).
 
-Two rounds of `/code-review` ran this session (`5288f8a..40a39b5`, then `40a39b5..HEAD`), each
-producing Standards + Spec findings; every actionable finding from both is fixed as of `38dec8c`.
-Also fixed, not tied to a single ticket: the B2 leak in `realtime/session.py` (tool arguments,
-agent transcript, and AOAI error events all now log arrival only, never content — `b9140fb`,
-`9197651`), and a CI workflow now exists (`ca53cae`,
-`.github/workflows/azure-banking-voice-agentic-ai-ci.yml` at the monorepo root, approved by Marco
-by exact absolute path since it falls outside `PROJECT_ROOT`).
+Three design decisions worth not re-deriving: a **declined** transfer is 200 + structured outcome
+(not 4xx -- it is a normal outcome of a working system); **`transfer` is never retried** (not
+idempotent, a retried timeout is a double-spend); one circuit breaker per process for the **whole**
+service (per-endpoint would let a healthy read path mask a service failing its writes). Full
+reasoning in #25.
 
-Findings raised but deliberately not actioned, with reasoning recorded in the commits/session, not
-silently dropped: the B3 static checker still cannot catch a model pin split across unrelated
-variables (e.g. bash) — that's the runtime boot guard's job, not this checker's; the successor
-rehearsal patches the gate open on purpose (proving the call completes is orthogonal to B1
-policy); CI does not auto-run the successor rehearsal (it's designed to be run deliberately, not
-routinely).
+## Phase 2 — closed
+
+**Signed off by Marco 2026-09-08 ("Phase 2 approved").** All three exit criteria met: fakes-only CI
+with the gate provably deny-all, `T-B3-SUCCESSOR-BOOT` exists, and B5's provisional figure landed
+at **p95=932ms, N=106** (31 real calls + 75 `scripts/b5_probe.py` samples, both pools stated).
+Spec was issue #16, tickets #17-24.
+
+Full narrative -- what was built per ticket, the two `/code-review` rounds, the B2 leak fix, the
+review findings deliberately not actioned: `docs/handoffs/2026-09-08-phase2-signoff-phase3-entry.md`.
+Per-call B5 detail: `docs/phase2/evidence/b5-call-log.md`. Not repeated here (decision 18).
 
 **98 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. **B5's provisional figure landed 2026-09-08: p95=932ms, N=106** — see "#24 — B5
-call log" below and `docs/phase2/evidence/b5-call-log.md` for full detail.
+`make lint` clean. **Phase 1 remains the demonstrable deliverable and still works.**
 
-**Phase 1 remains the demonstrable deliverable and still works** — the restructure preserved B4's
-per-call caps and B2's tone handling, both still covered by their own tests.
-
-**Operating-mode verdict: IDLE, reconfirmed 2026-09-08** against R-04's original method
-(`az monitor metrics` `Replicas`/`RxBytes`/`TxBytes`) over the window covering all 8 real B5 calls
-plus the `b5_probe.py` batch — settles to idle within one 15-min bucket every time, sustained 2h
-since the last activity, same ~189KB/118KB baseline as Phase 0/1. Full detail:
-`docs/phase2/evidence/b5-call-log.md`'s "R-04 reconfirmation" section. R-08's demo-runs/month
-figure (79.2, from Phase 0) is still stale and needs recomputing — not done yet, separately tracked
-below.
+**Operating-mode verdict: IDLE, reconfirmed 2026-09-08** against R-04's original method, over the
+window covering all 8 real B5 calls plus the probe batch -- settles to idle within one 15-min
+bucket every time, same ~189KB/118KB baseline as Phase 0/1.
 
 ## Phase 0 — closed
 
@@ -165,47 +129,38 @@ unresolved, not because anything below is currently blocking.
    both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
    exit table** (`docs/PLAN.md`'s own words). Scoped as `server_vad` config tuning, not new code,
    once/if it reproduces again.
-
-**Closed this session (were stale lines in this file, now corrected):** the old "Budget section
-stale" item — already fixed by commit `6390cac`, which predates Phase 1's start; and the old
-"`app.py:86` has no try/except" item — the fix landed in Phase 1's own work, confirmed by 4 passing
-tests and independently by this session's `/code-review`.
+10. **Dead air before the agent speaks first — PARKED, deliberately, 2026-09-08.** 2.5-11s on every
+    real call: `session.py` sends no initial `response.create`, so nothing prompts the greeting
+    until the caller talks first. **Decided at Phase 3 kickoff: not fixed in Phase 3.** It belongs
+    to the greeting path, not the tool path, and Phase 3's diff already touches the relay's tool
+    handling — changing both in one phase makes a regression hard to attribute. Small fix whenever
+    it's wanted; this line exists so it isn't re-litigated at every phase boundary.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-01, R-02, R-03 (partial, see item 3), R-04, R-05, R-06 resolved.** **R-04 reconfirmed
-2026-09-01 for Phase 1's stateful agent loop** (IDLE, see Current phase above). **R-08 answered in
-Phase 0 (~79–114 demo runs/month, gate passes) but stale as of the 2026-09-01 IDLE verdict — needs
-recomputing, not done.** **R-09** (number irreplaceability) is a standing hard rule, not something
+2026-09-01 for Phase 1's stateful agent loop** (IDLE, reconfirmed 2026-09-08). **R-08 answered in
+Phase 0 (~79–114 demo runs/month, gate passes) but stale — PARKED as of 2026-09-08, and promoted to
+a precondition of *provisioning*, not of Phase 3's code.** mock-core-banking's Container App would
+be this project's **second** Container App, and fixed cost is the line the whole $25/mo ceiling
+turns on — so R-08 gets recomputed against a two-app fixed cost before anything is deployed, not
+before Phase 3 is built. **R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
-
-## #24 — B5 call log
-
-**Done: p95=932ms, N=106 (31 real phone calls + 75 from `scripts/b5_probe.py`, both pools
-stated).** Full detail (per-call findings, all samples, the transfer-utterance latency finding)
-in `docs/phase2/evidence/b5-call-log.md` — this file keeps only the headline result (decision 18).
-
-`b5_probe.py`: an AOAI-direct automation (real connection, no ACS/phone) built after Marco asked
-whether dozens of real calls were really necessary. Reuses `run_call()` unchanged. Found and fixed
-a real bug before any sample existed (synthetic transport gave VAD nothing to detect silence from
-— server-side VAD measures silence from the audio stream itself, so simply stopping sends after
-the spoken utterance never let `speech_stopped` fire). Its batch run also surfaced a genuine
-finding, not noise: every outlier (4 slow, 1 no-response) was the same transfer-intent utterance —
-independent confirmation of `docs/PLAN.md`'s own prediction that tool calls are the slowest leg.
-
-Still open, not exit-blocking: dead air before the agent speaks first (2.5-11s on real calls —
-`session.py` sends no initial `response.create`, nothing prompts the greeting until the caller
-talks first). The earlier odd second-call oddities (Call 1's `AnswerFailed`, Call 6's empty
-connect) resolved as of Call 8 — a deliberate immediate callback worked normally, most likely
-Marco's phone/carrier, not the app.
 
 ## Next actions (in order)
 
-1. **Marco to review and sign off that Phase 2's exit criteria actually hold** (CLAUDE.md stop
-   condition — no phase transition self-certifies). `/code-review` is the named skill for this,
-   Marco's call to invoke, not Claude's.
-2. Decide on the ~11s dead-air gap (still open, not exit-blocking) before opening Phase 3.
-3. Recompute R-08's demo-runs/month figure against the 2026-09-01 IDLE verdict (currently stale at
-   Phase 0's 79.2 figure) — not exit-blocking either, just stale.
-4. Once 1-2 are settled: `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` before
-   Phase 3 design work begins (CLAUDE.md's phase-boundary discipline).
+1. **Build Phase 3**, tickets in order: #26 (service) → #27 (client) → #28 (the seam change) →
+   #29 (boot guard) → #30 (real-network test + Makefile) → #31 (docs) → #32 (Bicep, unapplied).
+   #28 is the one that touches the relay and dispatcher together — **never auto-accept that diff**
+   (CLAUDE.md), even though it deliberately leaves `gate.py`'s policy alone.
+2. `/code-review` before Phase 3's exit gate (Marco's call to invoke), then check
+   `docs/phase3/exit-criteria.md` actually holds.
+3. **Only after 1–2**: recompute R-08 against a two-Container-App fixed cost, and if it still clears
+   the gate, `APPROVED: Phase 3` for the provisioning step itself. Provisioning is not part of
+   Phase 3's own scope.
+4. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
+
+**Uncommitted as of 2026-09-08:** `CONTEXT.md` (new, the project glossary) and
+`docs/phase3/exit-criteria.md` (new), plus this file's Phase 3 rewrite. The root `CONTEXT-MAP.md`
+that `docs/agents/domain.md` calls for is **not** written — it sits outside `PROJECT_ROOT` and needs
+Marco's approval by absolute path, same as the CI workflow did.
