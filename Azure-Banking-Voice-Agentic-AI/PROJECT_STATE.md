@@ -171,45 +171,15 @@ Phase 0 (~79–114 demo runs/month, gate passes) but stale as of the 2026-09-01 
 recomputing, not done.** **R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
 
-## #24 — call log
+## #24 — B5 call log
 
-Both calls' timelines pulled from Log Analytics (`...ai1D`) — `az containerapp logs show
---follow`/`--tail` is unreachable from Marco's network entirely (TCP connect to
-`canadacentral.azurecontainerapps.dev:443` times out, confirmed from both this session and
-Marco's own terminal; cause unknown, not a sandbox issue). Log Analytics is the working fallback,
-with its normal few-minute ingestion delay.
-
-**Call 1 (2026-09-08, on `:p2`, before B5 logging existed):** `handoff: triage -> banking` fired
-correctly; the model attempted `handoff_to_banking` *again* while already on `banking` and was
-refused (`BANKING.handoff_to` is empty — this is 2026-09-07's `/code-review` fix firing live for
-the first time); `get_balance`, `list_accounts`, `transfer` all refused with a spoken reply; clean
-hangup at 82s, no B4 cap hit. Found: no B5 timestamp pair existed at all (fixed, `42e02c5`, see
-below) and a second incoming call ~43s later got `Microsoft.Communication.AnswerFailed`
-(unexplained, didn't recur on Call 2).
-
-**Call 2 (2026-09-08, on `:p3`, B5 logging live):** same shape as Call 1 — handoff fired,
-`get_balance`/`list_accounts` refused, clean hangup, no `AnswerFailed` this time. **First real B5
-numbers**: 297ms, 570ms, 440ms, 280ms (all sub-second). `speech_stopped` confirmed live — marked
-so in code (`e12a86f`).
-
-**Call 3 (2026-09-08, on `:p3`):** same shape again — handoff fired, `list_accounts`/`get_balance`
-refused, clean hangup, no `AnswerFailed`. Richer call, 6 samples: 495, 290, 247, 459, 616, 276ms.
-
-**Call 4 (2026-09-08, on `:p3`):** same shape, 5 samples: 345, 571, 669, 629, 337ms. Dead air only
-~2.5s this time — Marco spoke immediately rather than waiting; not code variability, just when the
-caller happened to talk (confirms the gap's real cause: it's exactly how long the caller waits
-before speaking, since nothing ever prompts the agent to speak first).
-
-**Call 5 (2026-09-08, on `:p3`):** same shape, 4 samples: 798, 918, 636, 291ms — the first two are
-the slowest seen so far, still sub-second.
-
-**Still open across all five calls**: the agent never speaks first — `session.py` sends no initial
-`response.create`, so the greeting only happens once the caller talks and VAD detects their turn
-ending. TRIAGE's instructions say to greet first but nothing triggers it. Not fixed yet, Marco's
-call on timing (before/after continuing to accumulate B5 samples).
-
-**B5 running tally: N=19 / ≥100** (4 + 6 + 5 + 4). Marco confirmed 2026-09-08: keep dialing across
-multiple sessions rather than changing call length or the N≥100 bar itself.
+**N = 19 / ≥100.** Full per-call detail (findings, latency samples, open items) moved to
+`docs/phase2/evidence/b5-call-log.md` 2026-09-08 to keep this file's size down (decision 18) —
+append new calls there, not here. Still open, not fixed: dead air before the agent speaks first
+(2.5-11s, varies with how fast the caller talks — `session.py` sends no initial `response.create`,
+so nothing prompts the greeting until the caller talks first); Call 1's one-off, unexplained
+`AnswerFailed` on a second incoming call. Marco confirmed 2026-09-08: keep dialing across multiple
+sessions toward N≥100 rather than changing call length or the bar itself.
 
 ## Next actions (in order)
 
