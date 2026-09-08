@@ -34,7 +34,7 @@ conversion happens here, once, at the presentation boundary -- and nowhere near 
 import logging
 from dataclasses import dataclass
 from time import monotonic
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import httpx
 
@@ -98,7 +98,6 @@ class TransferOutcome:
     available: float | None = None
 
 
-@runtime_checkable
 class CoreBankingClient(Protocol):
     """What the dispatcher needs from core banking. Satisfied by the real client and by the fake.
 
@@ -114,6 +113,21 @@ class CoreBankingClient(Protocol):
 
     async def transfer(self, from_account: str, to_account: str, amount: float) -> TransferOutcome:
         ...
+
+
+def _unknown_account_name(response):
+    """The account the service said it could not find, or None if it did not say.
+
+    **Never the request URL.** An earlier version raised UnknownAccountError with the URL, which
+    the dispatcher then spoke verbatim -- a caller heard the service's internal hostname read out
+    loud (found by /code-review, 2026-09-08). Returns None rather than guessing, so the dispatcher
+    can fall back to a sentence that names no account at all.
+    """
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return None
+    return detail.get("account") if isinstance(detail, dict) else None
 
 
 def _dollars(cents):
@@ -266,7 +280,7 @@ class HttpCoreBankingClient:
 
     def _decode(self, response):
         if response.status_code == 404:
-            raise UnknownAccountError(str(response.request.url))
+            raise UnknownAccountError(_unknown_account_name(response))
         if response.status_code >= 400:
             raise CoreBankingRequestError(
                 f"core banking rejected the request with {response.status_code}"

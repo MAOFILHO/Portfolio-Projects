@@ -129,7 +129,17 @@ async def dispatch_tool_call(
         # Caught before KeyError below: UnknownAccountError is a LookupError, and so is KeyError.
         # Order matters here -- an unknown account is a real answer to give the caller, not the
         # same thing as a malformed tool call.
-        return json.dumps({"error": f"There's no {e.args[0]!s} account on this profile."})
+        #
+        # The name comes from the service, which is the only thing that knows which account was
+        # unknown, and it can be absent. Absent means a sentence that names no account -- never a
+        # fallback to whatever else happens to be on the exception, which is how the first version
+        # of this ended up speaking the service's internal URL to a caller (/code-review,
+        # 2026-09-08).
+        account = e.args[0] if e.args else None
+        return json.dumps({"error": (
+            f"There's no {account} account on this profile." if account
+            else "I can't find that account on this profile."
+        )})
     except CoreBankingUnavailable:
         # Deliberately no figure of any kind in this branch. Never a cached balance, never a
         # default, never a "last known" number.

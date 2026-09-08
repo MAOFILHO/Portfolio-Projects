@@ -11,7 +11,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent.core_banking import CoreBankingUnavailable
+from azbank_voice_agent.core_banking import CoreBankingUnavailable, UnknownAccountError
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 
@@ -64,9 +64,19 @@ class TheThreeOutcomesStayDistinct(DispatchCase):
 
     async def test_unknown_account_names_the_account_and_does_not_claim_a_failure(self):
         out = await self.dispatch("get_balance", '{"account": "bitcoin"}')
-        self.assertIn("bitcoin", out["error"])
-        # T-UNKNOWN-ACCT: no balance figure of any kind came back with it.
-        self.assertNotIn("result", out)
+        # The EXACT sentence, not a substring. This assertion used to be
+        # `assertIn("bitcoin", out["error"])`, which passed happily while the caller was actually
+        # being told "There's no http://core-banking.internal:8001/accounts/bitcoin account on
+        # this profile." -- the URL contains the account name, so the substring check could not
+        # tell the two apart (/code-review, 2026-09-08).
+        self.assertEqual(out, {"error": "There's no bitcoin account on this profile."})
+
+    async def test_an_unknown_account_the_service_did_not_name_still_reads_as_a_sentence(self):
+        # The client returns None when the service's 404 carries no account name. The fallback has
+        # to be a sentence, not "There's no None account on this profile."
+        self.core_banking.fail_with = UnknownAccountError()
+        out = await self.dispatch("get_balance", '{"account": "bitcoin"}')
+        self.assertEqual(out, {"error": "I can't find that account on this profile."})
 
     async def test_declined_transfer_states_the_real_available_amount(self):
         out = await self.dispatch(

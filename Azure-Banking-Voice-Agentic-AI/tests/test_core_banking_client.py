@@ -134,6 +134,44 @@ class UnknownAccountRaises(unittest.IsolatedAsyncioTestCase):
             await _client(recorder).get_balance("bitcoin")
 
 
+class NothingInternalReachesTheCaller(unittest.IsolatedAsyncioTestCase):
+    """A caller hears whatever ends up on the exception. Nothing internal may end up there.
+
+    The first version of this client raised UnknownAccountError with `response.request.url`, so a
+    caller heard the service's internal hostname read out loud by the agent (/code-review,
+    2026-09-08). The account name now comes from the service's own 404 body -- the system of record
+    is the only thing that knows *which* of a transfer's two accounts was the bad one.
+    """
+
+    def _404(self, body):
+        return _json(body, status=404)
+
+    async def test_the_account_name_comes_from_the_service_body(self):
+        recorder = Recorder(self._404({"detail": {"error": "unknown_account", "account": "bitcoin"}}))
+        with self.assertRaises(cb.UnknownAccountError) as caught:
+            await _client(recorder).get_balance("bitcoin")
+        self.assertEqual(caught.exception.args[0], "bitcoin")
+
+    async def test_the_request_url_never_reaches_the_exception(self):
+        for body in (
+            {"detail": {"error": "unknown_account", "account": "bitcoin"}},
+            {"detail": "unknown_account"},          # older/plain shape: no name available
+            {"nothing": "recognisable"},
+        ):
+            with self.subTest(body=body):
+                recorder = Recorder(self._404(body))
+                with self.assertRaises(cb.UnknownAccountError) as caught:
+                    await _client(recorder).get_balance("bitcoin")
+                self.assertNotIn("core-banking.test", str(caught.exception.args))
+                self.assertNotIn("http", str(caught.exception.args))
+
+    async def test_an_unparseable_404_body_yields_no_name_rather_than_a_guess(self):
+        recorder = Recorder(httpx.Response(404, content=b"not json at all"))
+        with self.assertRaises(cb.UnknownAccountError) as caught:
+            await _client(recorder).get_balance("bitcoin")
+        self.assertIsNone(caught.exception.args[0])
+
+
 class RetryPolicy(unittest.IsolatedAsyncioTestCase):
     async def test_a_read_is_retried_once_and_succeeds(self):
         recorder = Recorder(httpx.ReadTimeout("too slow"), _CHEQUING)

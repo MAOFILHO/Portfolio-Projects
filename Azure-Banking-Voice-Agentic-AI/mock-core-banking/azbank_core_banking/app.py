@@ -44,6 +44,20 @@ class TransferRequest(BaseModel):
     amount_cents: int = Field(gt=0)
 
 
+def _unknown_account(error):
+    """The 404 for an unknown account, **naming the account**.
+
+    Naming it is not a nicety: the voice agent has to tell the caller which account it couldn't
+    find, and the system of record is the only thing that knows which of a transfer's two accounts
+    was the bad one. Without this the client has nothing account-shaped to put in the sentence --
+    and the first version of that client reached for the request URL instead, which meant a caller
+    heard the service's internal hostname read out loud (found by /code-review, 2026-09-08).
+    """
+    return HTTPException(
+        status_code=404, detail={"error": "unknown_account", "account": str(error.args[0])}
+    )
+
+
 def build_app(database=None):
     """Construct the app against a given database.
 
@@ -81,9 +95,9 @@ def build_app(database=None):
     def get_account(account: str):
         try:
             balance = db.get_balance(conn, account)
-        except db.UnknownAccount:
+        except db.UnknownAccount as e:
             # 404, and nothing else: no default balance, no zero, no nearest match.
-            raise HTTPException(status_code=404, detail="unknown_account") from None
+            raise _unknown_account(e) from None
         return {"name": account, "balance_cents": balance}
 
     @app.post("/transfers")
@@ -92,8 +106,8 @@ def build_app(database=None):
             result = db.transfer(
                 conn, request.from_account, request.to_account, request.amount_cents
             )
-        except db.UnknownAccount:
-            raise HTTPException(status_code=404, detail="unknown_account") from None
+        except db.UnknownAccount as e:
+            raise _unknown_account(e) from None
         if result.outcome == "declined":
             # 200: the system worked and said no. See the module docstring.
             return {
