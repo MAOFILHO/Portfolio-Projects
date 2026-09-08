@@ -85,8 +85,10 @@ teardown is not the current resource state. Full narrative: `docs/phase0/finding
 `aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
 `acs-azure-banking-voice`; phone number `+17059100383` (owned, $1.00/mo, R-09 — never released);
 Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0`
-(min-replicas=1, billing now) running the **Phase 2** image `docker.io/maofilho/azbank-echo-p0:p2`
-as of 2026-09-07 (was Phase 1's `:latest` before this session's deploy, see below); data-plane auth
+(min-replicas=1, billing now) running the **Phase 2** image `docker.io/maofilho/azbank-echo-p0:p3`
+as of 2026-09-08 (`:p2` deployed 2026-09-07, was Phase 1's `:latest` before that; `:p3` adds the B5
+latency-anchor logging from `42e02c5`, revision `--0000002`, `Healthy`, 100% traffic, B3 verified
+live again from real logs); data-plane auth
 to AOAI (the realtime connection itself) is still via the `AOAI_KEY` secret — only the B3 ARM read
 uses the managed identity.
 
@@ -116,6 +118,10 @@ managed identity acquired a token, `GET .../deployments/gpt-realtime-mini` retur
 the app logged `B3: deployed model ('gpt-realtime-mini', '2025-10-06') matches the active pin.`
 before `Application startup complete.` Single-revision mode, so this replaced the running Phase 1
 container — flagged to Marco as a real risk (no automatic fallback on a bad boot) before running.
+
+**Redeployed to `:p3` 2026-09-08** (same process, Marco confirmed the command first): adds the B5
+latency-anchor logging (`42e02c5`) that `:p2` didn't have. Revision `--0000002`, `Healthy`, 100%
+traffic, B3 verified live again from real logs (`ai1D` workspace). No env var changes.
 
 ## Open items
 
@@ -199,12 +205,9 @@ the working fallback with its normal few-minute ingestion delay).
 
 ## Next actions (in order)
 
-1. **Redeploy is required before the next call** — `ca-azbank-echo-p0` is still running the image
-   built before `42e02c5`, so today's B5 log lines don't exist in the running container yet. Build
-   `:p3` on Marco's laptop (same process as `:p2`), `az containerapp update --image
-   docker.io/maofilho/azbank-echo-p0:p3` (no env var changes needed this time).
+1. **Redeploy done** (2026-09-08) — `:p3` is live, B5 log lines are in the running container now.
 2. Decide on the ~11s dead-air gap above before or after more calls (Marco's call).
-3. **#24: after redeploy**, more calls toward ≥100 real turns for the provisional B5 figure —
+3. **#24**: more calls toward ≥100 real turns for the provisional B5 figure —
    `docs/PLAN.md`'s Exit paragraph makes this load-bearing for the phase's formal close. `/wizard`
    territory — Marco's hands/voice. Pull each call's logs via `az monitor log-analytics query
    --workspace bf520f2c-e2bc-4488-8965-9317a7922c74` (the live-stream endpoint may still be down).
