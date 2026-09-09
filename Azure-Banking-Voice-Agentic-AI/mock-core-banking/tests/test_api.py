@@ -96,6 +96,18 @@ class Transfers(ServiceCase):
         })
         self.assertEqual(response.status_code, 422)
 
+    def test_same_account_on_both_sides_is_rejected_as_malformed(self):
+        # 422, not 200: a self-transfer is a malformed request, so it never reaches the point of
+        # reporting a balance. It used to be accepted, and because the two UPDATEs cancelled out
+        # on one row while the response reported the arithmetic rather than the storage, the
+        # caller was told a balance the service had never held (/code-review, 2026-09-08).
+        client = self.client()
+        response = client.post("/transfers", json={
+            "from_account": "chequing", "to_account": "chequing", "amount_cents": 15000,
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(client.get("/accounts/chequing").json()["balance_cents"], 240000)
+
 
 class NoCallerFacingProse(ServiceCase):
     """The service returns data and outcome codes -- never a sentence.

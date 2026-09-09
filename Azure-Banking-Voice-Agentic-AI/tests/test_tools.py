@@ -57,6 +57,17 @@ class DispatchToolCall(DispatchCase):
         )
         self.assertIn("error", out)
 
+    async def test_a_self_transfer_is_malformed_and_speaks_no_balance(self):
+        # The no-fabrication rule at the dispatcher (CLAUDE.md's silent-fallback exclusion). A
+        # self-transfer used to be accepted and confirmed with a balance nothing had ever held:
+        # the debit and the credit cancelled on one account while the confirmation reported the
+        # arithmetic. Rejected as malformed now, so no figure is spoken at all.
+        out = await self.dispatch(
+            "transfer", '{"from_account": "chequing", "to_account": "chequing", "amount": 150.0}'
+        )
+        self.assertEqual(out, {"error": tools.MALFORMED})
+        self.assertEqual(self.core_banking.accounts["chequing"], 2400.0)
+
     async def test_a_malformed_request_never_speaks_the_services_own_wording(self):
         # The service answers a bad amount with a 422 and the client's message for it is
         # "core banking rejected the request with 422" -- diagnostic text for a log, which was

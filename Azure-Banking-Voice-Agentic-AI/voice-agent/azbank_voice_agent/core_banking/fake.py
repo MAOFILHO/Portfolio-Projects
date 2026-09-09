@@ -54,6 +54,13 @@ class FakeCoreBankingClient:
             # would make tests passing against it say something untrue about production
             # (/code-review, 2026-09-08 -- issue #25's own user story 10).
             raise CoreBankingRequestError(f"transfer amount must be positive, got {amount!r}")
+        if from_account == to_account:
+            # Malformed for the same reason and by the same route: the service answers this with a
+            # 422 and the real client turns that into this type. Accepting it here would net to
+            # zero in the dict and confirm a transfer that never happened.
+            raise CoreBankingRequestError(
+                f"transfer needs two different accounts, got {from_account!r} twice"
+            )
         available = self.accounts[from_account]
         if amount > available:
             # Declined, not raised: a normal outcome of a working system (CONTEXT.md).

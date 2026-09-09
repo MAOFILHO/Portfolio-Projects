@@ -22,7 +22,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from . import db
 
@@ -42,6 +42,15 @@ class TransferRequest(BaseModel):
     from_account: str
     to_account: str
     amount_cents: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _accounts_must_differ(self):
+        """Same reasoning as `amount_cents`: caught at the boundary so it is a 422 rather than
+        something the route has to remember. `db.transfer` rejects it too -- the rule belongs to
+        the system of record, and this is what gives it the right status code."""
+        if self.from_account == self.to_account:
+            raise ValueError("from_account and to_account must differ")
+        return self
 
 
 def _unknown_account(error):

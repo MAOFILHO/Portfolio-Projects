@@ -4,6 +4,7 @@ Money is stored in **integer cents** throughout (issue #26). A service that pers
 not inherit the demo-grade float the in-memory Phase 1 module used -- these tests assert the type,
 not just the value, because the whole point is that no float ever reaches storage.
 """
+import contextlib
 import sqlite3
 import unittest
 
@@ -36,10 +37,24 @@ class Seeding(unittest.TestCase):
         db.initialise(conn)
         self.assertEqual(db.get_balance(conn, "chequing"), 230000)
 
-    def test_balances_are_integers_not_floats(self):
-        conn = _fresh(self)
-        for balance in db.list_accounts(conn).values():
+    def test_seed_values_are_integer_cents_at_the_source(self):
+        # Asserted on SEED_ACCOUNTS itself, never on a value read back out of SQLite. This test
+        # used to do the round trip, and it could not fail: an INTEGER-affinity column converts a
+        # whole float on insert, so a seed of 240000.0 stores and reads back as int 240000 and an
+        # isinstance check downstream cannot tell a float seed from an integer one
+        # (/code-review, 2026-09-08 -- issue #26 criterion 3 was passing for the wrong reason).
+        for balance in db.SEED_ACCOUNTS.values():
             self.assertIsInstance(balance, int)
+
+    def test_no_balance_is_persisted_as_a_float(self):
+        # sqlite3's storage class, which is the one thing affinity cannot paper over: a value it
+        # could not convert losslessly -- the fractional cent that dollars-as-float produces --
+        # stays REAL and shows up here. Run after a transfer so the arithmetic path is covered
+        # too, not just the seed.
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000)
+        stored = conn.execute("SELECT typeof(balance_cents) FROM accounts").fetchall()
+        self.assertEqual([storage_class for (storage_class,) in stored], ["integer", "integer"])
 
 
 class GetBalance(unittest.TestCase):
@@ -91,6 +106,18 @@ class Transfer(unittest.TestCase):
         for amount in (0, -1):
             with self.assertRaises(ValueError):
                 db.transfer(_fresh(self), "chequing", "savings", amount)
+
+    def test_same_account_on_both_sides_raises(self):
+        # A malformed request, not a decline: the same reasoning as a non-positive amount. The
+        # caller has a bug, and the account holder has not been refused anything.
+        with self.assertRaises(ValueError):
+            db.transfer(_fresh(self), "chequing", "chequing", 15000)
+
+    def test_same_account_on_both_sides_mutates_nothing(self):
+        conn = _fresh(self)
+        with contextlib.suppress(ValueError):
+            db.transfer(conn, "chequing", "chequing", 15000)
+        self.assertEqual(db.list_accounts(conn), {"chequing": 240000, "savings": 50000})
 
     def test_transfer_of_the_entire_balance_is_allowed(self):
         # The boundary: exactly the available amount is not overdrawing.

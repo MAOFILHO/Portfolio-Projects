@@ -92,10 +92,18 @@ def transfer(conn, from_account, to_account, amount_cents):
     The three outcomes are kept distinct on purpose (CONTEXT.md): an unknown account **raises**, an
     overdrawing transfer is **declined** and mutates nothing, and a valid transfer **completes**
     atomically. A non-positive amount is a malformed request rather than a business decline, so it
-    raises too -- the caller has a bug, the account holder has not been refused anything.
+    raises too -- the caller has a bug, the account holder has not been refused anything. The same
+    account on both sides is malformed for the same reason.
     """
     if amount_cents <= 0:
         raise ValueError(f"transfer amount must be positive, got {amount_cents!r}")
+    if from_account == to_account:
+        # Rejected rather than performed as a no-op. Both UPDATEs below would land on the same row
+        # and cancel out, leaving storage untouched while the return below reported
+        # `available - amount_cents` -- a balance this service had never held, which the voice
+        # agent then read to the caller as fact (/code-review, 2026-09-08). The rule that no
+        # failure path may produce a fabricated figure has no exception for the happy path.
+        raise ValueError(f"transfer needs two different accounts, got {from_account!r} twice")
 
     # Read both balances first: an unknown *destination* must raise before any debit happens, not
     # after. Doing this inside the transaction below would still be correct, but this way there is
