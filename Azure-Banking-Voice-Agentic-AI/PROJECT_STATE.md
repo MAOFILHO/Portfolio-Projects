@@ -1,160 +1,94 @@
 # PROJECT_STATE.md — Azure-Banking-Voice-Agentic-AI
 
-Current-state only (decision 18, `CLAUDE.md`). Historical narrative lives in `docs/phase0/`,
-`docs/phase1/`, and `docs/handoffs/`, never here. Check this file's size before every edit — ceiling
-is ≤400 lines/~20KB; move the oldest closed material out first if an addition would exceed it.
+Current-state only (decision 18, `CLAUDE.md`): what is true now, what is open, what happens next.
+**Nothing past-tense belongs here.** Closed phases are archived per phase and the archives are the
+account of what happened:
 
-## Current phase
+| phase | closed record |
+|---|---|
+| 0 | `docs/phase0/findings.md`, `docs/phase0/EXIT-AND-PHASE1-ENTRY.md` |
+| 1 | `docs/phase1/archive.md`, `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` |
+| 2 | `docs/phase2/archive.md` |
+| 3 | `docs/phase3/archive.md` (exit criteria: `docs/phase3/exit-criteria.md`) |
 
-**Phase 3 — mock-core-banking. Built and reviewed 2026-09-08, all seven tickets.**
-`/code-review` ran both axes (`d697baf..HEAD`, spec = #25); every actionable finding is fixed
-(`0dec63e`, `HEAD`). **Marco's own sign-off on the exit criteria has not happened** — that is the
-stop condition, and this file does not self-certify it.
-Spec: GitHub issue **#25**. Tickets: **#26-32** (sub-issues of #25). Written exit criteria:
-`docs/phase3/exit-criteria.md`.
+Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
+material into the archive above if an addition would exceed it.
 
-**152 tests green** (129 voice-agent incl. 3 skipped by design, 23 mock-core-banking), `make lint`
-clean, B3 static check passes, zero cloud dependency. Built:
-- **#26** `mock-core-banking/` — FastAPI + SQLite, own package/pyproject/Dockerfile/tests, integer
-  cents, seeded-if-empty, REST-resource routes with the 404/200-declined/422 status mapping.
-- **#27** `core_banking/client.py` — the protocol, the async httpx client, 1.0s timeout, one retry
-  on reads only, and a per-process breaker (5 failures → 30s → half-open probe) for the whole
-  service. Failure paths tested via `httpx.MockTransport`; the breaker's clock is injected.
-- **#28** the seam — `FakeCoreBankingClient`, `accounts.py` **deleted**, the account enum dropped
-  from the tool schema, `dispatch_tool_call` async and awaited by the relay.
-- **#29** boot guard refuses to start without `CORE_BANKING_URL`.
-- **#30** one real-network test (spawns the service, real socket) + `make test`/`install` across
-  both suites.
-- **#31** these docs. **#32** `infra/modules/mock-core-banking.bicep`, written unapplied.
+## Stop conditions in force
 
-**`/code-review` findings, all fixed, each with a test verified red against the pre-fix code:**
-1. **The caller was being read the service's internal URL.** An unknown account produced "There's
-   no `http://ca-azbank-core-banking.internal:8001/accounts/bitcoin` account on this profile."
-   Both axes found it independently. The test had asserted `assertIn("bitcoin", error)` — and the
-   URL contains "bitcoin", so the substring check could not tell the right answer from the wrong
-   one. Fixed at the source: the service now names the unknown account in its 404 body (it is the
-   only thing that knows *which* of a transfer's two accounts was bad); assertions are now exact
-   sentences.
-2. **A half-open probe on a read issued two requests, not one** — `READ_RETRIES` applied to the
-   probe, against #27's own acceptance criterion, doubling load on a backend already believed sick.
-3. **A malformed request spoke the service's internal wording** ("core banking rejected the request
-   with 422"). Now a composed sentence; the raw text is logged, not spoken.
-4. **The tool schema still named the accounts in prose** ("e.g. chequing or savings") after the
-   enum was dropped — the same stale answer back in front of the model in another form.
-5. The fake raised `ValueError` where the real client raises `CoreBankingRequestError` for the same
-   scenario — a divergence that made tests passing against the fake say something untrue about
-   production (#25's own user story 10). The fake now fails the way the service does.
+`CLAUDE.md`'s stop-conditions list is canonical and is not restated here. These are the ones with a
+live bearing on the current moment:
 
-**Known-partial, not fixed:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no
-`bicep` CLI is available here, and `infra/` contains only this one module (no `main.bicep`), so
-"consistent with the existing modules' shape" has nothing to be consistent with yet. Also
-unenforced: #26's "runs without the voice agent installed" is true by construction (no cross-
-imports) but `make test` uses one shared venv, so nothing proves it.
+1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
+   reason (R-09). Irreplaceable, not merely billable.
+2. **The uncommitted diff must not be auto-accepted.** It touches
+   `voice-agent/azbank_voice_agent/dispatch/`, which the never-auto-accept rule covers even though
+   `gate.py` itself is byte-identical and `PERMISSIONS` is still `{}`.
+3. **No billable Azure resource without Marco typing `APPROVED: <phase name>`** — this binds the
+   pending mock-core-banking provisioning, which also has R-08 as a precondition (below).
+4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 3's
+   sign-off has not happened; Phase 4 has not begun.
+5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-**Two deviations from the tickets as written, both deliberate:**
-1. `tests/test_gate.py` could not pass *literally* unchanged (#28's criterion 7) — the dispatcher
-   is a coroutine now, so its in-path class had to become async. **What it asserts is unchanged,
-   and `dispatch/gate.py` itself is byte-identical**, which is the half that was actually load-
-   bearing. The policy class (`GateIsAPureDenyAllFunction`) is untouched.
-2. The client is built once in `app.lifespan()` and read from a module-level accessor, **not
-   constructed per call** — a first pass did the latter, which would have given every call its own
-   circuit breaker that could never trip. Q13 settled per-process; this is that decision, enforced.
+## Current phase — Phase 3, awaiting sign-off
 
-Scope: `mock-core-banking` becomes its own deployable (FastAPI + SQLite, own package/Dockerfile/
-tests), reached through one new seam -- a `CoreBankingClient` protocol with a real async httpx
-client and a deterministic fake, mirroring how `transport/` and `realtime/` already pair a real
-system with its fake. `accounts.py` is deleted. `dispatch_tool_call` goes async so a network call
-never stalls the audio loop. **`dispatch/gate.py` does not change** -- `PERMISSIONS` stays `{}`;
-this phase adds a path *behind* the control, Phase 4 adds permissions.
+**Phase 3 (mock-core-banking) is built and reviewed three times; Marco's sign-off on the exit
+criteria has not happened.** This file does not self-certify it. Spec: issue **#25**, tickets
+**#26-32**.
 
-**No `APPROVED: Phase 3` is required for this scope -- it creates no billable Azure resource.**
-Nothing is provisioned: the Dockerfile and Bicep module are written and left unapplied, and the
-live container app is not redeployed. Provisioning is a separately approved step afterwards, with
-its own precondition (R-08, below).
+**208 tests green** (176 voice-agent incl. 3 skipped by design, 32 mock-core-banking), `make lint`
+clean, B3 static check passes, zero cloud dependency.
 
-Three design decisions worth not re-deriving: a **declined** transfer is 200 + structured outcome
-(not 4xx -- it is a normal outcome of a working system); **`transfer` is never retried** (not
-idempotent, a retried timeout is a double-spend); one circuit breaker per process for the **whole**
-service (per-endpoint would let a healthy read path mask a service failing its writes). Full
-reasoning in #25.
+**UNCOMMITTED as of 2026-09-09**: the fixes from the 2026-09-09 `/diagnosing-bugs` and
+`/code-review` rounds are in the working tree, not in a commit. See stop condition 2.
 
-## Phase 2 — closed
+**No `APPROVED: Phase 3` is required for this scope** — it creates no billable Azure resource.
+Nothing is provisioned: the Dockerfile and Bicep module are written and left unapplied, and the live
+container app is not redeployed. Provisioning is a separately approved step afterwards, with its own
+precondition (R-08, below).
 
-**Signed off by Marco 2026-09-08 ("Phase 2 approved").** All three exit criteria met: fakes-only CI
-with the gate provably deny-all, `T-B3-SUCCESSOR-BOOT` exists, and B5's provisional figure landed
-at **p95=932ms, N=106** (31 real calls + 75 `scripts/b5_probe.py` samples, both pools stated).
-Spec was issue #16, tickets #17-24.
+### Open, needs Marco
 
-Full narrative -- what was built per ticket, the two `/code-review` rounds, the B2 leak fix, the
-review findings deliberately not actioned: `docs/handoffs/2026-09-08-phase2-signoff-phase3-entry.md`.
-Per-call B5 detail: `docs/phase2/evidence/b5-call-log.md`. Not repeated here (decision 18).
+1. **One deliberate deviation, to uphold or overrule:** `tools._account_name` refuses an account
+   name containing `/`. The spec axis reads that as the dispatcher deciding which names are usable,
+   which #25 gives to the system of record. It is kept because a slash cannot survive as a path
+   segment (uvicorn decodes `%2F` before routing), so letting it through means a redirect →
+   unavailable → a breaker failure, and five of them opens the circuit for every caller. Full
+   argument in that function's docstring.
+2. **Known-partial:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no `bicep` CLI
+   is available here, and `infra/` contains only this one module (no `main.bicep`), so "consistent
+   with the existing modules' shape" has nothing to be consistent with yet.
 
-**98 tests green, ~0.5s, no cloud dependency** (3 skipped: the successor rehearsal, by design).
-`make lint` clean. **Phase 1 remains the demonstrable deliverable and still works.**
+## Live Azure state
 
-**Operating-mode verdict: IDLE, reconfirmed 2026-09-08** against R-04's original method, over the
-window covering all 8 real B5 calls plus the probe batch -- settles to idle within one 15-min
-bucket every time, same ~189KB/118KB baseline as Phase 0/1.
+Verify this against the API before acting on it (`CLAUDE.md`, Resume discipline) — it is a snapshot
+and goes stale between sessions. **What a caller dialling the number reaches today is Phase 1's
+agent**, on the Phase 2 image; Phase 3's network path is built but not deployed.
 
-## Phase 0 — closed
-
-All 12 stages of `01-provision.sh` ran, first real answered call 2026-08-21, teardown complete
-(commit `07faf3b`). Compute was re-provisioned for Phase 1's own work (below) — Phase 0's own
-teardown is not the current resource state. Full narrative: `docs/phase0/findings.md`,
-`docs/phase0/EXIT-AND-PHASE1-ENTRY.md`, `docs/handoffs/2026-08-24-phase0-closeout-teardown-complete.md`.
-
-**Resources live now**: resource group `rg-azure-banking-voice-agentic-ai`; AOAI
-`aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
-`acs-azure-banking-voice`; phone number `+17059100383` (owned, $1.00/mo, R-09 — never released);
-Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0`
-(min-replicas=1, billing now) running the **Phase 2** image `docker.io/maofilho/azbank-echo-p0:p3`
-as of 2026-09-08 (`:p2` deployed 2026-09-07, was Phase 1's `:latest` before that; `:p3` adds the B5
-latency-anchor logging from `42e02c5`, revision `--0000002`, `Healthy`, 100% traffic, B3 verified
-live again from real logs); data-plane auth
-to AOAI (the realtime connection itself) is still via the `AOAI_KEY` secret — only the B3 ARM read
-uses the managed identity.
-
-**Correction 2026-09-08: there are three Log Analytics workspaces, not two.** `...aiCS`
-(`2a41795f-...`, Phase 0's documented "real/linked" one) and `...aixC` (`e42c142b-...`, documented
-orphan) were the only two on record — but the container app's diagnostic setting
-(`azbank-p0-console-logs`) actually targets a **third, undocumented one**:
-`workspace-rgazurebankingvoiceagenticai1D` (`bf520f2c-e2bc-4488-8965-9317a7922c74`). `...aiCS` has
-been stale since 2026-08-25 without anyone noticing; `...ai1D` is the live one — confirmed by
-querying it and finding real rows from today's calls. Query `...ai1D`, not `...aiCS`, for
-anything current. `...aixC` is still the orphan.
-
-**System-assigned managed identity added to `ca-azbank-echo-p0` 2026-09-07** (this session, Marco
-confirmed the plan first): principal `5e09fe34-8913-4aa2-80ac-618af308a88f`, granted `Reader` —
-scoped only to the `aoai-azure-banking-voice-cc` resource, nothing broader — which is what
-`boot.read_live_model()`'s one ARM `GET .../deployments/{name}` call needs. Free, no new billable
-resource.
-
-**Phase 2 image deployed 2026-09-07** (Marco built+pushed on his laptop, confirmed `linux/amd64`;
-Claude confirmed the `az containerapp update` command before running it): `ca-azbank-echo-p0` now
-runs `docker.io/maofilho/azbank-echo-p0:p2`, plus the three env vars `boot.read_live_model()` needs
-(`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AOAI_ACCOUNT_NAME` — added via `--set-env-vars`,
-additive, confirmed the 5 pre-existing vars were untouched). New revision
-`ca-azbank-echo-p0--0000001`, `Healthy`/`RunningAtMaxScale`. **B3's boot guard ran live for the
-first time and passed** — confirmed from actual container logs (not inferred from health state):
-managed identity acquired a token, `GET .../deployments/gpt-realtime-mini` returned `200 OK`, and
-the app logged `B3: deployed model ('gpt-realtime-mini', '2025-10-06') matches the active pin.`
-before `Application startup complete.` Single-revision mode, so this replaced the running Phase 1
-container — flagged to Marco as a real risk (no automatic fallback on a bad boot) before running.
-
-**Redeployed to `:p3` 2026-09-08** (same process, Marco confirmed the command first): adds the B5
-latency-anchor logging (`42e02c5`) that `:p2` didn't have. Revision `--0000002`, `Healthy`, 100%
-traffic, B3 verified live again from real logs (`ai1D` workspace). No env var changes.
+- Resource group `rg-azure-banking-voice-agentic-ai`.
+- AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
+- ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
+- Container Apps environment `cae-azure-banking-voice-p0`.
+- Container App `ca-azbank-echo-p0`, min-replicas=1 (**billing now**), running
+  `docker.io/maofilho/azbank-echo-p0:p3`, revision `--0000002`, `Healthy`, 100% traffic. Its
+  system-assigned identity (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI
+  resource only, which is what B3's boot guard reads. Deployment history:
+  `docs/phase2/archive.md`.
+- **Data-plane auth to AOAI is still the `AOAI_KEY` secret** — only the B3 ARM read uses the managed
+  identity.
+- **Logs: query `workspace-rgazurebankingvoiceagenticai1D`** (`bf520f2c-e2bc-4488-8965-9317a7922c74`),
+  never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
+  exist, not two.
 
 ## Open items
 
-Full triage of which of these block what, and why none block Phase 1's own exit criteria (already
-met): `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` Part 1. Listed here because they're still genuinely
-unresolved, not because anything below is currently blocking.
+Full triage of which of these block what: `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` Part 1. Listed here
+because they are genuinely unresolved, not because any of them is currently blocking.
 
 1. **No durable ACS-side call-diagnostics path.** App-side container logs deliver correctly
    (`docs/handoffs/2026-08-27-phase1-logpath-resolved.md`); ACS-side call diagnostics were never
-   configured, and per item 3 below, won't be for the R-03 question specifically. Matters more once
-   Phase 2 adds a gate whose failures need auditing — Phase 6 (Observability) is its real fix.
+   configured, and per item 3 below, won't be for the R-03 question specifically. Matters more now
+   that a gate's failures need auditing — Phase 6 (Observability) is its real fix.
 2. **`02-test-calls.sh` must not be re-run carelessly.** Stages 1-3 have no skip-if-already-confirmed
    guard — unconditionally prompts for 3 fresh billable calls before Stage 4's free, read-only
    evidence extraction can run. Candidate fix: an `--extract-only` flag.
@@ -167,8 +101,8 @@ unresolved, not because anything below is currently blocking.
 5. **Rate-limit meaning unconfirmed** — the Models API's per-deployment `rateLimits` field doesn't
    reconcile against the documented subscription-level Quota Tier table. Cheap Foundry-portal check
    (~30s), still not done.
-6. **`gpt-realtime-1.5` successor boot untested** — by design, Phase 2's own deliverable
-   (`T-B3-SUCCESSOR-BOOT`, needs `FakeRealtimeServer`, which Phase 2 builds).
+6. **`gpt-realtime-1.5` successor boot untested** against a real successor — the rehearsal
+   (`T-B3-SUCCESSOR-BOOT`) exists and is skipped by design.
 7. **Stale `az` CLI `defaults.location=eastus`** (this machine only, `~/.azure/config`). Fix
    identified (`--location ""`), shown as a diff, not yet applied — pending sign-off.
 8. **Log Analytics workspace auto-provision choice** (`az containerapp env create`'s default, no
@@ -199,10 +133,10 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **`/code-review` Phase 3** (Marco's call to invoke), then check `docs/phase3/exit-criteria.md`
-   actually holds. The diff to look at hardest is #28's — it touches the relay and the dispatcher
-   together, and CLAUDE.md's never-auto-accept rule covers that directory even though `gate.py`'s
-   own policy is deliberately untouched.
+1. **Review the uncommitted diff and commit it.** `git diff -- voice-agent/azbank_voice_agent/
+   dispatch/` is the part the never-auto-accept rule covers. Rule on the account-name deviation
+   above while reading it. Then check `docs/phase3/exit-criteria.md` actually holds. Three review
+   rounds are already done; a fourth is Marco's call, not a prerequisite.
 2. **Only after 1**: recompute R-08 against a two-Container-App fixed cost. If it still clears the
    gate, `APPROVED: Phase 3` for the **provisioning step itself** — which is not part of Phase 3's
    scope and has its own diff (`infra/modules/mock-core-banking.bicep`) to review first.
