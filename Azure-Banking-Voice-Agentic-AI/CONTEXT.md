@@ -122,4 +122,4 @@ nobody has been refused anything, which is what separates this from **declined**
 answers `422`, the client raises `CoreBankingRequestError`, and the caller hears a request to say
 it again. Validated at the request body, so it outranks **unknown account**: a bad amount is
 malformed whether or not the accounts exist.
-_Avoid_: invalid, bad request, declined
+_Avoid_: invalid, bad request, declined (means a business refusal of a well-formed request, above)

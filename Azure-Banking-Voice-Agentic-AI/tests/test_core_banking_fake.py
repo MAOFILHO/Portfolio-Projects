@@ -11,21 +11,25 @@ not the accounts exist; only then does `db.transfer` look accounts up and raise 
 checks accounts first answers the same request with an unknown-account error, which is a different
 outcome in CONTEXT.md's vocabulary and a different sentence to the caller.
 
-The expectations below were **measured** against the real service rather than reasoned about --
-each row is the status it actually returned, mapped through the client. That matters here more than
-usual: the drift these tests pin was introduced by a previous attempt to reason about it
-(/code-review, 2026-09-08, which found the fake answering `("bitcoin", "savings", -5.0)` with an
-unknown-account error where production answers malformed, and applying a sub-cent amount the
-service would have rejected outright).
+`EXPECTED_ERRORS` is the shared table, and **`tests/test_core_banking_live.py` drives the same rows
+against a real spawned service** -- so it is not a transcribed constant that stays green while the
+service drifts underneath it. This file asserts the fake matches the table; the live test asserts
+the service does. Neither claim rests on the other, which is the only arrangement that makes user
+story 10 mean anything (/code-review, 2026-09-08, which found the fake answering
+`("bitcoin", "savings", -5.0)` with an unknown-account error where production answers malformed,
+and applying a sub-cent amount the service would have rejected outright).
 """
 import unittest
 
 from azbank_voice_agent.core_banking import CoreBankingRequestError, UnknownAccountError
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 
-#: (from, to, amount) -> the exception the real client raises against the real service. A malformed
-#: amount outranks an unknown account in every row, because that is the order the service applies.
-BAD_REQUESTS = [
+#: (from, to, amount) -> the exception the real client raises against the real service, for requests
+#: the service refuses. The rows are ordered to show the precedence: the first four carry an amount
+#: the request body rejects, two of them *also* naming an account that does not exist, and all four
+#: answer malformed -- so a bad amount outranks an unknown account. The last two are well-formed
+#: amounts naming a missing account, which is the only way to reach unknown-account.
+EXPECTED_ERRORS = [
     (("chequing", "savings", -5.0), CoreBankingRequestError),
     (("bitcoin", "savings", -5.0), CoreBankingRequestError),
     (("bitcoin", "dogecoin", 0.0), CoreBankingRequestError),
@@ -37,7 +41,7 @@ BAD_REQUESTS = [
 
 class MatchesTheService(unittest.IsolatedAsyncioTestCase):
     async def test_a_bad_request_raises_what_the_service_would_raise(self):
-        for args, expected in BAD_REQUESTS:
+        for args, expected in EXPECTED_ERRORS:
             with self.subTest(args=args):
                 with self.assertRaises(expected):
                     await FakeCoreBankingClient().transfer(*args)
@@ -61,8 +65,8 @@ class MatchesTheService(unittest.IsolatedAsyncioTestCase):
 
 class ReportsWhatItHolds(unittest.IsolatedAsyncioTestCase):
     async def test_a_completed_transfer_reports_its_own_stored_balances(self):
-        # Same invariant the service is held to: the figures come from the balances, never from
-        # the arithmetic. A self-transfer is the input that tells those apart.
+        # The invariant db.transfer is held to, on the input that tells it apart -- see that
+        # function for why a self-transfer is the one that does.
         fake = FakeCoreBankingClient()
         result = await fake.transfer("chequing", "chequing", 150.0)
         self.assertEqual(result.from_balance, 2400.00)

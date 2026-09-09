@@ -2,7 +2,7 @@
 
 Split out of the Phase 1 relay's test file by the Phase 2.1 restructure (issue #17). Repointed at
 the injected core-banking client by Phase 3 (issue #28) -- the cases that were about an in-memory
-dict are now about what the dispatcher does with each of the three outcomes.
+dict are now about what the dispatcher does with each of CONTEXT.md's outcomes.
 
 The gate is patched open throughout so these cases don't depend on B1 policy (empty until Phase 4;
 see tests/test_gate.py for the gate itself).
@@ -59,9 +59,8 @@ class DispatchToolCall(DispatchCase):
 
     async def test_the_spoken_balance_is_the_one_core_banking_holds(self):
         # The no-fabrication rule where the caller actually hears it (CLAUDE.md's silent-fallback
-        # exclusion). A self-transfer is the input that separates a spoken balance read from the
-        # backend from one computed by subtracting: the service used to report 2250.00 here while
-        # holding 2400.00, and the dispatcher read that out (/code-review, 2026-09-08).
+        # exclusion): the spoken figure must be the one the backend holds. See db.transfer for why
+        # a self-transfer is the input that tells that apart from a computed one.
         out = await self.dispatch(
             "transfer", '{"from_account": "chequing", "to_account": "chequing", "amount": 150.0}'
         )
@@ -80,7 +79,7 @@ class DispatchToolCall(DispatchCase):
             self.assertNotIn(internal, out["error"])
 
 
-class TheThreeOutcomesStayDistinct(DispatchCase):
+class TheOutcomesStayDistinct(DispatchCase):
     """CONTEXT.md's unknown-account, declined and unavailable outcomes, at the dispatcher. Each
     gets its own spoken answer -- the whole reason Phase 3 stopped collapsing them into one error
     shape. Malformed, the fourth, is covered above in DispatchToolCall."""

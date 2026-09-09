@@ -25,6 +25,14 @@ import unittest
 import httpx
 from azbank_voice_agent.core_banking import HttpCoreBankingClient, UnknownAccountError
 
+try:
+    # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
+    from test_core_banking_fake import EXPECTED_ERRORS
+except ImportError:
+    # `python -m unittest tests.test_core_banking_live` does not, and running one file that way is
+    # the ordinary thing to do while iterating.
+    from tests.test_core_banking_fake import EXPECTED_ERRORS
+
 _STARTUP_TIMEOUT_SECONDS = 20.0
 
 
@@ -119,6 +127,17 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         declined = await self.client.transfer("chequing", "savings", 99999.00)
         self.assertEqual(declined.outcome, "declined")
         self.assertEqual(declined.available, 2250.00)
+        self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
+
+        # The refusal table the fake is pinned against, driven here against the real thing. Without
+        # this the fake's parity tests would be checking it against a constant somebody typed --
+        # green forever, including on the day the service starts answering differently. Kept inside
+        # this test rather than given its own: issue #30's "exactly one test" is about how many
+        # services get spawned, and this spawns none of its own.
+        for args, expected in EXPECTED_ERRORS:
+            with self.subTest(args=args):
+                with self.assertRaises(expected):
+                    await self.client.transfer(*args)
         self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
 
 

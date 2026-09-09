@@ -97,10 +97,8 @@ class Transfers(ServiceCase):
         self.assertEqual(response.status_code, 422)
 
     def test_a_transfer_reports_the_balance_the_service_actually_holds(self):
-        # Over HTTP, on the input that tells reported-from-storage apart from reported-from-
-        # arithmetic: a self-transfer nets to zero, so the body must say 240000 and agree with a
-        # re-read. Reporting `available - amount_cents` said 225000 here, and the voice agent read
-        # that to the caller as fact (/code-review, 2026-09-08).
+        # The same invariant as test_db.py's, asserted over HTTP: the body must agree with a
+        # re-read. See db.transfer for why a self-transfer is the input that tells it apart.
         client = self.client()
         response = client.post("/transfers", json={
             "from_account": "chequing", "to_account": "chequing", "amount_cents": 15000,

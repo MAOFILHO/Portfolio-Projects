@@ -13,7 +13,13 @@ call* seam, where what matters is what the caller ends up hearing. The client's 
 breaker behaviour is not tested through here; that is tests/test_core_banking_client.py's job,
 against httpx.MockTransport.
 """
-from .client import CoreBankingRequestError, TransferOutcome, UnknownAccountError
+from .client import (
+    CoreBankingRequestError,
+    TransferOutcome,
+    UnknownAccountError,
+    _cents,
+    _dollars,
+)
 
 #: Same accounts and balances as the service seeds, in dollars (the units this side of the seam
 #: speaks). Cents are the service's business; see client.py's module docstring.
@@ -45,40 +51,38 @@ class FakeCoreBankingClient:
 
     async def transfer(self, from_account, to_account, amount):
         self._check("transfer")
-        # Whole cents, rounded exactly as the real client rounds before sending. The service can
-        # never see a fraction of a cent -- `amount_cents` is an int on the wire -- so a fake that
-        # applied the raw dollars would move an amount the real system could not, and leave
-        # balances like 2399.999 behind (/code-review, 2026-09-08).
-        amount = round(amount * 100) / 100
+        # Put the amount through the real client's own conversion rather than a second copy of the
+        # rounding rule: what the service can actually receive is whatever `_cents` produces, and
+        # a fake with its own arithmetic drifts from that silently. Applying the raw dollars left
+        # balances like 2399.999 behind, which the real system cannot hold (/code-review,
+        # 2026-09-08).
+        moved = _dollars(_cents(amount))
 
         # Amount before accounts, because that is the order the service applies: `TransferRequest`
         # validates the body before the route body runs, so a bad amount is a 422 whether or not
-        # the accounts exist, and only then does the lookup produce a 404. Checking accounts first
-        # answered ("bitcoin", "bitcoin", -5) with an unknown-account error where production
-        # answers malformed -- a different outcome in CONTEXT.md's vocabulary and a different
-        # sentence to the caller. tests/test_core_banking_fake.py pins the order against responses
-        # measured from a real spawned service.
-        if amount <= 0:
+        # the accounts exist, and only then does the lookup produce a 404. See
+        # tests/test_core_banking_fake.py, which pins this order against a real spawned service.
+        if moved <= 0:
             # CoreBankingRequestError, not ValueError: the real service answers this with a 422,
             # which the real client turns into exactly this type. A fake that failed differently
             # would make tests passing against it say something untrue about production
-            # (/code-review, 2026-09-08 -- issue #25's own user story 10).
+            # (/code-review, 2026-09-08 -- issue #25's own user story 10). The message quotes the
+            # amount as asked for, not as rounded, so a sub-cent request does not report "got 0.0".
             raise CoreBankingRequestError(f"transfer amount must be positive, got {amount!r}")
         for account in (from_account, to_account):
             if account not in self.accounts:
                 raise UnknownAccountError(account)
 
         available = self.accounts[from_account]
-        if amount > available:
+        if moved > available:
             # Declined, not raised: a normal outcome of a working system (CONTEXT.md).
             return TransferOutcome(
                 outcome="declined", reason="insufficient_funds", available=available
             )
-        self.accounts[from_account] -= amount
-        self.accounts[to_account] += amount
-        # Read back out of the dict, never computed -- the same invariant db.transfer is held to.
-        # A self-transfer is the input that tells the two apart: both mutations land on one entry
-        # and cancel, so anything computed would report a balance nothing holds.
+        self.accounts[from_account] -= moved
+        self.accounts[to_account] += moved
+        # Read back out of the dict, never computed -- the invariant db.transfer is held to, and
+        # that function carries the reasoning.
         return TransferOutcome(
             outcome="completed",
             from_balance=self.accounts[from_account],
