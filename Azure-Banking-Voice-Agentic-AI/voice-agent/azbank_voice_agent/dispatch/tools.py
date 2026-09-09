@@ -121,24 +121,9 @@ def _account_name(args, key):
     rule of core banking, and the two clients had already drifted on it. The amount's own rule
     lives at the dollars-to-cents boundary instead (`client._cents`), because that one *is* about
     money and both clients pass through it.
-
-    A name containing "/" is refused for a narrower reason, and this one is a judgement call worth
-    stating: it cannot survive the trip as one path segment. Percent-encoding does not save it --
-    uvicorn decodes %2F before the router sees the path, so "chequing/" arrives as a trailing slash
-    and draws a redirect (measured, 2026-09-09).
-
-    /code-review's spec axis (2026-09-09) reads this as the dispatcher deciding which names are
-    usable, which #25 gives to the system of record. The counter-argument, and why it stands: this
-    decides addressability, not existence -- exactly like the empty name above -- and the
-    alternative is worse now that an unreadable response counts against the circuit breaker. Letting
-    a slash through means a redirect, which is `unavailable`, which is a breaker failure: five such
-    names in a row and the model has opened the circuit on a service that is perfectly healthy, for
-    every caller, for thirty seconds. Refusing the name costs one caller one sentence. **Recorded in
-    PROJECT_STATE.md as a deliberate deviation, for Marco to overrule if he reads the trade the
-    other way.**
     """
     value = args[key]
-    if not isinstance(value, str) or not value.strip() or "/" in value:
+    if not isinstance(value, str) or not value.strip():
         raise CoreBankingRequestError(f"{key} must be a non-empty account name, got {value!r}")
     return value
 

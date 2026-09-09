@@ -23,7 +23,11 @@ import time
 import unittest
 
 import httpx
-from azbank_voice_agent.core_banking import HttpCoreBankingClient, UnknownAccountError
+from azbank_voice_agent.core_banking import (
+    CoreBankingUnavailable,
+    HttpCoreBankingClient,
+    UnknownAccountError,
+)
 
 try:
     # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
@@ -140,6 +144,28 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
             with self.subTest(args=args):
                 with self.assertRaises(expected):
                     await self.client.transfer(*args)
+        self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
+
+        # An account name that cannot address a resource. The dispatcher was briefly given a rule
+        # refusing a name containing "/" as malformed; that was rejected 2026-09-09 -- the system of
+        # record decides which names exist -- so these names reach the service, and what it does
+        # with them can only be pinned here. Both are percent-encoded on the way out, which is what
+        # keeps the first from reaching /health, whose 200 body has no balance in it.
+        with self.assertRaises(UnknownAccountError) as caught:
+            await self.client.get_balance("../health")
+        # A clean 404 the service does not name, so the caller hears the no-name sentence rather
+        # than "There's no ../health account on this profile."
+        self.assertIsNone(caught.exception.args[0])
+
+        # A trailing slash is the one that costs something: uvicorn decodes %2F before routing, so
+        # it arrives as "/accounts/chequing/" and draws a redirect, which is not a result. The
+        # caller is told the bank could not be reached for an account that simply does not exist,
+        # and the operation counts against the circuit breaker. Asserted rather than merely noted,
+        # because it is the accepted price of leaving the decision with the system of record.
+        with self.assertRaises(CoreBankingUnavailable):
+            await self.client.get_balance("chequing/")
+
+        # Nothing above moved money, and the service is still answering.
         self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
 
 

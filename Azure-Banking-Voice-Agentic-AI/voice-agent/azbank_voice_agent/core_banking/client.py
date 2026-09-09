@@ -283,11 +283,6 @@ class HttpCoreBankingClient:
         # Interpolated raw it stopped being a name and became routing: "../health" resolved to
         # another route entirely, and "a#b" truncated the path and asked about account "a" -- whose
         # answer the caller was then given by name (probe, 2026-09-09).
-        #
-        # Encoding does not make a name containing "/" safe, and nothing here pretends it does:
-        # uvicorn decodes %2F before the router sees the path, so "chequing%2F" still arrives as a
-        # trailing slash and draws a 307 (measured, 2026-09-09). A slash is refused earlier, in the
-        # dispatcher, where both clients are held to the same rule.
         return await self._get(
             f"/accounts/{quote(account, safe='')}", lambda p: _dollars(p["balance_cents"])
         )

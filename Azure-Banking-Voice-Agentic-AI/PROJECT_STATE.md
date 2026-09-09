@@ -21,41 +21,31 @@ live bearing on the current moment:
 
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
-2. **The uncommitted diff must not be auto-accepted.** It touches
-   `voice-agent/azbank_voice_agent/dispatch/`, which the never-auto-accept rule covers even though
-   `gate.py` itself is byte-identical and `PERMISSIONS` is still `{}`.
-3. **No billable Azure resource without Marco typing `APPROVED: <phase name>`** — this binds the
+2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** This binds the
    pending mock-core-banking provisioning, which also has R-08 as a precondition (below).
-4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 3's
-   sign-off has not happened; Phase 4 has not begun.
+   **"Phase 3: APPROVED" (2026-09-09) signed off the exit criteria; it did not authorise
+   provisioning**, which was never in Phase 3's scope and needs its own approval.
+3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
+4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 4 has not
+   begun and has no written exit criteria yet.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 3, awaiting sign-off
+## Current phase — Phase 3, signed off; Phase 4 not begun
 
-**Phase 3 (mock-core-banking) is built and reviewed three times; Marco's sign-off on the exit
-criteria has not happened.** This file does not self-certify it. Spec: issue **#25**, tickets
-**#26-32**.
+**Phase 3 (mock-core-banking) was signed off by Marco on 2026-09-09 ("Phase 3: APPROVED").** Built,
+reviewed three times, and every finding fixed. Spec: issue **#25**, tickets **#26-32**. The closed
+record is `docs/phase3/archive.md`.
 
-**208 tests green** (176 voice-agent incl. 3 skipped by design, 32 mock-core-banking), `make lint`
+**207 tests green** (175 voice-agent incl. 3 skipped by design, 32 mock-core-banking), `make lint`
 clean, B3 static check passes, zero cloud dependency.
 
-**UNCOMMITTED as of 2026-09-09**: the fixes from the 2026-09-09 `/diagnosing-bugs` and
-`/code-review` rounds are in the working tree, not in a commit. See stop condition 2.
+**Nothing is provisioned** — the Dockerfile and Bicep module are written and left unapplied, and the
+live container app is not redeployed. Provisioning is a separately approved step, with R-08 as its
+precondition (below).
 
-**No `APPROVED: Phase 3` is required for this scope** — it creates no billable Azure resource.
-Nothing is provisioned: the Dockerfile and Bicep module are written and left unapplied, and the live
-container app is not redeployed. Provisioning is a separately approved step afterwards, with its own
-precondition (R-08, below).
+### Still open
 
-### Open, needs Marco
-
-1. **One deliberate deviation, to uphold or overrule:** `tools._account_name` refuses an account
-   name containing `/`. The spec axis reads that as the dispatcher deciding which names are usable,
-   which #25 gives to the system of record. It is kept because a slash cannot survive as a path
-   segment (uvicorn decodes `%2F` before routing), so letting it through means a redirect →
-   unavailable → a breaker failure, and five of them opens the circuit for every caller. Full
-   argument in that function's docstring.
-2. **Known-partial:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no `bicep` CLI
+1. **Known-partial:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no `bicep` CLI
    is available here, and `infra/` contains only this one module (no `main.bicep`), so "consistent
    with the existing modules' shape" has nothing to be consistent with yet.
 
@@ -133,14 +123,14 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Review the uncommitted diff and commit it.** `git diff -- voice-agent/azbank_voice_agent/
-   dispatch/` is the part the never-auto-accept rule covers. Rule on the account-name deviation
-   above while reading it. Then check `docs/phase3/exit-criteria.md` actually holds. Three review
-   rounds are already done; a fourth is Marco's call, not a prerequisite.
-2. **Only after 1**: recompute R-08 against a two-Container-App fixed cost. If it still clears the
-   gate, `APPROVED: Phase 3` for the **provisioning step itself** — which is not part of Phase 3's
-   scope and has its own diff (`infra/modules/mock-core-banking.bicep`) to review first.
-3. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
+1. **Recompute R-08 against a two-Container-App fixed cost.** If it still clears the gate, that is
+   when to approve the **provisioning step itself** — not part of Phase 3's scope, and with its own
+   diff (`infra/modules/mock-core-banking.bicep`) to review first, which no tooling here can
+   validate.
+2. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
+3. **Phase 4 kickoff** needs written exit criteria and Marco's approval before any of it begins. It
+   is the phase that adds permissions to `gate.py` and puts the DTMF PIN on the path, so both
+   never-auto-accept rules bind it from the first diff.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls
 for. It sits outside `PROJECT_ROOT` and needs approval by absolute path, same as the CI workflow

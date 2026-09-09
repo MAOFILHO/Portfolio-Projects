@@ -227,14 +227,11 @@ class ArgumentsTheModelCanActuallyEmit(DispatchCase):
                 out = await self.dispatch_raw("get_balance", '{"account": ' + literal + '}')
                 self.assertEqual(out, {"error": tools.MALFORMED})
 
-    async def test_an_account_name_containing_a_slash_is_refused(self):
-        # It cannot survive as one path segment: uvicorn decodes %2F before routing, so
-        # "chequing/" draws a trailing-slash redirect that the client can only report as
-        # unavailable -- an account that does not exist would have been answered as an outage.
-        for literal in ('"chequing/"', '"../health"'):
-            with self.subTest(account=literal):
-                out = await self.dispatch_raw("get_balance", '{"account": ' + literal + '}')
-                self.assertEqual(out, {"error": tools.MALFORMED})
+    # A name that cannot address a resource -- "../health", a trailing slash -- is deliberately
+    # *not* asserted here. The dispatcher passes such names to the system of record (the slash rule
+    # was considered and rejected 2026-09-09), and what comes back depends on a URL and an HTTP
+    # status that this fake has neither of: it answers both from a dict lookup. Pinned in
+    # tests/test_core_banking_live.py, against the real service, where the answer is real.
 
     async def test_an_unparseable_arguments_payload_is_refused(self):
         out = await self.dispatch_raw("get_balance", "not json at all")

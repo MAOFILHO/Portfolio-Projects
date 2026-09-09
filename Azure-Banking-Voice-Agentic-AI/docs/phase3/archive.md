@@ -53,8 +53,25 @@ mask a service failing its writes). Full reasoning in #25.
    constructed per call** — a first pass did the latter, which would have given every call its own
    circuit breaker that could never trip. Q13 settled per-process; this is that decision, enforced.
 
-A third deviation, `tools._account_name`'s refusal of an account name containing `/`, is **not**
-archived here: it is awaiting Marco's ruling and stays in `PROJECT_STATE.md` until he settles it.
+A third deviation was proposed and **overruled by Marco on 2026-09-09**: `tools._account_name`
+briefly refused an account name containing `/`, on the grounds that such a name cannot survive as a
+path segment. `/code-review`'s spec axis read that as the dispatcher deciding which names are
+usable, which #25 gives to the system of record, and that reading won. Marco removed the clause
+himself; the defence of it came out of the docstring with it.
+
+The accepted consequence, pinned in `tests/test_core_banking_live.py` rather than left as a note:
+`"chequing/"` reaches the service, arrives as a trailing slash because uvicorn decodes `%2F` before
+routing, and draws a redirect — so the caller is told the bank could not be reached for an account
+that simply does not exist, and the operation counts against the circuit breaker. `"../health"` is
+the better half of the trade: percent-encoding keeps it inside the accounts resource, and it comes
+back a clean 404 the service does not name.
+
+## Sign-off
+
+**Phase 3 signed off by Marco 2026-09-09 ("Phase 3: APPROVED").** That approval is the exit-criteria
+sign-off; it did not authorise provisioning, which was never in this phase's scope. At sign-off: 207
+tests green (175 voice-agent including 3 skipped by design, 32 mock-core-banking), `make lint`
+clean, B3 static check passing, zero cloud dependency, and nothing provisioned.
 
 ---
 
