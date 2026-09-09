@@ -1,4 +1,4 @@
-"""The core-banking client's own behaviour: the three outcomes, and resilience.
+"""The core-banking client's own behaviour: the outcomes it maps to, and resilience.
 
 Every failure here is produced by `httpx.MockTransport` -- in-process, no sockets, no sleeps beyond
 the ones under test. That is deliberate (issue #27): the deterministic failure suite lives here, and

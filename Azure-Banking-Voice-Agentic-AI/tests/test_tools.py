@@ -57,15 +57,15 @@ class DispatchToolCall(DispatchCase):
         )
         self.assertIn("error", out)
 
-    async def test_a_self_transfer_is_malformed_and_speaks_no_balance(self):
-        # The no-fabrication rule at the dispatcher (CLAUDE.md's silent-fallback exclusion). A
-        # self-transfer used to be accepted and confirmed with a balance nothing had ever held:
-        # the debit and the credit cancelled on one account while the confirmation reported the
-        # arithmetic. Rejected as malformed now, so no figure is spoken at all.
+    async def test_the_spoken_balance_is_the_one_core_banking_holds(self):
+        # The no-fabrication rule where the caller actually hears it (CLAUDE.md's silent-fallback
+        # exclusion). A self-transfer is the input that separates a spoken balance read from the
+        # backend from one computed by subtracting: the service used to report 2250.00 here while
+        # holding 2400.00, and the dispatcher read that out (/code-review, 2026-09-08).
         out = await self.dispatch(
             "transfer", '{"from_account": "chequing", "to_account": "chequing", "amount": 150.0}'
         )
-        self.assertEqual(out, {"error": tools.MALFORMED})
+        self.assertIn(f"${self.core_banking.accounts['chequing']:.2f}", out["result"])
         self.assertEqual(self.core_banking.accounts["chequing"], 2400.0)
 
     async def test_a_malformed_request_never_speaks_the_services_own_wording(self):
@@ -81,8 +81,9 @@ class DispatchToolCall(DispatchCase):
 
 
 class TheThreeOutcomesStayDistinct(DispatchCase):
-    """CONTEXT.md's three outcomes, at the dispatcher. Each gets its own spoken answer -- the whole
-    reason Phase 3 stopped collapsing them into one error shape."""
+    """CONTEXT.md's unknown-account, declined and unavailable outcomes, at the dispatcher. Each
+    gets its own spoken answer -- the whole reason Phase 3 stopped collapsing them into one error
+    shape. Malformed, the fourth, is covered above in DispatchToolCall."""
 
     async def test_unknown_account_names_the_account_and_does_not_claim_a_failure(self):
         out = await self.dispatch("get_balance", '{"account": "bitcoin"}')

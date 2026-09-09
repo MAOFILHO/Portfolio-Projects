@@ -1,7 +1,7 @@
 """The HTTP face of the system of record. REST-resource routes over the rules in db.py.
 
 **The status mapping is the contract** (docs/phase3/exit-criteria.md, criterion 3), and the whole
-reason the voice agent can tell three outcomes apart:
+reason the voice agent can tell the outcomes apart:
 
     unknown account           -> 404   the client raises (T-UNKNOWN-ACCT)
     declined by business rule -> 200   a normal outcome of a working system, carrying the real
@@ -22,7 +22,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from . import db
 
@@ -42,15 +42,6 @@ class TransferRequest(BaseModel):
     from_account: str
     to_account: str
     amount_cents: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def _accounts_must_differ(self):
-        """Same reasoning as `amount_cents`: caught at the boundary so it is a 422 rather than
-        something the route has to remember. `db.transfer` rejects it too -- the rule belongs to
-        the system of record, and this is what gives it the right status code."""
-        if self.from_account == self.to_account:
-            raise ValueError("from_account and to_account must differ")
-        return self
 
 
 def _unknown_account(error):

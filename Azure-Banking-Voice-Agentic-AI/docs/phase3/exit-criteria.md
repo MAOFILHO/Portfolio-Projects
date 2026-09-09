@@ -25,15 +25,22 @@ own precondition (below).
    and test suite; file-backed SQLite seeded on startup when empty; balances stored as integer
    cents. Its suite runs without the voice agent installed.
 
-3. **The three outcomes are separately tested and never conflated.**
+3. **The outcomes are separately tested and never conflated.**
    - **Unknown account** raises and is never resolved to a default, a zero, or another account's
      balance — `T-UNKNOWN-ACCT`, the behaviour `CLAUDE.md`'s hard exclusions name by example.
    - **Declined** returns a structured 200 business outcome carrying the real available amount, and
      mutates nothing.
    - **Unavailable** surfaces as unreachable.
+   - **Malformed** — a fourth, added during the phase rather than designed into it: the request
+     body itself is rejected (`422`) before the service forms an opinion, so nobody has been
+     refused anything. Not in issue #26's status-mapping table, which lists three; recorded here
+     and in `CONTEXT.md` because the code has it and a table that omits it is worse than a fourth
+     row (`/code-review`, 2026-09-08, both axes).
 
    A named test proves **no failure path ever returns a fabricated, cached, or defaulted balance** —
-   asserted across timeout, connection refused, 5xx, and open circuit.
+   asserted across timeout, connection refused, 5xx, and open circuit. The **completed** path is
+   held to the same rule: reported balances are read back out of storage, never computed from the
+   amount, and a self-transfer is the test input that tells those two apart.
 
 4. **Resilience is deterministically tested**: 1.0s per-attempt timeout; one retry on reads; **zero
    retries on `transfer`** (a timed-out transfer results in exactly one request reaching the

@@ -95,7 +95,7 @@ _Avoid_: payment, transaction, handoff (means moving a call, above)
 
 ### Outcomes
 
-The three ways a tool call can fail to give the caller what they asked for. They are genuinely
+The four ways a tool call can fail to give the caller what they asked for. They are genuinely
 different things, get genuinely different spoken responses, and are never collapsed into one:
 
 **Unknown account**:
@@ -114,3 +114,12 @@ mock-core-banking could not be reached, or did not answer in time. The caller is
 that the information can't be reached right now — and never given a remembered, cached, or guessed
 figure in its place.
 _Avoid_: down, offline, error
+
+**Malformed**:
+The request itself was not well-formed, so the service never got as far as an opinion about it — an
+amount of zero or less, or one that rounds to less than a cent. The caller of the API has a bug;
+nobody has been refused anything, which is what separates this from **declined**. The service
+answers `422`, the client raises `CoreBankingRequestError`, and the caller hears a request to say
+it again. Validated at the request body, so it outranks **unknown account**: a bad amount is
+malformed whether or not the accounts exist.
+_Avoid_: invalid, bad request, declined

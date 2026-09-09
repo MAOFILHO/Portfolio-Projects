@@ -4,7 +4,6 @@ Money is stored in **integer cents** throughout (issue #26). A service that pers
 not inherit the demo-grade float the in-memory Phase 1 module used -- these tests assert the type,
 not just the value, because the whole point is that no float ever reaches storage.
 """
-import contextlib
 import sqlite3
 import unittest
 
@@ -38,23 +37,18 @@ class Seeding(unittest.TestCase):
         self.assertEqual(db.get_balance(conn, "chequing"), 230000)
 
     def test_seed_values_are_integer_cents_at_the_source(self):
-        # Asserted on SEED_ACCOUNTS itself, never on a value read back out of SQLite. This test
-        # used to do the round trip, and it could not fail: an INTEGER-affinity column converts a
-        # whole float on insert, so a seed of 240000.0 stores and reads back as int 240000 and an
-        # isinstance check downstream cannot tell a float seed from an integer one
-        # (/code-review, 2026-09-08 -- issue #26 criterion 3 was passing for the wrong reason).
+        """Issue #26 criterion 3, asserted where it can actually fail.
+
+        On SEED_ACCOUNTS itself, never on a value read back out of SQLite. Two earlier versions of
+        this test did the round trip and neither could fail (/code-review, 2026-09-08 and again on
+        8163e83): an INTEGER-affinity column converts a whole float on insert, so a seed of
+        240000.0 stores and reads back as int 240000, and `typeof()` reports "integer" for it too.
+        Affinity erases the distinction downstream, so the source is the only place it survives --
+        and an isinstance check here catches both 2400.00 dollars-as-float and a fractional cent,
+        which is everything the round-trip assertions were reaching for.
+        """
         for balance in db.SEED_ACCOUNTS.values():
             self.assertIsInstance(balance, int)
-
-    def test_no_balance_is_persisted_as_a_float(self):
-        # sqlite3's storage class, which is the one thing affinity cannot paper over: a value it
-        # could not convert losslessly -- the fractional cent that dollars-as-float produces --
-        # stays REAL and shows up here. Run after a transfer so the arithmetic path is covered
-        # too, not just the seed.
-        conn = _fresh(self)
-        db.transfer(conn, "chequing", "savings", 15000)
-        stored = conn.execute("SELECT typeof(balance_cents) FROM accounts").fetchall()
-        self.assertEqual([storage_class for (storage_class,) in stored], ["integer", "integer"])
 
 
 class GetBalance(unittest.TestCase):
@@ -107,17 +101,21 @@ class Transfer(unittest.TestCase):
             with self.assertRaises(ValueError):
                 db.transfer(_fresh(self), "chequing", "savings", amount)
 
-    def test_same_account_on_both_sides_raises(self):
-        # A malformed request, not a decline: the same reasoning as a non-positive amount. The
-        # caller has a bug, and the account holder has not been refused anything.
-        with self.assertRaises(ValueError):
-            db.transfer(_fresh(self), "chequing", "chequing", 15000)
+    def test_a_completed_transfer_reports_what_storage_holds(self):
+        """The reported balances are read back out of the table, never computed from the amount.
 
-    def test_same_account_on_both_sides_mutates_nothing(self):
+        A self-transfer is the input that tells the two apart, which is why it is the one used
+        here: both UPDATEs land on the same row and cancel, so storage still holds 240000 while
+        `available - amount_cents` would say 225000. Reporting the arithmetic is how this service
+        came to read a caller a balance it had never held (/code-review, 2026-09-08). A transfer
+        between two different accounts cannot catch that -- the two agree for every such input.
+        """
         conn = _fresh(self)
-        with contextlib.suppress(ValueError):
-            db.transfer(conn, "chequing", "chequing", 15000)
-        self.assertEqual(db.list_accounts(conn), {"chequing": 240000, "savings": 50000})
+        result = db.transfer(conn, "chequing", "chequing", 15000)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(result.from_balance_cents, 240000)
+        self.assertEqual(result.to_balance_cents, 240000)
+        self.assertEqual(db.get_balance(conn, "chequing"), 240000)
 
     def test_transfer_of_the_entire_balance_is_allowed(self):
         # The boundary: exactly the available amount is not overdrawing.

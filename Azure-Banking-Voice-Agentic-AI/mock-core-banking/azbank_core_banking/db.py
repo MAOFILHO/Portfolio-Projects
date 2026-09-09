@@ -89,27 +89,21 @@ def get_balance(conn, account):
 def transfer(conn, from_account, to_account, amount_cents):
     """Move money between two accounts. Returns a TransferResult; raises only for bad inputs.
 
-    The three outcomes are kept distinct on purpose (CONTEXT.md): an unknown account **raises**, an
+    The outcomes are kept distinct on purpose (CONTEXT.md): an unknown account **raises**, an
     overdrawing transfer is **declined** and mutates nothing, and a valid transfer **completes**
     atomically. A non-positive amount is a malformed request rather than a business decline, so it
-    raises too -- the caller has a bug, the account holder has not been refused anything. The same
-    account on both sides is malformed for the same reason.
+    raises too -- the caller has a bug, the account holder has not been refused anything.
     """
     if amount_cents <= 0:
         raise ValueError(f"transfer amount must be positive, got {amount_cents!r}")
-    if from_account == to_account:
-        # Rejected rather than performed as a no-op. Both UPDATEs below would land on the same row
-        # and cancel out, leaving storage untouched while the return below reported
-        # `available - amount_cents` -- a balance this service had never held, which the voice
-        # agent then read to the caller as fact (/code-review, 2026-09-08). The rule that no
-        # failure path may produce a fabricated figure has no exception for the happy path.
-        raise ValueError(f"transfer needs two different accounts, got {from_account!r} twice")
 
-    # Read both balances first: an unknown *destination* must raise before any debit happens, not
-    # after. Doing this inside the transaction below would still be correct, but this way there is
-    # no window in which a rollback is what protects the caller.
+    # Both accounts are looked up first: an unknown *destination* must raise before any debit
+    # happens, not after. Doing it inside the transaction below would still be correct, but this
+    # way there is no window in which a rollback is what protects the caller. Only the source
+    # balance is kept -- the destination lookup is here to raise, and the balances that get
+    # reported are read back after the updates, below.
     available = get_balance(conn, from_account)
-    destination = get_balance(conn, to_account)
+    get_balance(conn, to_account)
 
     if amount_cents > available:
         return TransferResult(
@@ -117,6 +111,13 @@ def transfer(conn, from_account, to_account, amount_cents):
         )
 
     # `with conn` is sqlite3's transaction context: both updates commit together or neither does.
+    # The resulting balances are then **read back out of the table**, never computed as
+    # `available - amount_cents`. The arithmetic and the storage agree for a transfer between two
+    # different accounts, so the difference looks academic -- until both UPDATEs land on the same
+    # row and cancel, at which point the arithmetic reports a balance this service has never held
+    # and the voice agent reads it to the caller as fact (/code-review, 2026-09-08). Reading back
+    # is what makes "the figures come from the system of record" true by construction rather than
+    # true for the inputs someone happened to test.
     with conn:
         conn.execute(
             "UPDATE accounts SET balance_cents = balance_cents - ? WHERE name = ?",
@@ -126,10 +127,12 @@ def transfer(conn, from_account, to_account, amount_cents):
             "UPDATE accounts SET balance_cents = balance_cents + ? WHERE name = ?",
             (amount_cents, to_account),
         )
+        from_balance = get_balance(conn, from_account)
+        to_balance = get_balance(conn, to_account)
     return TransferResult(
         outcome="completed",
-        from_balance_cents=available - amount_cents,
-        to_balance_cents=destination + amount_cents,
+        from_balance_cents=from_balance,
+        to_balance_cents=to_balance,
     )
 
 

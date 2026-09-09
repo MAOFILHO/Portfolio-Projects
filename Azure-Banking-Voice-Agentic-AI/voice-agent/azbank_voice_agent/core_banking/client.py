@@ -6,9 +6,11 @@ without a network. Deliberately **not** inside dispatch/: that directory holds g
 CLAUDE.md puts a never-auto-accept rule on, and it stays short enough to read completely on every
 review.
 
-**Three outcomes, kept distinct** (CONTEXT.md). The whole reason this module exists rather than
+**The outcomes, kept distinct** (CONTEXT.md). The whole reason this module exists rather than
 `httpx` calls scattered through the dispatcher:
 
+    malformed         422              -> CoreBankingRequestError (the body was rejected; checked
+                                                                   before the accounts are)
     unknown account   404              -> UnknownAccountError    (raises; T-UNKNOWN-ACCT)
     declined          200 + outcome    -> TransferOutcome        (a normal outcome, not an error)
     unavailable       5xx/timeout/     -> CoreBankingUnavailable (never a balance, ever)

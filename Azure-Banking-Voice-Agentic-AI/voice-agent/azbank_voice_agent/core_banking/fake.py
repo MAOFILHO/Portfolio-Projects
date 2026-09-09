@@ -45,22 +45,29 @@ class FakeCoreBankingClient:
 
     async def transfer(self, from_account, to_account, amount):
         self._check("transfer")
-        for account in (from_account, to_account):
-            if account not in self.accounts:
-                raise UnknownAccountError(account)
+        # Whole cents, rounded exactly as the real client rounds before sending. The service can
+        # never see a fraction of a cent -- `amount_cents` is an int on the wire -- so a fake that
+        # applied the raw dollars would move an amount the real system could not, and leave
+        # balances like 2399.999 behind (/code-review, 2026-09-08).
+        amount = round(amount * 100) / 100
+
+        # Amount before accounts, because that is the order the service applies: `TransferRequest`
+        # validates the body before the route body runs, so a bad amount is a 422 whether or not
+        # the accounts exist, and only then does the lookup produce a 404. Checking accounts first
+        # answered ("bitcoin", "bitcoin", -5) with an unknown-account error where production
+        # answers malformed -- a different outcome in CONTEXT.md's vocabulary and a different
+        # sentence to the caller. tests/test_core_banking_fake.py pins the order against responses
+        # measured from a real spawned service.
         if amount <= 0:
             # CoreBankingRequestError, not ValueError: the real service answers this with a 422,
             # which the real client turns into exactly this type. A fake that failed differently
             # would make tests passing against it say something untrue about production
             # (/code-review, 2026-09-08 -- issue #25's own user story 10).
             raise CoreBankingRequestError(f"transfer amount must be positive, got {amount!r}")
-        if from_account == to_account:
-            # Malformed for the same reason and by the same route: the service answers this with a
-            # 422 and the real client turns that into this type. Accepting it here would net to
-            # zero in the dict and confirm a transfer that never happened.
-            raise CoreBankingRequestError(
-                f"transfer needs two different accounts, got {from_account!r} twice"
-            )
+        for account in (from_account, to_account):
+            if account not in self.accounts:
+                raise UnknownAccountError(account)
+
         available = self.accounts[from_account]
         if amount > available:
             # Declined, not raised: a normal outcome of a working system (CONTEXT.md).
@@ -69,6 +76,9 @@ class FakeCoreBankingClient:
             )
         self.accounts[from_account] -= amount
         self.accounts[to_account] += amount
+        # Read back out of the dict, never computed -- the same invariant db.transfer is held to.
+        # A self-transfer is the input that tells the two apart: both mutations land on one entry
+        # and cancel, so anything computed would report a balance nothing holds.
         return TransferOutcome(
             outcome="completed",
             from_balance=self.accounts[from_account],
