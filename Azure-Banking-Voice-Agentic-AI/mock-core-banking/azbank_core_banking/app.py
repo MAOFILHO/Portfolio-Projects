@@ -22,6 +22,8 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import db
@@ -76,6 +78,25 @@ def build_app(database=None):
 
     app = FastAPI(title="mock-core-banking", lifespan=lifespan)
 
+    @app.exception_handler(RequestValidationError)
+    async def malformed_request(_request, exception):
+        """The 422, with the framework's prose taken back out of it.
+
+        FastAPI's default validation body is pydantic's English -- "Input should be greater than 0",
+        "Field required" -- which is a caller-facing sentence sitting in a response from the system
+        of record. That is the exact inversion this service exists not to repeat, and #26's
+        criterion 8 ("no response body anywhere contains a caller-facing sentence") forbids it; the
+        prose-freedom test simply never covered a 422 (/code-review, 2026-09-09).
+
+        The field paths stay: they are tokens, not prose, and they are what a log needs to diagnose
+        a bug in our own request. The status code is unchanged, so the client's mapping is
+        untouched.
+        """
+        fields = sorted({".".join(str(part) for part in e["loc"]) for e in exception.errors()})
+        return JSONResponse(
+            status_code=422, content={"error": "malformed_request", "fields": fields}
+        )
+
     @app.get("/health")
     def health():
         """Liveness only -- deliberately does not touch account state, so a probe can never be
@@ -115,10 +136,14 @@ def build_app(database=None):
                 "reason": result.reason,
                 "available_cents": result.available_cents,
             }
+        # `moved_cents` is a field #26's body shape did not name, added deliberately: the voice
+        # agent speaks the amount as well as the balance, and a figure it computes itself is a
+        # figure this service did not vouch for (/code-review, 2026-09-09).
         return {
             "outcome": "completed",
             "from_balance_cents": result.from_balance_cents,
             "to_balance_cents": result.to_balance_cents,
+            "moved_cents": result.moved_cents,
         }
 
     return app

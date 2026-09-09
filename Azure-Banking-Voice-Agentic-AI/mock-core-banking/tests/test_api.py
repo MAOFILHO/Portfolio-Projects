@@ -133,15 +133,39 @@ class NoCallerFacingProse(ServiceCase):
         responses = [
             client.get("/accounts"),
             client.get("/accounts/chequing"),
+            client.get("/accounts/bitcoin"),                     # 404
             client.post("/transfers", json={
                 "from_account": "chequing", "to_account": "savings", "amount_cents": 15000,
             }),
             client.post("/transfers", json={
                 "from_account": "chequing", "to_account": "savings", "amount_cents": 900000,
             }),
+            # 422s. The status this list used to skip -- and the only one that was leaking:
+            # FastAPI's default validation body is pydantic's English ("Input should be greater
+            # than 0"), which is a caller-facing sentence sitting in the system of record's own
+            # response (/code-review, 2026-09-09, spec axis, against #26's criterion 8).
+            client.post("/transfers", json={
+                "from_account": "chequing", "to_account": "savings", "amount_cents": 0,
+            }),
+            client.post("/transfers", json={"from_account": "chequing"}),
+            client.post("/transfers", json={
+                "from_account": "chequing", "to_account": "savings", "amount_cents": "lots",
+            }),
         ]
         for response in responses:
-            self._assert_no_prose(response.json())
+            with self.subTest(url=str(response.url), status=response.status_code):
+                self._assert_no_prose(response.json())
+
+    def test_a_malformed_request_is_still_a_422_with_the_fields_named(self):
+        # Structured, not silent: the fields are what a log needs to diagnose our own bug, and a
+        # field name is a token rather than prose.
+        response = self.client().post("/transfers", json={
+            "from_account": "chequing", "to_account": "savings", "amount_cents": 0,
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json(), {
+            "error": "malformed_request", "fields": ["body.amount_cents"],
+        })
 
 
 if __name__ == "__main__":

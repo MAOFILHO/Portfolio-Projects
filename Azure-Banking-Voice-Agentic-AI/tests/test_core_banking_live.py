@@ -112,6 +112,8 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
 
         result = await self.client.transfer("chequing", "savings", 150.00)
         self.assertEqual(result.outcome, "completed")
+        # What the service moved, which is what the agent then speaks -- not the dollars asked for.
+        self.assertEqual(result.moved, 150.00)
 
         # The read-back is the part that matters: it proves the transfer actually mutated state in
         # another process, over a socket -- not that a dict in this one changed.

@@ -130,6 +130,160 @@ class TheOutcomesStayDistinct(DispatchCase):
         self.assertTrue(any("unavailable" in line for line in cm.output))
 
 
+class ATimedOutTransferIsAnUnknownOutcome(DispatchCase):
+    """"I can't check that" is the whole truth for a read, and a false claim for a transfer.
+
+    A `transfer` that raises unavailable may already have committed at the service -- that is the
+    entire reason `client.py` never retries it. Telling the caller the bank could not be reached
+    asserts that nothing happened, and a caller who believes that retries, which is the
+    double-spend the no-retry rule exists to prevent. Issue #25 user story 6 and #27: "a timed-out
+    transfer is reported as an unknown outcome" (/code-review, 2026-09-09, spec axis).
+    """
+
+    async def test_a_transfer_does_not_claim_that_nothing_happened(self):
+        self.core_banking.fail_with = CoreBankingUnavailable("timed out")
+        out = await self.dispatch(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": 150.0}'
+        )
+        self.assertEqual(out, {"error": tools.TRANSFER_UNCONFIRMED})
+        self.assertNotEqual(out["error"], tools.UNAVAILABLE)
+
+    async def test_a_read_still_says_plainly_that_it_could_not_check(self):
+        self.core_banking.fail_with = CoreBankingUnavailable("timed out")
+        out = await self.dispatch("get_balance", '{"account": "chequing"}')
+        self.assertEqual(out, {"error": tools.UNAVAILABLE})
+
+    async def test_neither_sentence_carries_a_figure(self):
+        # CLAUDE.md's silent-fallback exclusion holds for both: an unreachable backend is never
+        # answered with a remembered, cached or defaulted number.
+        for sentence in (tools.UNAVAILABLE, tools.TRANSFER_UNCONFIRMED):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(any(character.isdigit() for character in sentence))
+
+
+class ArgumentsTheModelCanActuallyEmit(DispatchCase):
+    """The model writes these arguments, not a type checker.
+
+    `arguments_json` is whatever the model emitted, and the schema in TOOLS is a request, not a
+    guarantee: a `"number"` field arrives as the string "100" often enough to be ordinary, and
+    `true`, `null` and an object all fit through the same hole. Every one of them used to end
+    somewhere it should not (probe, 2026-09-09): a string or null amount raised TypeError straight
+    out of `dispatch_tool_call` -- which its own docstring says never raises -- and killed the call
+    from `run_call`; `true` silently moved a dollar; an unparseable payload spoke the JSON parser's
+    own message to the caller.
+    """
+
+    async def dispatch_raw(self, name, arguments_json):
+        # Not json.loads()'d: these cases are about what comes back, including when it comes back
+        # from a payload that is not JSON at all.
+        return json.loads(await tools.dispatch_tool_call(
+            name, arguments_json, core_banking=self.core_banking
+        ))
+
+    async def test_a_string_amount_is_refused_and_moves_no_money(self):
+        out = await self.dispatch_raw(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": "100"}'
+        )
+        self.assertEqual(out, {"error": tools.MALFORMED})
+        self.assertEqual(self.core_banking.accounts["chequing"], 2400.0)
+
+    async def test_a_boolean_amount_moves_no_money(self):
+        # `True * 100 == 100`, so this completed a $1.00 transfer and told the caller "Done".
+        # db.py rejects a bool at the system of record; the conversion in _cents turned it into a
+        # perfectly ordinary 100 cents before that guard could ever see it.
+        out = await self.dispatch_raw(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": true}'
+        )
+        self.assertEqual(out, {"error": tools.MALFORMED})
+        self.assertEqual(self.core_banking.accounts["chequing"], 2400.0)
+
+    async def test_a_null_amount_is_refused(self):
+        out = await self.dispatch_raw(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": null}'
+        )
+        self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_a_non_finite_amount_is_refused(self):
+        # json.loads accepts NaN and Infinity, so the model can put either on this path.
+        for literal in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(amount=literal):
+                out = await self.dispatch_raw(
+                    "transfer",
+                    '{"from_account": "chequing", "to_account": "savings", "amount": ' + literal + '}',
+                )
+                self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_an_account_that_is_not_a_string_is_refused(self):
+        for literal in ("123", '{"name": "chequing"}', "null", "true", "[]"):
+            with self.subTest(account=literal):
+                out = await self.dispatch_raw("get_balance", '{"account": ' + literal + '}')
+                self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_an_empty_account_name_is_refused(self):
+        # It names no account and addresses no resource. Against the real service it produced a
+        # redirect whose empty body then became a spoken JSON parser error.
+        for literal in ('""', '"   "'):
+            with self.subTest(account=literal):
+                out = await self.dispatch_raw("get_balance", '{"account": ' + literal + '}')
+                self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_an_account_name_containing_a_slash_is_refused(self):
+        # It cannot survive as one path segment: uvicorn decodes %2F before routing, so
+        # "chequing/" draws a trailing-slash redirect that the client can only report as
+        # unavailable -- an account that does not exist would have been answered as an outage.
+        for literal in ('"chequing/"', '"../health"'):
+            with self.subTest(account=literal):
+                out = await self.dispatch_raw("get_balance", '{"account": ' + literal + '}')
+                self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_an_unparseable_arguments_payload_is_refused(self):
+        out = await self.dispatch_raw("get_balance", "not json at all")
+        self.assertEqual(out, {"error": tools.MALFORMED})
+
+    async def test_no_refusal_ever_speaks_an_internal_message(self):
+        # The general form of /code-review's finding 3 and of this round's own: whatever goes wrong
+        # with a tool call, what the caller hears is composed here. The exception's own text is for
+        # the log.
+        internal = ("Expecting value", "__round__", "balance_cents", "NoneType", "unsupported "
+                    "operand", "unhashable", "float NaN", "'account'")
+        cases = [
+            ("get_balance", "not json at all"),
+            ("get_balance", "{}"),
+            ("get_balance", '{"account": null}'),
+            ("get_balance", '{"account": {"name": "chequing"}}'),
+            ("transfer", '{"from_account": "chequing", "to_account": "savings", "amount": "100"}'),
+            ("transfer", '{"from_account": "chequing", "to_account": "savings", "amount": NaN}'),
+            ("delete_account", "{}"),
+        ]
+        for name, arguments in cases:
+            with self.subTest(tool=name, arguments=arguments):
+                out = await self.dispatch_raw(name, arguments)
+                for phrase in internal:
+                    self.assertNotIn(phrase, out["error"])
+
+    async def test_the_spoken_amount_is_the_one_that_moved(self):
+        # Not the one that was asked for. The two part company at the half cent, in both
+        # directions: 2.675 dollars is 268 cents once rounded to whole cents, and "%.2f" of the
+        # request says $2.67 (probe, 2026-09-09). Same rule as the balance figure -- what the
+        # caller hears is what the system did, not what the model typed.
+        before = self.core_banking.accounts["savings"]
+        out = await self.dispatch_raw(
+            "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": 2.675}'
+        )
+        self.assertIn("$2.68", out["result"])
+        self.assertNotIn("$2.67", out["result"])
+        self.assertEqual(round(self.core_banking.accounts["savings"] - before, 2), 2.68)
+
+    async def test_a_refused_tool_call_is_logged_with_its_diagnosis(self):
+        # The detail does not vanish -- it moves to the log, which is the half of finding 3 that
+        # makes the composed sentence acceptable rather than merely quieter.
+        with self.assertLogs("dispatch", level="WARNING") as cm:
+            await self.dispatch_raw(
+                "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": "100"}'
+            )
+        self.assertTrue(any("transfer" in line for line in cm.output))
+
+
 class TheDispatcherIsAsync(unittest.TestCase):
     def test_dispatch_tool_call_is_a_coroutine_function(self):
         # Issue #28: the relay awaits this. If it ever goes back to being synchronous, a network

@@ -110,16 +110,28 @@ told the real reason and the real number behind it.
 _Avoid_: rejected, failed, error
 
 **Unavailable**:
-mock-core-banking could not be reached, or did not answer in time. The caller is told the truth —
-that the information can't be reached right now — and never given a remembered, cached, or guessed
-figure in its place.
-_Avoid_: down, offline, error
+mock-core-banking could not be reached, did not answer in time, or answered with something that is
+not a result — a redirect, a body that is not JSON, a payload missing the fields. The caller is told
+the truth — that the information can't be reached right now — and never given a remembered, cached,
+or guessed figure in its place.
+
+For a **transfer**, unavailable means the outcome is *unknown*, not that nothing happened: a POST
+that timed out may already have committed, which is why the client never retries one. The caller is
+asked to check the balance rather than told the bank could not be reached, because that sentence
+would invite the retry the no-retry rule exists to prevent.
+_Avoid_: down, offline, error, failed (for a transfer: it may well have succeeded)
 
 **Malformed**:
-The request itself was not well-formed, so the service never got as far as an opinion about it — an
-amount of zero or less, or one that rounds to less than a cent. The caller of the API has a bug;
-nobody has been refused anything, which is what separates this from **declined**. The service
-answers `422`, the client raises `CoreBankingRequestError`, and the caller hears a request to say
-it again. Validated at the request body, so it outranks **unknown account**: a bad amount is
+The request itself was not well-formed, so the system of record never got as far as an opinion
+about it — an amount of zero or less, or one that rounds to less than a cent. The caller of the API
+has a bug; nobody has been refused anything, which is what separates this from **declined**. The
+service answers `422`, the client raises `CoreBankingRequestError`, and the caller hears a request
+to say it again. Validated at the request body, so it outranks **unknown account**: a bad amount is
 malformed whether or not the accounts exist.
+
+Not every malformed request reaches the service. A tool call the dispatcher cannot turn into a
+request at all — an amount that is not a finite number, an account name that is not a non-empty
+string, an arguments payload that is not JSON, a tool this agent does not have — is malformed for
+the same reason and gets the same spoken sentence, refused before anything leaves the process. The
+`422` is how the *service* says it; it is not what the word means.
 _Avoid_: invalid, bad request, declined (means a business refusal of a well-formed request, above)

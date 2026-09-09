@@ -14,6 +14,7 @@ The load-bearing cases, in the order they'd hurt if they regressed:
     to the failure modes this phase introduces
   * a 404 raises rather than resolving to anything -- T-UNKNOWN-ACCT
 """
+import asyncio
 import unittest
 
 import httpx
@@ -89,13 +90,27 @@ class HappyPath(unittest.IsolatedAsyncioTestCase):
     async def test_completed_transfer(self):
         response = _json({
             "outcome": "completed", "from_balance_cents": 225000, "to_balance_cents": 65000,
+            "moved_cents": 15000,
         })
         result = await _client(Recorder(response)).transfer("chequing", "savings", 150.00)
         self.assertEqual(result.outcome, "completed")
         self.assertEqual(result.from_balance, 2250.00)
 
+    async def test_a_completed_transfer_reports_the_cents_it_actually_sent(self):
+        # 2.675 dollars is 268 cents once rounded, and "%.2f" of the request says $2.67. The
+        # dispatcher speaks `moved`, so this is the figure that has to match the wire.
+        recorder = Recorder(_json({
+            "outcome": "completed", "from_balance_cents": 239732, "to_balance_cents": 50268,
+            "moved_cents": 268,
+        }))
+        result = await _client(recorder).transfer("chequing", "savings", 2.675)
+        self.assertIn(b'"amount_cents":268', recorder.requests[0].content.replace(b" ", b""))
+        self.assertEqual(result.moved, 2.68)
+
     async def test_transfer_sends_cents_not_dollars(self):
-        recorder = Recorder(_json({"outcome": "completed", "from_balance_cents": 1, "to_balance_cents": 1}))
+        recorder = Recorder(_json({
+            "outcome": "completed", "from_balance_cents": 1, "to_balance_cents": 1, "moved_cents": 1,
+        }))
         await _client(recorder).transfer("chequing", "savings", 150.00)
         self.assertIn(b'"amount_cents":15000', recorder.requests[0].content.replace(b" ", b""))
 
@@ -170,6 +185,112 @@ class NothingInternalReachesTheCaller(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(cb.UnknownAccountError) as caught:
             await _client(recorder).get_balance("bitcoin")
         self.assertIsNone(caught.exception.args[0])
+
+
+class TheAccountNameGoesIntoAUrl(unittest.IsolatedAsyncioTestCase):
+    """An account name is model-supplied text, and `get_balance` puts it in a URL path.
+
+    Interpolated raw, it stopped being a name and became routing: "../health" resolved to another
+    route entirely, whose 200 body has no balance in it, and the KeyError that followed was spoken
+    to the caller as "'balance_cents'" (probe, 2026-09-09). Percent-encoding is what makes the name
+    address exactly one account resource, or none.
+    """
+
+    async def _path_for(self, account):
+        recorder = Recorder(_json({"detail": {"error": "unknown_account", "account": account}},
+                                  status=404))
+        with self.assertRaises(cb.UnknownAccountError):
+            await _client(recorder).get_balance(account)
+        # raw_path, not path: raw_path is what goes on the wire, and `path` is httpx's decoded
+        # view of it, which shows "/accounts/../health" for a request that actually asks for
+        # "/accounts/..%2Fhealth". Asserting the decoded view would pass on the unencoded name too.
+        return recorder.requests[0].url.raw_path
+
+    async def test_a_traversing_account_name_cannot_leave_the_accounts_resource(self):
+        self.assertEqual(await self._path_for("../health"), b"/accounts/..%2Fhealth")
+
+    async def test_a_fragment_or_query_in_an_account_name_stays_in_the_path(self):
+        # "#" would otherwise truncate the path and turn the rest into a fragment, so the service
+        # answered about a *different* account than the one asked for -- and the caller was told
+        # about that other one by name.
+        self.assertEqual(await self._path_for("a#b"), b"/accounts/a%23b")
+        self.assertEqual(await self._path_for("a?b"), b"/accounts/a%3Fb")
+
+
+class AResponseWeCannotReadIsNotAnAnswer(unittest.IsolatedAsyncioTestCase):
+    """Unreadable is `unavailable` -- never a figure, and never the parser's own message.
+
+    Everything here is something an ingress can put in front of the service without the service
+    changing at all: a redirect, an HTML error page, a truncated body. Each one used to reach
+    `response.json()` unguarded, and "Expecting value: line 1 column 1 (char 0)" was what the caller
+    heard (probe, 2026-09-09).
+    """
+
+    async def test_a_redirect_is_unavailable(self):
+        for status in (301, 307, 308):
+            with self.subTest(status=status):
+                recorder = Recorder(httpx.Response(status, headers={"location": "/accounts"}),
+                                    httpx.Response(status, headers={"location": "/accounts"}))
+                with self.assertRaises(cb.CoreBankingUnavailable):
+                    await _client(recorder).get_balance("chequing")
+
+    async def test_a_non_json_body_is_unavailable(self):
+        recorder = Recorder(httpx.Response(200, content=b"<html>gateway</html>"),
+                            httpx.Response(200, content=b"<html>gateway</html>"))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).get_balance("chequing")
+
+    async def test_a_json_body_missing_the_balance_is_unavailable_and_carries_no_figure(self):
+        recorder = Recorder(_json({"status": "ok"}), _json({"status": "ok"}))
+        with self.assertRaises(cb.CoreBankingUnavailable) as caught:
+            await _client(recorder).get_balance("chequing")
+        # CLAUDE.md's silent-fallback exclusion: no default, no zero, no remembered number.
+        self.assertNotIn("0", str(caught.exception).replace("core banking", ""))
+
+    async def test_a_transfer_answered_with_an_unreadable_body_is_unavailable(self):
+        recorder = Recorder(_json({"outcome": "completed"}))  # no balances in it
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).transfer("chequing", "savings", 150.00)
+
+    async def test_an_account_list_that_is_not_a_list_is_unavailable(self):
+        recorder = Recorder(_json({"accounts": "chequing"}), _json({"accounts": "chequing"}))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).list_accounts()
+
+
+class AnAmountIsANumberOfDollars(unittest.IsolatedAsyncioTestCase):
+    """The dollars-to-cents boundary is where an amount stops being model output and becomes money.
+
+    db.py has the same guard at the system of record -- and it could never fire, because `True`
+    arrives there as a perfectly ordinary 100 cents. This is the boundary that has to reject it, and
+    it is shared by the real client and the fake, so both refuse the same things (issue #25's user
+    story 10).
+    """
+
+    def test_a_bool_is_not_an_amount(self):
+        with self.assertRaises(cb.CoreBankingRequestError):
+            cb._cents(True)
+
+    def test_a_string_is_not_an_amount(self):
+        for value in ("100", "100.00", ""):
+            with self.subTest(value=value):
+                with self.assertRaises(cb.CoreBankingRequestError):
+                    cb._cents(value)
+
+    def test_none_is_not_an_amount(self):
+        with self.assertRaises(cb.CoreBankingRequestError):
+            cb._cents(None)
+
+    def test_a_non_finite_amount_is_refused(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                with self.assertRaises(cb.CoreBankingRequestError):
+                    cb._cents(value)
+
+    def test_ordinary_amounts_still_convert(self):
+        self.assertEqual(cb._cents(150.00), 15000)
+        self.assertEqual(cb._cents(150), 15000)
+        self.assertEqual(cb._cents(0.014), 1)
 
 
 class RetryPolicy(unittest.IsolatedAsyncioTestCase):
@@ -317,6 +438,116 @@ class CircuitBreaker(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(cb.CoreBankingUnavailable):
             await client.get_balance("chequing")
         self.assertEqual(recorder.count, cb.BREAKER_FAILURE_THRESHOLD)  # still no probe issued
+
+
+class EveryUnavailableCauseCountsAgainstTheBreaker(unittest.IsolatedAsyncioTestCase):
+    """A cause the client reports as `unavailable` has to be one the breaker can see.
+
+    Four things produce `unavailable`: a transport failure, a 5xx, a response that is not a result
+    (a redirect, a body that is not JSON), and a payload missing the fields. The last two were
+    classified *after* `record_success()` had already run, so a service stuck behind a redirecting
+    or error-page-serving ingress was called unavailable on every request while the breaker stayed
+    closed forever -- 20 of 20 operations reached it, against 10 of 20 for a 5xx (probe,
+    2026-09-09). That is the failure `app.py`'s process-wide client exists to avoid.
+    """
+
+    def setUp(self):
+        self.clock = FakeClock()
+
+    async def _operations_until_the_breaker_stops_them(self, reply):
+        recorder = Recorder(*[reply() for _ in range(40)])
+        client = _client(recorder, self.clock)
+        for operation in range(1, 21):
+            try:
+                await client.get_balance("chequing")
+            except cb.CoreBankingUnavailable as e:
+                if "circuit is open" in str(e):
+                    return operation
+        return None
+
+    async def test_a_redirect_opens_the_breaker(self):
+        opened_at = await self._operations_until_the_breaker_stops_them(
+            lambda: httpx.Response(307, headers={"location": "/accounts"})
+        )
+        self.assertEqual(opened_at, cb.BREAKER_FAILURE_THRESHOLD + 1)
+
+    async def test_a_body_that_is_not_json_opens_the_breaker(self):
+        opened_at = await self._operations_until_the_breaker_stops_them(
+            lambda: httpx.Response(200, content=b"<html>gateway</html>")
+        )
+        self.assertEqual(opened_at, cb.BREAKER_FAILURE_THRESHOLD + 1)
+
+    async def test_a_payload_missing_its_fields_opens_the_breaker(self):
+        opened_at = await self._operations_until_the_breaker_stops_them(
+            lambda: _json({"status": "ok"})
+        )
+        self.assertEqual(opened_at, cb.BREAKER_FAILURE_THRESHOLD + 1)
+
+    async def test_an_unreadable_read_is_retried_like_a_5xx(self):
+        # It is a failure of the same kind, so it gets the same one retry -- and counts as one
+        # failed operation, not two.
+        recorder = Recorder(httpx.Response(307, headers={"location": "/accounts"}), _CHEQUING)
+        self.assertEqual(await _client(recorder, self.clock).get_balance("chequing"), 2400.00)
+        self.assertEqual(recorder.count, 2)
+
+    async def test_a_404_still_counts_as_healthy(self):
+        # The other half of the same rule: a working system saying "no such account" answered
+        # coherently, so it must not push the breaker towards opening.
+        recorder = Recorder(
+            *[_json({"detail": {"error": "unknown_account", "account": "bitcoin"}}, status=404)]
+            * (cb.BREAKER_FAILURE_THRESHOLD + 1)
+        )
+        client = _client(recorder, self.clock)
+        for _ in range(cb.BREAKER_FAILURE_THRESHOLD + 1):
+            with self.assertRaises(cb.UnknownAccountError):
+                await client.get_balance("bitcoin")
+        self.assertEqual(recorder.count, cb.BREAKER_FAILURE_THRESHOLD + 1)
+
+
+class TheProbeAlwaysReportsBack(unittest.IsolatedAsyncioTestCase):
+    """A half-open probe that never reports back must not wedge the client shut.
+
+    `before_request()` marks a probe in flight and only `record_success`/`record_failure` clear it.
+    The client is process-wide and lives for the life of the app, so anything that escapes `_send`
+    without reaching either -- `asyncio.CancelledError` when the caller hangs up mid-probe is the
+    realistic one -- left every later call refused with "circuit is probing", permanently. Issue #27
+    AC6 and user story 20 ("the breaker recovers on its own").
+    """
+
+    def setUp(self):
+        self.clock = FakeClock()
+
+    async def test_a_cancelled_probe_does_not_wedge_the_client(self):
+        cancel_next = {"yes": False}
+
+        def handler(request):
+            if cancel_next["yes"]:
+                raise asyncio.CancelledError()
+            raise httpx.ConnectError("refused")
+
+        client = cb.HttpCoreBankingClient(
+            base_url="http://core-banking.test",
+            transport=httpx.MockTransport(handler),
+            clock=self.clock,
+        )
+        for _ in range(cb.BREAKER_FAILURE_THRESHOLD):
+            with self.assertRaises(cb.CoreBankingUnavailable):
+                await client.transfer("chequing", "savings", 1.00)
+
+        # The window elapses, so the next call is the probe -- and the caller hangs up during it.
+        self.clock.advance(cb.BREAKER_OPEN_SECONDS + 1)
+        cancel_next["yes"] = True
+        with self.assertRaises(asyncio.CancelledError):
+            await client.get_balance("chequing")
+
+        # After another window, the client must be willing to probe again rather than answering
+        # "circuit is probing" for the rest of the process's life.
+        cancel_next["yes"] = False
+        self.clock.advance(cb.BREAKER_OPEN_SECONDS + 1)
+        with self.assertRaises(cb.CoreBankingUnavailable) as caught:
+            await client.get_balance("chequing")
+        self.assertNotIn("probing", str(caught.exception))
+        await client.aclose()
 
 
 class NeverFabricatesABalance(unittest.IsolatedAsyncioTestCase):

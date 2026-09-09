@@ -35,8 +35,10 @@ conversion happens here, once, at the presentation boundary -- and nowhere near 
 """
 import logging
 from dataclasses import dataclass
+from math import isfinite
 from time import monotonic
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -91,13 +93,19 @@ class CoreBankingRequestError(ValueError):
 class TransferOutcome:
     """What happened to a transfer, in dollars. Two shapes distinguished by `outcome`.
 
-    `completed` carries the resulting balances; `declined` carries the reason and the real amount
-    available, so the caller can be told what they *can* do rather than only what they can't.
+    `completed` carries the resulting balances and the amount that actually moved; `declined`
+    carries the reason and the real amount available, so the caller can be told what they *can* do
+    rather than only what they can't.
+
+    `moved` exists because it is not always the amount that was asked for: dollars become whole
+    cents on the way out, and at the half cent the two part company in both directions ($2.675 asked
+    for is $2.68 moved, and "%.2f" of the request says $2.67). The caller hears what the system did.
     """
 
     outcome: str
     from_balance: float | None = None
     to_balance: float | None = None
+    moved: float | None = None
     reason: str | None = None
     available: float | None = None
 
@@ -139,9 +147,38 @@ def _dollars(cents):
 
 
 def _cents(dollars):
-    """Round rather than truncate: 15000.000000000002 cents is a float artefact of the caller's
-    dollars, not an intent to move a fraction of a cent."""
+    """Dollars to whole cents -- and the boundary that decides what is an amount at all.
+
+    Round rather than truncate: 15000.000000000002 cents is a float artefact of the caller's
+    dollars, not an intent to move a fraction of a cent.
+
+    The type check is here, shared by the real client and the fake, because this is the last point
+    where an amount is still dollars. db.py has the same rule at the system of record and it could
+    never fire: `True * 100` is a perfectly ordinary 100 cents by the time it arrives, so a tool
+    call carrying `"amount": true` completed a $1.00 transfer and the agent said "Done" (probe,
+    2026-09-09). A string amount was worse -- `round("100")` raises TypeError, which escaped
+    `dispatch_tool_call` and ended the call. NaN and Infinity reach here too: json.loads accepts
+    both literals.
+    """
+    if isinstance(dollars, bool) or not isinstance(dollars, (int, float)) or not isfinite(dollars):
+        raise CoreBankingRequestError(f"transfer amount must be a finite number, got {dollars!r}")
     return round(dollars * 100)
+
+
+def _read(payload, build):
+    """Interpret a response body, or report the service unavailable.
+
+    A body this client cannot read is not an answer and must never become one. Unread, the missing
+    field surfaced as a bare KeyError that the dispatcher spoke to the caller as "'balance_cents'"
+    (probe, 2026-09-09). `unavailable` is both the honest outcome -- we did not get a result we
+    understand -- and the one branch guaranteed to carry no figure of any kind.
+    """
+    try:
+        return build(payload)
+    except (KeyError, TypeError, ValueError) as e:
+        raise CoreBankingUnavailable(
+            f"core banking returned an unreadable response: {e!r}"
+        ) from e
 
 
 class _CircuitBreaker:
@@ -177,6 +214,16 @@ class _CircuitBreaker:
         if self._state == _HALF_OPEN and self._probe_in_flight:
             raise CoreBankingUnavailable("core banking circuit is probing -- not piling on")
         return False
+
+    @property
+    def probe_in_flight(self):
+        """True while a half-open probe has been let through and has not reported back.
+
+        Read by the client so it can guarantee that one always does. Nothing else clears this flag,
+        and the client is process-wide (app.py's lifespan), so a probe that vanished would refuse
+        every later call with "circuit is probing" for the life of the process.
+        """
+        return self._probe_in_flight
 
     def record_success(self):
         if self._state != _CLOSED:
@@ -227,71 +274,127 @@ class HttpCoreBankingClient:
     # --- the protocol ---------------------------------------------------------------------------
 
     async def list_accounts(self):
-        payload = await self._get("/accounts")
-        return {a["name"]: _dollars(a["balance_cents"]) for a in payload["accounts"]}
+        return await self._get("/accounts", lambda p: {
+            a["name"]: _dollars(a["balance_cents"]) for a in p["accounts"]
+        })
 
     async def get_balance(self, account):
-        payload = await self._get(f"/accounts/{account}")
-        return _dollars(payload["balance_cents"])
+        # Percent-encoded, because the account name is model-supplied text going into a URL path.
+        # Interpolated raw it stopped being a name and became routing: "../health" resolved to
+        # another route entirely, and "a#b" truncated the path and asked about account "a" -- whose
+        # answer the caller was then given by name (probe, 2026-09-09).
+        #
+        # Encoding does not make a name containing "/" safe, and nothing here pretends it does:
+        # uvicorn decodes %2F before the router sees the path, so "chequing%2F" still arrives as a
+        # trailing slash and draws a 307 (measured, 2026-09-09). A slash is refused earlier, in the
+        # dispatcher, where both clients are held to the same rule.
+        return await self._get(
+            f"/accounts/{quote(account, safe='')}", lambda p: _dollars(p["balance_cents"])
+        )
 
     async def transfer(self, from_account, to_account, amount):
-        payload = await self._post("/transfers", {
+        def outcome(payload):
+            if payload["outcome"] == "declined":
+                return TransferOutcome(
+                    outcome="declined",
+                    reason=payload["reason"],
+                    available=_dollars(payload["available_cents"]),
+                )
+            # `moved_cents` comes from the service, like the balances beside it -- never recomputed
+            # here from the dollars that were asked for. The client knows what it sent, but what it
+            # sent is not evidence of what was applied, and this figure is spoken to the caller
+            # (/code-review, 2026-09-09, spec axis: exit criterion 3's "never computed from the
+            # amount" covers every figure in the sentence, not only the balances).
+            return TransferOutcome(
+                outcome="completed",
+                from_balance=_dollars(payload["from_balance_cents"]),
+                to_balance=_dollars(payload["to_balance_cents"]),
+                moved=_dollars(payload["moved_cents"]),
+            )
+
+        return await self._post("/transfers", {
             "from_account": from_account,
             "to_account": to_account,
             "amount_cents": _cents(amount),
-        })
-        if payload["outcome"] == "declined":
-            return TransferOutcome(
-                outcome="declined",
-                reason=payload["reason"],
-                available=_dollars(payload["available_cents"]),
-            )
-        return TransferOutcome(
-            outcome="completed",
-            from_balance=_dollars(payload["from_balance_cents"]),
-            to_balance=_dollars(payload["to_balance_cents"]),
-        )
+        }, outcome)
 
     # --- transport ------------------------------------------------------------------------------
 
-    async def _get(self, path):
-        return await self._send("GET", path, json=None, attempts=READ_RETRIES + 1)
+    async def _get(self, path, build):
+        return await self._send("GET", path, json=None, attempts=READ_RETRIES + 1, build=build)
 
-    async def _post(self, path, body):
+    async def _post(self, path, body, build):
         # attempts=1, always. See the module docstring: retrying a non-idempotent write that may
         # already have committed is a double-spend.
-        return await self._send("POST", path, json=body, attempts=1)
+        return await self._send("POST", path, json=body, attempts=1, build=build)
 
-    async def _send(self, method, path, json, attempts):
-        if self._breaker.before_request():
+    async def _send(self, method, path, json, attempts, build):
+        """One operation: attempts, classification, and the breaker's whole view of it.
+
+        `build` turns the decoded body into the caller's result **inside** this method rather than
+        after it returns, and that placement is the point: the breaker may only be told an operation
+        succeeded once there is a result to show for it. Recording success first and interpreting
+        afterwards meant a service answering redirects, HTML, or a payload missing its fields was
+        reported unavailable on every single call while the breaker stayed closed forever -- 20 of
+        20 operations reached it, against 10 of 20 for a 5xx (probe, 2026-09-09).
+        """
+        probing = self._breaker.before_request()
+        if probing:
             # The half-open probe is one request, never one-plus-a-retry (#27 AC6). Retrying a
             # probe would double the load on a backend already believed to be sick, and would make
             # "one probe" a claim the code did not actually keep.
             attempts = 1
         last_error = None
-        for attempt in range(attempts):
-            try:
-                response = await self._http.request(method, path, json=json)
-            except httpx.HTTPError as e:
-                # Transport-level: timeout, connection refused, DNS. Retryable if this is a read.
-                last_error = e
-                log.warning("core banking %s %s failed (attempt %s): %s", method, path, attempt + 1, e)
-                continue
-            if response.status_code >= 500:
-                last_error = CoreBankingUnavailable(f"core banking returned {response.status_code}")
-                log.warning("core banking %s %s returned %s", method, path, response.status_code)
-                continue
-            # The service answered. Whatever it said, it is healthy -- a 404 is a working system
-            # telling us the account does not exist, so it must not count against the breaker.
-            self._breaker.record_success()
-            return self._decode(response)
+        try:
+            for attempt in range(attempts):
+                try:
+                    response = await self._http.request(method, path, json=json)
+                except httpx.HTTPError as e:
+                    # Transport-level: timeout, connection refused, DNS. Retryable if this is a read.
+                    last_error = e
+                    log.warning("core banking %s %s failed (attempt %s): %s", method, path, attempt + 1, e)
+                    continue
+                if response.status_code >= 500:
+                    last_error = CoreBankingUnavailable(f"core banking returned {response.status_code}")
+                    log.warning("core banking %s %s returned %s", method, path, response.status_code)
+                    continue
+                try:
+                    result = _read(self._decode(response), build)
+                except CoreBankingUnavailable as e:
+                    # The service answered, but not with a result: a redirect, a body that is not
+                    # JSON, a payload missing its fields. Exactly the standing of a 5xx -- retried
+                    # on a read, and one failed operation if every attempt ends here.
+                    last_error = e
+                    log.warning(
+                        "core banking %s %s answered unreadably (attempt %s): %s",
+                        method, path, attempt + 1, e,
+                    )
+                    continue
+                except (UnknownAccountError, CoreBankingRequestError):
+                    # A working system saying "no such account" or "that request is malformed". It
+                    # answered, and coherently, so it is healthy: this must not count against the
+                    # breaker, and it must reset a run of failures like any other success.
+                    self._breaker.record_success()
+                    raise
+                self._breaker.record_success()
+                return result
 
-        # Every attempt failed at the transport or with a 5xx: one failed operation, not one per
-        # attempt (see BREAKER_FAILURE_THRESHOLD).
-        self._breaker.record_failure()
-        raise CoreBankingUnavailable(
-            f"core banking {method} {path} did not answer: {last_error}"
-        ) from last_error
+            # Every attempt failed at the transport, with a 5xx, or with a response that was not a
+            # result: one failed operation, not one per attempt (see BREAKER_FAILURE_THRESHOLD).
+            self._breaker.record_failure()
+            raise CoreBankingUnavailable(
+                f"core banking {method} {path} did not answer: {last_error}"
+            ) from last_error
+        finally:
+            if self._breaker.probe_in_flight:
+                # A probe that never reported back. `asyncio.CancelledError` when the caller hangs
+                # up mid-probe is the realistic one, and it is not an httpx.HTTPError, so nothing
+                # above catches it. The client is process-wide, so leaving the probe marked in
+                # flight refused every later call with "circuit is probing" for the life of the
+                # process -- a breaker that can never close is worse than no breaker (#27 AC6,
+                # user story 20). Counted as a failed probe: the outcome is unknown, and the open
+                # window expires on its own.
+                self._breaker.record_failure()
 
     def _decode(self, response):
         if response.status_code == 404:
@@ -300,4 +403,18 @@ class HttpCoreBankingClient:
             raise CoreBankingRequestError(
                 f"core banking rejected the request with {response.status_code}"
             )
-        return response.json()
+        if response.status_code >= 300:
+            # Nothing here follows redirects, so a 3xx is not an answer -- and its body is usually
+            # empty, which `json()` below then choked on. An ingress in front of the service can
+            # produce one without the service changing at all (an HTTPS redirect is the obvious
+            # one), so this is a production shape, not a curiosity.
+            raise CoreBankingUnavailable(
+                f"core banking answered {response.status_code}, which is not a result"
+            )
+        try:
+            return response.json()
+        except ValueError as e:
+            # An HTML error page from an ingress, or a truncated body. The parser's own message
+            # ("Expecting value: line 1 column 1 (char 0)") was reaching the caller's ear (probe,
+            # 2026-09-09) -- the same defect /code-review's finding 3 fixed for the 422 wording.
+            raise CoreBankingUnavailable("core banking returned a body that is not JSON") from e

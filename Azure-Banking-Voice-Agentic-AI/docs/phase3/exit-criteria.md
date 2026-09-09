@@ -40,7 +40,10 @@ own precondition (below).
    A named test proves **no failure path ever returns a fabricated, cached, or defaulted balance** —
    asserted across timeout, connection refused, 5xx, and open circuit. The **completed** path is
    held to the same rule: reported balances are read back out of storage, never computed from the
-   amount, and a self-transfer is the test input that tells those two apart.
+   amount, and a self-transfer is the test input that tells those two apart. The rule covers
+   **every figure in the spoken sentence, not only the balances** — the amount moved is reported by
+   the service as `moved_cents` rather than recomputed client-side from the dollars asked for, which
+   differ at the half cent (`/code-review`, 2026-09-09, spec axis).
 
 4. **Resilience is deterministically tested**: 1.0s per-attempt timeout; one retry on reads; **zero
    retries on `transfer`** (a timed-out transfer results in exactly one request reaching the

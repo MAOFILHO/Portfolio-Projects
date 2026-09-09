@@ -57,14 +57,21 @@ class UnknownAccount(LookupError):
 class TransferResult:
     """What happened to a transfer. Two shapes, one type, distinguished by `outcome`.
 
-    `completed` carries the resulting balances; `declined` carries the reason and the real amount
-    available. A decline is a normal outcome of a working system -- it is not an error, and the
-    fields that are None for one outcome are simply not part of that outcome.
+    `completed` carries the resulting balances and the amount that was actually applied; `declined`
+    carries the reason and the real amount available. A decline is a normal outcome of a working
+    system -- it is not an error, and the fields that are None for one outcome are simply not part
+    of that outcome.
+
+    `moved_cents` is reported for the same reason the balances are: the voice agent speaks it
+    ("transferred $X"), and every figure in that sentence has to come from the system of record.
+    The client can see what it sent, but what it sent is not evidence of what was applied
+    (/code-review, 2026-09-09).
     """
 
     outcome: str
     from_balance_cents: int | None = None
     to_balance_cents: int | None = None
+    moved_cents: int | None = None
     reason: str | None = None
     available_cents: int | None = None
 
@@ -166,6 +173,7 @@ def transfer(conn, from_account, to_account, amount_cents):
         outcome="completed",
         from_balance_cents=from_balance,
         to_balance_cents=to_balance,
+        moved_cents=amount_cents,
     )
 
 

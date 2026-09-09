@@ -24,11 +24,18 @@ import unittest
 from azbank_voice_agent.core_banking import CoreBankingRequestError, UnknownAccountError
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 
-#: (from, to, amount) -> the exception the real client raises against the real service, for requests
-#: the service refuses. The rows are ordered to show the precedence: the first four carry an amount
-#: the request body rejects, two of them *also* naming an account that does not exist, and all four
-#: answer malformed -- so a bad amount outranks an unknown account. The last two are well-formed
-#: amounts naming a missing account, which is the only way to reach unknown-account.
+#: (from, to, amount) -> the exception the real client raises, for requests that get refused. The
+#: rows are ordered to show the precedence: the first four carry an amount the request body rejects,
+#: two of them *also* naming an account that does not exist, and all four answer malformed -- so a
+#: bad amount outranks an unknown account. The next two are well-formed amounts naming a missing
+#: account, which is the only way to reach unknown-account.
+#:
+#: The last two never reach the wire at all, and that is the point of them: `_cents` refuses an
+#: amount that is not a finite number, so the real client and the fake refuse them identically by
+#: sharing that one function. `True` is the row that matters -- it is a valid JSON amount, and
+#: `True * 100` is an ordinary 100 cents, so db.py's own bool guard at the system of record could
+#: never fire on it and a tool call carrying `"amount": true` completed a $1.00 transfer (probe,
+#: 2026-09-09).
 EXPECTED_ERRORS = [
     (("chequing", "savings", -5.0), CoreBankingRequestError),
     (("bitcoin", "savings", -5.0), CoreBankingRequestError),
@@ -36,6 +43,8 @@ EXPECTED_ERRORS = [
     (("chequing", "savings", 0.001), CoreBankingRequestError),
     (("bitcoin", "savings", 100.0), UnknownAccountError),
     (("chequing", "bitcoin", 100.0), UnknownAccountError),
+    (("chequing", "savings", "100"), CoreBankingRequestError),
+    (("chequing", "savings", True), CoreBankingRequestError),
 ]
 
 
@@ -72,6 +81,14 @@ class ReportsWhatItHolds(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.from_balance, 2400.00)
         self.assertEqual(result.to_balance, 2400.00)
         self.assertEqual(fake.accounts["chequing"], 2400.00)
+
+    async def test_a_completed_transfer_reports_the_amount_that_actually_moved(self):
+        # The dispatcher speaks `moved`, so the fake has to carry it the same way the real client
+        # does -- and 2.675 is the input where it differs from the dollars asked for.
+        fake = FakeCoreBankingClient()
+        result = await fake.transfer("chequing", "savings", 2.675)
+        self.assertEqual(result.moved, 2.68)
+        self.assertEqual(fake.accounts["savings"], 502.68)
 
 
 if __name__ == "__main__":

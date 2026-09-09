@@ -82,9 +82,12 @@ class FakeCoreBankingClient:
         self.accounts[from_account] -= moved
         self.accounts[to_account] += moved
         # Read back out of the dict, never computed -- the invariant db.transfer is held to, and
-        # that function carries the reasoning.
+        # that function carries the reasoning. `moved` is the amount this fake actually applied,
+        # which is what the service reports as `moved_cents`: both are the system of record saying
+        # what it did, rather than the client restating what it asked for.
         return TransferOutcome(
             outcome="completed",
             from_balance=self.accounts[from_account],
             to_balance=self.accounts[to_account],
+            moved=moved,
         )

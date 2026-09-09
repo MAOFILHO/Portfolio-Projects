@@ -35,9 +35,26 @@ log = logging.getLogger("dispatch")
 #: with a remembered, cached, or defaulted balance (CLAUDE.md's silent-fallback exclusion).
 UNAVAILABLE = "I can't reach the banking system right now, so I can't check that."
 
-#: What the caller hears when the request itself was malformed -- a bad amount, a field the service
-#: rejected. Composed here like every other caller-facing sentence: the service's own wording for
-#: this ("core banking rejected the request with 422") is diagnostic text for a log, and it was
+#: What the caller hears when a **transfer** could not be confirmed. Deliberately not UNAVAILABLE:
+#: for a read, "I can't check that" is the whole truth, but a transfer that raised unavailable may
+#: already have committed at the service -- which is precisely why client.py never retries it. "I
+#: can't reach the banking system" asserts that nothing happened, and a caller who believes that
+#: retries, which is the double-spend the no-retry rule exists to prevent (issue #25 user story 6,
+#: #27; /code-review 2026-09-09).
+#:
+#: Said even when the request never left this process (an open circuit, a connection refused),
+#: where nothing did happen: the dispatcher cannot tell those apart from a timeout, and of the two
+#: possible wrong answers this is the safe one. Being told to check a balance that has not changed
+#: costs a caller a moment; being told nothing happened when something did costs them the money.
+TRANSFER_UNCONFIRMED = (
+    "I couldn't confirm whether that transfer went through, so please check the balance before "
+    "trying it again."
+)
+
+#: What the caller hears when a tool call could not be run at all -- a bad amount, an account name
+#: that names nothing, a tool this agent does not have, an arguments payload that is not JSON.
+#: Composed here like every other caller-facing sentence: the service's own wording for the amount
+#: case ("core banking rejected the request with 422") is diagnostic text for a log, and it was
 #: reaching the caller verbatim before /code-review caught it (2026-09-08).
 MALFORMED = "I can't do that with those details -- could you say that again?"
 
@@ -89,18 +106,60 @@ TOOLS = [
 ]
 
 
+def _account_name(args, key):
+    """The account the model asked about, as a name -- or a malformed request.
+
+    `arguments_json` is model output, and the schema in TOOLS is a request rather than a guarantee:
+    this field arrives as a number, an object, `null` or an empty string as readily as a name. None
+    of those can name an account, and each one used to fail somewhere further in (probe,
+    2026-09-09) -- an object raised TypeError inside the fake and ended the call, `null` had the
+    real service asked about an account literally called "None" and the caller told so by name, and
+    an empty name addressed no resource at all, drawing a redirect whose empty body then became a
+    spoken JSON parser error.
+
+    Refused here, once, rather than in each client: it is a fact about the model's arguments, not a
+    rule of core banking, and the two clients had already drifted on it. The amount's own rule
+    lives at the dollars-to-cents boundary instead (`client._cents`), because that one *is* about
+    money and both clients pass through it.
+
+    A name containing "/" is refused for a narrower reason, and this one is a judgement call worth
+    stating: it cannot survive the trip as one path segment. Percent-encoding does not save it --
+    uvicorn decodes %2F before the router sees the path, so "chequing/" arrives as a trailing slash
+    and draws a redirect (measured, 2026-09-09).
+
+    /code-review's spec axis (2026-09-09) reads this as the dispatcher deciding which names are
+    usable, which #25 gives to the system of record. The counter-argument, and why it stands: this
+    decides addressability, not existence -- exactly like the empty name above -- and the
+    alternative is worse now that an unreadable response counts against the circuit breaker. Letting
+    a slash through means a redirect, which is `unavailable`, which is a breaker failure: five such
+    names in a row and the model has opened the circuit on a service that is perfectly healthy, for
+    every caller, for thirty seconds. Refusing the name costs one caller one sentence. **Recorded in
+    PROJECT_STATE.md as a deliberate deviation, for Marco to overrule if he reads the trade the
+    other way.**
+    """
+    value = args[key]
+    if not isinstance(value, str) or not value.strip() or "/" in value:
+        raise CoreBankingRequestError(f"{key} must be a non-empty account name, got {value!r}")
+    return value
+
+
 async def _get_balance(core_banking, args):
-    return await core_banking.get_balance(args["account"])
+    return await core_banking.get_balance(_account_name(args, "account"))
 
 
 async def _transfer(core_banking, args):
-    from_account, to_account = args["from_account"], args["to_account"]
+    from_account = _account_name(args, "from_account")
+    to_account = _account_name(args, "to_account")
     amount = args["amount"]
     result = await core_banking.transfer(from_account, to_account, amount)
     if result.outcome == "declined":
         return f"I can't do that -- you have ${result.available:.2f} available in {from_account}."
+    # `result.moved`, not `amount`: dollars become whole cents on the way to the service, and at
+    # the half cent the requested figure and the moved one differ ($2.675 asked for moves $2.68,
+    # and "%.2f" of the request says $2.67 -- probe, 2026-09-09). Same rule as the balance beside
+    # it: the caller hears what the system did.
     return (
-        f"Done -- transferred ${amount:.2f} from {from_account} to {to_account}. "
+        f"Done -- transferred ${result.moved:.2f} from {from_account} to {to_account}. "
         f"New {from_account} balance: ${result.from_balance:.2f}."
     )
 
@@ -120,9 +179,10 @@ async def dispatch_tool_call(
     name, arguments_json, agent=gate.BANKING_AGENT, auth_state=gate.ANONYMOUS, *, core_banking
 ):
     """Run one tool call, returning the JSON string for a function_call_output. Never raises --
-    an unknown tool name, a missing argument, an unknown account, a malformed request, or an
-    unreachable backend all come back as {"error": "..."} so the model can say something sensible
-    instead of the call going silent.
+    an unknown tool name, a missing or wrongly-typed argument, an unknown account, a malformed
+    request, or an unreachable backend all come back as {"error": "..."} so the model can say
+    something sensible instead of the call going silent. "Never raises" is load-bearing rather than
+    tidy: run_call re-raises whatever escapes here, which drops the call.
 
     Every call passes the gate first (B1). A refusal comes back in the same {"error": ...} shape,
     so the caller hears a spoken refusal rather than silence.
@@ -134,8 +194,15 @@ async def dispatch_tool_call(
     """
     if not gate.is_allowed(agent, auth_state, name):
         # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
-        # The tool name is safe to log; arguments are not logged here -- they can carry account
-        # identifiers, and Phase 4 puts PIN-adjacent data on this path (B2).
+        # The tool name is safe to log; the arguments are not logged as a blob, because Phase 4
+        # puts PIN-adjacent data on this path and a blob would carry it (B2).
+        #
+        # Not a claim that an account name never reaches a log: `client._send` logs the request
+        # path, and for a balance read that path contains the account name. That is deliberate --
+        # it is the one field that makes a failed request diagnosable -- and an account name is not
+        # B2 data, which is the PIN and only the PIN. Said explicitly because the two modules
+        # otherwise read as asserting opposite rules about the same value (/code-review,
+        # 2026-09-09, standards axis).
         log.warning("gate refused tool %r for (agent=%s, auth_state=%s)", name, agent, auth_state)
         return json.dumps({"error": gate.REFUSAL})
     try:
@@ -163,8 +230,24 @@ async def dispatch_tool_call(
     except CoreBankingUnavailable:
         # Deliberately no figure of any kind in this branch. Never a cached balance, never a
         # default, never a "last known" number.
+        #
+        # A write and a read get different sentences because they are different facts: an
+        # unavailable read simply did not happen, while an unavailable transfer has an outcome
+        # nobody knows. See TRANSFER_UNCONFIRMED.
         log.warning("core banking unavailable for tool %r", name)
-        return json.dumps({"error": UNAVAILABLE})
-    except (KeyError, ValueError) as e:
-        return json.dumps({"error": str(e) or f"unknown tool: {name}"})
+        unknown_outcome = name == "transfer"
+        return json.dumps({"error": TRANSFER_UNCONFIRMED if unknown_outcome else UNAVAILABLE})
+    except (KeyError, TypeError, ValueError) as e:
+        # Everything else that can go wrong with a tool call: an unknown tool name, a missing
+        # argument, an arguments payload that is not JSON. The diagnosis goes to the log and the
+        # caller hears a composed sentence -- `str(e)` used to be spoken, which put the JSON
+        # parser's own message ("Expecting value: line 1 column 1 (char 0)") and internal field
+        # names in front of a caller (probe, 2026-09-09). Same defect as /code-review's finding 3,
+        # reached through the generic branch instead of the 422 one.
+        #
+        # TypeError is caught as well as raised-from-nowhere insurance: this function's docstring
+        # promises it never raises, and a raise here does not merely spoil one answer -- run_call
+        # re-raises it and the call drops mid-sentence.
+        log.warning("tool %r could not be run: %s: %s", name, type(e).__name__, e)
+        return json.dumps({"error": MALFORMED})
     return json.dumps({"result": result})
