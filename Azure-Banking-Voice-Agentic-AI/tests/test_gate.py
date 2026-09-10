@@ -35,22 +35,6 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
         # anything -- the old name implied a precondition this diff removed.
         self.assertFalse(gate.is_allowed(gate.BANKING_AGENT, gate.ANONYMOUS, "drain_account"))
 
-    def test_authenticated_has_no_permissions_yet(self):
-        # Phase 4 adds the transition into this state and the permissions it unlocks. Until then
-        # the state exists but grants nothing -- if this starts passing tools, a phase boundary
-        # was crossed without the work that was supposed to come with it.
-        for tool in (t["name"] for t in tools.TOOLS):
-            self.assertFalse(gate.is_allowed(gate.BANKING_AGENT, gate.AUTHENTICATED, tool))
-
-    def test_triage_agent_is_deny_all_same_as_banking(self):
-        # Issue #20 gave the gate a second real identity (a call starts on TRIAGE_AGENT, not
-        # BANKING_AGENT -- realtime/session.py). PERMISSIONS being empty already denies both, but
-        # this pins that fact for the identity that actually opens every call, not just the one
-        # that used to be the only one.
-        for tool in (t["name"] for t in tools.TOOLS):
-            self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.ANONYMOUS, tool))
-            self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.AUTHENTICATED, tool))
-
     def test_it_is_pure_same_answer_every_time(self):
         answers = {
             gate.is_allowed(gate.BANKING_AGENT, gate.ANONYMOUS, "get_balance")
@@ -61,8 +45,81 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
     def test_the_permission_table_is_exactly_what_was_reviewed(self):
         # A pinned table, not a smoke test. Every widening of B1 has to edit this literal, which
         # means it shows up in a diff and cannot be an accident. CLAUDE.md: a diff touching
-        # dispatch/gate.py never gets auto-accepted. Empty until Phase 4 adds AUTHENTICATED rows.
-        self.assertEqual(gate.PERMISSIONS, {})
+        # dispatch/gate.py never gets auto-accepted.
+        #
+        # All four pairs, including the three empty ones. is_allowed() treats an absent key and an
+        # empty set identically, so writing the empty rows out changes nothing about behaviour --
+        # it makes the table state its own completeness, and it makes this assertion able to catch
+        # a row being deleted rather than only a row being widened.
+        self.assertEqual(gate.PERMISSIONS, {
+            (gate.TRIAGE_AGENT, gate.ANONYMOUS): frozenset(),
+            (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset(),
+            (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(),
+            (gate.BANKING_AGENT, gate.AUTHENTICATED): frozenset({
+                "get_balance", "transfer", "list_accounts",
+            }),
+        })
+
+
+class TheExhaustiveCrossProduct(unittest.TestCase):
+    """Every declared tool against every (agent, auth state) pair (issue #38).
+
+    Generated from the declared tool list rather than hand-maintained: a tool added to
+    dispatch/tools.py later is covered here the moment it is declared, with no second list to keep
+    in sync and no chance of a new tool being permitted by an omission nobody noticed.
+
+    This is the first of B1's three tiers. The other two are the red-team corpus and the spy on the
+    core-banking client -- this one proves what the table says, and those prove what actually
+    reaches the system of record.
+    """
+
+    #: The one pair that grants anything, and exactly what it grants.
+    GRANTED = frozenset({"get_balance", "transfer", "list_accounts"})
+
+    def _pairs(self):
+        for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
+            for auth_state in (gate.ANONYMOUS, gate.AUTHENTICATED):
+                yield agent, auth_state
+
+    def test_every_tool_against_every_pair_is_exactly_the_table(self):
+        for agent, auth_state in self._pairs():
+            granting = (agent, auth_state) == (gate.BANKING_AGENT, gate.AUTHENTICATED)
+            for tool in (t["name"] for t in tools.TOOLS):
+                with self.subTest(agent=agent, auth_state=auth_state, tool=tool):
+                    self.assertEqual(
+                        gate.is_allowed(agent, auth_state, tool),
+                        granting and tool in self.GRANTED,
+                    )
+
+    def test_no_tool_is_reachable_while_a_call_is_anonymous(self):
+        # Criterion 2, on both agents. An anonymous caller routed to banking is refused everything
+        # there, which is what keeps routing from being mistaken for authorization.
+        for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
+            for tool in (t["name"] for t in tools.TOOLS):
+                with self.subTest(agent=agent, tool=tool):
+                    self.assertFalse(gate.is_allowed(agent, gate.ANONYMOUS, tool))
+
+    def test_authenticating_grants_triage_nothing(self):
+        # Triage has no banking tools of its own, and authenticating does not change what triage
+        # is for. This is the row most likely to be widened by accident later.
+        for tool in (t["name"] for t in tools.TOOLS):
+            with self.subTest(tool=tool):
+                self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.AUTHENTICATED, tool))
+
+    def test_the_granting_row_covers_every_declared_tool_and_nothing_more(self):
+        # The two lists have to agree in both directions: a declared tool missing from the row
+        # would be permanently unreachable, and a name in the row that no tool declares would be
+        # dead permission nobody could see was dead.
+        declared = {tool["name"] for tool in tools.TOOLS}
+        self.assertEqual(gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)], declared)
+
+    def test_no_handoff_tool_appears_anywhere_in_the_table(self):
+        # Handoff stays ungated. Gating it would put a routing decision inside the control and give
+        # the gate a second job.
+        for permitted in gate.PERMISSIONS.values():
+            for name in permitted:
+                with self.subTest(tool=name):
+                    self.assertFalse(name.startswith("handoff_to_"))
 
 
 class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):

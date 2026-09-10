@@ -335,6 +335,94 @@ class WholeCallWithAKeyedPin(unittest.TestCase):
         self.assertEqual(len(realtime.session_configs), 1)
 
 
+class WholeCallTheGateOpens(unittest.TestCase):
+    """The payoff, at the whole-call seam: key the PIN, then hear a balance (issue #38).
+
+    Nothing is patched. The gate as actually configured, the authenticator as actually wired, and
+    the real permission table -- which is the only arrangement in which "the caller authenticates
+    and then hears a balance" says anything true.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def _authenticate_then_ask_for_a_balance(self, pin):
+        transport = FakeTransport(
+            frames=[audio_frame("balance-please"), *_keyed(pin)], hang=True
+        )
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(specs.handoff_tool_name(gate.BANKING_AGENT), "{}"),
+                function_call("get_balance", '{"account": "chequing"}', call_id="call-2"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        return transport, realtime
+
+    def test_the_caller_authenticates_and_then_hears_a_balance(self):
+        transport, realtime = self._authenticate_then_ask_for_a_balance(DEFAULT_PIN)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        call_id, output = realtime.tool_outputs[-1]
+        self.assertEqual(call_id, "call-2")
+        # The figure came from the system of record, not from anywhere in the voice agent.
+        self.assertEqual(
+            json.loads(output), {"result": self.core_banking.accounts["chequing"]}
+        )
+        self.assertEqual(self.core_banking.calls, ["verify_pin", "get_balance"])
+
+    def test_the_same_call_without_the_pin_is_refused_the_same_balance(self):
+        # The control, held against the same script with the wrong PIN. Everything else about the
+        # call is identical, so the refusal can only be the auth state.
+        transport, realtime = self._authenticate_then_ask_for_a_balance("9999")
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        _, output = realtime.tool_outputs[-1]
+        self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+        self.assertEqual(self.core_banking.calls, ["verify_pin"])
+
+    def test_an_anonymous_caller_routed_to_banking_is_refused_everything_there(self):
+        # Handoff stays ungated, so this routing succeeds -- and buys the caller nothing. Routing
+        # is never authorization.
+        transport = FakeTransport(frames=[audio_frame("balance-please")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(specs.handoff_tool_name(gate.BANKING_AGENT), "{}"),
+                function_call("get_balance", '{"account": "chequing"}', call_id="call-2"),
+                function_call("list_accounts", "{}", call_id="call-3"),
+                function_call(
+                    "transfer",
+                    '{"from_account": "chequing", "to_account": "savings", "amount": 1.0}',
+                    call_id="call-4",
+                ),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        self.assertEqual(len(realtime.session_configs), 2)  # the handoff really happened
+        for call_id, output in realtime.tool_outputs[1:]:
+            with self.subTest(call_id=call_id):
+                self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+        # And the sharpened B1, at the seam that matters: nothing banking reached the client.
+        self.assertEqual(self.core_banking.calls, [])
+
+    def test_the_refusal_still_explains_nothing(self):
+        transport = FakeTransport(frames=[audio_frame("balance-please")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[function_call("get_balance", '{"account": "chequing"}'), response_done()],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        _, output = realtime.tool_outputs[0]
+        spoken = json.loads(output)["error"].lower()
+        for leak in ("authenticated", "anonymous", "pin", "permission", "banking agent"):
+            with self.subTest(leak=leak):
+                self.assertNotIn(leak, spoken)
+
+
 class TriageAsksForTheKeyedPin(unittest.TestCase):
     """Issue #37's trap 1: prose the model acts on must not describe a system that no longer exists.
 
