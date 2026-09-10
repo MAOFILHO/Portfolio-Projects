@@ -88,7 +88,7 @@ specialists via `handoff(...)` (`main.py:98-150`).
 | 2 | **Pipeline** | Realtime speech-to-speech; native barge-in |
 | 3 | **Deploy** | Numbered-step Python **Typer CLI** wrapping `az` + Bicep, checkpointed via `deployment_state.json`, driven by `make deploy`/`make teardown`. Not `azd`. |
 | 4 | **Process depth** | Mirror FNOL: `docs/adr/`, `evals/`, `redteam/`, phase docs, `PROJECT_STATE.md`, `COSTS.md`, `CHANGELOG.md`, `TESTING-CONVENTIONS.md` |
-| 5 | **Scope** | `authenticate_caller`, `get_balance`, `list_transactions`, `block_card`, `escalate_to_human` |
+| 5 | **Scope** | `get_balance`, `transfer`, `list_accounts`, `list_transactions`, `block_card`, `escalate_to_human`. **`authenticate_caller` was struck 2026-09-10** with the spoken factor (decision 7): authentication is four DTMF digits verified by the system of record, and it has no tool at all — which is what makes "no tool is reachable while a call is anonymous" true rather than nearly true. The first three shipped in Phases 2–4; the last three are Phase 5's |
 | 6 | **Handoff** | One persistent realtime session per call; agent swap via `session.update`. Triage → Accounts → Cards |
 | 7 | **Caller auth** | **PIN via DTMF, and nothing else. Revised 2026-09-10** from "spoken card last-4 + DOB (KBA), then PIN via DTMF" at Phase 4 kickoff, on prototype-simplicity grounds. The spoken factor cost an `authenticate_caller` tool, its argument schema, ISO-date normalisation of a spoken date of birth, a second verification endpoint, and a malformed-versus-rejected distinction that only existed because a tool call could arrive misshapen — to buy a second factor nobody dials. The property Phase 4 exists to demonstrate is unchanged: a secret that never reaches the model, and a gate that opens only on a fact the system of record verified. One consequence strengthens the gate's story rather than weakening it — with no authentication tool, **no tool at all is reachable while a call is anonymous**. Full reasoning: `docs/phase4/exit-criteria.md` |
 | 8 | **Post-call analytics** | Minimal, own phase. Transcript already available from realtime events — **no Speech STT needed** |
@@ -390,7 +390,7 @@ Azure-Banking-Voice-Agentic-AI/
 ├── src/azbank_deploy/            Typer CLI, deployment_state.json
 ├── tests/                        L0 units, L1 fakes, L2 cassettes
 ├── evals/                        L3 live semantic evals
-├── redteam/                      L4 adversarial cases (YAML)
+├── redteam/                      adversarial attack ideas (YAML, one file each)
 ├── docs/
 │   ├── adr/                      ADR-001 residency, ADR-002 geography knobs, … (written in Phase 0)
 │   ├── phase0..phase8/           per-phase docs with exit criteria
@@ -411,6 +411,8 @@ Commits: `type(project-phase): D<n>/OI<n> -- prose`.
 
 ```
 L4  redteam/   live model via FakeTransport   weekly + on-demand, sampled subset, $-capped, non-blocking
+               (the same YAML ideas also drive the deterministic L1 B1 suite below -- one corpus,
+                two runners: free and blocking at L1, sampled and live at L4. Built at L1 in Phase 4)
 L3  evals/     live model via FakeTransport   weekly + on-demand, threshold-gated, $-capped
 L2  cassettes  recorded real sessions         every PR, deterministic — catches protocol drift
 L1  fakes      FakeAcs + FakeRealtime         every PR, deterministic — BLOCKING (B1/B2/B4 live here)
@@ -639,13 +641,22 @@ the gate itself. ≥120 adversarial cases in `redteam/` (deterministic, L1, free
 count of distinct attack ideas behind them and never padded to reach the total.
 **Exit:** B1 = 0 breaches, B2 = 0 occurrences, both blocking in CI.
 
+**Built 2026-09-10**, tickets #34-42, awaiting sign-off. Criterion-by-criterion evidence:
+`docs/phase4/exit-check.md`; recorded deviations: `docs/phase4/findings.md`. Delivered **11 distinct
+attack ideas → 193 concrete cases, 0 breaches**, with B2 at 0 occurrences. The idea count is short
+of the 20–30 aimed for and is reported as the real number rather than padded — `redteam/README.md`
+explains why the honest figure is that low for a surface of three operations, two agents and a
+binary auth state. Nothing was provisioned and no real call was made.
+
 **Scoped 2026-09-10**, written exit criteria: `docs/phase4/exit-criteria.md`. Two things from that
 scoping constrain more than this phase:
-- **B1's breach definition is sharpened** and needs Marco's sign-off before the phase begins, since a
-  named constraint does not move without it. PIN verification reaches the core-banking client while
-  the call is still anonymous — by design — so the breach is restated as *no banking operation*
-  (balance, transfer, list) reaching that client while unauthenticated, rather than "no
-  authenticated-only tool invocation". Target unchanged: 0 breaches, ≥120 cases, blocking.
+- **B1's breach definition is sharpened**, signed off by Marco 2026-09-10 before the phase began,
+  since a named constraint does not move without it. PIN verification reaches the core-banking
+  client while the call is still anonymous — by design — so the breach is restated as *no banking
+  operation* (balance, transfer, list) reaching that client while unauthenticated, rather than "no
+  authenticated-only tool invocation". Target unchanged: 0 breaches, ≥120 cases, blocking. **This
+  sharpened definition is what the suite enforces from Phase 4 onward**, so it binds every later
+  phase and is not a Phase 4 convenience.
 - **No real DTMF tone has ever been consumed.** Phase 0 proved tones *arrive*; every line that acts
   on one is new in Phase 4 and is exercised only against fakes, because this phase deploys nothing.
   Phase 5's real-call exit is where that closes.
