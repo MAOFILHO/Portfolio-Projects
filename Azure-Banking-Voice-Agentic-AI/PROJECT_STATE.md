@@ -235,7 +235,11 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    when to approve the **provisioning step itself** — not part of Phase 3's scope, and with its own
    diff (`infra/modules/mock-core-banking.bicep`) to review first, which no tooling here can
    validate.
-2. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
+2. **Handoff written and committed 2026-09-10**:
+   `docs/handoffs/2026-09-10-phase4-built-reviewed-thrice-awaiting-signoff.md`. Read it before
+   Phase 5 — it carries what Phase 5 inherits and the traps this phase hit, neither of which is in
+   the exit check. `/clear` is safe at this boundary: nothing is uncommitted and no handoff is
+   outstanding.
 3. **Sign off Phase 4, or send back what does not hold.** The items needing Marco are listed under
    "Needs Marco" above. `/code-review` has now run **three times** on this phase (2026-09-10) and
    every finding is implemented. Whether a fourth is worth running is Marco's call, not Claude's.
