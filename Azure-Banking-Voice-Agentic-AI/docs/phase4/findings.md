@@ -128,7 +128,7 @@ true and was the shallowest of three independent reasons, each separately checka
 1. Nothing emits spans yet.
 2. **The realtime path is uninstrumented by everything off the shelf.** The OpenTelemetry OpenAI
    instrumentation wraps five call sites — chat completions, embeddings, responses — and none is the
-   realtime connection. The Azure Monitor distro's library list contains no GenAI instrumentation at
+   realtime session. The Azure Monitor distro's library list contains no GenAI instrumentation at
    all. Adding either in Phase 6 yields spans for FastAPI, httpx and the Azure SDK, and **zero
    `gen_ai.*` attributes**. Any such attribute here would have to be written by this project.
 3. **Both content-recording switches default to off**, and neither is set here.
@@ -257,6 +257,62 @@ mark, the detector catches both. Read across the whole process, it catches **non
 resembles the `authenticated`-from-the-script defect `/code-review` found, and differs in the one
 way that matters: that one over-reported and could only ever invent a breach, and this one would
 have swallowed real ones.
+
+---
+
+## Fixed after the second `/code-review`, 2026-09-10
+
+Two axes over `e42c063...HEAD`, the three commits Marco had not yet reviewed. Nine findings, all
+implemented, plus two judgement calls that had already been flagged as worth acting on. Nothing here
+changed a constraint's target.
+
+**The one that mattered most, and it is an own goal.** The B2 surface table in
+`docs/phase4/exit-check.md` had been widened to claim run-wide transcript coverage across *every*
+red-team call. The harness discarded the prior call of each cross-call case, and those twelve calls
+are the only ones in the corpus that key the **accepted** credential into a model context — every
+other call keys a rejected one. So the sentence claimed coverage of precisely the calls most worth
+watching, written one file away from the paragraph explaining why a constraint must never be
+reported as met against a surface that is not scanned.
+
+Fixed by scanning rather than by rewording: `run()` keeps every call's `(realtime, transport)` pair
+and `credentials_in_what_the_call_sent` is variadic over calls. **Verified against a planted leak**,
+the way this suite's other claims are: with the injection rewritten to append the submitted
+credential, all twelve cross-call cases report it; before the fix they reported none.
+
+**The rest, briefly.**
+- **The injection is two frames, and only one was addressable.** The response request that makes the
+  item speak carried no `event_id`, so a rejection of it logged as an unrelated error. Both frames
+  are stamped now, with distinct ids, so a rejection says which half failed.
+- **`maxlen=8` was a number nobody derived**, in a file where every other constant is. It is now
+  `2 * (MAX_ATTEMPTS + 1)` — every frame a call that ends normally can still be waiting on — and it
+  happens to equal what was there, which is the good case and not an argument for having guessed.
+- **B2's content-recording assertion covered only the environment half.** The research asks for the
+  programmatic half too, and an Azure SDK call enabling content recording in code sets no variable
+  and imports no OpenTelemetry package, so every other rule in that file would still have passed.
+  A source scan for the concept now covers it.
+- **A comment claimed the classifier is total; it is not.** The DTMF branch is; the audio branch
+  still indexes directly and raises on a malformed frame. The claim is narrowed to the branch it is
+  true of, and the audio branch's actual behaviour is pinned by a test rather than left as folklore.
+  **Not changed**: making that branch total is relay behaviour nobody asked to alter, and a silent
+  change there is exactly what the never-auto-accept rule exists to prevent.
+- **A base64 literal in the classifier tests encoded the demo credential.** Not a leak, since source
+  is not a scanned surface and no call sent it, but it put a credential in the tree where neither
+  `tests/keyed_values.py` nor its static guard could see it. It encodes something else now.
+- **A term `CONTEXT.md` proscribes** appeared in new prose describing the realtime session. Third
+  time this glossary has caught something in this phase, which is the glossary working.
+- **A guard comment miscounted its own regex** — "two functions" against three alternatives. The
+  third is kept deliberately and the comment now says why: a detector that over-matches costs
+  nothing, and under-matching is the failure it exists to prevent.
+- **A test sampled a property that is structural.** Two hundred whole calls were run to observe that
+  generated ids carry no digit. The mapping is what makes that true, so the mapping is asserted now,
+  along with the injectivity that keeps ids as unique as the uuid behind them.
+
+**Two findings recorded rather than fixed**, both in `PROJECT_STATE.md`. The relay imposes no
+deadline on an injected frame, so silence is still indistinguishable from acceptance — a timer on
+the PIN path is a Phase 5 design question, and the authenticator carries "no timer of any kind" as a
+deliberate decision. And whether the HTTP instrumentations capture bodies by default was **dropped
+rather than deferred** by the previous pass: the research named it, its sibling question became an
+open item, and this one reached no list at all until this review.
 
 ---
 

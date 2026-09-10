@@ -97,8 +97,11 @@ def _spoken_note(text, event_id):
 _DIGIT_FREE = str.maketrans("0123456789", "qrstuvwxyz")
 
 
-def _new_item_id():
-    """An id for one injected item: unique, opaque, and carrying no decimal digit at all.
+def _new_event_id():
+    """An id for one frame the relay sends: unique, opaque, and carrying no decimal digit at all.
+
+    Named for a frame rather than an item because both halves of the injection mechanism carry one
+    -- the item and the response request that makes it speak.
 
     **The digit-free part is not decoration.** A raw `uuid4().hex` is 32 characters drawn from an
     alphabet that is more than half digits, so across a call's injections it will eventually spell
@@ -171,10 +174,17 @@ async def run_call(transport, realtime, core_banking):
     # without a second fail-closed path (issue #35).
     authenticator = auth.Authenticator(core_banking)
 
-    # The ids this relay stamped on its own injected items, so an `error` naming one can be told
-    # from an error about anything else. Bounded rather than a growing set: a rejection follows its
-    # injection closely, and a call that keys forever must not accumulate for as long as it runs.
-    injected_item_ids = collections.deque(maxlen=8)
+    # The ids this relay stamped on its own frames, so an `error` naming one can be told from an
+    # error about anything else. Bounded rather than a growing set: a call whose credential check
+    # keeps coming back unavailable can key indefinitely without ever settling, and a correlation
+    # buffer must not grow for as long as such a call runs.
+    #
+    # **The bound is derived, not picked.** A settled call injects at most one outcome per rejected
+    # attempt plus one terminal outcome, and each injection is two frames -- the item and the
+    # response request. So this holds every frame a call that ends normally can still be waiting on.
+    # Anything older has already been answered or is not correlatable in a useful sense: an error
+    # names the frame that caused it, and that frame is recent.
+    injected_frame_ids = collections.deque(maxlen=2 * (auth.MAX_ATTEMPTS + 1))
 
     await realtime.send(_session_update(agent))
 
@@ -220,10 +230,16 @@ async def run_call(transport, realtime, core_banking):
                     # Told, not left in silence -- the same reason a refusal is spoken rather than
                     # met with nothing. The three silent outcomes are the caller still keying, and
                     # speaking over them is the one thing a PIN prompt cannot afford to do.
-                    event_id = _new_item_id()
-                    injected_item_ids.append(event_id)
-                    await realtime.send(_spoken_note(sentence, event_id))
-                    await realtime.send({"type": "response.create"})
+                    # **Both frames are stamped, because the mechanism is both frames.** The item
+                    # carries the sentence and the response request is what makes it spoken; a
+                    # rejection of the second is as much a failure of this injection as a rejection
+                    # of the first, and correlating only the item would report the second as an
+                    # unrelated error (/code-review, 2026-09-10).
+                    item_id = _new_event_id()
+                    response_id = _new_event_id()
+                    injected_frame_ids.extend((item_id, response_id))
+                    await realtime.send(_spoken_note(sentence, item_id))
+                    await realtime.send({"type": "response.create", "event_id": response_id})
                 if outcome == auth.outcomes.EXHAUSTED:
                     log.warning("PIN attempts exhausted, ending call")
                     raise auth.AttemptsExhausted("three rejected credentials")
@@ -338,8 +354,8 @@ async def run_call(transport, realtime, core_banking):
                 # item I injected was refused" from "something else went wrong". Phase 5's real
                 # call is a probe of that item's shape, and a probe that cannot tell those two
                 # apart would send whoever reads it chasing the wrong thing.
-                if _causing_event_id(event) in injected_item_ids:
-                    log.error("AOAI rejected the injected PIN-outcome item")
+                if _causing_event_id(event) in injected_frame_ids:
+                    log.error("AOAI rejected a frame of the injected PIN-outcome")
                 else:
                     log.error("AOAI error event received")
 

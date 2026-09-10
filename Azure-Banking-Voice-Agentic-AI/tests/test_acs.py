@@ -129,16 +129,38 @@ class TheNormalisedTonesAreTheOnesTheKeypadActsOn(unittest.TestCase):
 
 
 class AnythingElse(unittest.TestCase):
-    """The classifier must not raise on the inbound relay task, whatever arrives."""
+    """**The DTMF branch** must not raise on the inbound relay task, whatever arrives.
+
+    Stated for that branch rather than for the classifier, because the classifier as a whole is not
+    total and this docstring used to say it was (/code-review, 2026-09-10). The audio branch still
+    indexes `msg["audioData"]["data"]` directly, so a malformed audio frame raises -- pinned below
+    rather than left as folklore. That asymmetry is deliberate on the DTMF side and merely
+    inherited on the audio side; whether the audio branch should be made total too is recorded as
+    an open item rather than changed here, since it is relay behaviour nobody asked to alter.
+    """
 
     def test_an_unrecognised_tone_is_passed_through_untouched(self):
         # Not mapped, not guessed at, not dropped. The authenticator ignores a key it does not
         # recognise, so an unknown value fails closed on its own -- and passing it through
         # unchanged is what leaves a real call's evidence intact for whoever reads it next.
         # `A` through `D` land here: both vocabularies carry them and the keypad ignores both.
-        for tone in ("A", "b", "star-ish", "", "MTIzNA=="):
+        #
+        # The base64-looking value is deliberately base64 of something that is not a credential.
+        # It used to encode the demo PIN, which put a credential in the tree where neither
+        # `tests/keyed_values.py` nor its static guard could see it (/code-review, 2026-09-10).
+        for tone in ("A", "b", "star-ish", "", "YWJjZA=="):
             with self.subTest(tone=tone):
                 self.assertEqual(acs.classify_inbound(dtmf(tone)), (acs.DTMF, tone))
+
+    def test_a_malformed_audio_frame_still_raises(self):
+        """The classifier's one non-total branch, pinned as behaviour rather than described.
+
+        Not an endorsement. This is what the code does today, and a test that says so is what makes
+        a future decision to change it a deliberate one with a red test to update, rather than a
+        silent behaviour change nobody notices.
+        """
+        with self.assertRaises(KeyError):
+            acs.classify_inbound(json.dumps({"kind": "AudioData"}))
 
     def test_a_missing_or_null_tone_does_not_raise(self):
         self.assertEqual(acs.classify_inbound(dtmf(None)), (acs.DTMF, None))

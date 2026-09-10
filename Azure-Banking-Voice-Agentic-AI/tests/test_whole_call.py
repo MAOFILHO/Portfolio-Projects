@@ -365,7 +365,20 @@ class WholeCallWithAKeyedPin(unittest.TestCase):
 class _FixedUuid:
     """A `uuid4()` whose `.hex` is known, so an error can be scripted to name the id it produces."""
 
-    hex = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+    def __init__(self, hex_value):
+        self.hex = hex_value
+
+
+def _repeatable_uuids():
+    """A `uuid4` stand-in giving known, **distinct** values, restarting on each call to this.
+
+    Distinct matters: the injection is two frames and each gets its own id, so a stand-in returning
+    one value for every call would collapse them and hide whichever half a test meant to name.
+    Restarting matters too: a correlation test runs the same call twice, once to learn the ids and
+    once to have them rejected, and the two runs have to stamp the same ids.
+    """
+    values = iter([_FixedUuid(letter * 32) for letter in "abcdefghijkl"])
+    return lambda: next(values)
 
 
 class TheInjectedItemIsAddressable(unittest.TestCase):
@@ -426,25 +439,42 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         self.assertNotIn(DEFAULT_PIN, identifier)
 
     def test_the_id_contains_no_decimal_digit_at_all(self):
-        """The property that keeps B2's run-wide scan deterministic, asserted directly.
+        """The property that keeps B2's run-wide scan deterministic.
 
         A raw uuid hex is drawn from an alphabet that is more than half digits, so over a run it
         eventually spells some four-digit run by chance -- and the scan looks for exactly that,
         across everything every call sent. The first version of this id did precisely that and
         turned the red-team corpus's B2 assertion red on a coincidence. A constraint that fails at
-        random is worse than a weaker one stated honestly, so the id is built to be unable to
+        random is worse than a weaker one stated honestly, so the id is built to be *unable* to
         spell a credential rather than merely unlikely to.
 
-        Checked across many ids, because one is not evidence about a random generator.
+        **Asserted on the generator, not through whole calls.** An earlier version of this test ran
+        two hundred complete calls to sample the same property, which is both far slower and weaker
+        evidence: it exercised one id per call and never touched the generator directly
+        (/code-review, 2026-09-10). The mapping is what makes the property structural, so the
+        mapping is what gets asserted.
         """
-        for _ in range(200):
-            realtime = self._run(_keyed("9999"))
-            identifier = self._injected_items(realtime)[0]["event_id"]
+        for _ in range(2000):
+            identifier = session_module._new_event_id()
             self.assertFalse(
                 any(character.isdigit() for character in identifier),
-                f"an injected item id can spell digits: {identifier}",
+                f"a generated frame id can spell digits: {identifier}",
             )
-            self.core_banking = FakeCoreBankingClient()
+
+    def test_the_id_map_is_bijective_so_ids_stay_as_unique_as_the_uuid(self):
+        """The other half of the claim, and the half a sampling test cannot reach.
+
+        Digits are rewritten to letters. If that map ever collided -- if a digit were sent to a
+        letter the hex alphabet already uses -- two different uuids could produce one id, and a
+        rejection would be correlated to the wrong frame. Asserted on the table itself.
+        """
+        mapping = session_module._DIGIT_FREE
+        replacements = [chr(value) for value in mapping.values()]
+        self.assertEqual(len(replacements), len(set(replacements)), "the map is not injective")
+        self.assertFalse(
+            set(replacements) & set("0123456789abcdef"),
+            "a digit maps onto a character the hex alphabet already uses",
+        )
 
     def test_a_rejection_naming_the_injection_is_reported_as_that_injection_failing(self):
         """The whole point: Phase 5 learns that *this* shape was refused, not that *an* error came.
@@ -452,12 +482,13 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         The relay's id is random per call, so the error cannot be scripted to name it without
         pinning it first. That is what the patch below is for, and it is the only thing it does.
         """
-        with patch.object(session_module.uuid, "uuid4", return_value=_FixedUuid()):
-            # One run to learn the id the relay stamps, one to reject it. Both under the same
-            # patch, so both stamp the same id -- and neither assumes how the id is built.
+        # One run to learn the id the relay stamps, one to reject it. Each gets its own fresh
+        # sequence, so both stamp the same ids, and neither assumes how an id is built.
+        with patch.object(session_module.uuid, "uuid4", side_effect=_repeatable_uuids()):
             stamped = self._injected_items(self._run(_keyed(DEFAULT_PIN)))[0]["event_id"]
-            self.core_banking = FakeCoreBankingClient()
 
+        self.core_banking = FakeCoreBankingClient()
+        with patch.object(session_module.uuid, "uuid4", side_effect=_repeatable_uuids()):
             with self.assertLogs("bridge", level="ERROR") as cm:
                 self._run(
                     [*_keyed(DEFAULT_PIN), audio_frame("still-here")],
@@ -467,6 +498,42 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         self.assertTrue(
             any("injected" in line.lower() for line in cm.output),
             f"a rejection of the relay's own item was not identified as one: {cm.output}",
+        )
+
+    def test_the_response_request_is_stamped_too_not_only_the_item(self):
+        """The mechanism is two frames, so attribution has to cover both.
+
+        A rejection of the response request is as much a failure of this injection as a rejection
+        of the item, and correlating only the item would report it as an unrelated error
+        (/code-review, 2026-09-10).
+        """
+        realtime = self._run(_keyed(DEFAULT_PIN))
+        requests = [m for m in realtime.sent if m["type"] == "response.create"]
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(requests[0].get("event_id"), "the response request is unaddressable")
+        # And it is a different frame from the item, so a rejection says which half failed.
+        self.assertNotEqual(
+            requests[0]["event_id"], self._injected_items(realtime)[0]["event_id"]
+        )
+
+    def test_a_rejection_of_the_response_request_is_attributed_to_the_injection(self):
+        with patch.object(session_module.uuid, "uuid4", side_effect=_repeatable_uuids()):
+            realtime = self._run(_keyed(DEFAULT_PIN))
+            stamped = next(
+                m for m in realtime.sent if m["type"] == "response.create"
+            )["event_id"]
+
+        self.core_banking = FakeCoreBankingClient()
+        with patch.object(session_module.uuid, "uuid4", side_effect=_repeatable_uuids()):
+            with self.assertLogs("bridge", level="ERROR") as cm:
+                self._run(
+                    [*_keyed(DEFAULT_PIN), audio_frame("still-here")],
+                    events=[error_event("bad request", caused_by=stamped), response_done()],
+                )
+
+        self.assertTrue(
+            any("injected" in line.lower() for line in cm.output),
+            f"a rejected response request was not tied to the injection: {cm.output}",
         )
 
     def test_an_unrelated_error_is_not_attributed_to_the_injection(self):

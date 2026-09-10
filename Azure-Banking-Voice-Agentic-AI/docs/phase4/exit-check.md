@@ -64,10 +64,16 @@ a system message. What no primary source states is whether Azure's endpoint and 
 accept it, and none documents this event per model version at all — the case B3 exists for. That is
 a one-frame live probe at Phase 5's real-call exit, the same move Phase 1 used on the same wall.
 
-**The injected item is now addressable.** It carries a client `event_id`, and an `error` naming it is
-logged as that injection being refused rather than as an unattributed error — the only documented way
-to tell the two apart, and what makes Phase 5's probe diagnostic rather than pass-or-fail. The id
-contains no decimal digit, so it cannot spell a credential into B2's run-wide scan.
+**The injected outcome is now addressable, both frames of it.** The item and the response request
+each carry a client `event_id`, and an `error` naming either is logged as that injection being
+refused rather than as an unattributed error. That is the only documented way to tell the two apart.
+The ids contain no decimal digit, so they cannot spell a credential into B2's run-wide scan.
+
+**It makes a rejection legible; it does not make silence legible.** No source states a response
+deadline and the relay imposes none, so an injection that is simply never answered is still
+indistinguishable from an accepted one. Recorded as `PROJECT_STATE.md` open item 17 rather than
+built, because a timer on the relay's PIN path is a Phase 5 design question and the authenticator
+carries "no timer of any kind" as a deliberate decision.
 
 **8. No plaintext PIN is persisted.** ✅ Met.
 `db.py` seeds a SHA-256 digest beside `SEED_ACCOUNTS`. The database is dumped and scanned in
@@ -118,7 +124,7 @@ read this entry as claiming all four):
 |---|---|---|
 | Log lines | Run-wide, every record the run emits | `tests/test_zz_b2_leak_scan.py` |
 | Persisted records | Yes, the real file a spawned service wrote | `tests/test_core_banking_live.py` |
-| Transcripts / injected items | Run-wide across every red-team call **and** the whole-call test | `redteam_harness.credentials_in_what_the_call_sent`, `tests/test_whole_call.py` |
+| Transcripts / injected items | Run-wide across every red-team call, **including the prior call of each cross-call case**, and the whole-call test | `redteam_harness.credentials_in_what_the_call_sent`, `tests/test_whole_call.py` |
 | OTel span attributes | **Vacuously — this project emits no spans yet**, and the switches that would fill them are asserted off | `tests/test_b2_content_recording.py`; Phase 6 owns the rest |
 
 The OTel row is the honest one: `grep -riE "opentelemetry|otel|tracer|span"` returns nothing outside
@@ -140,6 +146,15 @@ be enabled here until its destination table has been queried and read.
 The transcript row was widened on 2026-09-10: it previously rested on one call, in
 `tests/test_whole_call.py`, while every call that actually keys wrong credentials went unscanned on
 that surface. Each red-team case now scans what it sent to the model and back to the caller.
+
+**And widened again the same day, after that first widening overstated itself.** The row was
+rewritten to claim every red-team call while the harness still discarded the prior call of each
+cross-call case — twelve calls, and the **only** calls in the whole corpus that key the *accepted*
+credential into a model context. Every other call keys a rejected one. So the sentence claimed
+coverage of exactly the calls most worth watching, one file away from the paragraph forbidding that
+move. The harness now keeps every call's surfaces and scans all of them. **Verified by planting a
+real leak in the relay**: with the injection rewritten to append the submitted credential, all
+twelve cross-call cases report it; before the fix they reported none.
 
 **11. Every attempt logged, carrying no digit.** ✅ Met.
 Info on success, warning on each rejection with the attempt number only.

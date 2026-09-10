@@ -62,9 +62,16 @@ CAPTURED = []
 #: This suite's own source, read as text by the static guard below.
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
 
-#: A four-digit string handed to either of the two functions that key a tone. Those are the only
-#: two ways anything in this suite submits a credential, so this pattern is what "a credential the
-#: suite keys" looks like from the outside, without importing or running anything.
+#: A four-digit string handed to something that keys a tone, as it looks from the outside -- read
+#: as text, without importing or running anything.
+#:
+#: **Three alternatives, not two, and the comment here used to say two** (/code-review, 2026-09-10).
+#: `_keyed` and `dtmf_frame` are the two ways this suite actually submits a credential today.
+#: `tuple` matches nothing in the tree right now and is kept deliberately: `redteam_harness.POINTS`
+#: already builds keypress sequences with `tuple(...)`, so `tuple("9999")` is the obvious next way
+#: to write one, and a detector that over-matches costs nothing while a detector that under-matches
+#: is the exact failure this guard exists to prevent. An unused alternative in a scanner is
+#: insurance; the miscount was the defect.
 _KEYED_LITERAL = re.compile(r"""(?:_keyed|dtmf_frame|tuple)\(\s*["'](\d{4})["']""")
 
 _original_handle = logging.Logger.handle

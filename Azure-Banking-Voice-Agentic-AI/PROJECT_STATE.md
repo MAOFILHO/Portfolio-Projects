@@ -49,63 +49,24 @@ The gate grants for the first time, on a PIN the model never sees. Criterion-by-
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
 | `make lint`, B3 static check | clean, passing |
 
-**`/code-review` has been run and its findings implemented** (2026-09-10, two axes over
-`56178e5...HEAD`). Fifteen findings deduplicated to thirteen; twelve implemented, one declined with
-a reason. Full account: `docs/phase4/findings.md`, "Fixed after `/code-review`". Three things a
-later session needs to know without reading it:
+**Three diffs are committed and unreviewed by Marco.** In order: `18d6a4a` (first `/code-review`
+remediation), `4097144` (the remaining findings), `395d6c5` (what `/research` found). A second
+`/code-review` then ran over all three and its nine findings are implemented on top. **The first and
+third touch the DTMF/PIN path**, so the never-auto-accept rule binds them.
 
-- **B1's verdict of 0 breaches is unchanged and was never at risk.** The harness's `authenticated`
-  flag was derived from scripted input rather than from the call, which collapsed the breach test to
-  its other half. That over-reports — it could invent a breach, never pass one. Both legs are now
-  exercised.
-- **B1's sharpened breach definition is now in all four places.** The named-constraint tables in
-  `CLAUDE.md` and `docs/PLAN.md` still carried the pre-sharpening wording. Propagating approved
-  wording, not moving a constraint; the target is untouched.
-- **B2 covers three of its four named surfaces.** Logs, persisted records and transcripts are
-  covered run-wide. **Span attributes are not, because this project emits no spans** — Phase 6 work,
-  and no longer reported as met. Table in `docs/phase4/exit-check.md` criterion 10.
+Blow-by-blow accounts are archives, not current state: `docs/phase4/findings.md` for what each pass
+found and fixed, `docs/phase4/research-carried-findings.md` for the sourced research behind the
+third. What a later session needs without reading either:
 
-**That remediation is committed** (`18d6a4a`). It touched the DTMF/PIN path
-(`auth/authenticator.py`, `realtime/session.py`, `core_banking/fake.py`) and `tests/test_gate.py`.
-
-**The remaining Phase 4 findings were implemented 2026-09-10, in a second diff that is committed and
-still unreviewed by Marco.** No production module is touched by it — the changes are in `tests/`,
-`redteam/`, the `Makefile`, `.gitignore` and the phase docs. Three things:
-
-- **The idea count moved 11 → 13**, by making the loader generate two ideas that were real, tested
-  and deliberately uncounted, rather than by counting them where they sat. **The gap to the 20–30
-  target is unchanged and still reported as a gap.**
-- **A detector fix that pointed the dangerous way.** `Outcome.authenticated` read the core-banking
-  spy's whole history, which is correct only while no case runs more than one call. The new
-  cross-call idea runs two, so an earlier caller's accepted verdict would have been read as this
-  call's and `is_breach` would have come back False for exactly the cases written to catch a breach.
-  Verified against a real injected breach: read from a per-call mark the detector catches both
-  cross-call breaches, read across the process it catches none. Unlike the `/code-review` defect it
-  resembles, this one would have **under**-reported.
-- **The unreproduced test failure can no longer lose its name.** `make test` keeps each suite's whole
-  output in a gitignored log whatever the caller pipes stdout through, and the live test retries a
-  start on a fresh port and reports the spawned service's own words. Still unexplained; a recurrence
-  is now readable.
-
-**`/research` ran 2026-09-10 on the three findings carried out of this phase, and a third diff
-implemented what it found** — committed, unreviewed, and it **touches the DTMF path and the PIN
-path**, so the never-auto-accept rule binds it. Sourcing:
-`docs/phase4/research-carried-findings.md`, every claim with a URL and fetch date.
-
-- **The injected item's shape is confirmed correct against the specification**, and `system` +
-  `input_text` is the only content type that role permits. What no source documents is whether
-  Azure's endpoint and this model version *accept* it — a one-frame live probe at Phase 5, the same
-  move Phase 1 used. The item now carries a client `event_id` so a rejection can be attributed to it
-  rather than guessed at.
-- **A new finding the research surfaced: the DTMF tone vocabulary was an unexamined assumption.**
-  The media-stream frame has no schema in any Azure specification, and `*` and `#` have no
-  documented spelling on this path at all — while the only vocabulary Azure enumerates spells them
-  as words. On that spelling a caller who mis-keyed could never clear, silently. The classifier now
-  accepts both vocabularies, which stops the question breaking the call without pretending to answer
-  it. **Phase 5's real call must press `*` and `#`.**
-- **B2's OTel surface is empty for three separate reasons, and one of them is now a test.** Neither
-  content-recording switch is set anywhere that configures a deployment, and the realtime path is
-  uninstrumented by everything off the shelf. Still reported as uncovered, not met.
+- **No constraint's target has moved**, through any of it. B1's verdict of 0 breaches has been
+  unchanged and never at risk; the B1 wording edits propagated an already-approved sentence.
+- **The red-team idea count is 13 against a target of 20-30**, reported rather than padded, and the
+  gap is still a gap. It moved from 11 by making the loader generate two real uncounted ideas.
+- **B2 covers three of its four named surfaces.** Span attributes are not covered, because nothing
+  emits spans; that is Phase 6 work and is not reported as met.
+- **Phase 5's real call must press `*` and `#`, not only digits.** The DTMF tone vocabulary has no
+  documented spelling for either key on this path, and a digits-only call would leave that open
+  while looking like it closed it.
 
 Both red-team numbers are always quoted together. A case count with no idea count behind it is the
 same empty claim as a percentile with no N.
@@ -121,9 +82,9 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
    after that (**`transport/acs.py` and `realtime/session.py`, so both the DTMF path and the PIN
    path**). **This is the one thing blocking the gate.**
 1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
-   limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, criterion
-   9's idea count is 13 against a target of 20-30, reported rather than padded, and criterion 10's
-   OTel surface is vacuous because no span exists yet.
+   limit rather than a clean pass: criterion 7's injected item is confirmed in shape but unverified
+   in acceptance by the live deployment, criterion 9's idea count is 13 against a target of 20-30,
+   reported rather than padded, and criterion 10's OTel surface is vacuous because no span exists.
 2. **Done 2026-09-10 — `/research` ran and its findings are implemented.** The shape is settled; the
    deployment's acceptance of it is not, and only a real call can settle that. What Marco still owns
    here is the review of the resulting diff, which is item 0.
@@ -229,6 +190,19 @@ because they are genuinely unresolved, not because any of them is currently bloc
     coverage.** Not enabled, and must not be enabled on `aoai-azure-banking-voice-cc` until its
     destination table has been queried and read — it is a candidate fifth B2 surface, and its name
     is the only thing anyone knows about it.
+16. **Unknown whether the FastAPI, httpx and requests instrumentations capture request or response
+    bodies by default.** Not verified against those packages' source, so it is not asserted either
+    way. It matters because the relay's own FastAPI app receives the ACS webhook and, at Phase 5,
+    the media WebSocket — a body-capturing default there would put DTMF frames into telemetry.
+    Cheap to settle by reading source, and it should be settled **before Phase 6 enables anything**.
+    Recorded 2026-09-10 after `/code-review` found it dropped rather than deferred: the research
+    named it, its sibling question became item 15, and this one reached no list at all.
+17. **The relay imposes no deadline on the injected PIN-outcome frames.** The research is explicit
+    that telling a rejection from silence needs the error type, a correlated id, **and the relay's
+    own timeout**. The first two are implemented; the third is not, so an injection that is simply
+    never answered still looks like an accepted one. Deliberately not built here: the authenticator
+    carries "no timer of any kind" as a design decision, and putting one on the relay's PIN path is
+    a Phase 5 design question rather than a fix.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 

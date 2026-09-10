@@ -9,9 +9,9 @@ establishing what the surface will actually be.
 **Three independent reasons the surface is empty, each separately checkable** (§3d, §3e):
 
 1. Nothing emits spans at all yet. Phase 6's work.
-2. **The realtime WebSocket path is uninstrumented by everything off the shelf.** The OpenTelemetry
+2. **The realtime path is uninstrumented by everything off the shelf.** The OpenTelemetry
    OpenAI instrumentation wraps exactly five call sites -- chat completions, embeddings, responses --
-   and none of them is the realtime connection. The Azure Monitor distro's auto-instrumented library
+   and none of them is the realtime session. The Azure Monitor distro's auto-instrumented library
    list contains no GenAI library at all. Adding either in Phase 6 produces spans for FastAPI, httpx
    and the Azure SDK, and **zero `gen_ai.*` attributes**. Any such attribute in this project would
    have to be written by this project.
@@ -46,6 +46,22 @@ CONTENT_RECORDING_SWITCHES = (
 CONTENT_UPLOAD_SWITCHES = (
     "OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK",
     "OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH",
+)
+
+#: The **programmatic** half of the same switch, which an environment scan cannot see
+#: (/code-review, 2026-09-10). The research note asks for "neither variable is set … **and no code
+#: sets the programmatic equivalent**", and the environment rules above answer only the first
+#: clause: an Azure SDK call enabling content recording in code would set no variable and import no
+#: OpenTelemetry package, so every other rule in this file would still pass.
+#:
+#: Matched as substrings and case-insensitively, because these are spelled differently across SDKs
+#: and languages and the point is to catch the concept rather than one library's parameter name.
+CONTENT_RECORDING_IDENTIFIERS = (
+    "content_recording",
+    "contentrecording",
+    "capture_message_content",
+    "capture_content",
+    "enable_content",
 )
 
 PROJECT = pathlib.Path(__file__).resolve().parent.parent
@@ -126,6 +142,26 @@ class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
                 "GenAI content upload is configured, which puts content outside every scanner "
                 "this project has: "
                 + "; ".join(f"{switch} in {path}" for path, switch in found)
+            )
+
+
+    def test_no_code_enables_content_recording_programmatically(self):
+        """The clause the environment rules above cannot reach.
+
+        A span-content scanner is not what this is: it is the cheaper check that nothing here asks
+        for content to be recorded in the first place, by either route. Setting a flag in code is
+        the route that leaves no trace in an environment and needs no OpenTelemetry import.
+        """
+        found = []
+        for path in _configuring_files():
+            body = path.read_text(errors="replace").casefold()
+            for identifier in CONTENT_RECORDING_IDENTIFIERS:
+                if identifier in body:
+                    found.append((str(path.relative_to(PROJECT)), identifier))
+        if found:
+            self.fail(
+                "content recording may be enabled in code: "
+                + "; ".join(f"{identifier} in {path}" for path, identifier in found)
             )
 
 

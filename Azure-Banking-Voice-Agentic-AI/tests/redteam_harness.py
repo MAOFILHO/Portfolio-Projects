@@ -292,16 +292,22 @@ def run(case, keys=None):
     """
     core_banking = FakeCoreBankingClient()
 
+    # Every (realtime, transport) pair this case drove, so B2's per-case scan below reads all of
+    # them. Held rather than discarded: the prior call keys the *accepted* credential, which no
+    # other call in the corpus does.
+    surfaces = []
+
     if case.prior_call == "authenticated":
         # An earlier caller, on the same process and the same client, who really did get in. The
         # backend is healthy for this one whatever the case asks for below -- a prior call that
         # could not reach the system of record could not have authenticated either, and the idea
         # under test is inheritance, not the outage.
-        asyncio.run(run_call(
-            FakeTransport(frames=[dtmf_frame(key) for key in keyed_values.ACCEPTED], hang=True),
-            FakeRealtimeServer(events=[], respond_after_appends=0),
-            core_banking,
-        ))
+        prior_transport = FakeTransport(
+            frames=[dtmf_frame(key) for key in keyed_values.ACCEPTED], hang=True
+        )
+        prior_realtime = FakeRealtimeServer(events=[], respond_after_appends=0)
+        asyncio.run(run_call(prior_transport, prior_realtime, core_banking))
+        surfaces.append((prior_realtime, prior_transport))
     elif case.prior_call:
         raise ValueError(f"unknown prior_call {case.prior_call!r}")
 
@@ -339,6 +345,7 @@ def run(case, keys=None):
     transport = FakeTransport(frames=frames, hang=True)
     realtime = FakeRealtimeServer(events=events, respond_after_appends=1)
     asyncio.run(run_call(transport, realtime, core_banking))
+    surfaces.append((realtime, transport))
 
     return Outcome(
         case=case,
@@ -358,19 +365,30 @@ def run(case, keys=None):
         # Sliced to this call, not the process: see the mark taken above.
         authenticated=any(core_banking.verify_pin_verdicts[already_verified:]),
         verifications=tuple(core_banking.verify_pin_verdicts[already_verified:]),
-        leaked=credentials_in_what_the_call_sent(realtime, transport),
+        leaked=credentials_in_what_the_call_sent(*surfaces),
     )
 
 
-def credentials_in_what_the_call_sent(realtime, transport):
-    """Any keyed credential appearing in what this call sent to the model or to the caller.
+def credentials_in_what_the_call_sent(*calls):
+    """Any keyed credential appearing in what these calls sent to the model or to the caller.
 
     The two surfaces B2 names that a log scan cannot see: everything put into the model's context
     -- session instructions, injected items, tool outputs -- and everything relayed back down to
     the caller. Serialised whole rather than walked field by field, because a leak that hid in a
     field this function forgot to visit is exactly the leak worth catching.
+
+    **Variadic over calls, not over one call** (/code-review, 2026-09-10). Each argument is a
+    `(realtime, transport)` pair. A case carrying `prior_call` runs *two* calls, and the earlier one
+    is the only place in the whole corpus where the **accepted** credential is keyed into a model
+    context -- every other call keys a rejected one. Scanning only the case's own call left that
+    surface unread while `docs/phase4/exit-check.md` claimed run-wide coverage across every
+    red-team call, which is criterion 10's own prohibited failure mode committed one file away from
+    the paragraph forbidding it.
     """
-    surface = json.dumps(realtime.sent, default=repr) + json.dumps(transport.sent, default=repr)
+    surface = "".join(
+        json.dumps(realtime.sent, default=repr) + json.dumps(transport.sent, default=repr)
+        for realtime, transport in calls
+    )
     return tuple(secret for secret in keyed_values.SECRETS if secret in surface)
 
 
