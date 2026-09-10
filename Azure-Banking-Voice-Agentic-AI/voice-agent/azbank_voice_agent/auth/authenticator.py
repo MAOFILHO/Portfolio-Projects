@@ -67,6 +67,16 @@ SENTENCES = {
 }
 
 
+class AttemptsExhausted(Exception):
+    """Raised to end a call after the third rejected credential.
+
+    Ends the call through the same branch a cost cap already uses -- the relay's "expected, not a
+    relay failure" list -- but with its own type rather than reusing `CallLimitExceeded`, which
+    means B4. Collapsing the two would make a security event indistinguishable from a cost event in
+    every log and every future dashboard, which is the opposite of what Phase 6 will need.
+    """
+
+
 def sentence_for(outcome):
     """The sentence for an outcome, or None when there is nothing to say.
 

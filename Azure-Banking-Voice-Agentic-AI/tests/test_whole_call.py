@@ -15,7 +15,11 @@ import socket
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
+from azbank_voice_agent.agents import specs
+from azbank_voice_agent.auth import AttemptsExhausted, outcomes, sentence_for
+from azbank_voice_agent.core_banking import CoreBankingUnavailable
+from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
+from azbank_voice_agent.cost import caps
 from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -144,7 +148,9 @@ class WholeCallHandlesNonAudioFrames(unittest.TestCase):
 
     def test_dtmf_tone_never_reaches_the_model_and_never_reaches_a_log_line(self):
         # B2 (CLAUDE.md): the PIN never appears in any transcript, log line, or span attribute.
-        # Asserted at the whole-call seam, not just at the frame parser.
+        # Asserted at the whole-call seam, not just at the frame parser. Since issue #37 the
+        # classifier does return the digit -- so this test now proves the thing that actually
+        # matters, which is that the relay hands it on without ever writing it down.
         transport = FakeTransport(frames=[dtmf_frame("7"), audio_frame("real-audio")], hang=True)
         realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
 
@@ -155,11 +161,206 @@ class WholeCallHandlesNonAudioFrames(unittest.TestCase):
         self.assertTrue(any("DTMF" in line for line in cm.output))  # arrival still logged
         self.assertFalse(any("7" in line for line in cm.output))  # but never the tone itself
 
+    def test_a_malformed_dtmf_frame_does_not_end_the_call(self):
+        # A DTMF frame with no tone in it is ignored like any other unrecognised key. Anything
+        # that raised on the inbound task would take the call down with it.
+        transport = FakeTransport(
+            frames=[json.dumps({"kind": "DtmfData"}), audio_frame("real-audio")], hang=True
+        )
+        realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(realtime.appended_audio, ["real-audio"])
+
     def test_an_unrecognised_frame_kind_is_ignored_not_crashed_on(self):
         transport = FakeTransport(frames=[unknown_frame(), audio_frame("real-audio")], hang=True)
         realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
         asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(realtime.appended_audio, ["real-audio"])
+
+
+def _keyed(pin):
+    """One DTMF frame per digit, the way a caller keying a PIN actually arrives."""
+    return [dtmf_frame(digit) for digit in pin]
+
+
+class WholeCallWithAKeyedPin(unittest.TestCase):
+    """The keyed tone reaching the authenticator, at the only seam where it is a real call.
+
+    The authenticator's own rules are proved directly in tests/test_authenticator.py. What is
+    proved here is the second claim of the same pair the gate's tests already use: that the machine
+    is genuinely in the path. A control that decides perfectly and is never consulted protects
+    nothing, and that failure would pass every test of the first kind.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def _call(self, frames, events=(), hang=True):
+        transport = FakeTransport(frames=list(frames), hang=hang)
+        realtime = FakeRealtimeServer(events=list(events), respond_after_appends=0)
+        return transport, realtime
+
+    def _injected_notes(self, realtime):
+        """The text of every conversation item the relay injected that is not a tool result."""
+        return [
+            part["text"]
+            for message in realtime.sent
+            if message["type"] == "conversation.item.create"
+            and message["item"].get("type") == "message"
+            for part in message["item"]["content"]
+        ]
+
+    def test_a_keyed_pin_authenticates_the_call_and_tells_the_caller(self):
+        transport, realtime = self._call(_keyed(DEFAULT_PIN))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        self.assertEqual(self.core_banking.calls, ["verify_pin"])
+        self.assertEqual(self._injected_notes(realtime), [sentence_for(outcomes.AUTHENTICATED)])
+        # Told rather than left in silence: the item is followed by a response request, the same
+        # two messages a handoff already sends.
+        self.assertEqual(realtime.sent_types[-2:], ["conversation.item.create", "response.create"])
+
+    def test_nothing_is_submitted_or_said_before_the_fourth_digit(self):
+        transport, realtime = self._call(_keyed(DEFAULT_PIN[:3]))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self.core_banking.calls, [])
+        self.assertEqual(self._injected_notes(realtime), [])
+
+    def test_a_mis_key_cleared_then_a_correct_entry_authenticates_and_costs_nothing(self):
+        frames = [*_keyed("999"), dtmf_frame("*"), *_keyed(DEFAULT_PIN)]
+        transport, realtime = self._call(frames)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        # One check, not two: the cleared entry never completed, so it never reached the service.
+        self.assertEqual(self.core_banking.calls, ["verify_pin"])
+        self.assertEqual(self._injected_notes(realtime), [sentence_for(outcomes.AUTHENTICATED)])
+
+    def test_three_rejections_end_the_call_after_the_caller_is_told(self):
+        frames = _keyed("9999") + _keyed("8888") + _keyed("7777") + [audio_frame("still-here")]
+        transport, realtime = self._call(frames)
+
+        with self.assertLogs("bridge", level="INFO") as cm:
+            asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        self.assertEqual(self.core_banking.calls, ["verify_pin"] * 3)
+        self.assertEqual(self._injected_notes(realtime), [
+            sentence_for(outcomes.REJECTED),
+            sentence_for(outcomes.REJECTED),
+            sentence_for(outcomes.EXHAUSTED),
+        ])
+        # The call ended: the audio frame queued behind the third rejection was never forwarded.
+        self.assertEqual(realtime.appended_audio, [])
+        self.assertTrue(any("attempts exhausted" in line.lower() for line in cm.output))
+        self.assertTrue(any("call ended" in line for line in cm.output))
+
+    def test_ending_on_exhausted_attempts_is_not_reported_as_a_relay_failure(self):
+        # It travels the relay's "expected, not a relay failure" branch, the same one a cost cap
+        # uses -- so run_call returns rather than raising.
+        transport, realtime = self._call(_keyed("9999") + _keyed("8888") + _keyed("7777"))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+    def test_exhaustion_uses_its_own_exception_type_and_not_the_cost_caps(self):
+        """A security event and a cost event must stay distinguishable (issue #37).
+
+        Asserted at the type rather than at the behaviour, because the behaviour is identical by
+        design: both end the call quietly. Reusing CallLimitExceeded would mean B4, and every log
+        and dashboard that ever reads these would conflate the two.
+        """
+        self.assertFalse(issubclass(AttemptsExhausted, caps.CallLimitExceeded))
+        self.assertFalse(issubclass(caps.CallLimitExceeded, AttemptsExhausted))
+
+    def test_an_unavailable_service_fails_closed_and_spends_no_attempt(self):
+        self.core_banking.fail_with = CoreBankingUnavailable("down")
+        frames = _keyed(DEFAULT_PIN) * 4
+        transport, realtime = self._call(frames)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        notes = self._injected_notes(realtime)
+        self.assertEqual(notes, [sentence_for(outcomes.UNAVAILABLE)] * 4)
+        # Four submissions, none of them an attempt -- the call is still going, which it would not
+        # be if an outage had spent the caller's three tries.
+        self.assertEqual(self.core_banking.calls, ["verify_pin"] * 4)
+
+    def test_the_caller_can_key_the_pin_after_a_handoff(self):
+        """The moment a caller may authenticate is not dictated by routing they cannot see.
+
+        The machine is agent-independent by construction; this is the proof that the relay does
+        not reintroduce the dependency by only feeding it while on triage.
+        """
+        transport = FakeTransport(
+            frames=[audio_frame("i-need-my-balance"), *_keyed(DEFAULT_PIN)], hang=True
+        )
+        realtime = FakeRealtimeServer(
+            events=[function_call(specs.handoff_tool_name(gate.BANKING_AGENT), "{}")],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        self.assertEqual(len(realtime.session_configs), 2)  # the handoff happened
+        self.assertEqual(self.core_banking.calls, ["verify_pin"])
+
+    def test_no_digit_reaches_the_model_a_log_line_or_an_injected_item(self):
+        """B2 across every surface one keyed call touches.
+
+        The injected item is the new one and the one that matters: it is the first thing this
+        project has ever put into the model's context on the caller's behalf, and it states the
+        outcome only -- never a digit, never an attempt count.
+        """
+        frames = _keyed("9999") + _keyed("*123") + _keyed(DEFAULT_PIN)
+        transport, realtime = self._call(frames)
+
+        with self.assertLogs(level="DEBUG") as cm:
+            asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        everything = "\n".join(cm.output) + json.dumps(realtime.sent) + json.dumps(transport.sent)
+        for secret in (DEFAULT_PIN, "9999", "123"):
+            with self.subTest(secret_length=len(secret)):
+                self.assertNotIn(secret, everything)
+
+    def test_no_new_tool_is_declared_anywhere(self):
+        """There is no authentication tool, which is why nothing is reachable while anonymous.
+
+        Dropping the spoken factor removed the one tool that would have had to be callable before
+        authentication (docs/phase4/exit-criteria.md).
+        """
+        declared = {tool["name"] for identity in specs.AGENTS for tool in specs.tools_for(identity)}
+        for name in declared:
+            with self.subTest(tool=name):
+                self.assertNotIn("auth", name)
+                self.assertNotIn("pin", name)
+                self.assertNotIn("verify", name)
+
+    def test_one_realtime_session_per_call_is_unchanged_by_a_pin_entry(self):
+        transport, realtime = self._call(_keyed(DEFAULT_PIN))
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(len(realtime.session_configs), 1)
+
+
+class TriageAsksForTheKeyedPin(unittest.TestCase):
+    """Issue #37's trap 1: prose the model acts on must not describe a system that no longer exists.
+
+    Asserted rather than eyeballed, because this is the instruction set that decides whether a
+    caller is ever asked to authenticate at all -- and it changed in the same diff as the
+    transition, deliberately.
+    """
+
+    def test_triage_asks_the_caller_to_key_the_pin(self):
+        instructions = specs.TRIAGE.instructions.lower()
+        self.assertIn("pin", instructions)
+        self.assertIn("keypad", instructions)
+
+    def test_triage_is_told_never_to_ask_for_it_aloud_or_repeat_a_digit_back(self):
+        instructions = specs.TRIAGE.instructions.lower()
+        self.assertIn("never ask them to say the pin out loud", instructions)
+        self.assertIn("never read any digit back", instructions)
+
+    def test_triage_is_told_not_to_count_attempts_out_loud(self):
+        # The same probing-oracle reasoning the gate's refusal and the auth sentences already use.
+        self.assertIn("how many tries are left", specs.TRIAGE.instructions.lower())
+
+    def test_banking_instructions_are_untouched_by_this_phase(self):
+        # It already refuses to state a figure without calling a tool, which is what it now
+        # actually gets to do (issue #38).
+        self.assertNotIn("pin", specs.BANKING.instructions.lower())
 
 
 class WholeCallWithTheGateClosed(unittest.TestCase):

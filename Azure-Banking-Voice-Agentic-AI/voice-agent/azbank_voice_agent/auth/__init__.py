@@ -10,6 +10,7 @@ from .authenticator import (
     MAX_ATTEMPTS,
     PIN_LENGTH,
     SENTENCES,
+    AttemptsExhausted,
     Authenticator,
     sentence_for,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "MAX_ATTEMPTS",
     "PIN_LENGTH",
     "SENTENCES",
+    "AttemptsExhausted",
     "Authenticator",
     "outcomes",
     "sentence_for",

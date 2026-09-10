@@ -20,17 +20,25 @@ OTHER = "other"
 
 
 def classify_inbound(raw_text):
-    """Returns (kind, audio_payload) for one inbound ACS frame.
+    """Returns (kind, payload) for one inbound ACS frame.
 
-    `kind` is DTMF, AUDIO, or OTHER. `audio_payload` is the base64 PCM string for AUDIO and
-    None otherwise -- deliberately None for DTMF: the tone value must never leave this
-    function (B2, PIN confidentiality), so there is nothing for a caller to accidentally log
-    or forward.
+    `kind` is DTMF, AUDIO, or OTHER. `payload` is the base64 PCM string for AUDIO, the keyed
+    digit for DTMF, and None otherwise.
+
+    **This function used to return None for a DTMF tone on purpose**, so that the tone value could
+    not leave it -- which was the right shape while nothing consumed one. Phase 4 gives the digit a
+    consumer (the call's authenticator), and the alternative to returning it here was a second
+    function parsing the same frame a second time. One classifier and one parse per frame is the
+    smaller surface: B2 is kept by what the *relay* does with the value, which is hand it straight
+    to the authenticator and log neither it nor its length.
     """
     msg = json.loads(raw_text)
     kind = msg.get("kind")
     if kind == "DtmfData":
-        return DTMF, None
+        # Defensively dug out rather than indexed. A malformed DTMF frame must not raise on the
+        # inbound relay task, which would end the call: the authenticator ignores a key it does
+        # not recognise, and None is one of those.
+        return DTMF, (msg.get("dtmfData") or {}).get("data")
     if kind == "AudioData":
         return AUDIO, msg["audioData"]["data"]
     return OTHER, None

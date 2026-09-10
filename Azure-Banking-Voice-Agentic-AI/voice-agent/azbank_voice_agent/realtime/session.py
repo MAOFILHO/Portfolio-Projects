@@ -16,6 +16,7 @@ import logging
 
 from fastapi import WebSocketDisconnect
 
+from .. import auth
 from ..agents import specs
 from ..cost import caps
 from ..dispatch import gate
@@ -46,6 +47,31 @@ _AUDIO_CONFIG = {
     },
     "output": {"format": {"type": "audio/pcm", "rate": 24000}},
 }
+
+
+def _spoken_note(text):
+    """A conversation item that tells the caller something the model did not decide.
+
+    The same two-message mechanism a handoff uses -- an item followed by a response request -- but
+    a plain message rather than a `function_call_output`, because no tool call is being answered.
+
+    **This item shape is not verified against the live deployment.** Phase 1 confirmed the
+    `function_call_output` shape on a real call (docs/phase1/research-aoai-realtime-wire-format.md);
+    this one is the documented shape and nothing more, because Phase 4 deploys nothing and makes no
+    real call. It sits in the same known-partial as the keyed tone itself and closes at the same
+    point: Phase 5's real-call exit.
+
+    The text is composed in auth/, never here and never in the system of record, and it states the
+    outcome only -- never a digit, never an attempt count.
+    """
+    return {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "system",
+            "content": [{"type": "input_text", "text": text}],
+        },
+    }
 
 
 def _session_update(identity):
@@ -81,31 +107,56 @@ async def run_call(transport, realtime, core_banking):
     research-aoai-realtime-wire-format.md). No barge-in, no reconnection: ends when either side
     disconnects, or when a B4 cap trips.
     """
-    # Call-scoped B1 state. `auth_state` is fixed for the whole call in Phase 2 -- there is no
-    # transition into AUTHENTICATED yet, that's Phase 4 once KBA and the DTMF PIN exist. `agent`
-    # starts on TRIAGE and changes on handoff (issue #20, model_to_transport below). Both are
-    # passed to every tool call rather than read from a module global so that a call's
-    # authorisation state can never be ambient -- it is always an argument the dispatcher had to
-    # be given.
+    # Call-scoped B1 state. `agent` starts on TRIAGE and changes on handoff (issue #20,
+    # model_to_transport below). `auth_state` starts ANONYMOUS and flips exactly once, when the
+    # authenticator reports a passed PIN check (issue #37) -- it is never set from anywhere else
+    # and there is no path back. Both are passed to every tool call rather than read from a module
+    # global so that a call's authorisation state can never be ambient: it is always an argument
+    # the dispatcher had to be given.
     agent = gate.TRIAGE_AGENT
     auth_state = gate.ANONYMOUS
+
+    # One per call, holding this caller's keypad and their attempts. Constructed here because this
+    # is where the call's auth state already lives, and given the same core-banking client the
+    # dispatcher gets -- which is what makes an unreachable service fail authentication closed
+    # without a second fail-closed path (issue #35).
+    authenticator = auth.Authenticator(core_banking)
+
     await realtime.send(_session_update(agent))
 
     async def transport_to_model():
+        nonlocal auth_state
         while True:
-            kind, audio_payload = acs.classify_inbound(await transport.receive_text())
+            kind, payload = acs.classify_inbound(await transport.receive_text())
             if kind == acs.DTMF:
-                # Arrival only, no raw tone value (B2) -- classify_inbound never returns it.
-                # Phase 0's R-03 question (does DTMF arrive during active bidirectional
-                # streaming) is already answered, so this doesn't need the elapsed-time-since-
-                # stream-start the Phase 0 app's log carried.
-                log.info("DTMF frame arrived, ignored by realtime relay (out of scope for Phase 1)")
+                # Arrival, then outcome. Never the digit and never how many have arrived (B2): the
+                # tone value goes straight from the classifier into the authenticator and is not
+                # held anywhere in between. Phase 0's R-03 question -- does DTMF arrive during
+                # active bidirectional streaming -- is already answered, so this does not need the
+                # elapsed-time-since-stream-start the Phase 0 app's log carried.
+                log.info("DTMF frame arrived")
+                outcome = await authenticator.key(payload)
+                log.info("PIN entry outcome: %s", outcome)
+                if authenticator.is_authenticated:
+                    # The one write. Idempotent by construction -- the machine's transition is
+                    # one-way, so a later key press cannot bring this back round a second time.
+                    auth_state = gate.AUTHENTICATED
+                sentence = auth.sentence_for(outcome)
+                if sentence is not None:
+                    # Told, not left in silence -- the same reason a refusal is spoken rather than
+                    # met with nothing. The three silent outcomes are the caller still keying, and
+                    # speaking over them is the one thing a PIN prompt cannot afford to do.
+                    await realtime.send(_spoken_note(sentence))
+                    await realtime.send({"type": "response.create"})
+                if outcome == auth.outcomes.EXHAUSTED:
+                    log.warning("PIN attempts exhausted, ending call")
+                    raise auth.AttemptsExhausted("three rejected credentials")
                 continue
             if kind != acs.AUDIO:
                 continue  # anything else: out of scope, ignored not crashed on
             await realtime.send({
                 "type": "input_audio_buffer.append",
-                "audio": audio_payload,
+                "audio": payload,
             })
 
     turn_count = 0
@@ -210,16 +261,26 @@ async def run_call(transport, realtime, core_banking):
         asyncio.create_task(transport_to_model()),
         asyncio.create_task(model_to_transport()),
     ]
-    done, pending = await asyncio.wait(
-        tasks, timeout=caps.MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
-    )
-    for task in pending:
-        task.cancel()
-    if not done:
-        # Timeout fired -- neither side disconnected and no turn cap tripped first (B4).
-        log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", caps.MAX_CALL_SECONDS)
-    for task in done:
-        exc = task.exception()
-        if exc is not None and not isinstance(exc, (WebSocketDisconnect, caps.CallLimitExceeded)):
-            raise exc
+    try:
+        done, pending = await asyncio.wait(
+            tasks, timeout=caps.MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        if not done:
+            # Timeout fired -- neither side disconnected and no turn cap tripped first (B4).
+            log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", caps.MAX_CALL_SECONDS)
+        for task in done:
+            exc = task.exception()
+            # Expected ways a call ends, not relay failures: the caller hung up, a B4 cap tripped,
+            # or the caller ran out of PIN attempts. AttemptsExhausted travels this same branch
+            # with its own type rather than reusing CallLimitExceeded, so a security event and a
+            # cost event stay distinguishable in every log that ever reads them.
+            expected = (WebSocketDisconnect, caps.CallLimitExceeded, auth.AttemptsExhausted)
+            if exc is not None and not isinstance(exc, expected):
+                raise exc
+    finally:
+        # The third point the buffer is zeroed at, after submit and clear -- on call end, whatever
+        # the outcome. In a finally because "whatever the outcome" includes the paths that raise.
+        authenticator.end_call()
     log.info("call ended")

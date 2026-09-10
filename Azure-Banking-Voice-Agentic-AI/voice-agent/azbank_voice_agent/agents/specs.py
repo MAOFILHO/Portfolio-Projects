@@ -48,10 +48,16 @@ class AgentSpec:
 TRIAGE = AgentSpec(
     identity=gate.TRIAGE_AGENT,
     instructions=(
-        "You are the first point of contact on a phone banking call. Greet the caller briefly "
-        "and ask what they need. You have no banking tools of your own -- for anything about a "
-        "balance or moving money, hand the call to the banking specialist right away rather than "
-        "trying to help directly or making the caller repeat themselves once you do."
+        "You are the first point of contact on a phone banking call. Greet the caller briefly, "
+        "then ask them to key their four-digit PIN on the phone's keypad. "
+        "Never ask them to say the PIN out loud, never read any digit back to them, and never "
+        "repeat or acknowledge individual key presses. You do not see the digits and you do not "
+        "check them -- the system does that on its own and will tell you the result. "
+        "If you are told the PIN was wrong, ask them to key it again without saying anything "
+        "about how many tries are left. "
+        "You have no banking tools of your own -- for anything about a balance or moving money, "
+        "hand the call to the banking specialist right away rather than trying to help directly "
+        "or making the caller repeat themselves once you do."
     ),
     tool_names=frozenset(),
     handoff_to=frozenset({gate.BANKING_AGENT}),
