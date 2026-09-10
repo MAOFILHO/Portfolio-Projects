@@ -31,17 +31,52 @@ response request — the same mechanism the handoff already uses". The handoff's
 
 A PIN outcome answers no tool call, so it has no `call_id` and cannot use that item type. What
 `realtime/session.py:_spoken_note` sends instead is a `message` item with a `system` role and
-`input_text` content. **That shape is the documented one and nothing more — this project has never
-seen the deployment accept it.**
+`input_text` content.
 
-This sits in the same known-partial as the keyed tone itself and closes at the same point: Phase 5's
-real-call exit. It is recorded here because Phase 4 deploys nothing, so nothing in this phase can
-close it, and `CLAUDE.md`'s rule against answering a factual API question from memory means it must
-not be left reading as verified.
+**Researched 2026-09-10 — the shape is right; what is unverified is acceptance, not shape.**
+Full sourcing: `docs/phase4/research-carried-findings.md` §1. Against the OpenAI realtime types
+generated at the SDK version this project pins, `role: "system"` with `type: "message"` is one of
+exactly three message items the `ConversationItem` union accepts; `input_text` is not merely
+permitted on a system message but is the **only** permitted content type there; and the spec's own
+docstring names this exact use — *"system messages can be added at any point in the conversation…
+for smaller updates"*. Azure's realtime reference delegates wholesale to that specification and
+documents one deviation, which touches `input_audio_transcription` and nothing here.
 
-**Wanted before Phase 5's real call:** `/research` on the Azure OpenAI realtime API's
-`conversation.item.create` item types, specifically whether a `system`-role `input_text` message is
-accepted mid-session on a `gpt-realtime-mini` deployment, and what a rejection looks like.
+**Two things that were wrong in the framing, not in the code.** `input_text` is not user-only, and
+assistant text is spelled `output_text` rather than `text`. Neither affects anything this project
+sends.
+
+**What remains open is narrower and is still a real-call question.** No primary source states that
+Azure's GA endpoint accepts this item, and none documents `conversation.item.create` per model
+version — which is precisely the case B3 exists for, since one deployment name has already been seen
+to span versions that behave differently. Phase 1 hit the same wall on a different event and settled
+it with a one-frame live probe. That is what closes this, at Phase 5's real-call exit.
+
+**Acted on: the item is now addressable.** A rejection arrives as an `error` event whose
+`error.event_id` names the client frame that caused it — the only documented way to attribute one,
+and the exact "tell a rejection from silence" requirement this section used to state without a
+mechanism. `_spoken_note` now stamps a client `event_id`, the relay remembers the ids it stamped,
+and an error naming one is logged as *the injected item being refused* rather than as an error.
+Nothing else about the error is read: message, type and code stay unlogged, because a validation
+error can echo the offending request back, which is the content B2 forbids.
+
+**The id carries no decimal digit, and that is not decoration.** The first version used a raw
+`uuid4().hex`, whose alphabet is more than half digits — across a run it spells a four-digit run by
+chance, and B2's run-wide scan looks for exactly that. It turned the red-team corpus's B2 assertion
+red on a coincidence within one full run. The id is now built through a bijective digit-to-letter
+map, so it is unique exactly as often as the uuid behind it and cannot spell a credential at all.
+A constraint that fails at random is worse than a weaker one stated honestly.
+
+**Also corrected: the fake's error event had the wrong shape.** `realtime/fake.py:error_event`
+returned a flat namespace with the message at the top level. The wire shape nests it — a server
+`event_id` plus an `error` object holding `message`, `type`, and the optional `code`, `param` and
+`event_id`. The relay only ever read `.type`, so nothing caught it. That is the failure this fake's
+own docstring says the builders exist to prevent, reached from the other direction.
+
+**Two things the docs could not settle, both now handled by not relying on them.** `error.code` has
+no enumerated vocabulary in any source, so the relay matches on `type == "error"` plus a correlated
+id and nothing narrower. And no source states a response deadline, so "rejected" versus "silent"
+cannot be decided from documentation at all — only by a real call, or by the relay imposing its own.
 
 ### 3. B2's leak detector is `unittest`, not a pytest autouse fixture
 
@@ -86,6 +121,44 @@ to scan and nothing is claimed; that surface becomes real work in Phase 6, which
 A constraint reported as met against a surface that does not yet exist would be the same empty claim
 as a percentile with no N. The table in `docs/phase4/exit-check.md` criterion 10 is the canonical
 version of this breakdown.
+
+**Made precise 2026-09-10** (`docs/phase4/research-carried-findings.md` §3). "We emit no spans" was
+true and was the shallowest of three independent reasons, each separately checkable:
+
+1. Nothing emits spans yet.
+2. **The realtime path is uninstrumented by everything off the shelf.** The OpenTelemetry OpenAI
+   instrumentation wraps five call sites — chat completions, embeddings, responses — and none is the
+   realtime connection. The Azure Monitor distro's library list contains no GenAI instrumentation at
+   all. Adding either in Phase 6 yields spans for FastAPI, httpx and the Azure SDK, and **zero
+   `gen_ai.*` attributes**. Any such attribute here would have to be written by this project.
+3. **Both content-recording switches default to off**, and neither is set here.
+
+**Acted on: reason 3 is now a test**, `tests/test_b2_content_recording.py`. It asserts that neither
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` nor
+`AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED` is set by anything that defines what this project
+deploys, that the content-upload hook is not configured either, and that nothing in the deployables
+imports OpenTelemetry. It is a **negative assertion and is deliberately the cheap one**: no spans, no
+deployment, no cloud call, and it goes red the day someone turns content recording on without
+reading B2 — which is the day it needs to. It is not coverage and is not counted as any.
+
+**B2's stated surface is narrower than the real one, and this is the concrete form of that.** Under
+the current spec the same content can travel as a span attribute, as a structured attribute on a
+span event, as a log record, or — via the completion hook — out of the process entirely to a
+filesystem or object store. B2's wording names one of those four. A Phase 6 scanner reading span
+attributes only would be the same empty claim this document refuses to make elsewhere, so it should
+work by `gen_ai.*` prefix and by value rather than by a fixed list: the older `gen_ai.prompt` and
+`gen_ai.completion` names are already gone from the spec, `gen_ai.prompt.variable.<name>` is a
+caller-named prefix, and Azure's own realtime SDK for a neighbouring service uses a different name
+again. That SDK also shipped a fix for emitting transcripts and function-call arguments
+unconditionally, ignoring this very opt-in — the failure mode is real and has happened in shipped
+Azure code.
+
+**One new B2 candidate surface, flagged and not enabled.** Azure OpenAI resource logs offer a
+diagnostic category named `RequestResponse` whose content coverage **no Microsoft page describes at
+all**. A category with that name and no description must not be assumed safe. It should not be
+enabled on `aoai-azure-banking-voice-cc` until its destination table has been queried and read —
+`CLAUDE.md`'s "ARM 200 OK proves creation, not delivery" cuts both ways, and here it means nobody has
+checked what lands there.
 
 ---
 
@@ -229,6 +302,59 @@ narrowed.** Still unexplained; what changed is that a recurrence will be readabl
 
 The retry loop is driven against a stub in `TheStartupRetry`, which spawns nothing — issue #30's
 "exactly one test" counts services started, not `TestCase` classes.
+
+---
+
+## Found by research 2026-09-10: the DTMF tone vocabulary was an unexamined assumption
+
+Sourcing: `docs/phase4/research-carried-findings.md` §2. This was not on the open list before the
+research; it came out of asking what a tone actually looks like on the wire, and it is the most
+consequential thing that came back.
+
+**The frame shape is confirmed.** `{"kind": "DtmfData", "dtmfData": {"data": …}}` matches
+Microsoft's own example, both the .NET and JavaScript SDK parsers, and a .NET round-trip test. The
+lowercase-inbound / capitalised-outbound asymmetry this project recorded in Phase 0 is corroborated
+by Microsoft's own Python sample on the same page. `app.py`'s `enable_dtmf_tones=True` alongside
+`enable_bidirectional=True` is exactly the documented enabling path, and `StartContinuousDtmfRecognition`
+is correctly not used — it is a different mechanism delivering to the webhook, not to this socket.
+
+**The tone vocabulary is not confirmed and the documentation cannot confirm it.** The media-streaming
+frame has **no schema anywhere in Azure's specifications** — the Call Automation REST spec does not
+define the websocket frames at all — and both SDK parsers pass `data` through untouched. Every
+primary example on this path shows a bare digit. But the only tone vocabulary Azure *enumerates*
+spells tones as words (`"one"`, `"pound"`, `"asterisk"`), and it belongs exclusively to the webhook
+path, which is unreachable from this frame.
+
+**So `*` and `#` have no documented spelling on this path at all** — and those are exactly the two
+keys the keypad gives meaning to. Star clears; pound is ignored. On the spelled vocabulary the
+authenticator would have received `"asterisk"`, ignored it like any unrecognised key, and a caller
+who mis-keyed a digit could never clear — silently, with nothing in any log to say why.
+
+**Three primary sources describe the same field three incompatible ways**: a literal character (the
+docs example and the .NET test), "encoded as a base64 string" (the .NET `DtmfData` docstring), and
+"a unique identifier for the media subscription" (the JS `DtmfData` docstring). The last two read as
+copy-paste from the neighbouring audio types. The executable artefact and the worked example agree
+with each other and against both docstrings, which is the reading taken — recorded as a judgement
+about which primary source to trust, because it is one.
+
+**Acted on: the classifier accepts both vocabularies.** `transport/acs.py` normalises through a
+mapping table, so the keypad sees one vocabulary whichever one arrives. This is not a guess about
+which is right — it is what makes the question stop being able to break the call. The two
+vocabularies cannot collide, because every spelled token is at least two characters and every
+literal tone is one, and `tests/test_acs.py` holds that property as a test rather than a claim.
+Anything unrecognised passes through unchanged and the authenticator ignores it, which fails closed.
+
+**This does not close the question, and Phase 5 must not let it look closed.** The real call has to
+press `*` and `#`, not only digits. A four-digit-only test call would leave this exactly as open as
+it is now while appearing to settle it. Phase 0's own evidence cannot help: it confirmed 6/6 tones
+arriving on calls 2 and 3, but the values were never recorded — deliberately, under B2.
+
+**Also open, and newly named: nothing guarantees DTMF and audio frames arrive in order.** No primary
+source offers any ordering or timing guarantee between the two on this socket. The webhook path
+ships a `sequenceId` for exactly this problem; the media-stream path ships nothing equivalent,
+though the payload does carry a `timestamp` this project does not read. A four-digit accumulator
+assumes arrival order equals press order. That assumption is currently implicit and unverified, and
+Phase 5 should observe it rather than inherit it.
 
 ---
 

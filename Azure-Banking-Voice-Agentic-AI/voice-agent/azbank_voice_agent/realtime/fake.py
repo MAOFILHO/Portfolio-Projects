@@ -50,9 +50,32 @@ def response_done():
     return SimpleNamespace(type="response.done")
 
 
-def error_event(message="something went wrong"):
-    """An error event from the model. Must be logged, never fatal to the call."""
-    return SimpleNamespace(type="error", message=message)
+def error_event(message="something went wrong", caused_by=None, code=None,
+                error_type="invalid_request_error"):
+    """An error event from the model. Must be logged, never fatal to the call.
+
+    **The nesting is the correction.** This used to be a flat namespace with the message at the top
+    level, which is not the wire shape: `RealtimeErrorEvent` carries a server `event_id` and a
+    nested `error` object holding `message`, `type`, and the optional `code`, `param` and
+    `event_id` (`docs/phase4/research-carried-findings.md` §1d, quoting the generated types). The
+    relay only ever read `.type`, so nothing caught it -- which is exactly the failure this module's
+    docstring says these builders exist to prevent, arrived at from the other direction.
+
+    `caused_by` is `error.event_id`: "The event_id of the client event that caused the error, if
+    applicable." It is the only documented way to attribute a rejection to a frame the relay sent,
+    and it is optional, so `None` is the ordinary case rather than an edge one.
+    """
+    return SimpleNamespace(
+        type="error",
+        event_id="event_server_error",
+        error=SimpleNamespace(
+            message=message,
+            type=error_type,
+            code=code,
+            event_id=caused_by,
+            param=None,
+        ),
+    )
 
 
 class FakeRealtimeServer:

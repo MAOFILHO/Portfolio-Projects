@@ -21,6 +21,7 @@ from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 from azbank_voice_agent.cost import caps
 from azbank_voice_agent.dispatch import gate
+from azbank_voice_agent.realtime import session as session_module
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
     audio_delta,
@@ -359,6 +360,135 @@ class WholeCallWithAKeyedPin(unittest.TestCase):
         transport, realtime = self._call(_keyed(DEFAULT_PIN))
         asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(len(realtime.session_configs), 1)
+
+
+class _FixedUuid:
+    """A `uuid4()` whose `.hex` is known, so an error can be scripted to name the id it produces."""
+
+    hex = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+
+class TheInjectedItemIsAddressable(unittest.TestCase):
+    """The injected PIN-outcome item carries a client `event_id`, and a rejection is correlated.
+
+    **Why** (`docs/phase4/research-carried-findings.md` §1d, researched 2026-09-10 against the
+    generated OpenAI realtime types). `conversation.item.create` is answered with either a
+    `conversation.item.created` or an `error`, and the error carries `error.event_id`: "The event_id
+    of the client event that caused the error, if applicable." That field is the **only** documented
+    way to attribute a rejection to a particular frame this relay sent. Without a client-generated
+    id on the way out, the relay can observe that an error arrived and nothing more.
+
+    This is what makes Phase 5's first real call diagnostic rather than pass-or-fail. The item's
+    shape is confirmed correct against the specification, but no source documents whether Azure's
+    endpoint and this model version accept it, so the call is a probe -- and a probe that cannot
+    tell "my injection was rejected" from "something else went wrong" is not much of one.
+
+    **What is deliberately still not logged**: the error's message, type and code. That decision
+    stands unchanged from Phase 2 -- a validation error can echo the offending request back, which
+    is exactly the content B2 forbids. Correlating on an opaque id this relay generated itself
+    reveals nothing about the caller.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def _injected_items(self, realtime):
+        return [
+            message for message in realtime.sent
+            if message["type"] == "conversation.item.create"
+            and message["item"].get("type") == "message"
+        ]
+
+    def _run(self, frames, events=()):
+        transport = FakeTransport(frames=list(frames), hang=True)
+        realtime = FakeRealtimeServer(events=list(events), respond_after_appends=0)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        return realtime
+
+    def test_the_injected_item_carries_a_client_event_id(self):
+        realtime = self._run(_keyed(DEFAULT_PIN))
+        items = self._injected_items(realtime)
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0].get("event_id"), "the injected item is unaddressable")
+
+    def test_two_injections_on_one_call_do_not_share_an_id(self):
+        # An id reused across injections would correlate a rejection to the wrong one, which is
+        # worse than not correlating at all.
+        realtime = self._run(_keyed("9999") + _keyed("8888"))
+        identifiers = [item["event_id"] for item in self._injected_items(realtime)]
+        self.assertEqual(len(identifiers), 2)
+        self.assertEqual(len(set(identifiers)), 2)
+
+    def test_the_id_does_not_carry_what_was_keyed(self):
+        """B2. The id is generated, never derived from anything the caller did."""
+        realtime = self._run(_keyed(DEFAULT_PIN))
+        identifier = self._injected_items(realtime)[0]["event_id"]
+        self.assertNotIn(DEFAULT_PIN, identifier)
+
+    def test_the_id_contains_no_decimal_digit_at_all(self):
+        """The property that keeps B2's run-wide scan deterministic, asserted directly.
+
+        A raw uuid hex is drawn from an alphabet that is more than half digits, so over a run it
+        eventually spells some four-digit run by chance -- and the scan looks for exactly that,
+        across everything every call sent. The first version of this id did precisely that and
+        turned the red-team corpus's B2 assertion red on a coincidence. A constraint that fails at
+        random is worse than a weaker one stated honestly, so the id is built to be unable to
+        spell a credential rather than merely unlikely to.
+
+        Checked across many ids, because one is not evidence about a random generator.
+        """
+        for _ in range(200):
+            realtime = self._run(_keyed("9999"))
+            identifier = self._injected_items(realtime)[0]["event_id"]
+            self.assertFalse(
+                any(character.isdigit() for character in identifier),
+                f"an injected item id can spell digits: {identifier}",
+            )
+            self.core_banking = FakeCoreBankingClient()
+
+    def test_a_rejection_naming_the_injection_is_reported_as_that_injection_failing(self):
+        """The whole point: Phase 5 learns that *this* shape was refused, not that *an* error came.
+
+        The relay's id is random per call, so the error cannot be scripted to name it without
+        pinning it first. That is what the patch below is for, and it is the only thing it does.
+        """
+        with patch.object(session_module.uuid, "uuid4", return_value=_FixedUuid()):
+            # One run to learn the id the relay stamps, one to reject it. Both under the same
+            # patch, so both stamp the same id -- and neither assumes how the id is built.
+            stamped = self._injected_items(self._run(_keyed(DEFAULT_PIN)))[0]["event_id"]
+            self.core_banking = FakeCoreBankingClient()
+
+            with self.assertLogs("bridge", level="ERROR") as cm:
+                self._run(
+                    [*_keyed(DEFAULT_PIN), audio_frame("still-here")],
+                    events=[error_event("bad item", caused_by=stamped), response_done()],
+                )
+
+        self.assertTrue(
+            any("injected" in line.lower() for line in cm.output),
+            f"a rejection of the relay's own item was not identified as one: {cm.output}",
+        )
+
+    def test_an_unrelated_error_is_not_attributed_to_the_injection(self):
+        # A relay that called every error a rejected injection would be as uninformative as one
+        # that called none of them that, and would send Phase 5 chasing the wrong thing.
+        with self.assertLogs("bridge", level="ERROR") as cm:
+            self._run(
+                [*_keyed(DEFAULT_PIN), audio_frame("still-here")],
+                events=[error_event("rate limited"), response_done()],
+            )
+        self.assertFalse(
+            any("injected" in line.lower() for line in cm.output),
+            f"an unrelated error was blamed on the injected item: {cm.output}",
+        )
+
+    def test_an_error_arriving_with_no_causing_id_does_not_raise(self):
+        # `error.event_id` is optional in the spec, so its absence is ordinary, not exceptional.
+        with self.assertLogs("bridge", level="ERROR"):
+            self._run(
+                [audio_frame("hello")],
+                events=[error_event("server error", caused_by=None), response_done()],
+            )
 
 
 class WholeCallTheGateOpens(unittest.TestCase):

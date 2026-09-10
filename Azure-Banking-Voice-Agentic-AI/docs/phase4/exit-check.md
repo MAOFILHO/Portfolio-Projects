@@ -9,7 +9,7 @@ Built 2026-09-10, tickets **#34–#42** under spec **#33**, on branch `azure-ban
 
 | | |
 |---|---|
-| voice-agent tests | 283 pass, 3 skipped by design |
+| voice-agent tests | 309 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
 | B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
 | B1 breaches | **0** |
@@ -53,11 +53,21 @@ Four digits, auto-submit on the fourth, star clears, pound ignored, no inter-dig
 rejections end the call, buffer zeroed on submit, on clear and on call end. `tests/test_authenticator.py`.
 The absence of a timer is asserted by parsing the module rather than grepping it.
 
-**7. The PIN never reaches the model.** ✅ Met, with one shape unverified.
+**7. The PIN never reaches the model.** ✅ Met; the shape is confirmed, acceptance is not.
 No tool call, no argument, no transcript carries a digit. The outcome is injected as a conversation
 item plus a response request, stating the outcome only.
-**The injected item's wire shape is not verified against the live deployment** — see
-`docs/phase4/findings.md` §2. Phase 4 deploys nothing, so nothing in this phase could verify it.
+
+**Updated 2026-09-10 after `/research`** (`docs/phase4/research-carried-findings.md` §1). The item's
+shape is **confirmed correct against the specification**: `role: "system"` with `type: "message"` is
+one of exactly three message items accepted, and `input_text` is the only content type permitted on
+a system message. What no primary source states is whether Azure's endpoint and this model version
+accept it, and none documents this event per model version at all — the case B3 exists for. That is
+a one-frame live probe at Phase 5's real-call exit, the same move Phase 1 used on the same wall.
+
+**The injected item is now addressable.** It carries a client `event_id`, and an `error` naming it is
+logged as that injection being refused rather than as an unattributed error — the only documented way
+to tell the two apart, and what makes Phase 5's probe diagnostic rather than pass-or-fail. The id
+contains no decimal digit, so it cannot spell a credential into B2's run-wide scan.
 
 **8. No plaintext PIN is persisted.** ✅ Met.
 `db.py` seeds a SHA-256 digest beside `SEED_ACCOUNTS`. The database is dumped and scanned in
@@ -109,12 +119,23 @@ read this entry as claiming all four):
 | Log lines | Run-wide, every record the run emits | `tests/test_zz_b2_leak_scan.py` |
 | Persisted records | Yes, the real file a spawned service wrote | `tests/test_core_banking_live.py` |
 | Transcripts / injected items | Run-wide across every red-team call **and** the whole-call test | `redteam_harness.credentials_in_what_the_call_sent`, `tests/test_whole_call.py` |
-| OTel span attributes | **Vacuously — this project emits no spans yet** | Phase 6 owns observability |
+| OTel span attributes | **Vacuously — this project emits no spans yet**, and the switches that would fill them are asserted off | `tests/test_b2_content_recording.py`; Phase 6 owns the rest |
 
 The OTel row is the honest one: `grep -riE "opentelemetry|otel|tracer|span"` returns nothing outside
 a comment, so there is no span for a PIN to reach. That is not coverage and is not counted as any;
 the row becomes real work in Phase 6 and is recorded in `docs/phase4/findings.md` §4 as an
 outstanding surface rather than a met one.
+
+**Made precise 2026-09-10 after `/research`.** The surface is empty for three independent reasons,
+not one: nothing emits spans; the realtime path is uninstrumented by both the OpenTelemetry OpenAI
+instrumentation and the Azure Monitor distro, so adding either yields no `gen_ai.*` attribute at
+all; and both content-recording switches default off. The third is now asserted rather than
+described, and the assertion is negative by design — it costs no spans and no deployment, and it
+goes red the day someone enables content recording. Two things Phase 6 inherits: B2's four named
+surfaces are narrower than the real ones, since content can also travel on span events, on log
+records, or out of the process entirely via the completion hook; and the Azure OpenAI
+`RequestResponse` diagnostic category, whose content coverage no Microsoft page describes, must not
+be enabled here until its destination table has been queried and read.
 
 The transcript row was widened on 2026-09-10: it previously rested on one call, in
 `tests/test_whole_call.py`, while every call that actually keys wrong credentials went unscanned on
@@ -188,8 +209,15 @@ rules rather than one.
 ## Open, carried out of this phase
 
 - **No real DTMF tone has ever been consumed.** Closes at Phase 5's real-call exit.
-- **The injected conversation item's shape is unverified.** Wants `/research` before Phase 5's real
-  call. `docs/phase4/findings.md` §2 names the exact question.
+- **The injected conversation item's acceptance is unverified.** `/research` ran 2026-09-10 and
+  settled the shape against the specification; what no source documents is whether Azure's endpoint
+  and this model version accept it. A one-frame live probe closes it.
+- **The DTMF tone vocabulary is unverified and the documentation cannot settle it.** Raised by that
+  same research. The classifier now accepts both candidate vocabularies so the question cannot break
+  the call, but **Phase 5's real call must press `*` and `#`** — a digits-only call would leave it as
+  open as it is now while looking closed. `docs/phase4/findings.md` carries the full account.
+- **Nothing guarantees DTMF and audio frames arrive in order** on this socket. The four-digit
+  accumulator assumes they do. Newly named, not yet observed.
 - **One test failure seen once and not reproduced in 98 runs.** `docs/phase4/findings.md`. Still
   unexplained, but no longer able to hide the same way: `make test` keeps each suite's whole output
   in its own file whatever the caller pipes stdout through, and the live test now retries a start on

@@ -10,7 +10,7 @@ account of what happened:
 | 1 | `docs/phase1/archive.md`, `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` |
 | 2 | `docs/phase2/archive.md` |
 | 3 | `docs/phase3/archive.md` (exit criteria: `docs/phase3/exit-criteria.md`) |
-| 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
+| 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -43,7 +43,7 @@ The gate grants for the first time, on a PIN the model never sees. Criterion-by-
 
 | | |
 |---|---|
-| voice-agent tests | 283 pass, 3 skipped by design |
+| voice-agent tests | 309 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
 | B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
@@ -87,6 +87,26 @@ still unreviewed by Marco.** No production module is touched by it — the chang
   start on a fresh port and reports the spawned service's own words. Still unexplained; a recurrence
   is now readable.
 
+**`/research` ran 2026-09-10 on the three findings carried out of this phase, and a third diff
+implemented what it found** — committed, unreviewed, and it **touches the DTMF path and the PIN
+path**, so the never-auto-accept rule binds it. Sourcing:
+`docs/phase4/research-carried-findings.md`, every claim with a URL and fetch date.
+
+- **The injected item's shape is confirmed correct against the specification**, and `system` +
+  `input_text` is the only content type that role permits. What no source documents is whether
+  Azure's endpoint and this model version *accept* it — a one-frame live probe at Phase 5, the same
+  move Phase 1 used. The item now carries a client `event_id` so a rejection can be attributed to it
+  rather than guessed at.
+- **A new finding the research surfaced: the DTMF tone vocabulary was an unexamined assumption.**
+  The media-stream frame has no schema in any Azure specification, and `*` and `#` have no
+  documented spelling on this path at all — while the only vocabulary Azure enumerates spells them
+  as words. On that spelling a caller who mis-keyed could never clear, silently. The classifier now
+  accepts both vocabularies, which stops the question breaking the call without pretending to answer
+  it. **Phase 5's real call must press `*` and `#`.**
+- **B2's OTel surface is empty for three separate reasons, and one of them is now a test.** Neither
+  content-recording switch is set anywhere that configures a deployment, and the realtime path is
+  uninstrumented by everything off the shelf. Still reported as uncovered, not met.
+
 Both red-team numbers are always quoted together. A case count with no idea count behind it is the
 same empty claim as a percentile with no N.
 
@@ -95,19 +115,18 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
 
 ### Needs Marco
 
-0. **Review the two committed-but-unreviewed Phase 4 diffs**, in order: `18d6a4a` (the
-   `/code-review` remediation, which touches the DTMF/PIN path and `tests/test_gate.py`) and the
-   findings diff after it (tests, corpus, `Makefile`, docs — no production module). **This is the one
-   thing blocking the gate.**
+0. **Review the three committed-but-unreviewed Phase 4 diffs**, in order: `18d6a4a` (the
+   `/code-review` remediation, DTMF/PIN path and `tests/test_gate.py`), the findings diff after it
+   (tests, corpus, `Makefile`, docs — no production module), and the research-implementation diff
+   after that (**`transport/acs.py` and `realtime/session.py`, so both the DTMF path and the PIN
+   path**). **This is the one thing blocking the gate.**
 1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
    limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, criterion
    9's idea count is 13 against a target of 20-30, reported rather than padded, and criterion 10's
    OTel surface is vacuous because no span exists yet.
-2. **`/research` on the realtime API's `conversation.item.create` item types** before Phase 5's real
-   call — specifically whether a `system`-role `input_text` message is accepted mid-session on a
-   `gpt-realtime-mini` deployment. `docs/phase4/findings.md` §2 names the exact question. This
-   project's own rule forbids answering it from memory, and Claude does not invoke `/research` on
-   its own initiative.
+2. **Done 2026-09-10 — `/research` ran and its findings are implemented.** The shape is settled; the
+   deployment's acceptance of it is not, and only a real call can settle that. What Marco still owns
+   here is the review of the resulting diff, which is item 0.
 3. **One test failure seen once, not reproduced in 98 runs.** Reading and evidence:
    `docs/phase4/findings.md`. Not evidence about B1 or B2, both of which are in-process and were
    re-run 98 times with identical verdicts. **Still unexplained**, but a recurrence now keeps its
@@ -187,10 +206,29 @@ because they are genuinely unresolved, not because any of them is currently bloc
 11. **No real DTMF tone has ever been consumed by this system.** Phase 0 proved tones *arrive*
     during active bidirectional streaming; every line that acts on one is Phase 4's and is exercised
     only against fakes, because Phase 4 deployed nothing. Closes at Phase 5's real-call exit.
-12. **The injected conversation item's wire shape is unverified.** The relay tells the caller a PIN
-    outcome by injecting a `message` item with a `system` role — the documented shape, never seen
-    accepted by this deployment. Only the `function_call_output` shape is confirmed live.
-    `docs/phase4/findings.md` §2.
+12. **The injected conversation item's *acceptance* is unverified — its shape no longer is.**
+    Confirmed against the generated specification 2026-09-10: `system` + `input_text` is not just
+    legal, it is the only content type that role permits, and the spec names this exact use. What no
+    source documents is whether Azure's GA endpoint and `gpt-realtime-mini` `2025-10-06` accept it,
+    per model version, which is the case B3 exists for. One live frame settles it. The item now
+    carries a client `event_id`, so the probe can tell "my item was refused" from "an error
+    happened". `docs/phase4/findings.md` §2, `docs/phase4/research-carried-findings.md` §1.
+13. **The DTMF tone vocabulary is unverified, and no documentation can verify it.** The
+    media-streaming frame has no schema anywhere in Azure's specs; every primary example shows a
+    bare digit, while the only vocabulary Azure enumerates spells tones as words and belongs to a
+    different delivery path. `*` and `#` — the two keys the keypad acts on — have no documented
+    spelling here at all. The classifier accepts both vocabularies so the ambiguity cannot break a
+    call, but **Phase 5's real call must press `*` and `#`**; a digits-only call closes nothing while
+    looking like it closed this. `docs/phase4/research-carried-findings.md` §2b.
+14. **Nothing guarantees DTMF and audio frames arrive in order on the media socket.** No primary
+    source offers any ordering or timing guarantee. The webhook path ships a `sequenceId` for
+    exactly this; this path ships nothing equivalent, though the payload carries an unread
+    `timestamp`. The four-digit accumulator assumes arrival order equals press order. Observe it at
+    Phase 5 rather than inheriting it.
+15. **`RequestResponse` is an Azure OpenAI diagnostic-log category with no documented content
+    coverage.** Not enabled, and must not be enabled on `aoai-azure-banking-voice-cc` until its
+    destination table has been queried and read — it is a candidate fifth B2 surface, and its name
+    is the only thing anyone knows about it.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 

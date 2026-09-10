@@ -11,8 +11,10 @@ connection -- `client.connect_realtime()` does that for the real path, and `real
 CI, in milliseconds, with no Azure and no patching.
 """
 import asyncio
+import collections
 import json
 import logging
+import uuid
 
 from fastapi import WebSocketDisconnect
 
@@ -49,29 +51,76 @@ _AUDIO_CONFIG = {
 }
 
 
-def _spoken_note(text):
+def _spoken_note(text, event_id):
     """A conversation item that tells the caller something the model did not decide.
 
     The same two-message mechanism a handoff uses -- an item followed by a response request -- but
     a plain message rather than a `function_call_output`, because no tool call is being answered.
 
-    **This item shape is not verified against the live deployment.** Phase 1 confirmed the
-    `function_call_output` shape on a real call (docs/phase1/research-aoai-realtime-wire-format.md);
-    this one is the documented shape and nothing more, because Phase 4 deploys nothing and makes no
-    real call. It sits in the same known-partial as the keyed tone itself and closes at the same
-    point: Phase 5's real-call exit.
+    **The shape is confirmed against the specification** (`docs/phase4/research-carried-findings.md`
+    §1b-1c, researched 2026-09-10 against the OpenAI realtime types generated at the SDK version
+    this project pins). `role: "system"` with `type: "message"` is one of exactly three message
+    items the `ConversationItem` union accepts, `input_text` is not merely permitted on a system
+    message but is the *only* permitted content type there, and the spec's own docstring names this
+    use case: "system messages can be added at any point in the conversation… for smaller updates".
+    Azure's realtime reference delegates wholesale to that specification and documents exactly one
+    deviation, which touches `input_audio_transcription` and nothing here.
+
+    **What remains unverified is acceptance, not shape.** No primary source states that Azure's GA
+    endpoint accepts this item, and none documents `conversation.item.create` per model version --
+    which is the case B3 exists for, since one deployment name has already been seen to span
+    versions that behave differently. Phase 1 hit the same wall on a different event and settled it
+    with a one-frame live probe; that is what closes this, at Phase 5's real-call exit.
+
+    **`event_id` is what makes that probe readable.** A rejection arrives as an `error` event whose
+    `error.event_id` names the client frame that caused it -- the only documented way to attribute
+    one. Stamping an id here turns "an error arrived" into "*this* injection was refused". The id
+    is generated, never derived from anything the caller keyed.
 
     The text is composed in auth/, never here and never in the system of record, and it states the
     outcome only -- never a digit, never an attempt count.
     """
     return {
         "type": "conversation.item.create",
+        "event_id": event_id,
         "item": {
             "type": "message",
             "role": "system",
             "content": [{"type": "input_text", "text": text}],
         },
     }
+
+
+#: Decimal digits mapped to letters outside the hex alphabet. **Bijective**, so an id built through
+#: it is unique exactly as often as the uuid behind it: `a`-`f` are untouched and `q`-`z` are not
+#: hex, so no two distinct hex strings can collide after translation.
+_DIGIT_FREE = str.maketrans("0123456789", "qrstuvwxyz")
+
+
+def _new_item_id():
+    """An id for one injected item: unique, opaque, and carrying no decimal digit at all.
+
+    **The digit-free part is not decoration.** A raw `uuid4().hex` is 32 characters drawn from an
+    alphabet that is more than half digits, so across a call's injections it will eventually spell
+    some four-digit run by chance -- and B2's run-wide scan looks for exactly that: four-digit
+    credentials, whole, in everything the call sent. An id that can spell one turns a constraint
+    that means "none found" into one that fails at random, which is worse than a weaker rule
+    honestly stated. Found by the red-team corpus's own B2 scan going red on a random id, 2026-09-10.
+
+    Digits are also the one thing a caller keys, so an identifier that cannot contain one cannot be
+    mistaken for keyed input by any future reader of a log or a wire capture either.
+    """
+    return "item_" + uuid.uuid4().hex.translate(_DIGIT_FREE)
+
+
+def _causing_event_id(event):
+    """`error.event_id` off an error event, or None -- defensively, and never raising.
+
+    Optional in the specification, and the error object is nested, so every step here is a step
+    that can legitimately find nothing. An error event that ends the relay task would end the call,
+    which is the one thing an error event must not do.
+    """
+    return getattr(getattr(event, "error", None), "event_id", None)
 
 
 def _session_update(identity):
@@ -122,6 +171,11 @@ async def run_call(transport, realtime, core_banking):
     # without a second fail-closed path (issue #35).
     authenticator = auth.Authenticator(core_banking)
 
+    # The ids this relay stamped on its own injected items, so an `error` naming one can be told
+    # from an error about anything else. Bounded rather than a growing set: a rejection follows its
+    # injection closely, and a call that keys forever must not accumulate for as long as it runs.
+    injected_item_ids = collections.deque(maxlen=8)
+
     await realtime.send(_session_update(agent))
 
     async def transport_to_model():
@@ -166,7 +220,9 @@ async def run_call(transport, realtime, core_banking):
                     # Told, not left in silence -- the same reason a refusal is spoken rather than
                     # met with nothing. The three silent outcomes are the caller still keying, and
                     # speaking over them is the one thing a PIN prompt cannot afford to do.
-                    await realtime.send(_spoken_note(sentence))
+                    event_id = _new_item_id()
+                    injected_item_ids.append(event_id)
+                    await realtime.send(_spoken_note(sentence, event_id))
                     await realtime.send({"type": "response.create"})
                 if outcome == auth.outcomes.EXHAUSTED:
                     log.warning("PIN attempts exhausted, ending call")
@@ -275,7 +331,17 @@ async def run_call(transport, realtime, core_banking):
                 # the tool-call and transcript lines above missed this one because it logged the
                 # whole event object, not a field (caught by /code-review, 2026-09-07). Detailed,
                 # redaction-aware error observability is Phase 6's job, not Phase 2's.
-                log.error("AOAI error event received")
+                #
+                # **One field is safe and is read**: `error.event_id`, the id of the client frame
+                # that caused the error. It is an opaque value this relay generated itself, so it
+                # carries nothing of the caller, and it is the only documented way to tell "the
+                # item I injected was refused" from "something else went wrong". Phase 5's real
+                # call is a probe of that item's shape, and a probe that cannot tell those two
+                # apart would send whoever reads it chasing the wrong thing.
+                if _causing_event_id(event) in injected_item_ids:
+                    log.error("AOAI rejected the injected PIN-outcome item")
+                else:
+                    log.error("AOAI error event received")
 
     tasks = [
         asyncio.create_task(transport_to_model()),
