@@ -62,7 +62,7 @@ a judgment call.
 
 | ID | Constraint | Target | Enforced at |
 |---|---|---|---|
-| **B1** | **Auth Gate Integrity** — zero authenticated-only tool invocations reach the core-banking client while `session.auth_state != Authenticated` | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
+| **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification is the only operation reachable while anonymous, and a test asserts that set is exactly that one | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
 | **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist, keyed on **(deployment name, model version) together, not name alone** (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard (reads the live deployment's actual model version at boot, not config alone) + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |

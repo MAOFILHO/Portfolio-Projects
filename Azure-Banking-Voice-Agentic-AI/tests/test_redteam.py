@@ -13,6 +13,7 @@ concrete cases. A case count with no idea count behind it is the same empty clai
 with no N, which this project already forbids for B5.
 """
 import asyncio
+import dataclasses
 import json
 import unittest
 
@@ -30,8 +31,10 @@ try:
         BANKING_OPERATIONS,
         MINIMUM_CASES,
         VERIFICATION_OPERATION,
+        arguments_for,
         concrete_cases,
         counts,
+        credentials_in_what_the_call_sent,
         declared_tools,
         load_ideas,
         run,
@@ -43,8 +46,10 @@ except ImportError:
         BANKING_OPERATIONS,
         MINIMUM_CASES,
         VERIFICATION_OPERATION,
+        arguments_for,
         concrete_cases,
         counts,
+        credentials_in_what_the_call_sent,
         declared_tools,
         load_ideas,
         run,
@@ -121,6 +126,125 @@ class TheCorpusItself(unittest.TestCase):
         """
         totals = counts()
         self.assertGreaterEqual(totals["attempting"], MINIMUM_CASES)
+
+
+class TheDetectorItself(unittest.TestCase):
+    """The scorer, before anything is concluded from it (/code-review, 2026-09-10).
+
+    `is_breach` is a conjunction, and a conjunction with a term that is always False is not a
+    conjunction -- it is the other term wearing a disguise. The corpus below rests entirely on this
+    object, so the same rule the module docstring applies to the gate applies here: a detector that
+    was never shown to distinguish the two cases has not been shown to detect anything.
+
+    The direction of the old defect mattered and is worth recording: `authenticated` was derived
+    from the scripted keypresses, never from the call, so it was False for every case and
+    `is_breach` collapsed to "a banking operation was reached". That over-reports rather than
+    under-reports -- it could never have passed a breach, only invented one -- which is why this is
+    a correctness fix and was not a live B1 hole.
+    """
+
+    def test_a_call_that_did_authenticate_is_not_scored_as_a_breach(self):
+        # The leg that never ran. A caller who keys the right PIN and then asks for a balance has
+        # done nothing wrong, and a detector that called that a breach would be measuring the
+        # opposite of B1.
+        case = concrete_cases()[0]
+        outcome = run(case, keys=tuple(DEFAULT_PIN))
+        self.assertTrue(outcome.authenticated, "keying the right PIN did not register")
+        self.assertFalse(outcome.is_breach)
+
+    def test_the_authenticated_verdict_is_read_off_the_spy_not_the_script(self):
+        # Every point in the matrix leaves the call anonymous, so all of them score False -- but
+        # for the right reason: the system of record never returned an accepted verdict, rather
+        # than the scripted keys never spelling a PIN the harness recognised.
+        for outcome in outcomes():
+            with self.subTest(case=outcome.case):
+                self.assertFalse(outcome.authenticated)
+                self.assertNotIn(True, outcome.verifications)
+
+    def test_a_cleared_entry_costs_no_attempt_and_a_rejection_costs_one(self):
+        """Attempt accounting, which `redteam/verification-flooding.yaml` names and nothing scored.
+
+        Its rationale calls out two failures -- a cleared entry costing an attempt, and a rejection
+        not costing one -- and until `verifications` existed the harness recorded neither, so the
+        idea's cases asserted nothing its neighbours did not already assert.
+        """
+        by_point = {}
+        for outcome in outcomes():
+            by_point.setdefault(outcome.case.point, outcome)
+
+        # Three digits then star: the buffer emptied, so the system of record was never asked.
+        self.assertEqual(by_point["after_clear"].verifications, ())
+        # Two digits and nothing more: an entry that never completed is not an attempt either.
+        self.assertEqual(by_point["mid_entry"].verifications, ())
+        # One completed check, refused. Exactly one attempt, and it cost one.
+        self.assertEqual(by_point["after_wrong_pin"].verifications, (False,))
+        # Three refused checks and no fourth: the cap is a cap.
+        self.assertEqual(by_point["after_exhaustion"].verifications, (False, False, False))
+
+
+class B2AcrossTheWholeCorpus(unittest.TestCase):
+    """B2's transcript surface, on all 193 calls rather than on one (/code-review, 2026-09-10).
+
+    The run-wide log scan in `tests/test_zz_b2_leak_scan.py` already covers every record these
+    calls emit. What it cannot see is what went *into the model's context* and what came back down
+    to the caller, and until now that surface was asserted on a single whole-call test. These are
+    the calls that key wrong credentials, three of them per exhausted case, so they are precisely
+    where a relay that echoed a keyed digit would show it.
+    """
+
+    def test_no_keyed_credential_reaches_the_model_or_the_caller_on_any_case(self):
+        leaks = [outcome for outcome in outcomes() if outcome.leaked]
+        self.assertEqual(
+            leaks, [],
+            "B2 breach: " + "; ".join(
+                f"{o.case.idea}/{o.case.point} sent {o.leaked}" for o in leaks
+            ),
+        )
+
+    def test_the_surface_scan_would_notice_a_credential_if_one_were_there(self):
+        # The rehearsal, same reasoning as the leak scanner's own. A scan whose serialisation
+        # silently produced an empty string would pass the assertion above forever.
+        class _Sent:
+            def __init__(self, sent):
+                self.sent = sent
+
+        self.assertEqual(credentials_in_what_the_call_sent(_Sent([{"text": f"the PIN is {DEFAULT_PIN}"}]), _Sent([])),
+                         (DEFAULT_PIN,))
+        self.assertEqual(credentials_in_what_the_call_sent(_Sent([{"text": "caller authenticated"}]), _Sent([])), ())
+
+
+class TheInjectedArgumentsStrategy(unittest.TestCase):
+    """`injected` has to differ from `malformed`, or it is one idea counted twice.
+
+    The payload used to be unterminated JSON, so it died at the dispatcher's parse exactly where a
+    `malformed` payload dies, and the field it claimed to smuggle never existed. Note what this
+    does and does not prove: the gate is consulted at `dispatch/tools.py` *before* the arguments
+    are parsed at all, so on a refused tool no argument shape is ever reached. The strategy only
+    discriminates on a tool that is permitted while anonymous, which is why one is aimed there.
+    """
+
+    def test_the_payload_parses_for_every_tool_it_is_sent_to(self):
+        for tool in declared_tools():
+            with self.subTest(tool=tool):
+                parsed = json.loads(arguments_for(tool, "injected"))
+                self.assertIsInstance(parsed, dict)
+
+    def test_the_payload_really_carries_the_field_it_claims_to_smuggle(self):
+        # An injection test whose injected field is absent is theatre about theatre.
+        parsed = json.loads(arguments_for("get_balance", "injected"))
+        self.assertEqual(parsed.get("auth_state"), gate.AUTHENTICATED)
+
+    def test_the_smuggled_field_changes_nothing_on_the_one_tool_that_is_reachable(self):
+        # verify_pin is permitted while anonymous, so this is the only tool where the arguments are
+        # ever parsed on an anonymous call. The injected auth_state rides all the way in and the
+        # call is still anonymous afterwards, because the gate reads three strings and none of them
+        # comes from the model's arguments.
+        case = dataclasses.replace(
+            concrete_cases()[0], tool=VERIFICATION_OPERATION, arguments="injected",
+        )
+        outcome = run(case)
+        self.assertFalse(outcome.authenticated)
+        self.assertFalse(outcome.is_breach)
 
 
 class ZeroBreaches(unittest.TestCase):

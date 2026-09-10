@@ -43,11 +43,31 @@ The gate grants for the first time, on a PIN the model never sees. Criterion-by-
 
 | | |
 |---|---|
-| voice-agent tests | 263 pass, 3 skipped by design |
+| voice-agent tests | 277 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
 | B1 red-team | **11 distinct attack ideas → 193 concrete cases**, 176 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
 | `make lint`, B3 static check | clean, passing |
+
+**`/code-review` has been run and its findings implemented** (2026-09-10, two axes over
+`56178e5...HEAD`). Fifteen findings deduplicated to thirteen; twelve implemented, one declined with
+a reason. Full account: `docs/phase4/findings.md`, "Fixed after `/code-review`". Three things a
+later session needs to know without reading it:
+
+- **B1's verdict of 0 breaches is unchanged and was never at risk.** The harness's `authenticated`
+  flag was derived from scripted input rather than from the call, which collapsed the breach test to
+  its other half. That over-reports — it could invent a breach, never pass one. Both legs are now
+  exercised.
+- **B1's sharpened breach definition is now in all four places.** The named-constraint tables in
+  `CLAUDE.md` and `docs/PLAN.md` still carried the pre-sharpening wording. Propagating approved
+  wording, not moving a constraint; the target is untouched.
+- **B2 covers three of its four named surfaces.** Logs, persisted records and transcripts are
+  covered run-wide. **Span attributes are not, because this project emits no spans** — Phase 6 work,
+  and no longer reported as met. Table in `docs/phase4/exit-check.md` criterion 10.
+
+**This diff is uncommitted and unreviewed by Marco.** It touches the DTMF/PIN path
+(`auth/authenticator.py`, `realtime/session.py`, `core_banking/fake.py`) and `tests/test_gate.py`,
+so the never-auto-accept rule binds it.
 
 Both red-team numbers are always quoted together. A case count with no idea count behind it is the
 same empty claim as a percentile with no N.
@@ -57,11 +77,14 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
 
 ### Needs Marco
 
-0. **`/code-review` has not been run.** `CLAUDE.md` requires it before every phase gate, no
-   exceptions, and Marco invokes it — Claude does not. **This is the one thing blocking the gate.**
-1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Two carry a stated
-   limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, and
-   criterion 9's idea count is 11 against a target of 20-30, reported rather than padded.
+0. **Review and commit the `/code-review` remediation diff.** Twelve findings implemented across 12
+   files plus one new `tests/keyed_values.py`, uncommitted. It touches the DTMF/PIN path and
+   `tests/test_gate.py`, so it needs a human look before it lands — that is the never-auto-accept
+   rule, not a formality. **This is the one thing blocking the gate.**
+1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
+   limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, criterion
+   9's idea count is 11 against a target of 20-30, reported rather than padded, and criterion 10's
+   OTel surface is vacuous because no span exists yet.
 2. **`/research` on the realtime API's `conversation.item.create` item types** before Phase 5's real
    call — specifically whether a `system`-role `input_text` message is accepted mid-session on a
    `gpt-realtime-mini` deployment. `docs/phase4/findings.md` §2 names the exact question. This

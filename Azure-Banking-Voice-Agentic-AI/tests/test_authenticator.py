@@ -15,7 +15,7 @@ import inspect
 import pathlib
 import unittest
 
-from azbank_voice_agent.auth import SENTENCES, Authenticator, outcomes, sentence_for
+from azbank_voice_agent.auth import SENTENCES, Authenticator, authenticator, outcomes, sentence_for
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 
@@ -301,6 +301,35 @@ class WhatTheCallerIsTold(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(any(character.isdigit() for character in sentence), sentence)
                 for counting_word in ("first", "second", "third", "last", "one", "two", "three"):
                     self.assertNotIn(counting_word, sentence.lower())
+
+
+    def test_no_sentence_uses_a_term_the_glossary_proscribes_for_the_auth_state(self):
+        """CONTEXT.md's Avoid list binds caller prose too (/code-review, 2026-09-10).
+
+        The success sentence read "you're verified", which is the first term under Auth state's
+        Avoid. Asserted rather than left to review, because caller prose is the part of this
+        vocabulary a reader is least likely to think of as vocabulary.
+        """
+        for outcome, sentence in SENTENCES.items():
+            with self.subTest(outcome=outcome):
+                for proscribed in ("verified", "logged in", "session state", "authorized"):
+                    self.assertNotIn(proscribed, sentence.lower())
+
+
+class TheCompletedEntryRefusesToPrintItself(unittest.IsolatedAsyncioTestCase):
+    """B2 at the one place four keyed digits exist as a value (/code-review, 2026-09-10).
+
+    `_press` hands the completed entry back to `key` wrapped rather than bare. The wrapper is what
+    a traceback, a `%r`, or a debugger frame would render if anything ever touched one, so what it
+    renders is fixed here rather than left to the dataclass default.
+    """
+
+    def test_the_wrapper_never_renders_the_digits(self):
+        entry = authenticator._CompletedEntry(DEFAULT_PIN)
+        self.assertNotIn(DEFAULT_PIN, repr(entry))
+        self.assertNotIn(DEFAULT_PIN, f"{entry!r}")
+        self.assertNotIn(DEFAULT_PIN, str([entry]))
+        self.assertEqual(entry.digits, DEFAULT_PIN, "the digits are still reachable by name")
 
 
 class WhatIsLogged(unittest.IsolatedAsyncioTestCase):

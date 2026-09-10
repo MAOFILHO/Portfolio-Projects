@@ -41,19 +41,31 @@ legitimate reason to emit a decimal digit while a caller is keying, and
 `tests/test_whole_call.py::test_the_relay_logs_no_decimal_digit_at_all_while_a_pin_is_being_keyed`
 asserts that it emits none. The two rules together are the coverage; neither alone is.
 """
+import contextlib
 import logging
+import pathlib
+import re
+import tempfile
 import unittest
 
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN
+
+try:
+    from keyed_values import SECRETS
+except ImportError:  # running one file as `python -m unittest tests.test_zz_b2_leak_scan`
+    from tests.keyed_values import SECRETS
 
 #: Every record every logger emitted, in order. Held as records rather than strings so both the
 #: rendered message and the raw arguments can be checked.
 CAPTURED = []
 
-#: What must not appear. The demo PIN, and the digit strings the suite keys as wrong ones -- a
-#: rejected credential is no less confidential than an accepted one, and a detector that only
-#: looked for the right PIN would miss a log line that recorded everything the caller tried.
-SECRETS = (DEFAULT_PIN, "9999", "8888", "7777")
+#: This suite's own source, read as text by the static guard below.
+TESTS_DIR = pathlib.Path(__file__).resolve().parent
+
+#: A four-digit string handed to either of the two functions that key a tone. Those are the only
+#: two ways anything in this suite submits a credential, so this pattern is what "a credential the
+#: suite keys" looks like from the outside, without importing or running anything.
+_KEYED_LITERAL = re.compile(r"""(?:_keyed|dtmf_frame|tuple)\(\s*["'](\d{4})["']""")
 
 _original_handle = logging.Logger.handle
 
@@ -139,6 +151,75 @@ class TheDetectorItselfWorks(unittest.TestCase):
             self.assertEqual(offending_records(CAPTURED[before:]), [])
         finally:
             del CAPTURED[before:]
+
+
+@contextlib.contextmanager
+def _a_temporary_test_source(line):
+    """A throwaway directory holding one .py file, for the two rehearsals above.
+
+    A real file rather than a patched-in string, so the rehearsal exercises the same `glob` and
+    `read_text` path the guard uses in earnest -- a rehearsal against a different mechanism proves
+    nothing about the mechanism.
+    """
+    with tempfile.TemporaryDirectory() as directory:
+        path = pathlib.Path(directory)
+        (path / "test_rehearsal.py").write_text(line + "\n")
+        yield path
+
+
+def credentials_this_suite_keys(directory=TESTS_DIR):
+    """Every four-digit credential literal appearing in this suite's own source.
+
+    Read off the source rather than collected at runtime, deliberately: a runtime registry would
+    only see the values that ran, so a test skipped on this machine could park an unscanned
+    credential in the tree indefinitely. Reading the text sees every one of them whether it ran or
+    not, and a value that is never keyed at all costs nothing but an entry in the list.
+    """
+    found = set()
+    for path in sorted(directory.glob("*.py")):
+        if path.resolve() == pathlib.Path(__file__).resolve():
+            # This module's own source, skipped: the two rehearsals below quote a keyed literal as
+            # a *string* in order to test the pattern, and scanning them would report that
+            # rehearsal fixture as an unregistered credential every run. Nothing here keys a tone
+            # for real -- this is the scanner, not a caller -- so there is nothing to miss.
+            continue
+        found.update(_KEYED_LITERAL.findall(path.read_text()))
+    return found
+
+
+class TheSecretListCannotFallBehindTheSuite(unittest.TestCase):
+    """The seam that was open (/code-review, 2026-09-10).
+
+    `SECRETS` used to be written by hand with nothing tying it to what the suite keyed, so a test
+    added later that submitted a new wrong credential would have been outside the detector and
+    nothing would have said so. B2 is *0 occurrences, blocking* -- a detector that silently stops
+    covering part of what it is supposed to cover is the one failure mode that cannot be allowed to
+    be quiet.
+    """
+
+    def test_every_credential_the_suite_keys_is_one_the_scan_looks_for(self):
+        missing = sorted(credentials_this_suite_keys() - set(SECRETS))
+        self.assertEqual(
+            missing, [],
+            "these credentials are keyed by the suite but are outside B2's run-wide scan; "
+            "add them to tests/keyed_values.py: " + ", ".join(missing),
+        )
+
+    def test_the_guard_notices_a_credential_that_was_never_registered(self):
+        """The rehearsal, following `TheDetectorItselfWorks` above.
+
+        A guard that reported "nothing missing" because its pattern matched nothing would pass
+        forever. This runs the same pattern over a source file that keys a credential deliberately
+        left out of `SECRETS`, and requires it to be found.
+        """
+        with_a_stray = self.enterContext(_a_temporary_test_source('_keyed("5150")'))
+        self.assertEqual(credentials_this_suite_keys(with_a_stray) - set(SECRETS), {"5150"})
+
+    def test_the_pattern_does_not_match_an_arbitrary_four_digit_number(self):
+        # The other direction: a pattern that matched every four-digit run in the tree would flag
+        # port numbers and years, and the list would grow until it meant nothing.
+        with_a_year = self.enterContext(_a_temporary_test_source('timeout_ms = 5150'))
+        self.assertEqual(credentials_this_suite_keys(with_a_year), set())
 
 
 class NoPinReachedALogRecordAnywhereInThisRun(unittest.TestCase):

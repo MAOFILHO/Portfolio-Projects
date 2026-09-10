@@ -58,6 +58,14 @@ class FakeCoreBankingClient:
         # divergence in exactly the direction that makes a green suite worthless.
         self._pin_digest = _digest(DEFAULT_PIN if pin is None else pin)
         self.calls = []
+        # One entry per credential check that actually got a verdict, in order: True accepted,
+        # False refused. A check the shape rejected, or that an outage cut short, produces no
+        # verdict and so appends nothing -- which is the same rule CONTEXT.md's Attempt entry
+        # states, and is what lets a test tell a spent attempt from an unanswered one.
+        #
+        # **Verdicts, never digits (B2).** What is recorded here is the answer, not the question.
+        # A spy that kept submitted PINs would be a spy whose own repr fails the artifact scan.
+        self.verify_pin_verdicts = []
 
     def _check(self, name):
         self.calls.append(name)
@@ -87,7 +95,9 @@ class FakeCoreBankingClient:
         self._check("verify_pin")
         if not isinstance(pin, str) or not _PIN_SHAPE.match(pin):
             raise CoreBankingUnavailable("core banking did not answer the credential check")
-        return hmac.compare_digest(self._pin_digest, _digest(pin))
+        verdict = hmac.compare_digest(self._pin_digest, _digest(pin))
+        self.verify_pin_verdicts.append(verdict)
+        return verdict
 
     async def transfer(self, from_account, to_account, amount):
         self._check("transfer")

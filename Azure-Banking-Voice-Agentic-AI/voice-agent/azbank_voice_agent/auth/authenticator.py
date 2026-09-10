@@ -25,6 +25,7 @@ for as long as the caller leaves it, and the call's own B4 caps are what bound t
 unreachable service fails authentication closed for free: the timeout, the single-attempt path and
 the circuit breaker are inherited rather than reimplemented here where they could disagree.
 """
+import dataclasses
 import logging
 
 from ..core_banking import CoreBankingUnavailable
@@ -55,8 +56,14 @@ POUND = "#"
 #: **No sentence carries a digit or an attempt count.** Same reasoning as the gate's refusal: an
 #: explanation of how many tries are left, or of which part was wrong, is a probing oracle for
 #: whoever found the phone. The caller is told it was wrong and nothing more.
+#: **No sentence uses a term CONTEXT.md proscribes for the auth state either.** The success line
+#: read "you're verified" until /code-review flagged it on 2026-09-10; the glossary lists *verified*
+#: and *logged in* under Auth state's Avoid, and caller prose is not carved out of that. The rule
+#: costs nothing here -- "that's confirmed" is the more natural sentence anyway -- and a glossary
+#: with an unwritten exemption for the strings a caller actually hears is a glossary describing a
+#: different product from the one on the phone.
 SENTENCES = {
-    outcomes.AUTHENTICATED: "Thank you, you're verified.",
+    outcomes.AUTHENTICATED: "Thank you, that's confirmed.",
     outcomes.REJECTED: "That PIN wasn't right. Please key it again.",
     outcomes.EXHAUSTED: (
         "That PIN wasn't right. For your security I'm ending the call here."
@@ -65,6 +72,25 @@ SENTENCES = {
         "I can't check your PIN just now. Please key it again in a moment."
     ),
 }
+
+
+@dataclasses.dataclass(frozen=True, repr=False)
+class _CompletedEntry:
+    """A four-digit entry that has just completed and is on its way to the system of record.
+
+    Exists so `_press` has one return type instead of a `(outcome, submission)` pair whose first
+    element was None exactly when the second was not (/code-review, 2026-09-10). A caller
+    distinguishes the two answers by type rather than by which half of a tuple came back empty.
+
+    **It refuses to print itself.** The default dataclass repr would put four keyed digits into any
+    traceback, any `%r`, and any debugger line that touched one -- which is precisely the accident
+    B2 exists to make impossible. The digits are reachable only by asking for them by name.
+    """
+
+    digits: str
+
+    def __repr__(self):
+        return "<completed entry>"
 
 
 class AttemptsExhausted(Exception):
@@ -124,34 +150,34 @@ class Authenticator:
         The only entry point. Everything before the submission is the pure transition below; the
         submission is the one await.
         """
-        outcome, submission = self._press(key)
-        if submission is None:
-            return outcome
-        return await self._submit(submission)
+        answer = self._press(key)
+        if isinstance(answer, _CompletedEntry):
+            return await self._submit(answer.digits)
+        return answer
 
     # --- the pure part ------------------------------------------------------------------------
 
     def _press(self, key):
         """The whole keypad protocol, and the only thing that touches the buffer.
 
-        Pure and synchronous: no I/O, no clock, no randomness. Returns `(outcome, submission)`,
-        where `submission` is the completed entry when the fourth digit has just arrived and None
-        otherwise -- in which case `outcome` is already the final answer.
+        Pure and synchronous: no I/O, no clock, no randomness. Returns either an outcome token,
+        which is already the final answer for this keypress, or a `_CompletedEntry` when the fourth
+        digit has just arrived and the system of record has to be asked.
         """
         if self._authenticated or self._settled:
             # One-way. A digit after the question is settled does nothing at all: it must not open
             # a second check, and it must not be able to undo the first.
-            return outcomes.IGNORED, None
+            return outcomes.IGNORED
         if key == CLEAR:
             self._buffer = ""
-            return outcomes.CLEARED, None
+            return outcomes.CLEARED
         if key == POUND or not _is_digit(key):
-            return outcomes.IGNORED, None
+            return outcomes.IGNORED
         self._buffer += key
         if len(self._buffer) < PIN_LENGTH:
-            return outcomes.ACCUMULATING, None
+            return outcomes.ACCUMULATING
         submission, self._buffer = self._buffer, ""
-        return None, submission
+        return _CompletedEntry(submission)
 
     # --- the one await ------------------------------------------------------------------------
 

@@ -129,14 +129,34 @@ async def run_call(transport, realtime, core_banking):
         while True:
             kind, payload = acs.classify_inbound(await transport.receive_text())
             if kind == acs.DTMF:
-                # Arrival, then outcome. Never the digit and never how many have arrived (B2): the
-                # tone value goes straight from the classifier into the authenticator and is not
-                # held anywhere in between. Phase 0's R-03 question -- does DTMF arrive during
-                # active bidirectional streaming -- is already answered, so this does not need the
-                # elapsed-time-since-stream-start the Phase 0 app's log carried.
+                # Arrival, then outcome. **Never the digit** (B2): the tone value goes straight from
+                # the classifier into the authenticator and is not held anywhere in between, and
+                # neither line below takes it as an argument. Phase 0's R-03 question -- does DTMF
+                # arrive during active bidirectional streaming -- is already answered, so this does
+                # not need the elapsed-time-since-stream-start the Phase 0 app's log carried.
+                #
+                # **What the record does reveal, stated rather than denied.** One arrival line per
+                # frame means the number of tones a caller keyed is inferable by counting lines, and
+                # this comment used to claim otherwise (/code-review, 2026-09-10). That is accepted,
+                # not overlooked: B2 protects the credential, and a count of keypresses is not one
+                # -- it is exactly what an operator needs to tell a caller who mis-keyed from a
+                # caller who never keyed at all. The digits themselves appear in neither line, which
+                # is the property B2 actually names.
+                #
+                # **The term is CONTEXT.md's.** "PIN check", not "PIN entry" -- the glossary lists
+                # the latter under Avoid, and a log line is code vocabulary like any other.
                 log.info("DTMF frame arrived")
+                # The one blocking call on this path: a live credential check against the system of
+                # record, awaited inside the inbound loop, so audio frames are not forwarded to the
+                # model until it answers. Bounded by the client's own timeout and circuit breaker
+                # rather than by anything here -- see `auth/authenticator.py`, which inherits both
+                # instead of reimplementing them. Left inline deliberately (/code-review,
+                # 2026-09-10): the stall happens on the fourth tone, when the caller has just
+                # finished keying and is waiting for a verdict rather than speaking, and putting a
+                # second concurrent task on the PIN path to reclaim it would buy a moment of audio
+                # nobody is using at the cost of the one ordering guarantee B1 rests on.
                 outcome = await authenticator.key(payload)
-                log.info("PIN entry outcome: %s", outcome)
+                log.info("PIN check outcome: %s", outcome)
                 if authenticator.is_authenticated:
                     # The one write. Idempotent by construction -- the machine's transition is
                     # one-way, so a later key press cannot bring this back round a second time.

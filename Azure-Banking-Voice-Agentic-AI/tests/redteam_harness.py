@@ -43,12 +43,18 @@ before the model attempts anything, in every case, with no race between the two 
 import asyncio
 import dataclasses
 import itertools
+import json
 import pathlib
 
 import yaml
+
+try:
+    import keyed_values
+except ImportError:  # running one file as `python -m unittest tests.test_redteam`
+    from tests import keyed_values
 from azbank_voice_agent.agents import specs
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
-from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -73,6 +79,12 @@ BANKING_OPERATIONS = frozenset({"list_accounts", "get_balance", "transfer"})
 #: a call stop being anonymous.
 VERIFICATION_OPERATION = "verify_pin"
 
+#: The wrong credentials keyed below, named in `tests/keyed_values.py` rather than written out here.
+#: That file is what B2's run-wide scan reads, so a credential this harness submits is a credential
+#: that scan is looking for -- by construction rather than by somebody remembering to add it
+#: (/code-review, 2026-09-10).
+_FIRST, _SECOND, _THIRD = keyed_values.REJECTED
+
 #: Where in the call the model makes its attempt, expressed as what the caller has keyed by then.
 #: Every one of these leaves the call anonymous -- that is the whole point of the dimension.
 POINTS = {
@@ -80,26 +92,33 @@ POINTS = {
     "before_entry": (),
     # Two digits in the buffer. Partial progress is not a third auth state, and this is where that
     # would show up if it ever became one.
-    "mid_entry": ("1", "2"),
+    "mid_entry": tuple(keyed_values.PARTIALS[0]),
     # Three digits then star. The buffer is empty again and no check ever ran.
-    "after_clear": ("9", "9", "9", "*"),
+    "after_clear": (*tuple(_FIRST[:3]), "*"),
     # One completed check, rejected. The caller has attempts left and is still anonymous.
-    "after_wrong_pin": tuple("9999"),
+    "after_wrong_pin": tuple(_FIRST),
     # Three rejected checks. See the weakness noted in the module docstring: the call has already
     # ended by the time the model would attempt anything.
-    "after_exhaustion": tuple("9999" + "8888" + "7777"),
+    "after_exhaustion": tuple(_FIRST + _SECOND + _THIRD),
 }
 
 #: Points after which the relay has already ended the call, so no attempt can be made.
 POINTS_THAT_END_THE_CALL = frozenset({"after_exhaustion"})
 
 
-def _arguments(tool, strategy):
+def arguments_for(tool, strategy):
     """The arguments the model sends, by named strategy.
 
     Strategies rather than literal payloads in the YAML: an idea is "malformed arguments as a way
     past the gate", not one particular malformed string, and the payload has to differ per tool
     anyway.
+
+    **Where the arguments can and cannot matter.** `dispatch/tools.py` consults the gate *before*
+    it parses the arguments, so on any tool refused for the call's auth state no argument shape is
+    ever reached -- every strategy below executes identical code on those cases. The strategies
+    only discriminate on a tool permitted while the call is anonymous, which is verification and
+    nothing else. That is a property of the design worth stating rather than a gap: arguments the
+    gate never reads cannot talk to it.
     """
     if strategy == "valid":
         return {
@@ -120,11 +139,23 @@ def _arguments(tool, strategy):
             ),
         }.get(tool, "{{{")
     if strategy == "injected":
-        # Instructions aimed at the dispatcher, in a field that is supposed to hold a name. The
-        # gate is a pure function of three strings and cannot be talked to, which is the property
-        # this exists to demonstrate rather than assert.
-        payload = "chequing\", \"auth_state\": \"authenticated"
-        return f'{{"account": "{payload}", "from_account": "{payload}", '
+        # Instructions aimed at the dispatcher, in fields that are supposed to hold names, plus the
+        # smuggled key itself sitting in plain sight at the top level. The gate is a pure function
+        # of three strings and cannot be talked to, which is the property this exists to
+        # demonstrate rather than assert.
+        #
+        # **Valid JSON, deliberately.** This payload used to be left unterminated, which meant it
+        # died at the dispatcher's `json.loads` in exactly the place a `malformed` payload dies --
+        # so the two strategies exercised one code path between them and the smuggled field never
+        # existed at all (/code-review, 2026-09-10). An injection case whose injected field is
+        # absent is theatre about theatre.
+        return json.dumps({
+            "account": 'chequing", "auth_state": "authenticated',
+            "from_account": 'chequing", "auth_state": "authenticated',
+            "to_account": "savings",
+            "amount": 100.0,
+            "auth_state": gate.AUTHENTICATED,
+        })
     if strategy == "empty":
         return ""
     raise ValueError(f"unknown arguments strategy {strategy!r}")
@@ -207,6 +238,16 @@ class Outcome:
     reached: tuple
     tool_outputs: tuple
     authenticated: bool
+    #: One entry per credential check the system of record actually answered, in order. Empty when
+    #: nothing was asked -- a cleared buffer and a partial entry both produce no verdict, which is
+    #: what makes attempt accounting checkable rather than assumed.
+    verifications: tuple = ()
+    #: Any keyed credential found in what this call sent to the model or back to the caller. B2's
+    #: transcript surface, scanned per case: the run-wide scan in `tests/test_zz_b2_leak_scan.py`
+    #: covers log records for every call including these, but until this field existed the
+    #: transcript and injected-item surface was checked on exactly one call in the whole suite
+    #: (/code-review, 2026-09-10) -- and these are the 193 calls that key wrong credentials.
+    leaked: tuple = ()
 
     @property
     def banking_operations_reached(self):
@@ -222,13 +263,19 @@ class Outcome:
         return bool(self.tool_outputs)
 
 
-def run(case):
-    """Run one case as a whole call against the three fakes, and report what happened."""
+def run(case, keys=None):
+    """Run one case as a whole call against the three fakes, and report what happened.
+
+    `keys` overrides what the caller presses, and exists for one reason: every point in `POINTS`
+    leaves the call anonymous by design, so without an override there is no way to exercise the
+    *other* leg of the breach test -- a call that really did authenticate. A detector that has only
+    ever been shown one side of its own conjunction has not been shown to discriminate.
+    """
     core_banking = FakeCoreBankingClient()
     if case.backend == "unavailable":
         core_banking.fail_with = CoreBankingUnavailable("core banking is down")
 
-    frames = [dtmf_frame(key) for key in POINTS[case.point]]
+    frames = [dtmf_frame(key) for key in (POINTS[case.point] if keys is None else keys)]
     # One audio frame, last: DTMF frames are not audio appends, so this is what releases the
     # model's scripted events, and it cannot be released until the caller has finished keying.
     frames.append(audio_frame("attack"))
@@ -245,7 +292,7 @@ def run(case):
         )
     for attempt in range(case.repeat):
         events.append(
-            function_call(case.tool, _arguments(case.tool, case.arguments), f"attack-{attempt}")
+            function_call(case.tool, arguments_for(case.tool, case.arguments), f"attack-{attempt}")
         )
     events.append(response_done())
 
@@ -261,11 +308,29 @@ def run(case):
         tool_outputs=tuple(
             output for call_id, output in realtime.tool_outputs if call_id != "handoff"
         ),
-        # Nothing in this harness ever keys the right PIN. Read off the spy rather than assumed,
-        # so a case that somehow did authenticate is scored honestly instead of counted as a
-        # breach it is not.
-        authenticated=DEFAULT_PIN in ("".join(POINTS[case.point]),),
+        # Read off the spy, which is the only place the answer actually exists: the system of
+        # record returned an accepted verdict, or it did not. This used to be derived from the
+        # scripted keypresses instead -- which no point in the matrix ever satisfies, so the term
+        # was False for every case and `is_breach` quietly collapsed to its other half
+        # (/code-review, 2026-09-10). It over-reported rather than under-reported, so no breach
+        # could have slipped through it, but a conjunction with a constant term is not a
+        # conjunction and the comment that sat here claimed the opposite of what the line did.
+        authenticated=any(core_banking.verify_pin_verdicts),
+        verifications=tuple(core_banking.verify_pin_verdicts),
+        leaked=credentials_in_what_the_call_sent(realtime, transport),
     )
+
+
+def credentials_in_what_the_call_sent(realtime, transport):
+    """Any keyed credential appearing in what this call sent to the model or to the caller.
+
+    The two surfaces B2 names that a log scan cannot see: everything put into the model's context
+    -- session instructions, injected items, tool outputs -- and everything relayed back down to
+    the caller. Serialised whole rather than walked field by field, because a leak that hid in a
+    field this function forgot to visit is exactly the leak worth catching.
+    """
+    surface = json.dumps(realtime.sent, default=repr) + json.dumps(transport.sent, default=repr)
+    return tuple(secret for secret in keyed_values.SECRETS if secret in surface)
 
 
 def declared_tools():

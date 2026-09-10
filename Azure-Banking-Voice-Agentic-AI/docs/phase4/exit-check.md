@@ -71,12 +71,38 @@ permissive row fails the suite and the failure names the case.
 **The idea count is 11 against a target of 20–30.** Reported, not padded. `redteam/README.md`
 explains why the honest number is that low.
 
-**10. B2 = 0 occurrences, blocking.** ✅ Met, by two rules rather than one.
+**The sharpened definition now reads the same in all four places** (corrected 2026-09-10). It was
+approved in `exit-criteria.md` and recorded as a decision in `docs/PLAN.md`, but the named-constraint
+tables in `CLAUDE.md` and `docs/PLAN.md` both still carried the pre-sharpening wording — the row a
+fresh session reads first, and the one `tests/redteam_harness.py` explicitly notes would have scored
+the PIN check itself as a breach. Both tables now carry the approved sentence verbatim. No constraint
+moved: this propagated wording Marco had already signed off, and the target is untouched.
+
+**10. B2 = 0 occurrences, blocking.** ✅ Met — **against three of the four surfaces B2 names.**
 A run-wide capture checks both rendered messages and raw arguments; the database file is scanned; one
 test leaks deliberately and asserts the detector fires. The run-wide scan looks for whole values and
 therefore cannot see a digit-by-digit leak, so that one is caught precisely at the relay instead. Both
 rules were verified against real injected leaks. Implemented with `unittest`, not pytest — flagged in
 `docs/phase4/findings.md` §3.
+
+**Which surfaces, stated rather than left to the reader** (corrected 2026-09-10 after `/code-review`
+read this entry as claiming all four):
+
+| B2 surface | Covered | Where |
+|---|---|---|
+| Log lines | Run-wide, every record the run emits | `tests/test_zz_b2_leak_scan.py` |
+| Persisted records | Yes, the real file a spawned service wrote | `tests/test_core_banking_live.py` |
+| Transcripts / injected items | Run-wide across all 193 red-team calls **and** the whole-call test | `redteam_harness.credentials_in_what_the_call_sent`, `tests/test_whole_call.py` |
+| OTel span attributes | **Vacuously — this project emits no spans yet** | Phase 6 owns observability |
+
+The OTel row is the honest one: `grep -riE "opentelemetry|otel|tracer|span"` returns nothing outside
+a comment, so there is no span for a PIN to reach. That is not coverage and is not counted as any;
+the row becomes real work in Phase 6 and is recorded in `docs/phase4/findings.md` §4 as an
+outstanding surface rather than a met one.
+
+The transcript row was widened on 2026-09-10: it previously rested on one call, in
+`tests/test_whole_call.py`, while the 193 calls that actually key wrong credentials went unscanned on
+that surface. Each red-team case now scans what it sent to the model and back to the caller.
 
 **11. Every attempt logged, carrying no digit.** ✅ Met.
 Info on success, warning on each rejection with the attempt number only.

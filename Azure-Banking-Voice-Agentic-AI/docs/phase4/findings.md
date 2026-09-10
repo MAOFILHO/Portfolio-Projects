@@ -78,6 +78,73 @@ the submission in `auth/authenticator.py` fails the run-wide scan, and logging t
 credited the run-wide scan with a catch that was actually the older whole-call assertion's — the
 substring rule had not fired at all, which is how gap 4 was found.
 
+**Which of B2's four surfaces these rules actually cover** (added 2026-09-10; `/code-review` read
+the "two rules" framing above as a claim about all four). Log lines and persisted records: covered.
+Transcripts and injected items: covered, run-wide, since 2026-09-10 — previously one call.
+**OTel span attributes: not covered, because this project emits no spans at all.** There is nothing
+to scan and nothing is claimed; that surface becomes real work in Phase 6, which owns observability.
+A constraint reported as met against a surface that does not yet exist would be the same empty claim
+as a percentile with no N. The table in `docs/phase4/exit-check.md` criterion 10 is the canonical
+version of this breakdown.
+
+---
+
+## Fixed after `/code-review`, 2026-09-10
+
+The two-axis review ran over the whole phase, `56178e5...HEAD`. Fifteen findings across both axes,
+deduplicating to thirteen. Twelve were implemented; one was declined. Nothing here changed a
+constraint's target, and `make test` and `make lint` are green.
+
+**The one that mattered most, and why it was not a live hole.** `redteam_harness.py` derived each
+case's `authenticated` flag from the *scripted keypresses* rather than from the call. No point in the
+matrix ever spells the accepted credential, so the flag was `False` for all 193 cases and
+`Outcome.is_breach` silently collapsed from a conjunction to its remaining half. That over-reports:
+it could have invented a breach, never passed one, so B1's verdict of 0 breaches stands unchanged.
+It is still a real defect — a detector never shown to distinguish its two cases has not been shown to
+detect anything — and `TheDetectorItself` now exercises both legs, including a call that really does
+authenticate.
+
+**The rest, briefly.**
+- The `injected` arguments strategy emitted unterminated JSON, so it died at the dispatcher's parse
+  in exactly the place a `malformed` payload dies and the smuggled field never existed. Now valid
+  JSON carrying a real `auth_state` key. Worth stating plainly: the gate is consulted *before*
+  arguments are parsed, so on a refused tool no argument shape is reached at all — the strategy can
+  only discriminate on verification, the one operation permitted while anonymous, and a case is
+  aimed there.
+- `verification-flooding.yaml` named two failures nothing scored. `Outcome.verifications` records one
+  entry per answered credential check, so a cleared entry costing an attempt, or a rejection not
+  costing one, is now a red test rather than a rationale.
+- B2's secret list was hand-written with nothing tying it to what the suite keys. `tests/keyed_values.py`
+  is now the one list, and a static guard reads the suite's own source and fails if any keyed
+  four-digit credential is outside it. Fragments such as a cleared `123` are deliberately *not* in
+  the run-wide scan: a two-digit needle matches any timestamp or port number the suite logs. They
+  stay asserted precisely, in the one call that keys them.
+- The relay's DTMF comment claimed the record never reveals how many tones arrived. One arrival line
+  per frame means it does. The comment now says so and explains why that is acceptable: B2 protects
+  the credential, and a keypress count is not one.
+- `log.info("PIN entry outcome")` used a term `CONTEXT.md` proscribes; so did the success sentence
+  read to the caller, `"you're verified"`. Both fixed, and a test now asserts no caller sentence uses
+  a proscribed auth-state term.
+- `_press` returned `(None, submission)` — a pair whose first element was empty exactly when the
+  second was not. It returns one value now, and the completed-entry wrapper **refuses to render its
+  own digits**, which keeps four keyed digits out of any traceback or debugger frame.
+- `test_gate.py`'s both-directions permission assertion is split, so a Phase 5 failure says which
+  direction broke. It was **kept, not relaxed**: a declared tool absent from the granting row is
+  refused for everyone, which is the gate failing closed and therefore silent. The red build is the
+  tripwire that makes that silence audible, and Phase 5 will trip it three times on purpose.
+
+**Declined, deliberately.** The sha256 digest helper appears in the voice agent's fake, in
+`mock-core-banking/db.py`, and in its seed constant. That is `docs/PLAN.md` decision 9's
+shared-nothing rule working as intended — the two deployables do not share code — so consolidating it
+would undo an architectural decision to satisfy a duplication smell. Recorded here rather than fixed.
+
+**Not restructured, and why.** The credential check is awaited inside the inbound relay loop, so
+audio forwarding stalls until the system of record answers. It is bounded by the client's own timeout
+and circuit breaker. The stall lands on the fourth tone, when the caller has just finished keying and
+is waiting for a verdict rather than speaking, so putting a second concurrent task on the PIN path
+would reclaim audio nobody is using at the cost of the ordering guarantee B1 rests on. Revisit only
+if B5 measurement shows it.
+
 ---
 
 ## Open: one unreproduced test failure

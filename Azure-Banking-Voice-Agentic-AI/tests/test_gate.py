@@ -106,12 +106,40 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.AUTHENTICATED, tool))
 
-    def test_the_granting_row_covers_every_declared_tool_and_nothing_more(self):
-        # The two lists have to agree in both directions: a declared tool missing from the row
-        # would be permanently unreachable, and a name in the row that no tool declares would be
-        # dead permission nobody could see was dead.
+    def test_the_granting_row_names_no_tool_that_does_not_exist(self):
+        """Half of the old both-directions assertion, split so a failure says which half broke.
+
+        A name in the row that no tool declares is dead permission nobody can see is dead. This
+        direction is unconditional: there is never a reason for it to hold a name that is not a
+        tool.
+        """
         declared = {tool["name"] for tool in tools.TOOLS}
-        self.assertEqual(gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)], declared)
+        granted = gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)]
+        self.assertEqual(granted - declared, set(), "the granting row names tools that do not exist")
+
+    def test_every_declared_tool_is_named_in_the_granting_row(self):
+        """The other half -- and the one that is a deliberate tripwire, not an invariant.
+
+        A declared tool absent from this row is *refused for everyone, in every state*. That is the
+        gate failing closed, which `dispatch/gate.py` calls the whole point, so nothing is broken
+        at runtime when it happens -- the tool is simply unreachable and silent.
+
+        This test exists to make that silence loud. Phase 5 adds `list_transactions`, `block_card`
+        and `escalate_to_human`, and each one will turn this red until somebody writes it into the
+        table on purpose. That is the intended cost (/code-review, 2026-09-10 asked whether it
+        should be relaxed to a subset check; it should not). A new banking capability reaching
+        callers because a permission was inferred from a tool list is precisely the failure B1
+        exists to prevent, and a red build asking "did you mean to grant this?" is the cheapest
+        possible place to ask it.
+        """
+        declared = {tool["name"] for tool in tools.TOOLS}
+        granted = gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)]
+        self.assertEqual(
+            declared - granted, set(),
+            "a declared tool is in no permission row, so it is refused for every caller in every "
+            "state. If that is deliberate, grant it explicitly or move it out of tools.TOOLS -- "
+            "do not weaken this test to a subset check",
+        )
 
     def test_no_handoff_tool_appears_anywhere_in_the_table(self):
         # Handoff stays ungated. Gating it would put a routing decision inside the control and give
