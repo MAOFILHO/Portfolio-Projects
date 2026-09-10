@@ -21,8 +21,12 @@ and applying a sub-cent amount the service would have rejected outright).
 """
 import unittest
 
-from azbank_voice_agent.core_banking import CoreBankingRequestError, UnknownAccountError
-from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
+from azbank_voice_agent.core_banking import (
+    CoreBankingRequestError,
+    CoreBankingUnavailable,
+    UnknownAccountError,
+)
+from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 
 #: (from, to, amount) -> the exception the real client raises, for requests that get refused. The
 #: rows are ordered to show the precedence: the first four carry an amount the request body rejects,
@@ -46,6 +50,84 @@ EXPECTED_ERRORS = [
     (("chequing", "savings", "100"), CoreBankingRequestError),
     (("chequing", "savings", True), CoreBankingRequestError),
 ]
+
+
+#: pin -> what `verify_pin` does with it. The same arrangement as EXPECTED_ERRORS above and for the
+#: same reason: this file asserts the fake matches the table, tests/test_core_banking_live.py drives
+#: the identical rows against a real spawned service, and neither claim rests on the other.
+#:
+#: Three standings, and the distinction between the last two is the one that matters. An **accepted**
+#: and a **rejected credential** are both ordinary results of a working check, told apart by the
+#: returned bool rather than by an exception -- a rejection is the system saying no, not failing.
+#: Everything else is **unavailable**: no verdict was produced, so none may be inferred. A malformed
+#: check is in that bucket rather than its own, because from the authenticator's side a service that
+#: refused to answer and a service that could not be reached are the same fact -- see
+#: `HttpCoreBankingClient.verify_pin` for why that mapping happens in the client.
+EXPECTED_VERIFICATIONS = [
+    (DEFAULT_PIN, True),
+    ("9999", False),
+    ("0000", False),
+    ("123", CoreBankingUnavailable),
+    ("12345", CoreBankingUnavailable),
+    ("abcd", CoreBankingUnavailable),
+    ("12 4", CoreBankingUnavailable),
+    ("", CoreBankingUnavailable),
+    (1234, CoreBankingUnavailable),
+    (None, CoreBankingUnavailable),
+]
+
+
+class VerifiesLikeTheService(unittest.IsolatedAsyncioTestCase):
+    """The credential store, held to the same table the real service is driven against (issue #35).
+
+    Almost every test in this suite runs against the fake, so a fake that accepted where the service
+    rejects would make the whole B1 corpus say something untrue -- and it would say it in the one
+    direction that matters, which is the permissive one.
+    """
+
+    async def test_the_fake_answers_each_pin_the_way_the_service_does(self):
+        for index, (pin, expected) in enumerate(EXPECTED_VERIFICATIONS):
+            # By index, never by value: a subTest label is printed on failure.
+            with self.subTest(case=index):
+                fake = FakeCoreBankingClient()
+                if isinstance(expected, type) and issubclass(expected, Exception):
+                    with self.assertRaises(expected):
+                        await fake.verify_pin(pin)
+                else:
+                    self.assertIs(await fake.verify_pin(pin), expected)
+
+    async def test_the_store_holds_a_digest_and_not_the_pin(self):
+        # Same reasoning as the service's: what is held is what a scan of this object would find.
+        fake = FakeCoreBankingClient()
+        self.assertNotIn(DEFAULT_PIN, repr(vars(fake)))
+
+    async def test_a_different_credential_can_be_arranged(self):
+        # A store rather than a hardcoded answer, so a test can arrange either outcome.
+        fake = FakeCoreBankingClient(pin="4321")
+        self.assertIs(await fake.verify_pin("4321"), True)
+        self.assertIs(await fake.verify_pin(DEFAULT_PIN), False)
+
+    async def test_a_verification_is_recorded_like_every_other_call(self):
+        # The fake's call record is the B1 spy (issue #40): a breach is a *banking* method name
+        # appearing for a call that never authenticated, so verification has to appear there too or
+        # the "exactly one operation is reachable while anonymous" claim has nothing to assert on.
+        fake = FakeCoreBankingClient()
+        await fake.verify_pin(DEFAULT_PIN)
+        self.assertEqual(fake.calls, ["verify_pin"])
+
+    async def test_an_arranged_failure_reaches_verification_too(self):
+        # `fail_with` is how the whole-call seam arranges an unreachable backend. A verification
+        # that ignored it would make "authentication fails closed when the bank cannot be reached"
+        # untestable at the only seam where the caller's experience is visible.
+        fake = FakeCoreBankingClient(fail_with=CoreBankingUnavailable("down"))
+        with self.assertRaises(CoreBankingUnavailable):
+            await fake.verify_pin(DEFAULT_PIN)
+
+    async def test_verification_moves_no_money(self):
+        fake = FakeCoreBankingClient()
+        await fake.verify_pin(DEFAULT_PIN)
+        await fake.verify_pin("9999")
+        self.assertEqual(fake.accounts, {"chequing": 2400.00, "savings": 500.00})
 
 
 class MatchesTheService(unittest.IsolatedAsyncioTestCase):

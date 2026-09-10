@@ -15,6 +15,7 @@ The load-bearing cases, in the order they'd hurt if they regressed:
   * a 404 raises rather than resolving to anything -- T-UNKNOWN-ACCT
 """
 import asyncio
+import json
 import unittest
 
 import httpx
@@ -588,6 +589,114 @@ class NeverFabricatesABalance(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await client.get_balance("chequing"), 2400.00)
         with self.assertRaises(cb.CoreBankingUnavailable):
             await client.get_balance("chequing")
+
+
+class VerifyingACredential(unittest.IsolatedAsyncioTestCase):
+    """Verification on the real client: one attempt, a body not a path, and no verdict invented.
+
+    It goes on this client rather than a client of its own, which is the whole point of issue #35:
+    it inherits the timeout, the retry policy and the breaker, so an unreachable service fails
+    closed for free rather than needing a second fail-closed path that could disagree with this one.
+    """
+
+    async def test_an_accepted_check_is_true(self):
+        recorder = Recorder(_json({"outcome": "accepted"}))
+        self.assertIs(await _client(recorder).verify_pin("1234"), True)
+
+    async def test_a_rejected_check_is_false_rather_than_an_exception(self):
+        # A rejected credential is a working check saying no. If it raised, the authenticator would
+        # have to tell it apart from an outage by exception message, and the two are opposite facts.
+        recorder = Recorder(_json({"outcome": "rejected"}))
+        self.assertIs(await _client(recorder).verify_pin("9999"), False)
+
+    async def test_the_pin_goes_in_the_body_and_never_in_the_path(self):
+        recorder = Recorder(_json({"outcome": "accepted"}))
+        await _client(recorder).verify_pin("1234")
+        request = recorder.requests[0]
+        self.assertEqual(request.url.path, "/credential-checks")
+        self.assertEqual(request.url.query, b"")
+        self.assertNotIn("1234", str(request.url))
+        self.assertEqual(json.loads(request.content), {"pin": "1234"})
+
+    async def test_a_verification_is_never_retried(self):
+        # The single-attempt path, for a different reason than a transfer's: a transfer must not be
+        # repeated because it may have committed; a verification must not be repeated because a
+        # silent second check could spend an attempt the caller never made.
+        recorder = Recorder(httpx.ReadTimeout("too slow"))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).verify_pin("1234")
+        self.assertEqual(recorder.count, 1)
+
+    async def test_no_failure_path_can_produce_an_accepted_verdict(self):
+        """Every way this can go wrong, and none of them returns True.
+
+        This is the fail-closed assertion in the only form that is worth anything: not "an outage
+        raises", but "no outage returns the answer that opens the gate". The unreadable bodies are
+        the ones that bite -- a payload with no outcome, or an outcome this client does not
+        recognise, are both a service that did not answer the question.
+        """
+        failures = [
+            httpx.ConnectError("refused"),
+            httpx.ReadTimeout("too slow"),
+            httpx.Response(500, json={"outcome": "accepted"}),
+            httpx.Response(503, text="gateway"),
+            httpx.Response(301, headers={"location": "/credential-checks"}),
+            httpx.Response(200, content=b"<html>gateway</html>"),
+            _json({"status": "ok"}),
+            _json({"outcome": "yes"}),
+            _json({"outcome": None}),
+            _json({"outcome": "ACCEPTED"}),
+            _json({"outcome": "accepted_maybe"}),
+        ]
+        for index, failure in enumerate(failures):
+            with self.subTest(case=index):
+                with self.assertRaises(cb.CoreBankingUnavailable):
+                    await _client(Recorder(failure)).verify_pin("1234")
+
+    async def test_a_malformed_check_is_reported_unavailable_not_raised_as_our_bug(self):
+        # The service answers 422 when the submitted value is not four digits. The authenticator
+        # only ever submits four digits, so this is unreachable in practice -- and if it happens
+        # anyway, the honest report is that no verdict was produced. Letting the 422's
+        # CoreBankingRequestError escape would put a ValueError on the relay's DTMF path, where
+        # nothing is waiting to catch it.
+        recorder = Recorder(httpx.Response(422, json={"error": "malformed_request"}))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).verify_pin("123")
+
+    async def test_a_rejected_check_does_not_count_against_the_breaker(self):
+        # The same standing a declined transfer and an unknown account already have: the service
+        # answered, and coherently, so it is healthy. A caller keying wrong PINs must not be able to
+        # open the circuit for every other call in the process.
+        recorder = Recorder(*[_json({"outcome": "rejected"})] * (cb.BREAKER_FAILURE_THRESHOLD + 1))
+        client = _client(recorder)
+        for _ in range(cb.BREAKER_FAILURE_THRESHOLD):
+            self.assertIs(await client.verify_pin("9999"), False)
+        self.assertIs(await client.verify_pin("9999"), False)
+
+    async def test_an_open_circuit_refuses_a_verification_without_a_request(self):
+        # Fails closed for free -- the reuse this ticket exists for. The breaker is opened by
+        # ordinary read failures, and verification is refused by it without being special-cased.
+        clock = FakeClock()
+        failures = [httpx.ConnectError("refused")] * (cb.BREAKER_FAILURE_THRESHOLD * 2)
+        recorder = Recorder(*failures)
+        client = _client(recorder, clock)
+        for _ in range(cb.BREAKER_FAILURE_THRESHOLD):
+            with self.assertRaises(cb.CoreBankingUnavailable):
+                await client.get_balance("chequing")
+        opened_after = recorder.count
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await client.verify_pin("1234")
+        self.assertEqual(recorder.count, opened_after, "the request must not have been attempted")
+
+    async def test_nothing_this_client_logs_about_a_verification_carries_the_pin(self):
+        # The client logs the request path on every failed call, deliberately, because it is the
+        # one field that makes a failure diagnosable. That is exactly why the PIN is in the body.
+        with self.assertLogs("core_banking", level="DEBUG") as captured:
+            with self.assertRaises(cb.CoreBankingUnavailable):
+                await _client(Recorder(httpx.ConnectError("refused"))).verify_pin("1234")
+        for record in captured.records:
+            self.assertNotIn("1234", record.getMessage())
+            self.assertNotIn("1234", repr(record.args))
 
 
 class BudgetsArePinned(unittest.TestCase):

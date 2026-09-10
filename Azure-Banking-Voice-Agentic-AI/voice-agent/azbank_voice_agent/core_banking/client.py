@@ -16,6 +16,13 @@ review.
     unavailable       5xx/timeout/     -> CoreBankingUnavailable (never a balance, ever)
                       refused/open
 
+**Verification lives on this client rather than a client of its own** (issue #35). That is the
+whole reason it is here: it inherits the timeout, the single-attempt write path and the breaker, so
+an unreachable service fails authentication closed for free rather than through a second
+fail-closed path that could drift out of agreement with this one. Its outcomes are narrower --
+accepted, rejected credential, or unavailable, and `verify_pin` documents why the third swallows
+what the money paths keep distinct.
+
 **Cents on the wire, dollars in the agent.** The service stores and speaks integer cents, because
 nothing persisting money should use a float. The model needs a number it can say out loud. That
 conversion happens here, once, at the presentation boundary -- and nowhere near persistence.
@@ -124,6 +131,15 @@ class CoreBankingClient(Protocol):
         ...
 
     async def transfer(self, from_account: str, to_account: str, amount: float) -> TransferOutcome:
+        ...
+
+    async def verify_pin(self, pin: str) -> bool:
+        """True if the system of record accepted the PIN, False if it rejected it.
+
+        The only operation on this protocol that is not a banking operation, which is what B1's
+        sharpened definition turns on: this one may reach the client while a call is still
+        anonymous, and the other three may not.
+        """
         ...
 
 
@@ -312,6 +328,48 @@ class HttpCoreBankingClient:
             "to_account": to_account,
             "amount_cents": _cents(amount),
         }, outcome)
+
+    async def verify_pin(self, pin):
+        """Ask the system of record whether this PIN is right. True, False, or unavailable.
+
+        **The PIN goes in the body.** `_send` logs the method and path of every failed request,
+        deliberately, because the path is the one field that makes a failure diagnosable -- for a
+        balance read it carries an account name, which is not B2 data. B2 data is the PIN and only
+        the PIN, and keeping it out of the path is what lets both of those stay true at once.
+
+        **One attempt, never a retry**, on the same path a transfer uses and for a different
+        reason. A transfer must not be repeated because it may already have committed; a
+        verification must not be repeated because a silent second check could spend an attempt the
+        caller never made. The honest report of an unconfirmed check is unavailable, which is also
+        the outcome that fails closed.
+
+        **Everything that is not a clear verdict is unavailable, including a 422 and a 404.** The
+        money paths keep malformed, unknown-account and unavailable apart because the caller hears
+        a different sentence for each. Here the distinctions buy nothing and cost something: the
+        authenticator only ever submits four digits, so a 422 is unreachable in practice, and a 404
+        means this route is missing altogether -- a service too old to answer the question. Either
+        one would otherwise travel up the relay's DTMF path as a ValueError or a LookupError with
+        nothing waiting to catch it. Neither produced a verdict, which is what unavailable means.
+        Both are logged as the anomalies they would be rather than folded in silently.
+        """
+        def verdict(payload):
+            outcome = payload["outcome"]
+            if outcome not in ("accepted", "rejected"):
+                # An outcome this client does not recognise is a service that did not answer the
+                # question. Raised as a ValueError so `_read` turns it into unavailable -- the one
+                # branch guaranteed not to be mistaken for a verdict.
+                raise ValueError(f"unrecognised credential check outcome {outcome!r}")
+            return outcome == "accepted"
+
+        try:
+            return await self._post("/credential-checks", {"pin": pin}, verdict)
+        except (CoreBankingRequestError, UnknownAccountError) as e:
+            # `e` carries a status code or an account name, never the submitted value -- see
+            # `_decode`, which builds both from the response rather than from the request.
+            log.warning("core banking did not answer a credential check: %r", e)
+            raise CoreBankingUnavailable(
+                "core banking did not answer the credential check"
+            ) from e
 
     # --- transport ------------------------------------------------------------------------------
 

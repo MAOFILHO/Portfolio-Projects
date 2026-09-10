@@ -15,6 +15,7 @@ dependency", and a locally-spawned service meets all three. There is no Azure he
 and no spend.
 """
 import os
+import pathlib
 import socket
 import subprocess
 import sys
@@ -28,14 +29,15 @@ from azbank_voice_agent.core_banking import (
     HttpCoreBankingClient,
     UnknownAccountError,
 )
+from azbank_voice_agent.core_banking.fake import DEFAULT_PIN
 
 try:
     # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
-    from test_core_banking_fake import EXPECTED_ERRORS
+    from test_core_banking_fake import EXPECTED_ERRORS, EXPECTED_VERIFICATIONS
 except ImportError:
     # `python -m unittest tests.test_core_banking_live` does not, and running one file that way is
     # the ordinary thing to do while iterating.
-    from tests.test_core_banking_fake import EXPECTED_ERRORS
+    from tests.test_core_banking_fake import EXPECTED_ERRORS, EXPECTED_VERIFICATIONS
 
 _STARTUP_TIMEOUT_SECONDS = 20.0
 
@@ -51,6 +53,9 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmpdir = tempfile.TemporaryDirectory()
+        # Named here rather than inline below, because B2's artifact scan needs the same path the
+        # service is told to write to.
+        cls.database_path = os.path.join(cls._tmpdir.name, "core-banking.sqlite3")
         cls.port = _free_port()
         cls.base_url = f"http://127.0.0.1:{cls.port}"
         cls.process = subprocess.Popen(
@@ -64,7 +69,7 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
                 **os.environ,
                 # Its own database file, thrown away with the test -- never the default path, so a
                 # test run can never touch whatever a local dev instance is holding.
-                "CORE_BANKING_DB": os.path.join(cls._tmpdir.name, "core-banking.sqlite3"),
+                "CORE_BANKING_DB": cls.database_path,
             },
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -165,8 +170,40 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(CoreBankingUnavailable):
             await self.client.get_balance("chequing/")
 
+        # Verification over the same real hop, driven off the same shared table the fake is pinned
+        # against (issue #35). Without this the fake's parity tests would be checking it against a
+        # constant somebody typed -- green forever, including on the day the service starts
+        # answering differently. This is Trap 2 from Phase 3, which found fake/real divergences in
+        # three separate review rounds.
+        for index, (pin, expected) in enumerate(EXPECTED_VERIFICATIONS):
+            # By index, never by value: a subTest label is printed on failure, and one of these
+            # rows is the demo PIN.
+            with self.subTest(case=index):
+                if isinstance(expected, type) and issubclass(expected, Exception):
+                    with self.assertRaises(expected):
+                        await self.client.verify_pin(pin)
+                else:
+                    self.assertIs(await self.client.verify_pin(pin), expected)
+
         # Nothing above moved money, and the service is still answering.
         self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
+
+    async def test_the_database_file_holds_no_plaintext_pin(self):
+        """B2's artifact scan, on a file a real service really wrote (issues #34 and #39).
+
+        This test controls its own data, so the scan looks for the demo PIN itself rather than for
+        any four-digit string a balance might coincidentally contain. It is possible with no
+        carve-out precisely because what the service stores is a digest -- a scan that had to skip
+        a column would be a scan that could be made to pass by moving the leak into it.
+
+        Ordered after the sequence above by name, and deliberately does its own submissions anyway:
+        a scan that only passed because nothing had ever been submitted would prove nothing.
+        """
+        await self.client.verify_pin(DEFAULT_PIN)
+        await self.client.verify_pin("9999")
+        database = pathlib.Path(self.database_path)
+        self.assertTrue(database.exists(), "the spawned service wrote no database file")
+        self.assertNotIn(DEFAULT_PIN.encode(), database.read_bytes())
 
 
 if __name__ == "__main__":
