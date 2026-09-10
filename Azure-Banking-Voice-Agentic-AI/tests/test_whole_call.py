@@ -316,6 +316,32 @@ class WholeCallWithAKeyedPin(unittest.TestCase):
             with self.subTest(secret_length=len(secret)):
                 self.assertNotIn(secret, everything)
 
+    def test_the_relay_logs_no_decimal_digit_at_all_while_a_pin_is_being_keyed(self):
+        """The digit-by-digit leak, which a whole-PIN substring scan cannot see.
+
+        `tests/test_zz_b2_leak_scan.py` scans every record in the run for the submitted values, and
+        that is the right shape for a value logged whole. It cannot catch a relay that logged each
+        tone as it arrived: four records reading "1", "2", "3", "4" contain the PIN between them
+        and contain no substring of it in any one of them.
+
+        The bridge logger's whole vocabulary on this path is fixed prose and outcome tokens -- it
+        has no legitimate reason to emit a digit while a caller is keying -- so the precise
+        assertion is available here and is stronger than any substring rule could be.
+        """
+        frames = [*_keyed("9999"), dtmf_frame("*"), *_keyed("8888"), *_keyed(DEFAULT_PIN)]
+        transport, realtime = self._call(frames)
+
+        with self.assertLogs("bridge", level="DEBUG") as cm:
+            asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        for record in cm.records:
+            with self.subTest(message=record.msg):
+                rendered = record.getMessage()
+                self.assertFalse(
+                    any(character.isdigit() for character in rendered),
+                    f"the relay emitted a digit while a PIN was being keyed: {rendered!r}",
+                )
+
     def test_no_new_tool_is_declared_anywhere(self):
         """There is no authentication tool, which is why nothing is reachable while anonymous.
 

@@ -50,6 +50,34 @@ record is in one place. This project runs stdlib `unittest discover` from its `M
 criterion's intent — blocking by construction rather than a CI step someone can drop — is met by
 installing the capture from the suite itself.
 
+Two implementation details are worth reading before touching it (`tests/test_zz_b2_leak_scan.py`):
+
+- **It patches `logging.Logger.handle`, not the root logger's handlers.** A root handler looks like
+  the obvious way to catch everything and quietly is not: `assertLogs` replaces the target logger's
+  handlers and sets `propagate = False` for the duration of the block, and this suite is full of
+  those on exactly the modules that touch the PIN. Those records would never have reached a root
+  handler.
+- **Its filename sorts last on purpose.** `unittest discover` imports every module before running
+  any test, so the capture is installed before the first test runs; the run-wide assertion has to
+  come after the last one, and sorted module order is how a stdlib `unittest` run says that.
+
+### 4. B2's coverage is two rules, not one
+
+The run-wide scan looks for submitted values **whole**. It cannot see a relay that logged each tone
+as it arrived: four records reading `1`, `2`, `3`, `4` carry the PIN between them and contain no
+substring of it in any one of them. Widening the scan to single digits is not the fix — it would
+flag `attempt 1 of 3` and every port number in the suite.
+
+The digit-by-digit leak is caught precisely instead, at the seam where it could happen. The relay's
+own logger has no legitimate reason to emit a decimal digit while a caller is keying, so
+`test_the_relay_logs_no_decimal_digit_at_all_while_a_pin_is_being_keyed` asserts that it emits none.
+
+**Both rules were verified against a real injected leak, not only against the rehearsal**: logging
+the submission in `auth/authenticator.py` fails the run-wide scan, and logging the arriving tone in
+`realtime/session.py` fails the digit rule. Recorded because the first attempt at that verification
+credited the run-wide scan with a catch that was actually the older whole-call assertion's — the
+substring rule had not fired at all, which is how gap 4 was found.
+
 ---
 
 ## Recorded up front, unchanged
