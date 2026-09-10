@@ -26,11 +26,15 @@ live bearing on the current moment:
    **"Phase 3: APPROVED" (2026-09-09) signed off the exit criteria; it did not authorise
    provisioning**, which was never in Phase 3's scope and needs its own approval.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
-4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 4 has not
-   begun and has no written exit criteria yet.
+4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 4's exit
+   criteria are **written and approved** (`docs/phase4/exit-criteria.md`, both 2026-09-10). The
+   approval covers the one item that needed its own sign-off: **B1's breach definition is
+   sharpened** — no *banking* operation reaches the core-banking client while the call is
+   unauthenticated, with PIN verification the only operation reachable while anonymous. Target
+   unmoved: 0 breaches, ≥120 cases, L1, blocking.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 3, signed off; Phase 4 not begun
+## Current phase — Phase 3 signed off; Phase 4 approved and ticketed, nothing built yet
 
 **Phase 3 (mock-core-banking) was signed off by Marco on 2026-09-09 ("Phase 3: APPROVED").** Built,
 reviewed three times, and every finding fixed. Spec: issue **#25**, tickets **#26-32**. The closed
@@ -128,9 +132,16 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    diff (`infra/modules/mock-core-banking.bicep`) to review first, which no tooling here can
    validate.
 2. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
-3. **Phase 4 kickoff** needs written exit criteria and Marco's approval before any of it begins. It
-   is the phase that adds permissions to `gate.py` and puts the DTMF PIN on the path, so both
-   never-auto-accept rules bind it from the first diff.
+3. **Build Phase 4, ticket by ticket, on the frontier.** Spec **#33**, tickets **#34-42**, filed
+   2026-09-10 as sub-issues with GitHub blocking edges: #34 → #35 → #36 → #37, which then unblocks
+   #38 (gate rows) and #39 (B2 suite) in parallel; #38 → #40 → #41; #39 and #41 → #42 (close-out).
+   Only **#34** has no open blocker today. Phase 4 adds permissions to `gate.py` and puts the DTMF
+   PIN on the path, so both never-auto-accept rules bind every diff. **Phase 4 is PIN-only** — the
+   spoken KBA factor was cut 2026-09-10 and `docs/PLAN.md` decision 7 and its Phase 4 section are
+   amended to match, not left to drift.
+4. **One ADR is offered and not written** (`docs/adr/`): the shared core-banking client that made
+   B1's restatement necessary. Hard to reverse, and it would read as arbitrary without the
+   reasoning. The second candidate — a binary gate carrying two factors — died with the KBA cut.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls
 for. It sits outside `PROJECT_ROOT` and needs approval by absolute path, same as the CI workflow

@@ -62,8 +62,31 @@ _Avoid_: guard, permission check, authorization layer
 
 **Auth state**:
 Whether the caller on this call has been authenticated. Either anonymous or authenticated; nothing
-in between.
+in between. The PIN check below is the one thing that moves a call from the first to the second.
 _Avoid_: logged in, verified, session state
+
+**PIN check**:
+Four digits keyed as tones and verified by the system of record. Never spoken, never shown to the
+model, never written down anywhere. Passing it is the only way a call becomes authenticated.
+_Avoid_: PIN entry, login, KBA (a spoken second factor was scoped and then cut, 2026-09-10)
+
+**Rejected credential**:
+A PIN check the system of record refused. A normal outcome of a working check rather than an error —
+and deliberately not a **declined**, which is about money: nobody has been refused a banking
+operation. The caller hears that it was wrong and nothing more, for the same reason a **refusal**
+explains nothing.
+_Avoid_: auth failure, invalid credentials, declined
+
+**Attempt**:
+One completed PIN check that came back a rejected credential. A submission that never completed —
+cleared by the caller, or abandoned — is not an attempt and costs nothing. Three attempts end the
+call.
+_Avoid_: try, retry, failure
+
+**Profile**:
+The single set of credentials and accounts this prototype holds. Authentication unlocks it; it never
+identifies anyone, because there is only one and no caller is ever distinguished from another.
+_Avoid_: customer, user, identity, tenant
 
 **Refusal**:
 What the caller hears when the gate declines a tool call. Deliberately uninformative about why — an

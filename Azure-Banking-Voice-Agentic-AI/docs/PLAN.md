@@ -90,7 +90,7 @@ specialists via `handoff(...)` (`main.py:98-150`).
 | 4 | **Process depth** | Mirror FNOL: `docs/adr/`, `evals/`, `redteam/`, phase docs, `PROJECT_STATE.md`, `COSTS.md`, `CHANGELOG.md`, `TESTING-CONVENTIONS.md` |
 | 5 | **Scope** | `authenticate_caller`, `get_balance`, `list_transactions`, `block_card`, `escalate_to_human` |
 | 6 | **Handoff** | One persistent realtime session per call; agent swap via `session.update`. Triage → Accounts → Cards |
-| 7 | **Caller auth** | Spoken card last-4 + DOB (KBA), then **PIN via DTMF** |
+| 7 | **Caller auth** | **PIN via DTMF, and nothing else. Revised 2026-09-10** from "spoken card last-4 + DOB (KBA), then PIN via DTMF" at Phase 4 kickoff, on prototype-simplicity grounds. The spoken factor cost an `authenticate_caller` tool, its argument schema, ISO-date normalisation of a spoken date of birth, a second verification endpoint, and a malformed-versus-rejected distinction that only existed because a tool call could arrive misshapen — to buy a second factor nobody dials. The property Phase 4 exists to demonstrate is unchanged: a secret that never reaches the model, and a gate that opens only on a fact the system of record verified. One consequence strengthens the gate's story rather than weakening it — with no authentication tool, **no tool at all is reachable while a call is anonymous**. Full reasoning: `docs/phase4/exit-criteria.md` |
 | 8 | **Post-call analytics** | Minimal, own phase. Transcript already available from realtime events — **no Speech STT needed** |
 | 9 | **Layout** | Two deployables, shared-nothing |
 | 10 | **Agent shape** | Explicit FSM + declarative `AgentSpec` table |
@@ -633,10 +633,22 @@ they constrain later phases rather than just this one:
   freezes in Phase 5 rather than Phase 2.
 
 ### Phase 4 — Auth gate permissions ⛔ *B1/B2 threshold*
-KBA (card last-4 + DOB) + DTMF PIN. Adds the `Authenticated` transition and the permissions it
-unlocks to the Phase-2 gate — does not introduce the gate itself. ≥120 adversarial cases in `redteam/`
-(deterministic, L1, free).
+**DTMF PIN only** — the spoken KBA factor was cut 2026-09-10, see decision 7. Adds the
+`Authenticated` transition and the permissions it unlocks to the Phase-2 gate — does not introduce
+the gate itself. ≥120 adversarial cases in `redteam/` (deterministic, L1, free), reported with the
+count of distinct attack ideas behind them and never padded to reach the total.
 **Exit:** B1 = 0 breaches, B2 = 0 occurrences, both blocking in CI.
+
+**Scoped 2026-09-10**, written exit criteria: `docs/phase4/exit-criteria.md`. Two things from that
+scoping constrain more than this phase:
+- **B1's breach definition is sharpened** and needs Marco's sign-off before the phase begins, since a
+  named constraint does not move without it. PIN verification reaches the core-banking client while
+  the call is still anonymous — by design — so the breach is restated as *no banking operation*
+  (balance, transfer, list) reaching that client while unauthenticated, rather than "no
+  authenticated-only tool invocation". Target unchanged: 0 breaches, ≥120 cases, blocking.
+- **No real DTMF tone has ever been consumed.** Phase 0 proved tones *arrive*; every line that acts
+  on one is new in Phase 4 and is exercised only against fakes, because this phase deploys nothing.
+  Phase 5's real-call exit is where that closes.
 
 ### Phase 5 — Intents + cost controls ⛔ *B5 frozen here*
 `get_balance`, `list_transactions`, `block_card` (confirmation + idempotency), `escalate_to_human`
