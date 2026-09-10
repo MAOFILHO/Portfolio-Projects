@@ -43,9 +43,9 @@ The gate grants for the first time, on a PIN the model never sees. Criterion-by-
 
 | | |
 |---|---|
-| voice-agent tests | 277 pass, 3 skipped by design |
+| voice-agent tests | 283 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
-| B1 red-team | **11 distinct attack ideas → 193 concrete cases**, 176 reaching an attempt |
+| B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
 | `make lint`, B3 static check | clean, passing |
 
@@ -65,9 +65,27 @@ later session needs to know without reading it:
   covered run-wide. **Span attributes are not, because this project emits no spans** — Phase 6 work,
   and no longer reported as met. Table in `docs/phase4/exit-check.md` criterion 10.
 
-**This diff is uncommitted and unreviewed by Marco.** It touches the DTMF/PIN path
-(`auth/authenticator.py`, `realtime/session.py`, `core_banking/fake.py`) and `tests/test_gate.py`,
-so the never-auto-accept rule binds it.
+**That remediation is committed** (`18d6a4a`). It touched the DTMF/PIN path
+(`auth/authenticator.py`, `realtime/session.py`, `core_banking/fake.py`) and `tests/test_gate.py`.
+
+**The remaining Phase 4 findings were implemented 2026-09-10, in a second diff that is committed and
+still unreviewed by Marco.** No production module is touched by it — the changes are in `tests/`,
+`redteam/`, the `Makefile`, `.gitignore` and the phase docs. Three things:
+
+- **The idea count moved 11 → 13**, by making the loader generate two ideas that were real, tested
+  and deliberately uncounted, rather than by counting them where they sat. **The gap to the 20–30
+  target is unchanged and still reported as a gap.**
+- **A detector fix that pointed the dangerous way.** `Outcome.authenticated` read the core-banking
+  spy's whole history, which is correct only while no case runs more than one call. The new
+  cross-call idea runs two, so an earlier caller's accepted verdict would have been read as this
+  call's and `is_breach` would have come back False for exactly the cases written to catch a breach.
+  Verified against a real injected breach: read from a per-call mark the detector catches both
+  cross-call breaches, read across the process it catches none. Unlike the `/code-review` defect it
+  resembles, this one would have **under**-reported.
+- **The unreproduced test failure can no longer lose its name.** `make test` keeps each suite's whole
+  output in a gitignored log whatever the caller pipes stdout through, and the live test retries a
+  start on a fresh port and reports the spawned service's own words. Still unexplained; a recurrence
+  is now readable.
 
 Both red-team numbers are always quoted together. A case count with no idea count behind it is the
 same empty claim as a percentile with no N.
@@ -77,13 +95,13 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
 
 ### Needs Marco
 
-0. **Review and commit the `/code-review` remediation diff.** Twelve findings implemented across 12
-   files plus one new `tests/keyed_values.py`, uncommitted. It touches the DTMF/PIN path and
-   `tests/test_gate.py`, so it needs a human look before it lands — that is the never-auto-accept
-   rule, not a formality. **This is the one thing blocking the gate.**
+0. **Review the two committed-but-unreviewed Phase 4 diffs**, in order: `18d6a4a` (the
+   `/code-review` remediation, which touches the DTMF/PIN path and `tests/test_gate.py`) and the
+   findings diff after it (tests, corpus, `Makefile`, docs — no production module). **This is the one
+   thing blocking the gate.**
 1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
    limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, criterion
-   9's idea count is 11 against a target of 20-30, reported rather than padded, and criterion 10's
+   9's idea count is 13 against a target of 20-30, reported rather than padded, and criterion 10's
    OTel surface is vacuous because no span exists yet.
 2. **`/research` on the realtime API's `conversation.item.create` item types** before Phase 5's real
    call — specifically whether a `system`-role `input_text` message is accepted mid-session on a
@@ -92,7 +110,8 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
    its own initiative.
 3. **One test failure seen once, not reproduced in 98 runs.** Reading and evidence:
    `docs/phase4/findings.md`. Not evidence about B1 or B2, both of which are in-process and were
-   re-run 98 times with identical verdicts.
+   re-run 98 times with identical verdicts. **Still unexplained**, but a recurrence now keeps its
+   name and the spawned service's own words — nothing more to do until it happens again.
 
 ### Still open from Phase 3
 
@@ -191,9 +210,10 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    diff (`infra/modules/mock-core-banking.bicep`) to review first, which no tooling here can
    validate.
 2. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
-3. **Sign off Phase 4, or send back what does not hold.** The three items needing Marco are listed
-   under "Needs Marco" above. `/code-review` has **not** been run on this phase — `CLAUDE.md`
-   requires it before every phase gate, and Marco invokes it, not Claude.
+3. **Sign off Phase 4, or send back what does not hold.** The items needing Marco are listed under
+   "Needs Marco" above. `/code-review` **has** been run on this phase (2026-09-10, two axes over
+   `56178e5...HEAD`) and its findings are implemented; a second `/code-review` over the two diffs
+   since is Marco's call, not Claude's, same as the first.
 4. **One ADR is offered and not written** (`docs/adr/`): the shared core-banking client that made
    B1's restatement necessary. Hard to reverse, and it would read as arbitrary without the
    reasoning. The second candidate — a binary gate carrying two factors — died with the KBA cut.

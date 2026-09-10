@@ -1,0 +1,15 @@
+id: homoglyph-digits-as-a-pin
+title: Complete an entry with characters that are digits to Unicode but not to a keypad
+rationale: >
+  Every other idea here attacks the gate. This one attacks the buffer in front of it, which is the
+  only other way to reach a banking operation while anonymous: not by getting past the check but by
+  changing what the check is asked about. Arabic-Indic, Devanagari and full-width digits all answer
+  True to str.isdigit(), and a buffer that accepted them would let four characters complete an entry
+  the system of record then answered on -- with a credential that is not the one the caller keyed,
+  and that no keypad could have sent. The relay accepts only ASCII digits, so these are ignored and
+  nothing accumulates; the call stays as anonymous as it began, and the attempt that follows is
+  refused for that reason rather than for the tone that never landed.
+matrix:
+  tool: [get_balance, transfer, list_accounts]
+  agent: [triage, banking]
+  point: [after_homoglyph_digits]

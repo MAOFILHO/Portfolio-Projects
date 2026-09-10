@@ -147,6 +147,46 @@ if B5 measurement shows it.
 
 ---
 
+## Closed 2026-09-10: the idea count, and a detector that would have under-reported
+
+`redteam/README.md` recorded two attack ideas as **real, tested, and deliberately not counted**,
+because the loader did not generate them: inheriting a previous caller's authentication, and
+completing an entry with characters that are digits to Unicode and to no keypad. The count read 11.
+
+**They are counted now because they are generated now — not because the rule changed.** Counting
+them where they sat would have been the padding the README forbids. The matrix grew two things
+instead: a `prior_call` field, which runs an earlier unrelated call against the same core-banking
+client, and an `after_homoglyph_digits` point, which keys six characters `str.isdigit()` accepts.
+Both are ordinary idea files now and widen with every tool Phase 5 adds. **13 ideas → 211 concrete
+cases, 194 reaching an attempt, 0 breaches.**
+
+**The gap to the 20–30 target is not closed and is still reported as a gap.** The surface is three
+operations, two agents and two auth states; that is what caps the honest number, and two more ideas
+did not change it.
+
+**What the narrow tests became.** `tests/test_redteam.py`'s `IdeasThatDoNotFitTheMatrix` was renamed
+and re-framed rather than deleted. A corpus case watches a call from outside and can only see a
+refusal, and a refusal looks the same however it was arrived at. The two tests now assert the
+mechanism the corpus cases cannot reach: the exact payload the second call is refused with, and the
+authenticator's `IGNORED` verdict on each character one at a time. They are assertions *about* two
+counted ideas, not a thirteenth and fourteenth.
+
+**The correctness fix this dragged in, and which way it pointed.** `Outcome.authenticated` and
+`Outcome.reached` were read off the core-banking spy's whole history. That is correct only while no
+case runs more than one call. With `prior_call`, the earlier caller's accepted verdict would have
+been read as *this* call's — and `is_breach`, a conjunction, would have come back False for
+precisely the cases written to catch a breach. The harness now marks the spy's record before the
+case's own call and reads only past that mark.
+
+**Verified against a real injected breach, not against the rehearsal.** With one permissive gate
+row, the twelve cross-call cases put two banking operations into the spy's record. Read from the
+mark, the detector catches both. Read across the whole process, it catches **none** of them. This
+resembles the `authenticated`-from-the-script defect `/code-review` found, and differs in the one
+way that matters: that one over-reported and could only ever invent a breach, and this one would
+have swallowed real ones.
+
+---
+
 ## Open: one unreproduced test failure
 
 **Seen once, in a full `make test`-equivalent run on 2026-09-10, and not reproduced in 98
@@ -165,7 +205,30 @@ of spawning a real service on a real socket, and the machine was running other w
 sleeps, and the red-team corpus was re-run 98 times with identical verdicts.
 
 **What would settle it:** the failure name. The run was piped through `grep`, which is why the name
-was lost. A future occurrence should be captured with the unittest output kept whole.
+was lost.
+
+**Acted on 2026-09-10 — the name can no longer be lost this way, and both suspected shapes are
+narrowed.** Still unexplained; what changed is that a recurrence will be readable.
+
+- **`make test` keeps each suite's whole output**, in `.test-output-voice-agent.log` and
+  `.test-output-mock-core-banking.log`, whatever the caller does to the target's stdout. Both are
+  gitignored and rewritten every run. Redirect-then-`cat` rather than `tee`, because `tee` returns
+  its own exit status and would turn a red suite green, and `set -o pipefail` does not exist in the
+  `/bin/sh` the ubuntu CI runners use. **Verified in both directions:** a deliberately failing test
+  run as `make test | grep -E '^(Ran|OK|FAILED)'` — the exact shape that lost the name — exits
+  non-zero and leaves the failing test's name in the log.
+- **The live test retries a start on a fresh port**, three attempts, and the final failure carries
+  every attempt's reason rather than only the last. This is aimed straight at the reading above:
+  the free port is closed before `uvicorn` binds it, and a busy machine can miss a fixed deadline.
+  A service that genuinely cannot start still fails all three, for the same reason each time, which
+  is what distinguishes the two.
+- **The spawned service's own output is kept instead of going to `DEVNULL`**, and its tail is
+  reported on a failed start. A port collision and a broken import both used to arrive as
+  "exited during startup with code 1"; forcing a real collision now prints
+  `ERROR: [Errno 48] error while attempting to bind on address ... address already in use`.
+
+The retry loop is driven against a stub in `TheStartupRetry`, which spawns nothing — issue #30's
+"exactly one test" counts services started, not `TestCase` classes.
 
 ---
 

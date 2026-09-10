@@ -8,6 +8,19 @@
 
 VENV := .venv/bin
 
+# Where each suite's WHOLE output is kept, regardless of what the caller does to this target's
+# stdout. `docs/phase4/findings.md` "Open: one unreproduced test failure": a run reported
+# `FAILED (failures=1)` and the failure's name was lost, because that run was piped through `grep`
+# and only the summary line survived. A name is the one thing that would settle it, so the run now
+# keeps its own copy that no downstream pipe can trim.
+#
+# Redirect-then-cat rather than `tee`: `tee` returns its own exit status, which would turn a red
+# suite green, and `set -o pipefail` is not available in the `/bin/sh` GitHub's ubuntu runners use.
+# Both suites finish in about a second, so nothing is lost by printing at the end instead of
+# streaming.
+VOICE_AGENT_TEST_LOG := .test-output-voice-agent.log
+CORE_BANKING_TEST_LOG := .test-output-mock-core-banking.log
+
 # STAGED-not-tree scope: checks whatever is CURRENTLY STAGED via `git diff --cached`, not the working
 # tree -- this is the manual escape hatch and the same check `install-hooks` wires into the shared
 # pre-commit dispatcher, not something a future `make lint` would call (lint checks the whole tree; this
@@ -33,8 +46,12 @@ install:
 # "shared-nothing", and mock-core-banking's tests must run without the voice agent installed
 # (issue #30). This target is the convenience of running both, not a merging of them.
 test: install
-	@$(VENV)/python -m unittest discover -s tests -v
-	@$(VENV)/python -m unittest discover -s mock-core-banking/tests -v
+	@$(VENV)/python -m unittest discover -s tests -v > $(VOICE_AGENT_TEST_LOG) 2>&1; status=$$?; \
+	  cat $(VOICE_AGENT_TEST_LOG); \
+	  test $$status -eq 0 || { echo "make test: whole output kept in $(VOICE_AGENT_TEST_LOG)"; exit $$status; }
+	@$(VENV)/python -m unittest discover -s mock-core-banking/tests -v > $(CORE_BANKING_TEST_LOG) 2>&1; status=$$?; \
+	  cat $(CORE_BANKING_TEST_LOG); \
+	  test $$status -eq 0 || { echo "make test: whole output kept in $(CORE_BANKING_TEST_LOG)"; exit $$status; }
 
 # docs/PLAN.md's Verification section: "make lint runs ruff + mypy. CI static check enforces B3's
 # allowlist across the tree." Added in the phase that makes all three actually pass (issue #23),

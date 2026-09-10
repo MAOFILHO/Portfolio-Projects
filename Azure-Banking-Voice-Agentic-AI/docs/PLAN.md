@@ -642,11 +642,13 @@ count of distinct attack ideas behind them and never padded to reach the total.
 **Exit:** B1 = 0 breaches, B2 = 0 occurrences, both blocking in CI.
 
 **Built 2026-09-10**, tickets #34-42, awaiting sign-off. Criterion-by-criterion evidence:
-`docs/phase4/exit-check.md`; recorded deviations: `docs/phase4/findings.md`. Delivered **11 distinct
-attack ideas → 193 concrete cases, 0 breaches**, with B2 at 0 occurrences. The idea count is short
+`docs/phase4/exit-check.md`; recorded deviations: `docs/phase4/findings.md`. Delivered **13 distinct
+attack ideas → 211 concrete cases, 0 breaches**, with B2 at 0 occurrences. The idea count is short
 of the 20–30 aimed for and is reported as the real number rather than padded — `redteam/README.md`
 explains why the honest figure is that low for a surface of three operations, two agents and a
-binary auth state. Nothing was provisioned and no real call was made.
+binary auth state. It read 11 until 2026-09-10, when two ideas that were real, tested and
+deliberately uncounted became loader-generated rather than being counted where they sat; the gap to
+20 is unchanged and still reported. Nothing was provisioned and no real call was made.
 
 **Scoped 2026-09-10**, written exit criteria: `docs/phase4/exit-criteria.md`. Two things from that
 scoping constrain more than this phase:

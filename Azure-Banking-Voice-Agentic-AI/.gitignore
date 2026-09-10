@@ -38,3 +38,9 @@ docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl
 
 # Editable-install build artifacts (voice-agent/pyproject.toml, added Phase 2.1)
 *.egg-info/
+
+# `make test`'s own whole-output copy, one file per suite. Kept so a failure's NAME survives a
+# caller that pipes the target through grep -- see the Makefile's comment and
+# docs/phase4/findings.md "Open: one unreproduced test failure". Regenerated every run; never
+# committed, because it is this machine's last run and nobody else's.
+.test-output-*.log

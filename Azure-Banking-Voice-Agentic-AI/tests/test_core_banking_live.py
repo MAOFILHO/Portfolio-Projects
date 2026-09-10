@@ -41,12 +41,99 @@ except ImportError:
 
 _STARTUP_TIMEOUT_SECONDS = 20.0
 
+#: How many times a start is attempted, each on its own fresh port. Both shapes of flakiness this
+#: test has are per-attempt and independent -- a port stolen between asking and binding, and a
+#: startup that misses the deadline because the machine was busy -- so a second attempt clears
+#: either one, while a service that genuinely cannot start still fails all three the same way.
+#: See `TheStartupRetry` at the foot of this module, and docs/phase4/findings.md.
+_STARTUP_ATTEMPTS = 3
+
+#: How much of the spawned service's own output a failed start reports. Its startup errors are the
+#: last thing it writes, and the whole file would bury them.
+_OUTPUT_TAIL_LINES = 20
+
 
 def _free_port():
-    """Ask the OS for a port nobody is using, rather than hardcoding one that CI might hold."""
+    """Ask the OS for a port nobody is using, rather than hardcoding one that CI might hold.
+
+    The socket is closed before `uvicorn` binds it, which leaves a window another process can take
+    it in. That race is why the caller retries rather than why this function is cleverer.
+    """
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def _start_until_healthy(start_one, attempts=_STARTUP_ATTEMPTS):
+    """Call `start_one` until it answers, and carry every reason if none of them does.
+
+    `start_one` raises `AssertionError` for a start that did not come up and is responsible for
+    cleaning up whatever it spawned. Nothing here inspects the reason: a port collision and a
+    missed deadline are both retried, because distinguishing them by message text would be a
+    guess, and a real failure exhausts the attempts either way.
+
+    **The reasons are kept.** The open finding in docs/phase4/findings.md could not be settled
+    because the run's output named nothing; a retry that swallowed its attempts would rebuild that
+    same problem one layer down.
+    """
+    reasons = []
+    for attempt in range(1, attempts + 1):
+        try:
+            return start_one()
+        except AssertionError as refused:
+            reasons.append(f"attempt {attempt}: {refused}")
+    raise AssertionError(
+        f"mock-core-banking never became healthy in {attempts} attempts:\n" + "\n".join(reasons)
+    )
+
+
+def _wait_until_healthy(process, base_url, output_path):
+    """Poll /health until the service answers, rather than sleeping a guessed interval.
+
+    A fixed sleep is the usual source of flakiness in a test like this: too short on a loaded
+    CI box, wasted time everywhere else.
+    """
+    deadline = time.monotonic() + _STARTUP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise AssertionError(
+                f"exited during startup with code {process.returncode}"
+                f"{_output_tail(output_path)}"
+            )
+        try:
+            if httpx.get(f"{base_url}/health", timeout=0.5).status_code == 200:
+                return
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.05)
+    raise AssertionError(
+        f"did not become healthy within {_STARTUP_TIMEOUT_SECONDS}s{_output_tail(output_path)}"
+    )
+
+
+def _output_tail(output_path):
+    """The end of what the spawned service said, for a start that failed.
+
+    This used to go to `DEVNULL`, which left an exit code and nothing to read it with -- a port
+    collision and a broken import both arrive as "exited with code 1".
+    """
+    try:
+        lines = pathlib.Path(output_path).read_text(errors="replace").splitlines()
+    except OSError as unreadable:
+        return f" (its output could not be read: {unreadable})"
+    if not lines:
+        return " (it said nothing)"
+    return "\n  " + "\n  ".join(lines[-_OUTPUT_TAIL_LINES:])
+
+
+def _stop(process):
+    """Ask the service to stop, and insist if it does not."""
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
 
 
 class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
@@ -56,58 +143,46 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         # Named here rather than inline below, because B2's artifact scan needs the same path the
         # service is told to write to.
         cls.database_path = os.path.join(cls._tmpdir.name, "core-banking.sqlite3")
-        cls.port = _free_port()
+        cls.process, cls.port = _start_until_healthy(cls._spawn_on_a_fresh_port)
         cls.base_url = f"http://127.0.0.1:{cls.port}"
-        cls.process = subprocess.Popen(
-            [
-                sys.executable, "-m", "uvicorn",
-                "azbank_core_banking.app:build_app", "--factory",
-                "--host", "127.0.0.1", "--port", str(cls.port),
-                "--log-level", "warning",
-            ],
-            env={
-                **os.environ,
-                # Its own database file, thrown away with the test -- never the default path, so a
-                # test run can never touch whatever a local dev instance is holding.
-                "CORE_BANKING_DB": cls.database_path,
-            },
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        cls._wait_until_healthy()
 
     @classmethod
-    def _wait_until_healthy(cls):
-        """Poll /health until the service answers, rather than sleeping a guessed interval.
-
-        A fixed sleep is the usual source of flakiness in a test like this: too short on a loaded
-        CI box, wasted time everywhere else.
-        """
-        deadline = time.monotonic() + _STARTUP_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            if cls.process.poll() is not None:
-                raise AssertionError(
-                    f"mock-core-banking exited during startup with code {cls.process.returncode}"
-                )
-            try:
-                if httpx.get(f"{cls.base_url}/health", timeout=0.5).status_code == 200:
-                    return
-            except httpx.HTTPError:
-                pass
-            time.sleep(0.05)
-        cls.process.kill()
-        raise AssertionError(
-            f"mock-core-banking did not become healthy within {_STARTUP_TIMEOUT_SECONDS}s"
-        )
+    def _spawn_on_a_fresh_port(cls):
+        """One attempt: a port nobody held a moment ago, a process, and a wait for /health."""
+        port = _free_port()
+        base_url = f"http://127.0.0.1:{port}"
+        # Kept rather than discarded, and per-port so one attempt cannot overwrite another's
+        # reason. Thrown away with the temporary directory either way.
+        output_path = os.path.join(cls._tmpdir.name, f"uvicorn-{port}.log")
+        with open(output_path, "wb") as output:
+            process = subprocess.Popen(
+                [
+                    sys.executable, "-m", "uvicorn",
+                    "azbank_core_banking.app:build_app", "--factory",
+                    "--host", "127.0.0.1", "--port", str(port),
+                    "--log-level", "warning",
+                ],
+                env={
+                    **os.environ,
+                    # Its own database file, thrown away with the test -- never the default path,
+                    # so a test run can never touch whatever a local dev instance is holding.
+                    "CORE_BANKING_DB": cls.database_path,
+                },
+                stdout=output,
+                stderr=subprocess.STDOUT,
+            )
+        try:
+            _wait_until_healthy(process, base_url, output_path)
+        except AssertionError:
+            # This attempt's process never answered, and the next attempt gets its own port. Left
+            # running, it would hold whatever it did manage to bind.
+            _stop(process)
+            raise
+        return process, port
 
     @classmethod
     def tearDownClass(cls):
-        cls.process.terminate()
-        try:
-            cls.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            cls.process.kill()
-            cls.process.wait(timeout=10)
+        _stop(cls.process)
         cls._tmpdir.cleanup()
 
     async def asyncSetUp(self):
@@ -204,6 +279,63 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         database = pathlib.Path(self.database_path)
         self.assertTrue(database.exists(), "the spawned service wrote no database file")
         self.assertNotIn(DEFAULT_PIN.encode(), database.read_bytes())
+
+
+class TheStartupRetry(unittest.TestCase):
+    """The retry loop above, driven against a stub rather than a real service.
+
+    Spawns nothing, which is what keeps it inside issue #30's rule -- that rule counts services
+    started, not `TestCase` classes, and this class starts none.
+
+    **Why it exists.** `docs/phase4/findings.md` "Open: one unreproduced test failure" names two
+    ordinary shapes of flakiness in the class above, both about spawning a real service on a real
+    socket: the free port is closed before `uvicorn` binds it, so another process can take it in
+    between, and a loaded machine can miss a fixed startup deadline. Retrying on a fresh port tells
+    both of those from a service that genuinely cannot start, which fails every attempt for the
+    same reason -- and the reasons are carried into the final message so the difference is
+    readable rather than guessed at afterwards.
+    """
+
+    def test_a_service_that_answers_is_returned_without_a_second_attempt(self):
+        attempts = []
+
+        def start_one():
+            attempts.append("started")
+            return "the service"
+
+        self.assertEqual(_start_until_healthy(start_one, attempts=3), "the service")
+        self.assertEqual(len(attempts), 1, "a healthy start was retried anyway")
+
+    def test_a_port_taken_between_asking_and_binding_is_retried_on_a_fresh_one(self):
+        attempts = []
+
+        def start_one():
+            attempts.append("started")
+            if len(attempts) < 2:
+                raise AssertionError("exited during startup with code 1")
+            return "the service"
+
+        self.assertEqual(_start_until_healthy(start_one, attempts=3), "the service")
+        self.assertEqual(len(attempts), 2)
+
+    def test_a_service_that_never_starts_fails_carrying_every_reason(self):
+        """The failure this test can still produce says why, three times over.
+
+        The open finding could not be settled because the run's output named nothing. A retry that
+        swallowed its attempts' reasons would rebuild exactly that problem one layer down.
+        """
+        def start_one():
+            raise AssertionError("did not become healthy within 20.0s: Address already in use")
+
+        with self.assertRaises(AssertionError) as refused:
+            _start_until_healthy(start_one, attempts=3)
+
+        message = str(refused.exception)
+        self.assertIn("3 attempts", message)
+        for attempt in (1, 2, 3):
+            with self.subTest(attempt=attempt):
+                self.assertIn(f"attempt {attempt}", message)
+        self.assertIn("Address already in use", message)
 
 
 if __name__ == "__main__":
