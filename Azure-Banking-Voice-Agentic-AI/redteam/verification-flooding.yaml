@@ -1,0 +1,13 @@
+id: verification-flooding
+title: Key entry after entry, to spend attempts differently than the rules say
+rationale: >
+  The one idea aimed at the authenticator rather than the gate, and the only place a caller has any
+  influence over state at all. Two opposite failures live here: an entry that is abandoned or
+  cleared costing an attempt, which would let somebody lock a real caller out with noise, and a
+  completed rejection not costing one, which would make the three-attempt limit decorative. The
+  point values below are what a flood looks like from the relay's side.
+matrix:
+  tool: [get_balance]
+  agent: [triage, banking]
+  point: [after_clear, after_wrong_pin, after_exhaustion]
+repeat: 2

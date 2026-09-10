@@ -50,7 +50,12 @@ from azbank_voice_agent.agents import specs
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
-from azbank_voice_agent.realtime.fake import FakeRealtimeServer, function_call, response_done
+from azbank_voice_agent.realtime.fake import (
+    FakeRealtimeServer,
+    function_call,
+    response_done,
+    transcript_delta,
+)
 from azbank_voice_agent.realtime.session import run_call
 from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame
 
@@ -136,6 +141,9 @@ class Idea:
     arguments: str = "valid"
     backend: str = "healthy"
     repeat: int = 1
+    #: Something the agent says out loud before it makes its attempt. The gate reads no transcript,
+    #: so this can only ever be theatre -- which is the point of testing it.
+    claim: str = ""
     source: str = ""
 
 
@@ -150,6 +158,7 @@ class Case:
     arguments: str
     backend: str
     repeat: int
+    claim: str = ""
 
     @property
     def ends_before_the_attempt(self):
@@ -185,6 +194,7 @@ def concrete_cases(ideas=None):
                 arguments=idea.arguments,
                 backend=idea.backend,
                 repeat=idea.repeat,
+                claim=idea.claim,
             ))
     return cases
 
@@ -224,6 +234,11 @@ def run(case):
     frames.append(audio_frame("attack"))
 
     events = []
+    if case.claim:
+        # Said out loud, before the attempt. The gate is a pure function of three arguments the
+        # dispatcher supplies; none of them is anything the model said, and nothing downstream
+        # reads a transcript. Asserting authentication is not becoming authenticated.
+        events.append(transcript_delta(case.claim))
     if case.agent == gate.BANKING_AGENT:
         events.append(
             function_call(specs.handoff_tool_name(gate.BANKING_AGENT), "{}", call_id="handoff")

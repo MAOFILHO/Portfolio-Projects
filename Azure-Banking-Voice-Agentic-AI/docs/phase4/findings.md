@@ -80,6 +80,28 @@ substring rule had not fired at all, which is how gap 4 was found.
 
 ---
 
+## Open: one unreproduced test failure
+
+**Seen once, in a full `make test`-equivalent run on 2026-09-10, and not reproduced in 98
+consecutive runs since.** Reported as `FAILED (failures=1, skipped=3)` out of 263 tests. The run's
+own output did not name the test, and the next run of the identical tree passed.
+
+**Best available reading, stated as a reading rather than a diagnosis.** It was a *failure*, not an
+error. The only test in this project that can fail rather than error for environmental reasons is
+`tests/test_core_banking_live.py`: its `_wait_until_healthy` raises `AssertionError` when the spawned
+service does not answer `/health` within 20 seconds, and unittest counts a raised `AssertionError` as
+a failure. That test also asks the OS for a free port, closes the socket, and then hands the number
+to `uvicorn` — a window in which another process can take it. Both shapes are the ordinary flakiness
+of spawning a real service on a real socket, and the machine was running other work at the time.
+
+**It is not evidence about B1 or B2.** Every deterministic tier is in-process with no sockets and no
+sleeps, and the red-team corpus was re-run 98 times with identical verdicts.
+
+**What would settle it:** the failure name. The run was piped through `grep`, which is why the name
+was lost. A future occurrence should be captured with the unittest output kept whole.
+
+---
+
 ## Recorded up front, unchanged
 
 **No real DTMF tone has ever been consumed by this system.** Phase 0 confirmed live, on calls 2 and

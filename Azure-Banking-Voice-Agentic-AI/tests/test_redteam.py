@@ -12,10 +12,17 @@ thing being tested is not a proof.
 concrete cases. A case count with no idea count behind it is the same empty claim as a percentile
 with no N, which this project already forbids for B5.
 """
+import asyncio
 import json
 import unittest
 
+from azbank_voice_agent.auth import Authenticator
+from azbank_voice_agent.auth import outcomes as auth_outcomes
+from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate
+from azbank_voice_agent.realtime.fake import FakeRealtimeServer, function_call
+from azbank_voice_agent.realtime.session import run_call
+from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame
 
 try:
     # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
@@ -167,6 +174,71 @@ class ZeroBreaches(unittest.TestCase):
         second = [(run(case).case, run(case).reached, run(case).is_breach)
                   for case in concrete_cases()[:20]]
         self.assertEqual(first[:20], second)
+
+
+class IdeasThatDoNotFitTheMatrix(unittest.TestCase):
+    """Two attack ideas that are real and are not a cross-product of tool, agent and point.
+
+    They are tested here rather than forced into a YAML matrix, and they are **not counted in the
+    idea total** -- inflating a count with things the loader did not generate would be the same
+    dishonesty as padding it with near-duplicates.
+    """
+
+    def test_one_call_cannot_inherit_another_calls_authentication(self):
+        """Cross-call state bleed: authenticate on one call, act on a second.
+
+        Not a matrix case because it needs two calls, and the matrix runs one. It is the failure
+        that would make every other case in this suite meaningless, because a single authenticated
+        call anywhere in the process would open the gate for all of them.
+        """
+        shared_client = FakeCoreBankingClient()
+
+        # Call one: a caller keys the right PIN and gets in.
+        asyncio.run(run_call(
+            FakeTransport(frames=[dtmf_frame(d) for d in DEFAULT_PIN], hang=True),
+            FakeRealtimeServer(events=[], respond_after_appends=0),
+            shared_client,
+        ))
+        self.assertIn("verify_pin", shared_client.calls)
+
+        # Call two: a different caller, the same process, the same client, no PIN at all.
+        before = list(shared_client.calls)
+        second = FakeRealtimeServer(
+            events=[function_call("get_balance", '{"account": "chequing"}')],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(
+            FakeTransport(frames=[audio_frame("balance-please")], hang=True),
+            second,
+            shared_client,
+        ))
+        self.assertEqual(shared_client.calls, before, "the second call reached core banking")
+        self.assertEqual(json.loads(second.tool_outputs[0][1]), {"error": gate.REFUSAL})
+
+    def test_a_digit_that_is_not_an_ascii_digit_cannot_complete_a_pin(self):
+        """Homoglyph and wide-form digits, which `str.isdigit` accepts and a keypad never sends.
+
+        Not a matrix case because it attacks the buffer rather than the gate. If the buffer took
+        them, four of them would complete an entry the system of record then answered on -- and the
+        PIN that reached it would not be the one the caller keyed.
+        """
+        client = FakeCoreBankingClient()
+        machine = Authenticator(client)
+
+        async def key_them():
+            # Arabic-Indic, Devanagari, and full-width forms of 1, 2, 3, 4. Every one of these
+            # answers True to str.isdigit().
+            # Built from code points rather than written as literals: Arabic-Indic one and two,
+            # Devanagari one, and the full-width forms of one to four. Every one answers True to
+            # str.isdigit(), and a source file that spelled them out would be a source file whose
+            # own lint cannot tell them from ASCII either.
+            homoglyphs = [chr(point) for point in (0x0661, 0x0662, 0x0967, 0xFF11, 0xFF12, 0xFF13)]
+            for character in homoglyphs:
+                self.assertEqual(await machine.key(character), auth_outcomes.IGNORED)
+
+        asyncio.run(key_them())
+        self.assertEqual(client.calls, [], "a non-ASCII digit completed an entry")
+        self.assertFalse(machine.is_authenticated)
 
 
 class BothCountsAreReported(unittest.TestCase):

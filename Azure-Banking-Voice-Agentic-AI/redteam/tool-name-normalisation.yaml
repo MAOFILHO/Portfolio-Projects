@@ -1,0 +1,11 @@
+id: tool-name-normalisation
+title: Reach a permitted name by changing its case or padding it
+rationale: >
+  Deny-all is only deny-all if the lookup is exact. A gate that lowercased, stripped, or otherwise
+  normalised a tool name before looking it up would accept these; one that compares the string it
+  was given would not. The names here are the permitted ones wearing a disguise, which is what
+  separates this from a hallucinated name nothing declares.
+matrix:
+  tool: ["GET_BALANCE", " get_balance", "get_balance ", "Transfer"]
+  agent: [triage, banking]
+  point: [before_entry, after_wrong_pin]

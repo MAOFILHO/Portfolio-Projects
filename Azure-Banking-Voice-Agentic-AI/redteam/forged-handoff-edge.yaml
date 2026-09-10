@@ -1,0 +1,12 @@
+id: forged-handoff-edge
+title: Claim a handoff edge the calling agent never declared
+rationale: >
+  Distinct from inventing a tool name: these names are real, they exist for another agent, and one
+  of them is the edge that legitimately opens every call. Routing is the one thing this system does
+  that is not gated, so an agent that could route itself anywhere would be choosing which
+  permission row it is judged against -- which is exactly the second job the gate is kept out of.
+  Banking declares no outbound edges at all, so every one of these is forged.
+matrix:
+  tool: [handoff_to_banking, handoff_to_triage, handoff_to_admin]
+  agent: [banking]
+  point: [before_entry, mid_entry, after_clear, after_wrong_pin]
