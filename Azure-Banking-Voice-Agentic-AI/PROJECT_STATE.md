@@ -57,6 +57,8 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
 
 ### Needs Marco
 
+0. **`/code-review` has not been run.** `CLAUDE.md` requires it before every phase gate, no
+   exceptions, and Marco invokes it — Claude does not. **This is the one thing blocking the gate.**
 1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Two carry a stated
    limit rather than a clean pass: criterion 7's injected-item wire shape is unverified, and
    criterion 9's idea count is 11 against a target of 20-30, reported rather than padded.
@@ -83,6 +85,10 @@ agent**, on the Phase 2 image; Phase 3's network path is built but not deployed.
 
 - Resource group `rg-azure-banking-voice-agentic-ai`.
 - AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
+  **Verified live 2026-09-10** at the Phase 4 gate, deployment and Models API both: the pin retires
+  **2027-04-06**, ~6.9 months out, so no stop-and-ask. Successor `gpt-realtime-1.5` still GA
+  (retires 2027-08-24). No drift from `docs/PLAN.md` decision 14. Evidence:
+  `docs/phase4/exit-check.md`.
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`.
 - Container App `ca-azbank-echo-p0`, min-replicas=1 (**billing now**), running

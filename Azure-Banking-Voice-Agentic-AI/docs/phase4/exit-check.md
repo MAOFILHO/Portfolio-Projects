@@ -101,6 +101,30 @@ Zero cloud dependency. See the table above.
 
 ---
 
+## B3 model pin review at the gate — checked live 2026-09-10, passes
+
+`CLAUDE.md` requires the active pin to be checked against the **live Models API** at every phase
+gate, not read out of this repo's own notes. Run against `canadacentral` and against the deployment
+itself, both read-only and free:
+
+| | pin | retires | runway from 2026-09-10 |
+|---|---|---|---|
+| active | `gpt-realtime-mini` 2025-10-06 | 2027-04-06 | **~6.9 months** |
+| documented successor | `gpt-realtime-1.5` 2026-02-23 | 2027-08-24 | ~11.5 months |
+| *not* pinned, for contrast | `gpt-realtime-mini` 2025-12-15 | 2026-12-15 | ~3.1 months |
+
+**No stop-and-ask triggered.** The threshold is a retirement under two months out at a gate; the
+active pin has nearly seven, and the successor is still GA and still listed.
+
+**The live deployment matches the pin exactly**: `aoai-azure-banking-voice-cc` runs deployment
+`gpt-realtime-mini` on model version `2025-10-06`, `GlobalStandard`, `NoAutoUpgrade`. Name *and*
+version together, which is the pairing R-01's evidence forced B3 to key on.
+
+**No drift** between the live API and `docs/PLAN.md` decision 14. All three retirement dates match
+what was recorded in Phase 0.
+
+---
+
 ## The carried assumptions, resolved
 
 Both were stated up front as overrulable.
