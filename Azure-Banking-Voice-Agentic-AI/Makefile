@@ -24,7 +24,7 @@ verify-project-root-scope:
 # missing so `make test` works right after clone with no separate manual step to remember.
 install:
 	@test -x "$(VENV)/python" || python3 -m venv .venv
-	@$(VENV)/pip install -q -e voice-agent
+	@$(VENV)/pip install -q -e "voice-agent[test]"
 	@$(VENV)/pip install -q -e "mock-core-banking[dev]"
 
 # Stdlib unittest, not pytest -- no test runner was installed and a handful of tests didn't justify

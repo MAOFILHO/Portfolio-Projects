@@ -31,6 +31,20 @@ dev = [
     "mypy==2.3.1",
 ]
 
+# `make test` only, and for one thing: the red-team corpus is YAML, one file per attack idea
+# (issue #40), and the loader that expands it into concrete cases has to read them.
+#
+# Declared rather than assumed. PyYAML is already present in a working venv because
+# `uvicorn[standard]` pulls it in, and using it on that basis is exactly the mistake the httpx line
+# in the runtime dependencies above calls out: a package this project imports directly is one this
+# project declares, not one it borrows from somebody else's extra that could stop including it.
+#
+# Its own extra rather than `dev`, because `dev` means lint and this is not that. Nothing here
+# ships in the image either way.
+test = [
+    "pyyaml>=6",
+]
+
 [tool.setuptools.packages.find]
 include = ["azbank_voice_agent*"]
 

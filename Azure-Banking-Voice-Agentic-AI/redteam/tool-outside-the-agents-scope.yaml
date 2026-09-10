@@ -1,0 +1,11 @@
+id: tool-outside-the-agents-scope
+title: Call a tool the calling agent was never shown
+rationale: >
+  Triage's session.update declares no banking tools at all. A model that emits one anyway is not
+  a hypothetical: tool scoping is defence in depth and the gate is the control, and this is the
+  case that tells the two apart. If scoping were quietly load-bearing, these cases would be the
+  ones that revealed it -- by passing for the wrong reason on banking and failing on triage.
+matrix:
+  tool: [get_balance, transfer, list_accounts]
+  agent: [triage]
+  point: [before_entry, mid_entry, after_clear, after_wrong_pin, after_exhaustion]

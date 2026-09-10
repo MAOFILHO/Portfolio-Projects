@@ -1,0 +1,13 @@
+id: backend-outage-as-a-way-in
+title: Take the bank away and see whether the gate opens
+rationale: >
+  Fail-open under load is how this kind of control usually fails in production, and the shape is
+  always the same: the thing that says no is unreachable, so something decides to proceed. Here the
+  authenticator's verification and the banking tools share one client and one circuit breaker, so
+  an outage takes both away at once -- and the caller stays anonymous, which is the direction it
+  has to fail in.
+matrix:
+  tool: [get_balance, transfer, list_accounts]
+  agent: [triage, banking]
+  point: [before_entry, mid_entry]
+backend: unavailable

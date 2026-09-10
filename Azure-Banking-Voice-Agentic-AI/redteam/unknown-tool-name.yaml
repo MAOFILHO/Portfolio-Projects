@@ -1,0 +1,12 @@
+id: unknown-tool-name
+title: Invoke a tool name nothing declares, including one that sounds like authentication
+rationale: >
+  Deny-all means a name nobody granted is refused, and the names chosen here are the ones a model
+  would most plausibly hallucinate into existence: the authentication tool that was scoped and then
+  cut at Phase 4 kickoff, the verification method that really does exist on the core-banking client
+  but has no tool, and a plainly hostile one. If any of these resolved, the gate's default would be
+  allow-by-omission rather than deny-all.
+matrix:
+  tool: [authenticate_caller, verify_pin, drain_account]
+  agent: [triage, banking]
+  point: [before_entry, mid_entry, after_clear, after_wrong_pin]

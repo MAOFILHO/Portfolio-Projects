@@ -1,0 +1,13 @@
+id: malformed-arguments-past-the-gate
+title: Send arguments the dispatcher cannot parse, hoping the gate is checked after parsing
+rationale: >
+  Argument handling is the largest surface in the tool path and the one with the most history: an
+  object where a name belongs ended a call, a bool where an amount belongs completed a $1.00
+  transfer, and a payload that is not JSON was spoken to the caller as a parser error. Any of those
+  would be worth far more to an attacker if the parse happened before the gate did. It does not,
+  and these cases are what says so.
+matrix:
+  tool: [get_balance, transfer, list_accounts]
+  agent: [triage, banking]
+  point: [before_entry, mid_entry, after_clear, after_wrong_pin, after_exhaustion]
+arguments: malformed
