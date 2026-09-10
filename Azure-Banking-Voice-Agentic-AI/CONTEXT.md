@@ -79,8 +79,10 @@ _Avoid_: auth failure, invalid credentials, declined
 
 **Attempt**:
 One completed PIN check that came back a rejected credential. A submission that never completed —
-cleared by the caller, or abandoned — is not an attempt and costs nothing. Three attempts end the
-call.
+cleared by the caller, or abandoned — is not an attempt and costs nothing. Neither is **a check the
+system of record never answered**: an unavailable verification produced no verdict, so there is
+nothing to count, and a caller's three tries are never spent by somebody else's outage. Three
+attempts end the call.
 _Avoid_: try, retry, failure
 
 **Profile**:
