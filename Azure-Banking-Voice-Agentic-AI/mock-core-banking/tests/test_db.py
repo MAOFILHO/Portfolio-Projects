@@ -5,6 +5,7 @@ not inherit the demo-grade float the in-memory Phase 1 module used -- these test
 not just the value, because the whole point is that no float ever reaches storage.
 """
 import contextlib
+import hashlib
 import sqlite3
 import threading
 import unittest
@@ -51,6 +52,66 @@ class Seeding(unittest.TestCase):
         """
         for balance in db.SEED_ACCOUNTS.values():
             self.assertIsInstance(balance, int)
+
+
+class Credentials(unittest.TestCase):
+    """The one credential this profile holds, and the rules for checking it (issue #34).
+
+    The stored value is a digest, never the PIN. That is what lets B2's artifact scan cover the
+    database file with no carve-out -- a scan that had to skip a column would be a scan that could
+    be made to pass by moving the leak into it.
+    """
+
+    def test_the_credential_is_seeded(self):
+        self.assertEqual(db.credential_digest(_fresh(self)), db.SEED_CREDENTIAL_DIGEST)
+
+    def test_the_seeded_value_is_a_digest_and_not_the_pin(self):
+        # On SEED_CREDENTIAL_DIGEST itself, for the same reason the seed balances are asserted at
+        # the source: this is the one place the distinction between the PIN and its digest can
+        # still fail, because everything downstream only ever sees whatever was seeded here.
+        self.assertNotIn(db.DEMO_PIN, db.SEED_CREDENTIAL_DIGEST)
+        self.assertEqual(
+            db.SEED_CREDENTIAL_DIGEST, hashlib.sha256(db.DEMO_PIN.encode()).hexdigest()
+        )
+
+    def test_no_plaintext_pin_reaches_persistence(self):
+        # The whole database, dumped as SQL -- schema, values and all. The demo balances contain no
+        # "1234" of their own, so a hit here means the PIN itself was written.
+        conn = _fresh(self)
+        dump = "\n".join(conn.iterdump())
+        self.assertNotIn(db.DEMO_PIN, dump)
+
+    def test_an_existing_credential_is_left_alone(self):
+        # Same "only if empty" rule the accounts use: a restart must not silently reset a
+        # credential that is already there.
+        conn = _fresh(self)
+        conn.execute("UPDATE credentials SET pin_digest = ?", ("not-the-seeded-digest",))
+        conn.commit()
+        db.initialise(conn)
+        self.assertEqual(db.credential_digest(conn), "not-the-seeded-digest")
+
+    def test_the_right_pin_is_accepted(self):
+        self.assertIs(db.verify_pin(_fresh(self), db.DEMO_PIN), True)
+
+    def test_a_wrong_pin_is_refused(self):
+        self.assertIs(db.verify_pin(_fresh(self), "9999"), False)
+
+    def test_a_malformed_pin_is_refused_and_never_raises(self):
+        """Refused, not raised -- deliberately, and this is the B2 reason rather than a style one.
+
+        An exception carrying a rejected value is an exception whose message is the leak, and the
+        `transfer` precedent of raising ValueError on a malformed input formats the offending value
+        into the message. There is no such thing as a PIN that is malformed enough to be worth
+        repeating back, so this path refuses everything it cannot match and says nothing about what
+        it was given. It fails closed for free: whatever cannot be compared cannot be accepted.
+        """
+        conn = _fresh(self)
+        # Labelled by index, not by value: a subTest label is printed on failure, and a loop that
+        # prints the value it was given is the same leak this suite exists to prevent.
+        malformed = ("", "123", "12345", "abcd", "12 4", None, 1234, b"1234", ["1", "2", "3", "4"])
+        for index, pin in enumerate(malformed):
+            with self.subTest(case=index):
+                self.assertIs(db.verify_pin(conn, pin), False)
 
 
 class GetBalance(unittest.TestCase):

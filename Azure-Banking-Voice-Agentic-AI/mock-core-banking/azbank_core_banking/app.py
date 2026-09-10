@@ -6,11 +6,19 @@ reason the voice agent can tell the outcomes apart:
     unknown account           -> 404   the client raises (T-UNKNOWN-ACCT)
     declined by business rule -> 200   a normal outcome of a working system, carrying the real
                                        available amount
+    rejected credential       -> 200   likewise: a working check saying no (issue #34)
     malformed request         -> 422   the caller has a bug; nobody has been refused anything
     anything unexpected       -> 5xx   the client treats it as unavailable
 
 A decline is deliberately **not** a 4xx. Mapping it to one would put it in the same bucket as
-unknown-account and blur the distinction T-UNKNOWN-ACCT rests on.
+unknown-account and blur the distinction T-UNKNOWN-ACCT rests on. A **rejected credential** is not
+a 4xx for the same reason and gets the same 200: nobody has been refused a banking operation, and
+the request was not malformed.
+
+**The submitted PIN travels in the request body, never in a path or a query string.** The voice
+agent's client logs the request path on every failed call, deliberately, because it is the one
+field that makes a failure diagnosable -- so a path parameter here would write the PIN into that
+line and breach B2 from the far side of the network hop.
 
 **No response body ever contains a caller-facing sentence.** This service returns data and outcome
 codes; every sentence the caller hears is composed in the voice agent. That is asserted
@@ -44,6 +52,19 @@ class TransferRequest(BaseModel):
     from_account: str
     to_account: str
     amount_cents: int = Field(gt=0)
+
+
+class CredentialCheckRequest(BaseModel):
+    """One submitted PIN, constrained to exactly four digits by the model rather than the route.
+
+    Same reasoning as `amount_cents` above: a shape the framework can reject is a shape no route
+    has to remember to check. It also puts the rejection in the one handler that strips the value
+    back out of the response -- FastAPI's default validation body carries an `input` field holding
+    whatever failed, so a malformed PIN answered by the default handler would be a PIN quoted back
+    over the wire.
+    """
+
+    pin: str = Field(pattern=r"^\d{4}$")
 
 
 def _unknown_account(error):
@@ -145,6 +166,20 @@ def build_app(database=None):
             "to_balance_cents": result.to_balance_cents,
             "moved_cents": result.moved_cents,
         }
+
+    @app.post("/credential-checks")
+    def create_credential_check(request: CredentialCheckRequest):
+        """Does this PIN match the profile's credential? 200 either way, carrying the outcome.
+
+        Resource-shaped like the transfer route: a check is a thing that gets created, and its
+        answer is the created thing's outcome. The body is the outcome and nothing else -- no
+        attempt count, no hint about which part was wrong, no echo of what was sent. Anything more
+        would be a probing oracle, which is the same reason the caller-facing refusal explains
+        nothing. The attempt count that does exist is the voice agent's, because attempts are
+        scoped to a call and this service has never heard of calls.
+        """
+        outcome = "accepted" if db.verify_pin(conn, request.pin) else "rejected"
+        return {"outcome": outcome}
 
     return app
 

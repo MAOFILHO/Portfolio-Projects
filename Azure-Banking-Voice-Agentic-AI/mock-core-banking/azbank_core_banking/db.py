@@ -9,9 +9,17 @@ once, at the presentation boundary in the voice agent, and never here.
 record's decision. A caller that could decide for itself whether it had enough money would not be
 talking to a system of record.
 
-Deliberately stdlib `sqlite3` and hand-written SQL: five statements against one table does not earn
-an ORM dependency, and the schema is small enough to read in full.
+**The credential is stored as a digest, never as a PIN.** That is what lets B2's artifact scan cover
+the database file with no carve-out: a scan that had to skip a column would be a scan that could be
+made to pass by moving the leak into it. Nothing in this module ever writes, returns, formats, or
+raises the submitted value.
+
+Deliberately stdlib `sqlite3` and hand-written SQL: a handful of statements against two small tables
+does not earn an ORM dependency, and the schema is small enough to read in full. The digest is
+stdlib `hashlib` for the same reason -- see SEED_CREDENTIAL_DIGEST for why it is unsalted.
 """
+import hashlib
+import hmac
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -35,10 +43,28 @@ _LOCK = threading.RLock()
 #: held ($2,400.00 and $500.00), so a demo behaves identically across the change of backend.
 SEED_ACCOUNTS = {"chequing": 240000, "savings": 50000}
 
+#: The demo PIN, in the clear, in source. A published constant of a prototype -- not a secret this
+#: file is failing to keep. B2 forbids the PIN in a transcript, a log line, a span attribute or a
+#: persisted record; source code is none of those, and the B2 scanner needs a value to search for.
+DEMO_PIN = "1234"
+
+#: What the database actually holds. Unsalted and stdlib-only, deliberately: a four-digit PIN whose
+#: value is published gets nothing from a KDF -- an attacker who reads this file already has the
+#: PIN, and one who reads only the database can exhaust ten thousand candidates whatever the
+#: derivation costs. A stated prototype choice, and the line where production would differ.
+SEED_CREDENTIAL_DIGEST = hashlib.sha256(DEMO_PIN.encode()).hexdigest()
+
+#: One row, always, because there is one profile (CONTEXT.md): a single set of credentials and
+#: accounts that authentication unlocks and that never identifies anyone. The CHECK is what says so
+#: in the schema rather than in a comment -- a second credential cannot be inserted.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     name          TEXT    PRIMARY KEY,
     balance_cents INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS credentials (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    pin_digest TEXT NOT NULL
 )
 """
 
@@ -77,21 +103,64 @@ class TransferResult:
 
 
 def initialise(conn):
-    """Creates the schema if absent and seeds the accounts **only if the table is empty**.
+    """Creates the schema if absent and seeds accounts and credential **only if empty**.
 
     Seeding is "if empty", never "on every boot": Container Apps' filesystem is ephemeral, so a
     fresh container legitimately starts from the demo state, but a restart of a container that has
-    a database must not silently undo whatever is in it.
+    a database must not silently undo whatever is in it. The credential gets the same rule as the
+    balances, and for the same reason.
+
+    `executescript` rather than `execute`, because the schema is now two statements. It issues a
+    COMMIT of its own first, which is harmless here: this runs at connect time, before any request
+    can have a transaction open.
     """
     with _LOCK:
-        conn.execute(_SCHEMA)
+        conn.executescript(_SCHEMA)
         already_seeded = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] > 0
         if not already_seeded:
             conn.executemany(
                 "INSERT INTO accounts (name, balance_cents) VALUES (?, ?)",
                 sorted(SEED_ACCOUNTS.items()),
             )
+        credential_seeded = conn.execute("SELECT COUNT(*) FROM credentials").fetchone()[0] > 0
+        if not credential_seeded:
+            conn.execute(
+                "INSERT INTO credentials (id, pin_digest) VALUES (1, ?)",
+                (SEED_CREDENTIAL_DIGEST,),
+            )
         conn.commit()
+
+
+def credential_digest(conn):
+    """The stored digest. Exposed so a test can pin what was seeded without reaching for SQL."""
+    with _LOCK:
+        row = conn.execute("SELECT pin_digest FROM credentials WHERE id = 1").fetchone()
+    return None if row is None else row[0]
+
+
+def verify_pin(conn, pin):
+    """Does this PIN match the profile's credential? True or False, and nothing else.
+
+    **Refuses rather than raises, whatever it is handed.** The rest of this module raises on a
+    malformed input -- a fractional amount, an unknown account -- and formats the offending value
+    into the message, which is the right call for money and exactly the wrong one here: an
+    exception carrying a rejected credential is an exception whose message is the leak. There is no
+    PIN malformed enough to be worth repeating back, so anything that cannot be compared is simply
+    not a match. That fails closed for free, which is the direction this control has to fail in.
+
+    The comparison is `hmac.compare_digest`, so the check itself teaches an attacker nothing about
+    how much of a wrong PIN was right: both operands are fixed-length hex digests, and the compare
+    does not stop at the first differing character the way `==` does.
+    """
+    if not isinstance(pin, str):
+        return False
+    stored = credential_digest(conn)
+    if stored is None:
+        return False
+    # `errors="replace"` so that a lone surrogate -- the one str a UTF-8 encode refuses -- is
+    # refused like every other non-match instead of raising out of a function that promises not to.
+    candidate = hashlib.sha256(pin.encode(errors="replace")).hexdigest()
+    return hmac.compare_digest(stored, candidate)
 
 
 def list_accounts(conn):
