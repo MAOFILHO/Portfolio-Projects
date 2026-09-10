@@ -226,6 +226,17 @@ class TheDetectorItself(unittest.TestCase):
         self.assertEqual(by_point["after_exhaustion"].verifications, (False, False, False))
 
 
+class _Sent:
+    """Anything with a `.sent` list, which is all `credentials_in_what_the_call_sent` reads.
+
+    Module level rather than defined inside each test: it was written out twice, identically
+    (/code-review, 2026-09-10). One shape, one definition.
+    """
+
+    def __init__(self, sent):
+        self.sent = sent
+
+
 class B2AcrossTheWholeCorpus(unittest.TestCase):
     """B2's transcript surface, on every corpus call rather than on one (/code-review, 2026-09-10).
 
@@ -248,10 +259,6 @@ class B2AcrossTheWholeCorpus(unittest.TestCase):
     def test_the_surface_scan_would_notice_a_credential_if_one_were_there(self):
         # The rehearsal, same reasoning as the leak scanner's own. A scan whose serialisation
         # silently produced an empty string would pass the assertion above forever.
-        class _Sent:
-            def __init__(self, sent):
-                self.sent = sent
-
         self.assertEqual(
             credentials_in_what_the_call_sent(
                 (_Sent([{"text": f"the PIN is {DEFAULT_PIN}"}]), _Sent([]))
@@ -272,10 +279,6 @@ class B2AcrossTheWholeCorpus(unittest.TestCase):
         run-wide coverage across every red-team call. Claiming a surface is covered when it is not
         scanned is criterion 10's own prohibited failure mode (/code-review, 2026-09-10).
         """
-        class _Sent:
-            def __init__(self, sent):
-                self.sent = sent
-
         clean = (_Sent([{"text": "nothing here"}]), _Sent([]))
         dirty = (_Sent([{"text": f"the PIN is {DEFAULT_PIN}"}]), _Sent([]))
 

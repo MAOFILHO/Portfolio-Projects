@@ -43,16 +43,21 @@ The gate grants for the first time, on a PIN the model never sees. Criterion-by-
 
 | | |
 |---|---|
-| voice-agent tests | 309 pass, 3 skipped by design |
+| voice-agent tests | 315 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
 | B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
 | `make lint`, B3 static check | clean, passing |
 
-**Three diffs are committed and unreviewed by Marco.** In order: `18d6a4a` (first `/code-review`
-remediation), `4097144` (the remaining findings), `395d6c5` (what `/research` found). A second
-`/code-review` then ran over all three and its nine findings are implemented on top. **The first and
-third touch the DTMF/PIN path**, so the never-auto-accept rule binds them.
+**Everything on this branch after `e42c063` is committed and unreviewed by Marco** — that is
+`git log e42c063..HEAD`, and it is stated as a range on purpose. A fixed count was written here
+twice and was wrong both times, for a structural reason rather than carelessness: the commit that
+updates the number is itself uncounted at the moment it is written. A range does not have that
+failure mode.
+
+What the range holds: the first `/code-review`'s remediation, the remaining Phase 4 findings, what
+`/research` found, and the second and third reviews' findings. **Every commit in it except the
+findings one touches the DTMF/PIN path**, so the never-auto-accept rule binds them.
 
 Blow-by-blow accounts are archives, not current state: `docs/phase4/findings.md` for what each pass
 found and fixed, `docs/phase4/research-carried-findings.md` for the sourced research behind the
@@ -76,11 +81,13 @@ number reaches today is still Phase 1's agent on the Phase 2 image.
 
 ### Needs Marco
 
-0. **Review the three committed-but-unreviewed Phase 4 diffs**, in order: `18d6a4a` (the
-   `/code-review` remediation, DTMF/PIN path and `tests/test_gate.py`), the findings diff after it
-   (tests, corpus, `Makefile`, docs — no production module), and the research-implementation diff
-   after that (**`transport/acs.py` and `realtime/session.py`, so both the DTMF path and the PIN
-   path**). **This is the one thing blocking the gate.**
+0. **Review everything after `e42c063`** — `git log e42c063..HEAD`, oldest first. In order it is
+   the first `/code-review` remediation (DTMF/PIN path and `tests/test_gate.py`), the remaining
+   Phase 4 findings (tests, corpus, `Makefile`, docs — no production module), what `/research`
+   found (**`transport/acs.py` and `realtime/session.py`**), and the second and third reviews'
+   findings (**`realtime/session.py`**). **This is the one thing blocking the gate.** Read the
+   range from `git log`, never a count written here: a count was written twice and wrong twice,
+   because the commit that updates it is uncounted when it is written.
 1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
    limit rather than a clean pass: criterion 7's injected item is confirmed in shape but unverified
    in acceptance by the live deployment, criterion 9's idea count is 13 against a target of 20-30,
@@ -197,7 +204,14 @@ because they are genuinely unresolved, not because any of them is currently bloc
     Cheap to settle by reading source, and it should be settled **before Phase 6 enables anything**.
     Recorded 2026-09-10 after `/code-review` found it dropped rather than deferred: the research
     named it, its sibling question became item 15, and this one reached no list at all.
-17. **The relay imposes no deadline on the injected PIN-outcome frames.** The research is explicit
+17. **`transport/acs.py`'s audio branch is not total, unlike its DTMF branch.** A malformed
+    `AudioData` frame raises `KeyError` on the inbound relay task, which ends the call; the DTMF
+    branch is deliberately defensive for exactly that reason and the audio branch never was. Pinned
+    by `tests/test_acs.py::test_a_malformed_audio_frame_still_raises` so the behaviour is known
+    rather than folklore. **Not changed**: it is relay behaviour nobody asked to alter, on a path
+    the never-auto-accept rule covers. Recorded 2026-09-10 because a docstring claimed this item
+    existed before it did.
+18. **The relay imposes no deadline on the injected PIN-outcome frames.** The research is explicit
     that telling a rejection from silence needs the error type, a correlated id, **and the relay's
     own timeout**. The first two are implemented; the third is not, so an injection that is simply
     never answered still looks like an accepted one. Deliberately not built here: the authenticator
@@ -223,9 +237,8 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    validate.
 2. `/handoff`, copy it into `docs/handoffs/`, commit, then `/clear` at the phase boundary.
 3. **Sign off Phase 4, or send back what does not hold.** The items needing Marco are listed under
-   "Needs Marco" above. `/code-review` **has** been run on this phase (2026-09-10, two axes over
-   `56178e5...HEAD`) and its findings are implemented; a second `/code-review` over the two diffs
-   since is Marco's call, not Claude's, same as the first.
+   "Needs Marco" above. `/code-review` has now run **three times** on this phase (2026-09-10) and
+   every finding is implemented. Whether a fourth is worth running is Marco's call, not Claude's.
 4. **One ADR is offered and not written** (`docs/adr/`): the shared core-banking client that made
    B1's restatement necessary. Hard to reverse, and it would read as arbitrary without the
    reasoning. The second candidate — a binary gate carrying two factors — died with the KBA cut.

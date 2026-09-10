@@ -55,16 +55,18 @@ it with a one-frame live probe. That is what closes this, at Phase 5's real-call
 **Acted on: the item is now addressable.** A rejection arrives as an `error` event whose
 `error.event_id` names the client frame that caused it — the only documented way to attribute one,
 and the exact "tell a rejection from silence" requirement this section used to state without a
-mechanism. `_spoken_note` now stamps a client `event_id`, the relay remembers the ids it stamped,
-and an error naming one is logged as *the injected item being refused* rather than as an error.
+mechanism. Both frames of the mechanism now stamp a client `event_id` — the item and the
+response request that makes it spoken — the relay remembers what it stamped, and an error naming
+either is logged as *a frame of the injected PIN-outcome being refused* rather than as an error.
 Nothing else about the error is read: message, type and code stay unlogged, because a validation
 error can echo the offending request back, which is the content B2 forbids.
 
 **The id carries no decimal digit, and that is not decoration.** The first version used a raw
 `uuid4().hex`, whose alphabet is more than half digits — across a run it spells a four-digit run by
 chance, and B2's run-wide scan looks for exactly that. It turned the red-team corpus's B2 assertion
-red on a coincidence within one full run. The id is now built through a bijective digit-to-letter
-map, so it is unique exactly as often as the uuid behind it and cannot spell a credential at all.
+red on a coincidence within one full run. The id is now built through an injective digit-to-letter
+map that avoids the hex alphabet, so it is unique exactly as often as the uuid behind it and cannot
+spell a credential at all.
 A constraint that fails at random is worse than a weaker one stated honestly.
 
 **Also corrected: the fake's error event had the wrong shape.** `realtime/fake.py:error_event`
@@ -277,7 +279,18 @@ reported as met against a surface that is not scanned.
 Fixed by scanning rather than by rewording: `run()` keeps every call's `(realtime, transport)` pair
 and `credentials_in_what_the_call_sent` is variadic over calls. **Verified against a planted leak**,
 the way this suite's other claims are: with the injection rewritten to append the submitted
-credential, all twelve cross-call cases report it; before the fix they reported none.
+credential, all twelve cross-call cases report it.
+
+**Corrected 2026-09-10, same day, by the next review — the counterfactual first published here was
+wrong.** This paragraph and `07c26fa`'s commit message both said "before the fix they reported
+none". Measured rather than assumed, the pre-fix figure is **6 of 12, not 0**: the six cases at
+`after_wrong_pin` inject a sentence on their own call, so the plant was visible there even while
+the prior call went unread. The true statement is narrower and still damning enough — **the
+accepted credential's surface was unscanned in all twelve**, and six of the twelve had no coverage
+of the plant at all. The original claim was a counterfactual asserted without running it, which is
+the same failure as a coverage claim outrunning its scan, one level up. The commit message of
+`07c26fa` still carries the wrong figure and cannot be corrected without rewriting a SHA this file
+references; this note is the correction.
 
 **The rest, briefly.**
 - **The injection is two frames, and only one was addressable.** The response request that makes the

@@ -113,7 +113,10 @@ def _new_event_id():
     Digits are also the one thing a caller keys, so an identifier that cannot contain one cannot be
     mistaken for keyed input by any future reader of a log or a wire capture either.
     """
-    return "item_" + uuid.uuid4().hex.translate(_DIGIT_FREE)
+    # Prefix carries no frame kind. It used to read `item_`, which stamped the response request as
+    # an item and quietly undercut the "which half failed" attribution this exists for
+    # (/code-review, 2026-09-10).
+    return "evt_" + uuid.uuid4().hex.translate(_DIGIT_FREE)
 
 
 def _causing_event_id(event):
@@ -179,11 +182,20 @@ async def run_call(transport, realtime, core_banking):
     # keeps coming back unavailable can key indefinitely without ever settling, and a correlation
     # buffer must not grow for as long as such a call runs.
     #
-    # **The bound is derived, not picked.** A settled call injects at most one outcome per rejected
-    # attempt plus one terminal outcome, and each injection is two frames -- the item and the
-    # response request. So this holds every frame a call that ends normally can still be waiting on.
-    # Anything older has already been answered or is not correlatable in a useful sense: an error
-    # names the frame that caused it, and that frame is recent.
+    # **This is a recency window, not a complete record, and it cannot be one.** An earlier comment
+    # here claimed the bound "holds every frame a call that ends normally can still be waiting on".
+    # That is false: an unavailable credential check produces a spoken sentence and costs no
+    # attempt (CONTEXT.md, "Attempt"), so a call can inject without limit and still end normally.
+    # No fixed bound covers that, and the claim was the same species of defect -- a comment
+    # outrunning its code -- that the review this line came from was fixing (/code-review,
+    # 2026-09-10).
+    #
+    # What the size is actually for: hold enough frames that a rejection arriving while the caller
+    # keys on can still be attributed. `MAX_ATTEMPTS` injections at two frames each covers every
+    # attempt a call is allowed, with one injection's headroom for a terminal or unavailable
+    # outcome on top. Older ids age out on purpose -- an error names the frame that caused it, and
+    # that frame is recent. A missed correlation degrades to the unattributed log line, which is
+    # where this started.
     injected_frame_ids = collections.deque(maxlen=2 * (auth.MAX_ATTEMPTS + 1))
 
     await realtime.send(_session_update(agent))

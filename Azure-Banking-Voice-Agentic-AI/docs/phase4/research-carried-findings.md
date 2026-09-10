@@ -945,7 +945,7 @@ instrumentation whatsoever:
 **So: the realtime path this project's relay uses is uninstrumented by both the OpenTelemetry OpenAI
 instrumentation and the Azure Monitor distro. Adding `azure-monitor-opentelemetry` in Phase 6
 produces spans for FastAPI, httpx, requests and the Azure SDK — and zero `gen_ai.*` attributes, because
-nothing in that list touches the realtime socket.** This materially shrinks the surface B2 must
+nothing in that list touches the realtime session.** This materially shrinks the surface B2 must
 protect: `gen_ai.input.messages` and friends cannot appear on a realtime turn unless this project
 writes the instrumentation itself.
 

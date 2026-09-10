@@ -448,29 +448,33 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         random is worse than a weaker one stated honestly, so the id is built to be *unable* to
         spell a credential rather than merely unlikely to.
 
-        **Asserted on the generator, not through whole calls.** An earlier version of this test ran
-        two hundred complete calls to sample the same property, which is both far slower and weaker
-        evidence: it exercised one id per call and never touched the generator directly
-        (/code-review, 2026-09-10). The mapping is what makes the property structural, so the
-        mapping is what gets asserted.
+        **Asserted structurally, not by sampling.** Two earlier versions of this both sampled: two
+        hundred whole calls, then two thousand generated ids. Sampling cannot establish this. The
+        property holds because the map covers every digit the uuid alphabet can produce, so that is
+        what gets asserted -- one line, complete, and it would still catch a map that forgot `9`
+        while a random sample might not (/code-review, 2026-09-10).
         """
-        for _ in range(2000):
-            identifier = session_module._new_event_id()
-            self.assertFalse(
-                any(character.isdigit() for character in identifier),
-                f"a generated frame id can spell digits: {identifier}",
-            )
+        # Every character a hex uuid can contain, put through the map at once.
+        self.assertFalse(
+            any(c.isdigit() for c in "0123456789abcdef".translate(session_module._DIGIT_FREE)),
+            "the map lets a digit through",
+        )
+        # And the assembled id, prefix included, for the same reason at the other end.
+        self.assertFalse(any(c.isdigit() for c in session_module._new_event_id()))
 
-    def test_the_id_map_is_bijective_so_ids_stay_as_unique_as_the_uuid(self):
-        """The other half of the claim, and the half a sampling test cannot reach.
+    def test_the_id_map_is_injective_so_ids_stay_as_unique_as_the_uuid(self):
+        """The other half of the claim, and the half the digit rule does not reach.
 
-        Digits are rewritten to letters. If that map ever collided -- if a digit were sent to a
-        letter the hex alphabet already uses -- two different uuids could produce one id, and a
-        rejection would be correlated to the wrong frame. Asserted on the table itself.
+        Digits are rewritten to letters. If that map ever collided -- two digits to one letter, or a
+        digit onto a letter the hex alphabet already uses -- two different uuids could produce one
+        id, and a rejection would be correlated to the wrong frame.
+
+        **Injective and disjoint from hex is what is asserted, which is what the uniqueness argument
+        needs.** An earlier name for this test said "bijective", which is a different and stronger
+        claim about a map this one never makes (/code-review, 2026-09-10).
         """
-        mapping = session_module._DIGIT_FREE
-        replacements = [chr(value) for value in mapping.values()]
-        self.assertEqual(len(replacements), len(set(replacements)), "the map is not injective")
+        replacements = [chr(value) for value in session_module._DIGIT_FREE.values()]
+        self.assertEqual(len(replacements), len(set(replacements)), "two digits share a letter")
         self.assertFalse(
             set(replacements) & set("0123456789abcdef"),
             "a digit maps onto a character the hex alphabet already uses",
@@ -528,7 +532,7 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
             with self.assertLogs("bridge", level="ERROR") as cm:
                 self._run(
                     [*_keyed(DEFAULT_PIN), audio_frame("still-here")],
-                    events=[error_event("bad request", caused_by=stamped), response_done()],
+                    events=[error_event("malformed item", caused_by=stamped), response_done()],
                 )
 
         self.assertTrue(

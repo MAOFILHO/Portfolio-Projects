@@ -135,8 +135,10 @@ class AnythingElse(unittest.TestCase):
     total and this docstring used to say it was (/code-review, 2026-09-10). The audio branch still
     indexes `msg["audioData"]["data"]` directly, so a malformed audio frame raises -- pinned below
     rather than left as folklore. That asymmetry is deliberate on the DTMF side and merely
-    inherited on the audio side; whether the audio branch should be made total too is recorded as
-    an open item rather than changed here, since it is relay behaviour nobody asked to alter.
+    inherited on the audio side; whether the audio branch should be made total too is
+    `PROJECT_STATE.md` open item 17 rather than a change here, since it is relay behaviour nobody
+    asked to alter. That item did not exist when this docstring first claimed it did
+    (/code-review, 2026-09-10).
     """
 
     def test_an_unrecognised_tone_is_passed_through_untouched(self):

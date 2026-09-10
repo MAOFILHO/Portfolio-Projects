@@ -9,7 +9,7 @@ Built 2026-09-10, tickets **#34–#42** under spec **#33**, on branch `azure-ban
 
 | | |
 |---|---|
-| voice-agent tests | 309 pass, 3 skipped by design |
+| voice-agent tests | 315 pass, 3 skipped by design |
 | mock-core-banking tests | 47 pass |
 | B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
 | B1 breaches | **0** |
@@ -71,7 +71,7 @@ The ids contain no decimal digit, so they cannot spell a credential into B2's ru
 
 **It makes a rejection legible; it does not make silence legible.** No source states a response
 deadline and the relay imposes none, so an injection that is simply never answered is still
-indistinguishable from an accepted one. Recorded as `PROJECT_STATE.md` open item 17 rather than
+indistinguishable from an accepted one. Recorded as `PROJECT_STATE.md` open item 18 rather than
 built, because a timer on the relay's PIN path is a Phase 5 design question and the authenticator
 carries "no timer of any kind" as a deliberate decision.
 
@@ -154,7 +154,12 @@ credential into a model context. Every other call keys a rejected one. So the se
 coverage of exactly the calls most worth watching, one file away from the paragraph forbidding that
 move. The harness now keeps every call's surfaces and scans all of them. **Verified by planting a
 real leak in the relay**: with the injection rewritten to append the submitted credential, all
-twelve cross-call cases report it; before the fix they reported none.
+twelve cross-call cases report it.
+
+**The pre-fix figure first published here was wrong and is corrected**: measured rather than
+assumed, six of the twelve caught the plant on their own call, not none. What was true of all
+twelve is that the *accepted* credential's surface went unread. `docs/phase4/findings.md` carries
+the full correction.
 
 **11. Every attempt logged, carrying no digit.** ✅ Met.
 Info on success, warning on each rejection with the attempt number only.
