@@ -56,7 +56,7 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
             (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset(),
             (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(),
             (gate.BANKING_AGENT, gate.AUTHENTICATED): frozenset({
-                "get_balance", "transfer", "list_accounts",
+                "get_balance", "transfer", "list_accounts", "list_transactions",
             }),
         })
 
@@ -74,7 +74,7 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
     """
 
     #: The one pair that grants anything, and exactly what it grants.
-    GRANTED = frozenset({"get_balance", "transfer", "list_accounts"})
+    GRANTED = frozenset({"get_balance", "transfer", "list_accounts", "list_transactions"})
 
     def _pairs(self):
         for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
@@ -168,6 +168,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             "get_balance": '{"account": "chequing"}',
             "transfer": '{"from_account": "chequing", "to_account": "savings", "amount": 1.0}',
             "list_accounts": "{}",
+            "list_transactions": '{"account": "chequing"}',
         }[tool_name]
 
     async def test_no_declared_tool_executes_when_the_gate_says_no(self):

@@ -117,6 +117,28 @@ class TransferOutcome:
     available: float | None = None
 
 
+@dataclass(frozen=True)
+class Transaction:
+    """One line of one account's history, in the units and shape this side of the seam speaks.
+
+    `amount` is **dollars and signed from this account's point of view**: negative is money that
+    left it. The sign is what decides whether the caller hears "to savings" or "from chequing", and
+    it is carried rather than turned into a direction word here, because that word is phrasing and
+    phrasing is the model's to speak (issue #46).
+
+    `occurred_at` is a **date, not an instant**. The service stores and returns a full ISO-8601 UTC
+    timestamp, because that is what a system of record should hold; a caller being read
+    "fourteen thirty-one and seven seconds Zulu" is not an improvement on "September the second".
+    The narrowing happens here, at the same presentation boundary cents become dollars at, and
+    never near persistence.
+    """
+
+    kind: str
+    counterparty: str | None
+    amount: float
+    occurred_at: str
+
+
 class CoreBankingClient(Protocol):
     """What the dispatcher needs from core banking. Satisfied by the real client and by the fake.
 
@@ -128,6 +150,17 @@ class CoreBankingClient(Protocol):
         ...
 
     async def get_balance(self, account: str) -> float:
+        ...
+
+    async def list_transactions(self, account: str) -> list[Transaction]:
+        """The account's recent history, newest first, **bounded by the service**.
+
+        There is no `limit` argument, deliberately, and that absence is the point: the bound is
+        about what a person can follow when it is read to them over a phone, which is not a fact
+        this client or the model knows better than the service does. An unknown account raises,
+        exactly as `get_balance` does; an account with nothing on it is an empty list, which is a
+        normal answer rather than an error.
+        """
         ...
 
     async def transfer(self, from_account: str, to_account: str, amount: float) -> TransferOutcome:
@@ -160,6 +193,30 @@ def _unknown_account_name(response):
 
 def _dollars(cents):
     return cents / 100
+
+
+def _date(instant):
+    """The date part of the service's ISO-8601 UTC timestamp -- what a caller can actually hear.
+
+    Split rather than parsed: the service's format is fixed and this needs the first ten characters
+    of it, not a datetime object nobody downstream wants. A value that is not the shape this
+    expects comes back unchanged rather than raising, because `_read` turns an exception here into
+    **unavailable** -- and a history is not worth refusing to read out over a timestamp nobody was
+    going to check.
+    """
+    return instant.split("T")[0] if isinstance(instant, str) else instant
+
+
+def _transaction(payload):
+    """One wire transaction into the shape this side of the seam speaks. Cents to dollars, instant
+    to date. A missing field raises KeyError here, which `_read` turns into unavailable -- a body
+    this client cannot read is not an answer and must never become one."""
+    return Transaction(
+        kind=payload["kind"],
+        counterparty=payload["counterparty"],
+        amount=_dollars(payload["amount_cents"]),
+        occurred_at=_date(payload["occurred_at"]),
+    )
 
 
 def _cents(dollars):
@@ -301,6 +358,15 @@ class HttpCoreBankingClient:
         # answer the caller was then given by name (probe, 2026-09-09).
         return await self._get(
             f"/accounts/{quote(account, safe='')}", lambda p: _dollars(p["balance_cents"])
+        )
+
+    async def list_transactions(self, account):
+        # Percent-encoded for the same reason `get_balance` is: the account name is model-supplied
+        # text going into a URL path, and interpolated raw it stops being a name and becomes
+        # routing.
+        return await self._get(
+            f"/accounts/{quote(account, safe='')}/transactions",
+            lambda p: [_transaction(t) for t in p["transactions"]],
         )
 
     async def transfer(self, from_account, to_account, amount):

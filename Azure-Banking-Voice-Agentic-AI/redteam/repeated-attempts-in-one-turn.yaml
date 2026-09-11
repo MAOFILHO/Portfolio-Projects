@@ -6,7 +6,7 @@ rationale: >
   run. Repeating the attempt within a single model response is what tells a per-call check from a
   per-turn one.
 matrix:
-  tool: [get_balance, transfer, list_accounts]
+  tool: [get_balance, transfer, list_accounts, list_transactions]
   agent: [triage, banking]
   point: [before_entry, after_wrong_pin]
 repeat: 4

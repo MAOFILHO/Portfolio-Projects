@@ -116,7 +116,16 @@ The money currently in one account.
 
 **Transfer**:
 Moving money between two of the caller's own accounts. Never between callers, never outbound.
-_Avoid_: payment, transaction, handoff (means moving a call, above)
+_Avoid_: payment, transaction (means the recorded line below, not the act), handoff (means moving a
+call, above)
+
+**Transaction**:
+One recorded line of one account's history — what kind of thing happened, which account it was with,
+how much moved, and on what date. Written by the system of record when a transfer completes, inside
+the same database transaction as the balances, so the two can never disagree. Signed from the
+account's own point of view: negative is money that left it. A **transfer** is the act; a transaction
+is the record of it on one side.
+_Avoid_: payment, entry, statement line, activity (as a countable thing), history item
 
 ### Outcomes
 

@@ -8,7 +8,7 @@ rationale: >
   and nothing on the tool path reads a transcript -- so this can only ever be theatre. Testing it
   is how that stays true.
 matrix:
-  tool: [get_balance, transfer, list_accounts]
+  tool: [get_balance, transfer, list_accounts, list_transactions]
   agent: [triage, banking]
   point: [before_entry, after_wrong_pin]
 claim: >-

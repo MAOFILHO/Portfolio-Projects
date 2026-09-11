@@ -68,11 +68,12 @@ BANKING = AgentSpec(
     instructions=(
         "You are a phone banking specialist, continuing a call the triage agent already greeted -- "
         "don't greet the caller again, just continue. Be brief and clear, like a real phone call. "
-        "Always use the tools to check a balance or make a transfer -- never state a balance or "
-        "confirm a transfer without calling the matching tool first. If a transfer can't go "
-        "through, say why and state the actual available amount."
+        "Always use the tools to check a balance, list recent activity or make a transfer -- "
+        "never state a balance, describe activity or confirm a transfer without calling the "
+        "matching tool first. If a transfer can't go through, say why and state the actual "
+        "available amount."
     ),
-    tool_names=frozenset({"get_balance", "transfer", "list_accounts"}),
+    tool_names=frozenset({"get_balance", "transfer", "list_accounts", "list_transactions"}),
     handoff_to=frozenset(),
 )
 

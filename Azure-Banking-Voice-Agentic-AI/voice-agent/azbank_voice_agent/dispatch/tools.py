@@ -18,6 +18,7 @@ outcome codes; the sentences the caller hears are composed in this module. That 
 inversion the Phase 1 module carried: `accounts.transfer()` returned a ready-made apology sentence
 from what was, in effect, the system of record.
 """
+import dataclasses
 import json
 import logging
 
@@ -103,6 +104,31 @@ TOOLS = [
         "description": "List the caller's accounts and their balances.",
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "type": "function",
+        "name": "list_transactions",
+        # The description carries the reading instructions, because the result is data and the
+        # sentence is the model's -- the same division `list_accounts` already uses. What it must
+        # not do is invite the model to ask for more: the bound is the service's, there is no
+        # argument for it, and a description hinting otherwise would have the model apologise for
+        # a limit it cannot lift.
+        #
+        # The empty case is named explicitly. A caller who has never used an account must be told
+        # so plainly rather than left to read silence as a failure, and "say there is nothing yet"
+        # is phrasing guidance, which lives on this side of the seam.
+        "description": (
+            "List recent activity on one of the caller's accounts, newest first. The list is "
+            "already limited to the few most recent items -- read them out, and don't offer to "
+            "fetch more. A negative amount is money that left the account and a positive amount "
+            "is money that arrived, so say which it was and which account it was with. If the "
+            "list is empty, say plainly that nothing has happened on that account yet."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"account": _ACCOUNT},
+            "required": ["account"],
+        },
+    },
 ]
 
 
@@ -153,10 +179,26 @@ async def _list_accounts(core_banking, args):
     return await core_banking.list_accounts()
 
 
+async def _list_transactions(core_banking, args):
+    """The account's history as data, not as a sentence.
+
+    Returned in the same spirit as `_list_accounts`: dictionaries of figures and tokens that the
+    model reads out, rather than prose composed here. The two tools that return *outcomes* --
+    `transfer` and every error branch below -- get composed sentences, because there the wording
+    carries a decision the model must not restate its own way.
+
+    `dataclasses.asdict` rather than a hand-written dict: a field added to `Transaction` should
+    reach the model without a second place to remember to update it.
+    """
+    transactions = await core_banking.list_transactions(_account_name(args, "account"))
+    return [dataclasses.asdict(transaction) for transaction in transactions]
+
+
 _DISPATCH = {
     "get_balance": _get_balance,
     "transfer": _transfer,
     "list_accounts": _list_accounts,
+    "list_transactions": _list_transactions,
 }
 
 

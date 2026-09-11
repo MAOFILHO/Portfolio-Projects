@@ -723,3 +723,107 @@ class BudgetsArePinned(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+_TRANSACTIONS = _json({"account": "chequing", "transactions": [
+    {"kind": "transfer", "counterparty": "savings", "amount_cents": -12500,
+     "occurred_at": "2026-09-05T09:12:44Z"},
+    {"kind": "transfer", "counterparty": "chequing", "amount_cents": 4000,
+     "occurred_at": "2026-09-02T14:31:07Z"},
+]})
+
+
+class ListingTransactions(unittest.IsolatedAsyncioTestCase):
+    """The history read (issue #46): the same conversions the balance read does, plus a date.
+
+    Cents become dollars here, at the presentation boundary, and the service's full ISO-8601
+    instant narrows to a date -- because a caller being read "fourteen thirty-one and seven seconds
+    Zulu" is not an improvement on "September the second". Both conversions happen once and never
+    near persistence.
+    """
+
+    async def test_amounts_come_back_as_dollars(self):
+        client = _client(Recorder(_TRANSACTIONS))
+        transactions = await client.list_transactions("chequing")
+        self.assertEqual([t.amount for t in transactions], [-125.00, 40.00])
+
+    async def test_the_sign_survives_the_conversion(self):
+        # The sign is what the caller's sentence turns on. A conversion that took an absolute value
+        # would leave every line reading as money arriving.
+        client = _client(Recorder(_TRANSACTIONS))
+        transactions = await client.list_transactions("chequing")
+        self.assertLess(transactions[0].amount, 0)
+        self.assertGreater(transactions[1].amount, 0)
+
+    async def test_the_instant_narrows_to_a_date(self):
+        client = _client(Recorder(_TRANSACTIONS))
+        transactions = await client.list_transactions("chequing")
+        self.assertEqual([t.occurred_at for t in transactions], ["2026-09-05", "2026-09-02"])
+
+    async def test_the_service_order_is_preserved(self):
+        # Newest-first is the service's decision, not something re-sorted here: the client has no
+        # opinion about which end of a history is the interesting one.
+        client = _client(Recorder(_TRANSACTIONS))
+        transactions = await client.list_transactions("chequing")
+        self.assertEqual(transactions[0].occurred_at, "2026-09-05")
+
+    async def test_an_empty_history_is_an_empty_list_not_an_error(self):
+        client = _client(Recorder(_json({"account": "savings", "transactions": []})))
+        self.assertEqual(await client.list_transactions("savings"), [])
+
+    async def test_an_unknown_account_raises(self):
+        recorder = Recorder(_json({"detail": {"account": "bitcoin"}}, status=404))
+        with self.assertRaises(cb.UnknownAccountError):
+            await _client(recorder).list_transactions("bitcoin")
+
+    async def test_the_account_name_is_percent_encoded_into_the_path(self):
+        # Same reason get_balance encodes: the name is model-supplied text going into a URL path,
+        # and interpolated raw it stops being a name and becomes routing.
+        recorder = Recorder(_json({"account": "a/b", "transactions": []}))
+        await _client(recorder).list_transactions("../health")
+        url = str(recorder.requests[0].url)
+        # The slash is what matters and it is encoded. httpx normalises the `.` escapes back to
+        # literal dots when it builds the URL, so pinning the whole encoded string would be
+        # pinning httpx's normaliser rather than this client's encoding.
+        self.assertIn("%2F", url)
+        self.assertNotIn("/../", url)
+        self.assertTrue(url.endswith("/transactions"))
+
+    async def test_a_body_missing_its_fields_is_unavailable_not_a_history(self):
+        # A body this client cannot read is not an answer and must never become one. Reads retry,
+        # so both attempts are scripted.
+        recorder = Recorder(
+            _json({"account": "chequing", "transactions": [{"kind": "transfer"}]}),
+            _json({"account": "chequing", "transactions": [{"kind": "transfer"}]}),
+        )
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).list_transactions("chequing")
+
+    async def test_a_5xx_is_unavailable_and_carries_no_history(self):
+        recorder = Recorder(_json({}, status=503), _json({}, status=503))
+        with self.assertRaises(cb.CoreBankingUnavailable) as caught:
+            await _client(recorder).list_transactions("chequing")
+        self.assertNotIn("transfer", str(caught.exception))
+
+    async def test_it_is_a_read_and_is_retried_like_one(self):
+        # Reads get READ_RETRIES; writes get none. A history read is unambiguously a read, so it
+        # inherits the retry rather than needing its own decision.
+        recorder = Recorder(_json({}, status=503), _TRANSACTIONS)
+        transactions = await _client(recorder).list_transactions("chequing")
+        self.assertEqual(recorder.count, cb.READ_RETRIES + 1)
+        self.assertEqual(len(transactions), 2)
+
+    async def test_a_malformed_instant_does_not_refuse_the_history(self):
+        """A timestamp this client cannot split comes back unchanged rather than raising.
+
+        Deliberate: `_read` would turn an exception here into **unavailable**, and refusing to read
+        a caller their own history over a date format nobody was going to check is a worse answer
+        than an odd-looking date. The figures, which are what matter, are untouched.
+        """
+        recorder = Recorder(_json({"account": "chequing", "transactions": [
+            {"kind": "transfer", "counterparty": "savings", "amount_cents": -100,
+             "occurred_at": None},
+        ]}))
+        transactions = await _client(recorder).list_transactions("chequing")
+        self.assertEqual(transactions[0].amount, -1.00)
+        self.assertIsNone(transactions[0].occurred_at)

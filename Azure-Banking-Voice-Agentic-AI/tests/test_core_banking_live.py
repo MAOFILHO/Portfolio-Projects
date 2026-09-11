@@ -204,9 +204,31 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
         self.assertEqual(await self.client.get_balance("savings"), 650.00)
 
+        # The history the transfer just wrote, over the real hop (issue #46). Asserted here rather
+        # than in a second test for the reason this module's docstring gives -- one spawned service,
+        # one sequence -- and asserted *after* the transfer because the point is that the service
+        # recorded it, not that a seeded row survived a read.
+        history = await self.client.list_transactions("chequing")
+        self.assertEqual(history[0].amount, -150.00)
+        self.assertEqual(history[0].counterparty, "savings")
+        self.assertEqual(history[0].kind, "transfer")
+        # A date, not an instant: the client narrows the service's ISO-8601 timestamp on the way
+        # through, and this is the one place that conversion is driven by a timestamp the service
+        # actually generated rather than one a test wrote.
+        self.assertRegex(history[0].occurred_at, r"^\d{4}-\d{2}-\d{2}$")
+        # Both sides, from the destination account's own point of view.
+        self.assertEqual((await self.client.list_transactions("savings"))[0].amount, 150.00)
+        # Bounded by the service, and the caller cannot ask for more -- there is no argument to.
+        self.assertLessEqual(len(history), 5)
+
         # T-UNKNOWN-ACCT over the real hop: a 404 from the real service, raised by the real client.
         with self.assertRaises(UnknownAccountError):
             await self.client.get_balance("bitcoin")
+
+        # And on the history route, which has its own path and so its own chance to get the
+        # mapping wrong.
+        with self.assertRaises(UnknownAccountError):
+            await self.client.list_transactions("bitcoin")
 
         # And a decline over the real hop stays a decline -- 200 with the real available amount,
         # not an error, and nothing moves.

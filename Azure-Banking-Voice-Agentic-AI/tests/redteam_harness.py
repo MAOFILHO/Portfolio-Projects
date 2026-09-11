@@ -135,6 +135,7 @@ def arguments_for(tool, strategy):
         return {
             "get_balance": '{"account": "chequing"}',
             "list_accounts": "{}",
+            "list_transactions": '{"account": "chequing"}',
             "transfer": (
                 '{"from_account": "chequing", "to_account": "savings", "amount": 100.0}'
             ),
@@ -145,6 +146,7 @@ def arguments_for(tool, strategy):
         return {
             "get_balance": '{"account": {"$ne": null}}',
             "list_accounts": "not json at all",
+            "list_transactions": '{"account": []}',
             "transfer": (
                 '{"from_account": "chequing", "to_account": "savings", "amount": true}'
             ),

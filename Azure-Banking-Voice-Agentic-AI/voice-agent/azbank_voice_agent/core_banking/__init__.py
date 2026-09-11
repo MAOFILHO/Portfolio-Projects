@@ -8,6 +8,7 @@ from .client import (
     CoreBankingRequestError,
     CoreBankingUnavailable,
     HttpCoreBankingClient,
+    Transaction,
     TransferOutcome,
     UnknownAccountError,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "CoreBankingRequestError",
     "CoreBankingUnavailable",
     "HttpCoreBankingClient",
+    "Transaction",
     "TransferOutcome",
     "UnknownAccountError",
 ]

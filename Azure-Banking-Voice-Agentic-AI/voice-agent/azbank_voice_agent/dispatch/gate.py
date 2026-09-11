@@ -66,7 +66,12 @@ BANKING_AGENT = "banking"
 #     triage  + anonymous       -> nothing
 #     triage  + authenticated   -> nothing
 #     banking + anonymous       -> nothing
-#     banking + authenticated   -> get_balance, transfer, list_accounts
+#     banking + authenticated   -> get_balance, transfer, list_accounts, list_transactions
+#
+# Phase 5 (issue #46) widened that one row by one tool and touched nothing else. `list_transactions`
+# is a banking operation like the three beside it -- it reads the caller's own money -- so it sits
+# in the same row, under the same authentication, and the sharpened B1 definition covers it with no
+# new wording.
 #
 # Triage grants nothing in either state because it has no banking tools of its own -- authenticating
 # does not change what triage is for. Banking grants nothing while anonymous because routing is not
@@ -94,7 +99,9 @@ PERMISSIONS: dict[tuple[str, str], frozenset[str]] = {
     (TRIAGE_AGENT, ANONYMOUS): frozenset(),
     (TRIAGE_AGENT, AUTHENTICATED): frozenset(),
     (BANKING_AGENT, ANONYMOUS): frozenset(),
-    (BANKING_AGENT, AUTHENTICATED): frozenset({"get_balance", "transfer", "list_accounts"}),
+    (BANKING_AGENT, AUTHENTICATED): frozenset(
+        {"get_balance", "transfer", "list_accounts", "list_transactions"}
+    ),
 }
 
 # What the caller hears when the gate refuses. Deliberately vague about *why*: a refusal that

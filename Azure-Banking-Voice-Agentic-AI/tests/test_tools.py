@@ -7,11 +7,12 @@ dict are now about what the dispatcher does with each of CONTEXT.md's outcomes.
 The gate is patched open throughout so these cases don't depend on B1 policy (empty until Phase 4;
 see tests/test_gate.py for the gate itself).
 """
+import dataclasses
 import json
 import unittest
 from unittest.mock import patch
 
-from azbank_voice_agent.core_banking import CoreBankingUnavailable, UnknownAccountError
+from azbank_voice_agent.core_banking import CoreBankingUnavailable, Transaction, UnknownAccountError
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 
@@ -327,3 +328,56 @@ class ToolsMatchDispatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListingTransactionsAtTheDispatcher(DispatchCase):
+    """What the caller is told about their history, and what they are never told (issue #46).
+
+    The sentence lives here rather than at the whole-call seam because the fake's `fail_with` is
+    whole-client: arranging an outage there would fail the PIN check too, and the call would never
+    reach an authenticated state to be refused from. The whole-call seam proves the tool is
+    genuinely in the path; this proves what each outcome says.
+    """
+
+    async def test_a_history_comes_back_as_data_not_a_sentence(self):
+        result = (await self.dispatch("list_transactions", '{"account": "chequing"}'))["result"]
+        self.assertIsInstance(result, list)
+        self.assertEqual(
+            sorted(result[0]), ["amount", "counterparty", "kind", "occurred_at"]
+        )
+
+    async def test_an_unreachable_service_carries_no_figure_of_any_kind(self):
+        # CLAUDE.md's silent-fallback exclusion, applied to the newest read: never a remembered,
+        # cached or defaulted history, and never a partial one.
+        self.core_banking.fail_with = CoreBankingUnavailable("down")
+        answer = await self.dispatch("list_transactions", '{"account": "chequing"}')
+        self.assertEqual(answer, {"error": tools.UNAVAILABLE})
+
+    async def test_it_gets_the_read_sentence_and_not_the_transfer_one(self):
+        # TRANSFER_UNCONFIRMED exists because a timed-out write may already have committed. A read
+        # that did not happen simply did not happen, and telling a caller to go and check their
+        # balance after a failed history lookup would be nonsense.
+        self.core_banking.fail_with = CoreBankingUnavailable("down")
+        answer = await self.dispatch("list_transactions", '{"account": "chequing"}')
+        self.assertNotEqual(answer["error"], tools.TRANSFER_UNCONFIRMED)
+
+    async def test_an_unknown_account_names_the_account(self):
+        answer = await self.dispatch("list_transactions", '{"account": "bitcoin"}')
+        self.assertEqual(answer, {"error": "There's no bitcoin account on this profile."})
+
+    async def test_an_account_name_that_is_not_a_name_is_malformed(self):
+        for arguments in ('{"account": null}', '{"account": ""}', '{"account": 7}',
+                          '{"account": {"$ne": null}}', "{}"):
+            with self.subTest(arguments=arguments):
+                answer = await self.dispatch("list_transactions", arguments)
+                self.assertEqual(answer, {"error": tools.MALFORMED})
+
+    async def test_a_field_added_to_the_record_reaches_the_model_without_a_second_list(self):
+        """`dataclasses.asdict`, not a hand-written dict.
+
+        Asserted by comparing what the model receives against the record's own fields, so a field
+        added to `Transaction` and forgotten here fails rather than silently never arriving.
+        """
+        result = (await self.dispatch("list_transactions", '{"account": "chequing"}'))["result"]
+        expected = [f.name for f in dataclasses.fields(Transaction)]
+        self.assertEqual(sorted(result[0]), sorted(expected))

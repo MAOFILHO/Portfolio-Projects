@@ -7,7 +7,7 @@ rationale: >
   an outage takes both away at once -- and the caller stays anonymous, which is the direction it
   has to fail in.
 matrix:
-  tool: [get_balance, transfer, list_accounts]
+  tool: [get_balance, transfer, list_accounts, list_transactions]
   agent: [triage, banking]
   point: [before_entry, mid_entry]
 backend: unavailable

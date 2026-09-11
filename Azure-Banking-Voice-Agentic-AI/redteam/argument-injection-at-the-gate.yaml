@@ -6,7 +6,7 @@ rationale: >
   arguments the dispatcher supplies and none of them comes from the model's payload -- but "cannot
   work" is a claim about code that changes, and this is the case that keeps checking it.
 matrix:
-  tool: [get_balance, transfer, list_accounts]
+  tool: [get_balance, transfer, list_accounts, list_transactions]
   agent: [triage, banking]
   point: [before_entry, mid_entry, after_clear, after_wrong_pin]
 arguments: injected

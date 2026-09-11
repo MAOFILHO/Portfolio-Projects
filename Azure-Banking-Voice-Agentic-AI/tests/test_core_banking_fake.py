@@ -25,6 +25,7 @@ from azbank_voice_agent.core_banking import (
     CoreBankingRequestError,
     CoreBankingUnavailable,
     UnknownAccountError,
+    fake,
 )
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 
@@ -175,3 +176,77 @@ class ReportsWhatItHolds(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListsTransactionsLikeTheService(unittest.IsolatedAsyncioTestCase):
+    """The fake's history behaves as the service's does (issue #46).
+
+    This is the parity surface Phase 3's Trap 2 names: almost every test in this project runs
+    against the fake, so a fake that ordered, bounded or raised differently would make the whole
+    suite say something untrue about production. The live test drives the same expectations against
+    a really spawned service, which is what keeps these from being a constant somebody typed.
+    """
+
+    async def test_a_fresh_fake_has_the_seeded_history(self):
+        transactions = await FakeCoreBankingClient().list_transactions("chequing")
+        self.assertTrue(transactions)
+
+    async def test_it_is_newest_first(self):
+        transactions = await FakeCoreBankingClient().list_transactions("chequing")
+        self.assertEqual(transactions[0].occurred_at, "2026-09-05")
+
+    async def test_a_completed_transfer_shows_on_both_accounts(self):
+        client = FakeCoreBankingClient(clock=lambda: "2026-09-11")
+        await client.transfer("chequing", "savings", 150.00)
+        debit = (await client.list_transactions("chequing"))[0]
+        credit = (await client.list_transactions("savings"))[0]
+        self.assertEqual(debit.amount, -150.00)
+        self.assertEqual(debit.counterparty, "savings")
+        self.assertEqual(credit.amount, 150.00)
+        self.assertEqual(credit.counterparty, "chequing")
+
+    async def test_a_declined_transfer_writes_nothing(self):
+        client = FakeCoreBankingClient()
+        before = await client.list_transactions("chequing")
+        result = await client.transfer("chequing", "savings", 99999.00)
+        self.assertEqual(result.outcome, "declined")
+        self.assertEqual(await client.list_transactions("chequing"), before)
+
+    async def test_it_is_bounded_the_way_the_service_bounds_it(self):
+        client = FakeCoreBankingClient(clock=lambda: "2026-09-11")
+        for _ in range(fake.TRANSACTION_LIST_LIMIT + 4):
+            await client.transfer("chequing", "savings", 1.00)
+        self.assertEqual(
+            len(await client.list_transactions("chequing")), fake.TRANSACTION_LIST_LIMIT
+        )
+
+    async def test_an_unknown_account_raises_rather_than_returning_nothing(self):
+        # The order matters: unknown-account is checked before the history is looked up, so a
+        # caller is never told their account does not exist merely because they have not used it.
+        with self.assertRaises(UnknownAccountError):
+            await FakeCoreBankingClient().list_transactions("bitcoin")
+
+    async def test_an_account_with_no_history_is_empty_not_unknown(self):
+        client = FakeCoreBankingClient(accounts={"tfsa": 0.0}, transactions={})
+        self.assertEqual(await client.list_transactions("tfsa"), [])
+
+    async def test_it_is_recorded_like_every_other_call(self):
+        client = FakeCoreBankingClient()
+        await client.list_transactions("chequing")
+        self.assertIn("list_transactions", client.calls)
+
+    async def test_an_arranged_failure_reaches_it_too(self):
+        client = FakeCoreBankingClient(fail_with=CoreBankingUnavailable("down"))
+        with self.assertRaises(CoreBankingUnavailable):
+            await client.list_transactions("chequing")
+
+    async def test_two_fakes_do_not_share_history(self):
+        # A shallow dict copy would hand every fake in a run the same list objects to append to,
+        # which is the shape of cross-test contamination that is hardest to diagnose.
+        first = FakeCoreBankingClient(clock=lambda: "2026-09-11")
+        second = FakeCoreBankingClient()
+        await first.transfer("chequing", "savings", 1.00)
+        self.assertNotEqual(
+            len(await first.list_transactions("chequing")),
+            len(await second.list_transactions("chequing")),
+        )

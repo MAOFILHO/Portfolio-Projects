@@ -21,6 +21,7 @@ from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 from azbank_voice_agent.cost import caps
 from azbank_voice_agent.dispatch import gate
+from azbank_voice_agent.dispatch import tools as tools_module
 from azbank_voice_agent.realtime import session as session_module
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -762,7 +763,7 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         self.assertEqual([t["name"] for t in configs[0]["tools"]], ["handoff_to_banking"])
         self.assertEqual(
             sorted(t["name"] for t in configs[1]["tools"]),
-            ["get_balance", "list_accounts", "transfer"],
+            ["get_balance", "list_accounts", "list_transactions", "transfer"],
         )
         self.assertNotEqual(configs[0]["instructions"], configs[1]["instructions"])
 
@@ -890,3 +891,91 @@ class WholeCallLogsB5LatencyAnchors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WholeCallListingTransactions(unittest.TestCase):
+    """A caller who authenticates and asks what happened on an account (issue #46).
+
+    The point of testing this here rather than only at the dispatcher is the second claim of the
+    pair the gate's tests use: the tool is genuinely reachable on a real call path, and the history
+    the caller hears came from the system of record rather than from anything the model remembered.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def _call(self, arguments='{"account": "chequing"}'):
+        transport = FakeTransport(
+            frames=[*_keyed(DEFAULT_PIN), audio_frame("what-happened-on-chequing")], hang=True
+        )
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_banking", "{}", call_id="call-handoff"),
+                function_call("list_transactions", arguments, call_id="call-history"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        return transport, realtime
+
+    def _result(self, realtime, call_id="call-history"):
+        return json.loads(dict(realtime.tool_outputs)[call_id])
+
+    def test_an_authenticated_caller_hears_their_history(self):
+        transport, realtime = self._call()
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+
+        result = self._result(realtime)["result"]
+        self.assertTrue(result)
+        # Newest first, and the figures are the ones the system of record holds.
+        self.assertEqual(result[0]["occurred_at"], "2026-09-05")
+        self.assertEqual(result[0]["amount"], -40.00)
+        self.assertEqual(result[0]["counterparty"], "savings")
+        self.assertIn("list_transactions", self.core_banking.calls)
+
+    def test_the_history_came_from_the_system_of_record(self):
+        # The claim that matters: what the caller is read is what the client returned, not a
+        # payload assembled anywhere in the relay. Proved by changing what the system of record
+        # holds and watching the answer change with it.
+        transport, realtime = self._call()
+        self.core_banking.transactions["chequing"] = []
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self._result(realtime)["result"], [])
+
+    def test_an_empty_history_is_a_result_not_an_error(self):
+        # A caller who has never used an account must not be told something went wrong.
+        transport, realtime = self._call()
+        self.core_banking.transactions["chequing"] = []
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertNotIn("error", self._result(realtime))
+
+    def test_an_unknown_account_is_the_sentence_get_balance_already_produces(self):
+        transport, realtime = self._call(arguments='{"account": "bitcoin"}')
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(
+            self._result(realtime), {"error": "There's no bitcoin account on this profile."}
+        )
+
+    def test_an_anonymous_caller_is_refused_and_the_service_is_never_asked(self):
+        # No PIN keyed at all: the call stays anonymous, and the refusal must happen before the
+        # client is reached rather than after it answers.
+        transport = FakeTransport(frames=[audio_frame("what-happened")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_banking", "{}", call_id="call-handoff"),
+                function_call(
+                    "list_transactions", '{"account": "chequing"}', call_id="call-history"
+                ),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self._result(realtime), {"error": gate.REFUSAL})
+        self.assertNotIn("list_transactions", self.core_banking.calls)
+
+    def test_a_malformed_account_argument_never_reaches_the_service(self):
+        transport, realtime = self._call(arguments='{"account": {"$ne": null}}')
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self._result(realtime), {"error": tools_module.MALFORMED})
+        self.assertNotIn("list_transactions", self.core_banking.calls)
