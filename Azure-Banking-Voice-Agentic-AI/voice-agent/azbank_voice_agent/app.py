@@ -67,21 +67,19 @@ except OSError as e:
 #: import time") and `realtime/client.py` ("Reads configuration at call time, not import time") --
 #: and this was the one file in that role not following it (/code-review, 2026-09-11).
 #:
-#: No default, same as every other address this project reads. **The refusal lives in `boot.py`
-#: and `lifespan()` calls it**, which is what makes a missing value a startup failure rather than a
-#: `KeyError` in the webhook -- reading it at call time alone did not, and briefly made this the
-#: one address that failed in front of a caller (/code-review, 2026-09-11).
-def _app_base_url():
-    # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
-    return app_base_url()
-
-
+#: No default, same as every other address this project reads. **The refusal lives in
+#: `boot.app_base_url` and `lifespan()` calls it**, which is what makes a missing value a startup
+#: failure rather than a `KeyError` in the webhook -- reading it at call time alone did not, and
+#: briefly made this the one address that failed in front of a caller (/code-review, 2026-09-11).
+#: Both functions below call it directly; the private one-line wrapper that stood here for one
+#: commit delegated and did nothing else (/code-review, 2026-09-11, twice).
 def callback_url():
-    return f"{_app_base_url()}/api/callbacks"
+    # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io/api/callbacks
+    return f"{app_base_url()}/api/callbacks"
 
 
 def ws_url():
-    return _app_base_url().replace("https://", "wss://") + "/ws"
+    return app_base_url().replace("https://", "wss://") + "/ws"
 
 
 #: The process-wide collaborators, built once in lifespan(). Module-level rather than on app.state

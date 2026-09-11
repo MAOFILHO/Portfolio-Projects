@@ -281,13 +281,14 @@ async def run_closed_call(transport, realtime, call_records, correlation_id=None
         relay enforces it was false (/code-review, 2026-09-11). Reading it here is what makes the
         number the bound instead of a description of one.
         """
-        # Checked before the loop as well as inside it. A cap of zero means "no turns", and a
-        # test that only counts `response.done` events would never reach its own bound -- the
-        # wall clock would be the only thing ending the path, which is the brake-becomes-the-cost
-        # shape this constant exists to prevent (/code-review, 2026-09-11).
-        turns = 0
-        if turns >= caps.MAX_CLOSED_CALL_TURNS:
+        # A cap of zero means "no turns at all", and counting `response.done` events could never
+        # reach it -- the wall clock would be the only thing ending the path, which is the
+        # brake-becomes-the-cost shape this constant exists to prevent. Written as a direct test of
+        # the constant: the first version of this guard compared a freshly-assigned `turns = 0`
+        # against the cap, which is this line with extra steps (/code-review, 2026-09-11, twice).
+        if caps.MAX_CLOSED_CALL_TURNS <= 0:
             return
+        turns = 0
         async for event in realtime:
             if event.type == "response.output_audio.delta":
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
@@ -306,11 +307,14 @@ async def run_closed_call(transport, realtime, call_records, correlation_id=None
         #
         # **What the `except` below now also swallows, stated accurately.** An earlier version of
         # this comment said "exactly one case", the caller hanging up during these frames. That
-        # undercounted: builtin `TimeoutError` subclasses `OSError`, so a *send* that times out is
-        # caught here too and logged as a path that ended without a complete response. Both are
-        # the closed path failing to deliver one sentence, which is the line's meaning, so the
-        # branch is right -- but "exactly one case" was a comment outrunning its code, in a hunk
-        # written to fix comments outrunning their code (/code-review, 2026-09-11).
+        # undercounted: `TimeoutError` is named in the tuple, so a *send* that times out is caught
+        # here too and logged as a path that ended without a complete response. Both are the closed
+        # path failing to deliver one sentence, which is the line's meaning, so the branch is right.
+        #
+        # Two corrections in two reviews on one comment. The first said "exactly one case" and was
+        # wrong about the count; the replacement blamed `TimeoutError` subclassing `OSError`, which
+        # is true of the type and irrelevant here, since `OSError` appears nowhere in the tuple
+        # (/code-review, 2026-09-11, twice).
         await realtime.send(_session_update(gate.TRIAGE_AGENT))
         item_id = _new_event_id()
         await realtime.send(_spoken_note(CLOSED, item_id))

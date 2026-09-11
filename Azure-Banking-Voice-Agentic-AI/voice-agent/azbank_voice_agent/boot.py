@@ -33,8 +33,9 @@ ACTIVE_REALTIME_MODEL = ("gpt-realtime-mini", "2025-10-06")  # GA, retires 2027-
 # audio cost; that is the tier difference, not the version.
 # **A dot, not a hyphen.** This is a *model* name, because that is what the guard compares it
 # against: `parse_deployment_response` reads `properties.model.name`. The hyphen form this entry
-# carried until 2026-09-11 traced to docs/phase0/findings.md:361, which described *deployment*
-# names -- a different namespace, freely chosen at deployment time. The live Models API spells the
+# carried until 2026-09-11 traced to the "deployment-name strings" sentence in
+# docs/phase0/findings.md ("Honest gap worth naming for Phase 2's implementation"), which described
+# *deployment* names -- a different namespace, freely chosen at deployment time. The live Models API spells the
 # model `gpt-realtime-1.5`, so the old entry could never match anything Azure would report, and
 # booting the pre-vetted successor would have been refused at startup by the very allowlist that
 # exists to let it boot. Found by /code-review 2026-09-11; see test_boot.py's
@@ -88,14 +89,19 @@ def core_banking_url(env=None):
 def app_base_url(env=None):
     """Where this app answers its own callbacks and media, or a refusal to start.
 
-    Same no-default rule as the two addresses below, and it is here rather than in `app.py`
-    because that is what makes it a *startup* failure. It used to be one by accident: `app.py` read
-    it at module scope, so a missing value killed the import. Moving that read to call time
-    (2026-09-11) removed an import-time side effect and, unnoticed, turned the failure into a
-    `KeyError` inside the incoming-call webhook -- past a `/healthz` that answers `ok`
-    unconditionally, on a revision already taking traffic, in front of a caller. Exactly what
-    `core_banking_url` above refuses to allow, undone by a change meant to tidy imports
-    (/code-review, 2026-09-11).
+    Same no-default rule as `core_banking_url` above and `call_records_account_url` below, and it
+    sits with them because this is where this project keeps its refusals -- **but being here is not
+    what makes a missing value fatal.** `lifespan()` calling it is. That distinction is the whole
+    defect: unlike the other two, nothing in the startup path *uses* this address, so it needs a
+    call made purely for its refusal, and an earlier version of this docstring claimed the file
+    location did the work (/code-review, 2026-09-11).
+
+    It used to be fatal by accident: `app.py` read it at module scope, so a missing value killed
+    the import. Moving that read to call time (2026-09-11) removed an import-time side effect and,
+    unnoticed, turned the failure into a `KeyError` inside the incoming-call webhook -- past a
+    `/healthz` that answers `ok` unconditionally, on a revision already taking traffic, in front of
+    a caller. Exactly what `core_banking_url` refuses to allow, undone by a change meant to tidy
+    imports.
     """
     env = os.environ if env is None else env
     url = env.get(APP_BASE_URL_VAR)
@@ -200,11 +206,17 @@ def assert_boot_safety(reader=read_live_model, env=None):
         # Same fail-closed reasoning as the client's own missing-pin behaviour: no default, ever.
         raise SystemExit("B3: AOAI_DEPLOYMENT is not set -- refusing to start without a named pin.")
 
-    # Checked here as well as read in app.py, so that "the app started" means "every piece of
-    # configuration it needs was present", rather than deferring the discovery to the first tool
-    # call. After the B3 checks above and before the network read below: B3 is the named
-    # constraint and keeps first claim on the failure message, and neither check should be paid
-    # for over the network when a local one can refuse first.
+    # Checked here as well as read in app.py, rather than deferring the discovery to the first tool
+    # call. After the B3 checks above and before the network read below: B3 is the named constraint
+    # and keeps first claim on the failure message, and neither check should be paid for over the
+    # network when a local one can refuse first.
+    #
+    # **This guard does not check every address**, and an earlier version of this comment said it
+    # did ("'the app started' means 'every piece of configuration it needs was present'"). The
+    # other two are refused by `lifespan()` instead -- `call_records_account_url` because it is
+    # used there to build the store, `app_base_url` by a call made purely for its refusal. All
+    # three fail before traffic, which is the property that matters; only this one fails here
+    # (/code-review, 2026-09-11).
     core_banking_url(env)
 
     try:

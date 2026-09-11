@@ -207,7 +207,10 @@ class CallRecordStore(Protocol):
         implementation: two calls ending at the same instant must both count. How an implementer
         gets there is its own business -- `TableStorageCallRecordStore` holds a lock because its
         read and write are separate awaits, and `FakeCallRecordStore` needs nothing because its
-        update is a single expression with no await inside it, so no other task can interleave.
+        body contains no `await` at all, so the event loop cannot hand another task the CPU part
+        way through it. (An earlier version of this sentence said "a single expression", which is
+        not true of it -- two statements, neither of them awaiting. The no-await half is the half
+        that matters; the count was decoration, and wrong.)
         Stated here because a future implementer reading only the signature would not guess it
         (/code-review, 2026-09-11).
         """

@@ -25,7 +25,7 @@ first and observed red.
 
 | # | Finding | Fixed by | Pinned by |
 |---|---|---|---|
-| 1 | **B3: the successor allowlist entry could never match a live deployment.** The guard compares `properties.model.name`, a *model* name. The entry spelled it `gpt-realtime-1-5`, a *deployment*-name form traced to `docs/phase0/findings.md:361`. The live Models API says `gpt-realtime-1.5`. Booting the pre-vetted successor would have been refused at startup by the allowlist that exists to permit it | the dot, in `boot.py` | `test_boot.py::test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it` |
+| 1 | **B3: the successor allowlist entry could never match a live deployment.** The guard compares `properties.model.name`, a *model* name. The entry spelled it `gpt-realtime-1-5`, a *deployment*-name form traced to the "deployment-name strings" sentence in `docs/phase0/findings.md`. The live Models API says `gpt-realtime-1.5`. Booting the pre-vetted successor would have been refused at startup by the allowlist that exists to permit it | the dot, in `boot.py` | `test_boot.py::test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it` |
 | 2 | **B4: criterion 11's "times out" branch was asserted, not implemented.** No deadline on either side of the seam, so a Storage endpoint that accepted the connection and went silent stalled the media socket with a caller on it. The only evidence was a fake pre-raising the exception the code was meant to produce | `session.LEDGER_DEADLINE_SECONDS`, wrapping the budget read and the teardown write | `test_whole_call.py::test_a_store_that_never_answers_at_all_refuses` |
 | 3 | **B4: the daily ledger lost concurrent updates.** Read-then-write across two awaits: two calls ending together in one process both read the same figure and the second write erased the first. The comment defended this with a `maxReplicas: 1` belonging to mock-core-banking — the voice agent has no Bicep module at all | an in-process `asyncio.Lock` (Marco's choice, 2026-09-11) | `test_call_records.py::test_two_calls_ending_together_both_count_against_the_day` |
 | 4 | **B4: minutes and `end_call` were skipped when a pre-`try` send raised.** Both relays took the start time, sent their opening frames, and only then opened the block whose `finally` charges the day — against a docstring promising "every path out" | the `try` moved above the preamble sends, in both relays | `test_whole_call.py::test_a_send_that_fails_before_the_relay_starts_is_still_charged` and its two siblings |
@@ -33,6 +33,33 @@ first and observed red.
 | 6 | **`MAX_CLOSED_CALL_TURNS` enforced nothing.** Referenced nowhere; the one-turn bound held structurally because the relay returned at the first `response.done`. Editing the constant changed no behaviour | `speak_once` counts completed responses against it | `test_whole_call.py::test_the_turn_bound_is_the_named_constant_and_not_a_coincidence` |
 | 7 | **The entry point read configuration and built a live ACS client at import time** — the one file in that role not following a rule three sibling modules state as a rule | configuration read at call time; the client built in `lifespan()` beside the other two, and closed there | `test_app.py::ImportingThisModuleHasNoSideEffects`, which imports from a scrubbed subprocess |
 | 8 | **Three tidy-ups**: the unrecognised-outcome check and its eight-line comment duplicated across two call sites; `CallScope`'s two collaborator fields typed `object` in a package defining Protocols for exactly that; the probe's frame-size expression written twice | `client._recognised`; the Protocols; `_BYTES_PER_FRAME` | the existing suites |
+
+## Round two, and round three
+
+The eight above were reviewed in turn, twice. Commits `8bb523f` and the one carrying this
+paragraph. Both rounds found real defects in the fixes, which is the argument for having run them.
+
+**Round two** found one hard violation and thirteen other findings. The violation was in fix 7:
+moving `APP_BASE_URL` off the import path removed the thing that made a missing value fatal, and
+nothing replaced it — `/healthz` answers `ok` unconditionally, so a misconfigured revision would
+have passed its health check, taken traffic, and raised `KeyError` in front of a caller. The
+refusal now lives in `boot.app_base_url` and `lifespan()` calls it purely for that. It also found
+that fix 5 carried a test which passed with its own fix reverted (see the note under "The eight").
+
+**Round three** found three more, all in text rather than behaviour, and all of the same shape:
+a docstring claiming its file location was what made a value fatal (the `lifespan()` call is), a
+claim that the fake's update was "a single expression" (two statements, neither awaiting — the
+no-await half was the true half), and a correction note inserted *above* the sentence it corrects,
+which shifted that sentence's line number and left two citations pointing at the note. Citations
+are by quoted text now, not line number. It also caught a guard written as `turns = 0` followed by
+comparing `turns` to the cap, a one-line delegating wrapper, and a replacement test that had
+dropped the half of its predecessor's coverage nobody noticed was gone.
+
+**What three rounds on one change actually demonstrates.** Every round found something, and each
+round's findings were smaller and more textual than the last. Rounds two and three both caught
+comments asserting properties the code did not have — the same defect class round one existed to
+fix, reintroduced while fixing it. That is worth knowing about this codebase's failure mode: the
+comment density that makes it readable is also its largest surface for untrue claims.
 
 ## Two decisions inside the fixes
 

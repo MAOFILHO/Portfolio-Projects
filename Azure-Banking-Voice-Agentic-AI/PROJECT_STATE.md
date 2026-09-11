@@ -48,10 +48,7 @@ nothing redeployed, no call made.** What a caller dialling the number reaches to
 1's agent on the Phase 2 image — the gap between what is committed and what answers the phone is now
 **four** phases wide.
 
-**The Phase 5 `/code-review`'s eight findings are fixed, and a second review of those fixes has
-itself been actioned** — it found one hard violation (a startup check turned into a webhook
-`KeyError`) and one B1 test that passed with its own fix reverted. Both fixed. Record:
-`docs/phase5/review-fixes.md`.
+**Three rounds of `/code-review` are actioned and closed.** Record: `docs/phase5/review-fixes.md`.
 
 | | |
 |---|---|

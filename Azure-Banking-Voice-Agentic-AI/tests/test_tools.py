@@ -362,6 +362,10 @@ class TheDefaultsAreTheLeastPrivilegedOnes(unittest.IsolatedAsyncioTestCase):
         agents = {agent for agent, _ in gate.PERMISSIONS}
         auth_states = {auth_state for _, auth_state in gate.PERMISSIONS}
 
+        # Indexing `PERMISSIONS` for every pair also asserts the table is total. A missing row
+        # raises `KeyError` here rather than quietly narrowing what this test covers -- loud, and
+        # deliberate, because the previous version could not have noticed one (/code-review,
+        # 2026-09-11).
         for auth_state in auth_states:
             mine = gate.PERMISSIONS[(default_agent, auth_state)]
             for other in agents:
@@ -371,6 +375,23 @@ class TheDefaultsAreTheLeastPrivilegedOnes(unittest.IsolatedAsyncioTestCase):
                         f"default agent {default_agent!r} grants more than {other!r} "
                         f"when {auth_state!r}: {sorted(mine - gate.PERMISSIONS[(other, auth_state)])}",
                     )
+
+    async def test_the_default_auth_state_is_the_unauthenticated_one(self):
+        """The other half of the pair, which briefly had no test at all.
+
+        The assertion this class replaced read both defaults; the replacement read only `agent`,
+        so for one commit nothing anywhere pinned `auth_state=ANONYMOUS` -- while this class's own
+        docstring went on claiming both were covered. Strengthening one half by dropping the other
+        is not strengthening (/code-review, 2026-09-11).
+
+        Stated as identity rather than as a permission comparison on purpose: `ANONYMOUS` is not
+        merely the least-granting state, it is the state a call *starts* in and the one B1's whole
+        definition is written against. A future table where some other state granted less must not
+        silently become the default.
+        """
+        import inspect
+        default = inspect.signature(tools.dispatch_tool_call).parameters["auth_state"].default
+        self.assertEqual(default, gate.ANONYMOUS)
 
 
 class ToolsMatchDispatch(unittest.TestCase):
