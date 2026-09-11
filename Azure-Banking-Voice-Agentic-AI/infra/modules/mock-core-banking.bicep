@@ -7,14 +7,38 @@
 //
 // BEFORE THIS IS EVER DEPLOYED, TWO THINGS MUST HAPPEN, IN THIS ORDER:
 //
-//   1. R-08 is recomputed against a **two**-Container-App fixed cost. This would be the project's
-//      second always-on container, and fixed cost is the line the entire $25/month ceiling turns
-//      on (PROJECT_STATE.md, "Active risks"). The current figure -- Phase 0's 79.2 demo runs/month
-//      -- assumes one.
-//   2. Marco types `APPROVED: Phase 3` for the provisioning step itself. Deploying this creates a
-//      billable resource, which CLAUDE.md's stop conditions gate absolutely.
+//   1. R-08 is recomputed against a **two**-Container-App fixed cost. **DONE 2026-09-11** and it
+//      passes with headroom: fixed $14.60/mo, 45-67 demo runs/month against a gate of 5 (COSTS.md,
+//      "R-08, recomputed"). This container's own marginal cost is **$7.88/mo, not $5.72** -- the
+//      Container Apps free grant is per subscription and the voice agent already consumes all of
+//      it, so this one bills on its whole consumption rather than net of a grant.
+//   2. Marco types `APPROVED: Phase 5` for the provisioning step itself. **GIVEN 2026-09-11.**
+//      (The token names Phase 5, not Phase 3: this module was written in Phase 3 and is applied in
+//      Phase 5, and the approval that matters is the one for the phase that spends the money.)
 //
 // A diff touching this file is also never auto-accepted: it provisions a billable resource.
+//
+// ---
+//
+// REVIEWED 2026-09-11 (issue #56), before applying. What was checked, and what it still cannot be:
+//
+//   * `external: false` -- still internal. This is what keeps deferring shared-secret auth to
+//     Phase 7 a considered decision rather than a PIN crossing the public internet in a body.
+//   * 0.25 vCPU / 0.5 GiB, minReplicas 1, maxReplicas 1 -- unchanged, and R-08's recomputed
+//     arithmetic assumes exactly this shape. **maxReplicas 1 is load-bearing twice**: it is what
+//     keeps that figure true, and it is what makes the call-record ledger's read-then-write correct
+//     (`call_records/store.py`). Changing it invalidates both, and both now say so.
+//   * A liveness probe on /health, which touches no account state -- so a probe can never be the
+//     thing that wakes or contends with the database.
+//   * No number-release or number-delete call, here or in any script in this repo. **Checked
+//     2026-09-11 rather than assumed** (issue #56): every hit for release/delete/purge across all
+//     83 shell, Python, Bicep and Makefile files is either a read-only `phonenumber list`, an
+//     unrelated identifier, or a comment restating the rule. `04-teardown-and-r08.sh` says in its
+//     own words that it never calls a release, and it does not.
+//   * **Still not validated by any tool.** There is no `bicep` CLI here and still no `main.bicep`,
+//     so this has never been compiled, linted or what-if'd, and "consistent with the existing
+//     modules" now has exactly one sibling to be consistent with. Human review is the only check
+//     that exists, which is why this list is written down rather than done silently.
 
 @description('Azure region. Canada Central, no fallback -- docs/PLAN.md decision 12.')
 param location string = 'canadacentral'
