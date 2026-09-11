@@ -202,6 +202,14 @@ class CallRecordStore(Protocol):
         Called when a call ends, on every path out (issue #50) -- including the paths that raise,
         and including the closed path's own short call. A brake whose usage was invisible in the one
         place it matters would not be a brake anybody could audit.
+
+        **Concurrent calls must not lose each other's minutes.** Part of the contract, not of one
+        implementation: two calls ending at the same instant must both count. How an implementer
+        gets there is its own business -- `TableStorageCallRecordStore` holds a lock because its
+        read and write are separate awaits, and `FakeCallRecordStore` needs nothing because its
+        update is a single expression with no await inside it, so no other task can interleave.
+        Stated here because a future implementer reading only the signature would not guess it
+        (/code-review, 2026-09-11).
         """
         ...
 
@@ -286,11 +294,21 @@ class TableStorageCallRecordStore:
         today, and an ETag path cannot be exercised against real Table Storage until the Storage
         account exists. If the scale rule ever changes, this is the line that breaks, and this
         paragraph is what says so.
+
+        **The lock and the relay's deadline interact, and not in the safe direction.**
+        `session.LEDGER_DEADLINE_SECONDS` wraps this whole call, lock acquisition included -- so
+        under the very contention the lock exists for, a queued writer spends part of its budget
+        waiting on the holder's round trip. Run out and `_record_minutes` logs loudly and swallows,
+        which undercounts: the fail-open direction again. Deliberately not "fixed" by starting the
+        deadline after the lock, which would let teardown block without bound. Not a live risk
+        either: one replica serving calls capped at 20 turns cannot queue writers deep enough for
+        three seconds of round trips. Written down rather than left to be rediscovered
+        (/code-review, 2026-09-11).
         """
         async with self._ledger_lock:
-            await self._read_then_write(day, minutes)
+            await self._add_to_day(day, minutes)
 
-    async def _read_then_write(self, day, minutes):
+    async def _add_to_day(self, day, minutes):
         current = await self.minutes_used(day)
         entity = {
             "PartitionKey": LEDGER_PARTITION,

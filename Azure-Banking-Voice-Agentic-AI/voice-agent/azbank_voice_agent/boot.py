@@ -50,6 +50,10 @@ ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_M
 # what this project configured. It is not a check on AOAI_KEY, which is legitimately set today.
 AMBIENT_SDK_KEY_VAR = "AZURE_OPENAI_API_KEY"
 
+#: The public base URL this app answers on, which its own ACS callback and media URLs are built
+#: from. No default, ever -- see app_base_url() below.
+APP_BASE_URL_VAR = "APP_BASE_URL"
+
 #: Where mock-core-banking lives. No default, ever -- see core_banking_url() below.
 CORE_BANKING_URL_VAR = "CORE_BANKING_URL"
 
@@ -77,6 +81,29 @@ def core_banking_url(env=None):
             f"{CORE_BANKING_URL_VAR} is not set -- refusing to start without an address for "
             "mock-core-banking. There is no default: an unconfigured backend must fail at boot, "
             "not on the first tool call."
+        )
+    return url
+
+
+def app_base_url(env=None):
+    """Where this app answers its own callbacks and media, or a refusal to start.
+
+    Same no-default rule as the two addresses below, and it is here rather than in `app.py`
+    because that is what makes it a *startup* failure. It used to be one by accident: `app.py` read
+    it at module scope, so a missing value killed the import. Moving that read to call time
+    (2026-09-11) removed an import-time side effect and, unnoticed, turned the failure into a
+    `KeyError` inside the incoming-call webhook -- past a `/healthz` that answers `ok`
+    unconditionally, on a revision already taking traffic, in front of a caller. Exactly what
+    `core_banking_url` above refuses to allow, undone by a change meant to tidy imports
+    (/code-review, 2026-09-11).
+    """
+    env = os.environ if env is None else env
+    url = env.get(APP_BASE_URL_VAR)
+    if not url:
+        raise SystemExit(
+            f"{APP_BASE_URL_VAR} is not set -- refusing to start without the address this app "
+            "answers its own callbacks and media on. There is no default: a revision that cannot "
+            "name itself must fail at boot, not on the first incoming call."
         )
     return url
 

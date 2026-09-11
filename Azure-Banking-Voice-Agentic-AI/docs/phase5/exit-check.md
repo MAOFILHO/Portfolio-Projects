@@ -87,7 +87,10 @@ Filed as sub-issues of **#43** on 2026-09-11: **#44–#60**.
     identity, no connection string** — and `boot.py` refuses one outright rather than merely not
     using one.
 11. **The daily cap, fail-closed — `T-B4-FAILCLOSED`.** ✅ Four ways in (raises, times out, answers
-    unreadably, genuinely spent), **one branch out**. Asserted on what the caller is told and on the
+    unreadably, genuinely spent), **one branch out**. *Verdict unchanged 2026-09-11, evidence
+    replaced*: "times out" was covered only by a fake pre-raising the exception the code was
+    supposed to produce, which proved the translation and not that any deadline existed. There is
+    one now (`session.LEDGER_DEADLINE_SECONDS`), driven by a store that actually hangs. Asserted on what the caller is told and on the
     call ending. An intact budget is asserted to serve, so a brake wired shut fails rather than
     passing everything. **The read moved from the webhook to the media socket**, recorded in the exit
     criteria with its three reasons — the decisive one being that a marker carried in the WebSocket
@@ -112,8 +115,16 @@ Filed as sub-issues of **#43** on 2026-09-11: **#44–#60**.
     | Retirement | **2027-04-06** — ~6.8 months out |
     | Successor | `gpt-realtime-1.5` 2026-02-23, GA, retires 2027-08-24 |
 
-    Both match `boot.py`'s allowlist exactly. Well clear of the two-month stop-and-ask threshold, so
-    the phase proceeds on this axis. Nothing has drifted from `docs/PLAN.md` decision 14.
+    Well clear of the two-month stop-and-ask threshold, so the phase proceeds on this axis.
+
+    > **Corrected 2026-09-11.** This paragraph read "Both match `boot.py`'s allowlist exactly…
+    > Nothing has drifted from `docs/PLAN.md` decision 14." **It was false when written**: the
+    > allowlist spelled the successor `gpt-realtime-1-5` and `docs/PLAN.md`'s B3 code block spelled
+    > it the same way, so the row above matched the live catalog and neither of the two things it
+    > claimed to match. The gate check compared the table against the catalog and never against the
+    > code. Both are corrected now; the check that would have caught it is
+    > `test_boot.py::test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it`,
+    > which pins the catalog spelling as a literal. See `docs/phase5/review-fixes.md`.
 21. **Two Bicep modules, human-reviewed, not applied.** ✅ *Written and reviewed.* The review is
     recorded in each module's header. **Applying them is #57 and has not happened.**
 22. **mock-core-banking's ingress stays internal.** ✅ Confirmed in the review.

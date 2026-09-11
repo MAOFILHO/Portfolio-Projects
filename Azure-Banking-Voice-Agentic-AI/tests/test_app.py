@@ -133,6 +133,26 @@ class BootGuardIsOnTheStartupPath(unittest.TestCase):
              patch.object(app, "DefaultAzureCredential", lambda: None):
             asyncio.run(enter_and_exit())
 
+    def test_startup_refuses_without_the_apps_own_base_url(self):
+        """A missing `APP_BASE_URL` must kill the container, not the call.
+
+        It used to, by accident: the value was read at module scope, so the import failed. Moving
+        the read to call time (2026-09-11) fixed an import-time side effect and broke this at the
+        same time -- nothing validated the variable at startup, `/healthz` answers `ok`
+        unconditionally, and the first `KeyError` would have fired inside `incoming_call`. A
+        misconfigured revision would have passed its health check, taken traffic, and failed in
+        front of a caller, which is the precise inversion of the rule `boot.py` states in its own
+        words (/code-review, 2026-09-11, Standards finding 1).
+        """
+        # B3 is patched out so the refusal under test is the only one that can fire -- otherwise
+        # this would pass on the guard's own complaint about an unrelated variable.
+        env = {k: v for k, v in os.environ.items() if k != "APP_BASE_URL"}
+        with patch.object(app, "assert_boot_safety", lambda: None), \
+             patch.dict(os.environ, env, clear=True), \
+             self.assertRaises(SystemExit) as caught:
+            self._run_lifespan()
+        self.assertIn("APP_BASE_URL", str(caught.exception))
+
     def test_startup_runs_the_boot_guard(self):
         calls = []
         with patch.object(app, "assert_boot_safety", lambda: calls.append("checked")):

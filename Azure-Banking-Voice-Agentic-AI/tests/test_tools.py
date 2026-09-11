@@ -342,22 +342,35 @@ class TheDefaultsAreTheLeastPrivilegedOnes(unittest.IsolatedAsyncioTestCase):
         ))
         self.assertEqual(answer, {"error": gate.REFUSAL})
 
-    async def test_the_default_pair_grants_exactly_what_the_least_privileged_row_grants(self):
-        # Not "grants nothing": the anonymous corollary changed in Phase 5 and asking for a person
-        # is reachable on every row. The claim is that the defaults land on the least-privileged
-        # row, whatever that row currently holds -- so this reads the table rather than restating
-        # it, and stays true when the table moves.
+    async def test_the_default_agent_is_least_privileged_in_every_auth_state(self):
+        """The default agent grants no more than any other agent would, in any auth state.
+
+        **This assertion replaces one that did not fail when the fix was reverted**
+        (/code-review, 2026-09-11). The first version compared the default row's grants to the
+        smallest row's *by value* -- and `(banking, anonymous)` and `(triage, anonymous)` are both
+        exactly `{escalate_to_human}`, so it passed happily with `BANKING_AGENT` restored. It
+        tested the pair that was already innocent and never looked at the authenticated row, which
+        is the one where the two agents differ and the only place the defect could bite.
+
+        Quantifying over every auth state is what closes that. `BANKING_AGENT` fails it on
+        `AUTHENTICATED`, where it grants all five banking tools and `TRIAGE_AGENT` grants one.
+        Still read off the table rather than restating it, so it survives the table moving -- the
+        anonymous corollary already moved once this phase.
+        """
         import inspect
-        signature = inspect.signature(tools.dispatch_tool_call)
-        defaults = (
-            signature.parameters["agent"].default,
-            signature.parameters["auth_state"].default,
-        )
-        least = min(gate.PERMISSIONS, key=lambda pair: len(gate.PERMISSIONS[pair]))
-        self.assertEqual(
-            gate.PERMISSIONS[defaults], gate.PERMISSIONS[least],
-            f"the defaults {defaults} do not land on a least-privileged row",
-        )
+        default_agent = inspect.signature(tools.dispatch_tool_call).parameters["agent"].default
+        agents = {agent for agent, _ in gate.PERMISSIONS}
+        auth_states = {auth_state for _, auth_state in gate.PERMISSIONS}
+
+        for auth_state in auth_states:
+            mine = gate.PERMISSIONS[(default_agent, auth_state)]
+            for other in agents:
+                with self.subTest(auth_state=auth_state, other=other):
+                    self.assertLessEqual(
+                        mine, gate.PERMISSIONS[(other, auth_state)],
+                        f"default agent {default_agent!r} grants more than {other!r} "
+                        f"when {auth_state!r}: {sorted(mine - gate.PERMISSIONS[(other, auth_state)])}",
+                    )
 
 
 class ToolsMatchDispatch(unittest.TestCase):

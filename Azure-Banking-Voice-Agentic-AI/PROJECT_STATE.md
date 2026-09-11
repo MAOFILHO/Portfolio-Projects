@@ -48,9 +48,10 @@ nothing redeployed, no call made.** What a caller dialling the number reaches to
 1's agent on the Phase 2 image — the gap between what is committed and what answers the phone is now
 **four** phases wide.
 
-**The Phase 5 `/code-review`'s eight findings are all fixed** — four of them on named constraints
-(B1, B3, B4 twice). Commits `581b8f4` and `59a3d93`; the gate-adjacent one landed separately, after
-Marco read its diff. Record: `docs/phase5/review-fixes.md`. **The fixes are themselves unreviewed.**
+**The Phase 5 `/code-review`'s eight findings are fixed, and a second review of those fixes has
+itself been actioned** — it found one hard violation (a startup check turned into a webhook
+`KeyError`) and one B1 test that passed with its own fix reverted. Both fixed. Record:
+`docs/phase5/review-fixes.md`.
 
 | | |
 |---|---|
@@ -62,7 +63,7 @@ Marco read its diff. Record: `docs/phase5/review-fixes.md`. **The fixes are them
 | B5 | **not frozen** — the probe is repaired but has not been run |
 | `make lint`, B3 static check | clean, passing |
 
-Both red-team numbers are always quoted together. A case count with no idea count behind it is the
+Both red-team numbers are always quoted together: a case count with no idea count behind it is the
 same empty claim as a percentile with no N.
 
 **What the phase added**: `list_transactions`, a Cards agent and `block_card` with a relay-generated
@@ -82,11 +83,11 @@ three things a later session needs without reading it:
 
 ### Needs Marco
 
-0. **Review `git log e42c063..HEAD`** — Phase 4's diff *and* Phase 5's, oldest first. This was Phase
-   5's one unmet entry condition and it was **waived rather than satisfied** on 2026-09-11. Read the
-   range from `git log`, never a count written here: a count was written twice and wrong twice,
-   because the commit that updates it is uncounted when it is written. **Most of Phase 5's commits
-   touch `dispatch/gate.py`, the DTMF/PIN path, or both**, so the never-auto-accept rule binds them.
+0. **Review `git log e42c063..HEAD`** — Phase 4's diff *and* Phase 5's, oldest first. Phase 5's one
+   unmet entry condition, **waived rather than satisfied** on 2026-09-11. Read the range from
+   `git log`, never a count written here; a count written here has been wrong twice, because the
+   commit updating it is uncounted as it is written. **Most of these commits touch `dispatch/`, the
+   DTMF/PIN path, or both**, so the never-auto-accept rule binds them.
 1. **`/research`, before anything is applied.** Two facts are written from documentation rather than
    from a live source, and the module says so in its own header: the **role definition GUID** in
    `infra/modules/call-records-store.bicep`, where being wrong produces a role assignment that
@@ -165,8 +166,8 @@ because they are genuinely unresolved, not because any of them is currently bloc
 7. **Stale `az` CLI `defaults.location=eastus`** (this machine only, `~/.azure/config`). Fix
    identified (`--location ""`), shown as a diff, not yet applied — pending sign-off.
 8. **Log Analytics workspace auto-provision choice** (`az containerapp env create`'s default, no
-   `--logs-destination` flag passed) — tied to item 1; needs a deliberate choice regardless of cost,
-   since the auto-provisioned path doesn't even deliver logs.
+   `--logs-destination` passed) — tied to item 1, and needs a deliberate choice regardless of cost
+   because the auto-provisioned path doesn't deliver logs at all.
 9. **Intermittent interrupt-the-caller defect.** Agent talks over the caller, cutting in before a
    sentence finishes. Reproduced on the first real call, not the second, same image and VAD config
    both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
@@ -184,13 +185,12 @@ because they are genuinely unresolved, not because any of them is currently bloc
     per model version, which is the case B3 exists for. One live frame settles it. The item now
     carries a client `event_id`, so the probe can tell "my item was refused" from "an error
     happened". `docs/phase4/findings.md` §2, `docs/phase4/research-carried-findings.md` §1.
-13. **The DTMF tone vocabulary is unverified, and no documentation can verify it.** The
-    media-streaming frame has no schema anywhere in Azure's specs; every primary example shows a
-    bare digit, while the only vocabulary Azure enumerates spells tones as words and belongs to a
-    different delivery path. `*` and `#` — the two keys the keypad acts on — have no documented
-    spelling here at all. The classifier accepts both vocabularies so the ambiguity cannot break a
-    call, but **Phase 5's real call must press `*` and `#`**; a digits-only call closes nothing while
-    looking like it closed this. `docs/phase4/research-carried-findings.md` §2b.
+13. **The DTMF tone vocabulary is unverified, and no documentation can verify it.** The frame has
+    no schema in Azure's specs; primary examples show a bare digit, the only enumerated vocabulary
+    spells tones as words and belongs to a different delivery path, and `*` and `#` — the two keys
+    the keypad acts on — have no documented spelling at all. The classifier accepts both, so the
+    ambiguity cannot break a call, but **the real call must press `*` and `#`**: a digits-only call
+    closes nothing while looking like it closed this. `docs/phase4/research-carried-findings.md` §2b.
 14. **Nothing guarantees DTMF and audio frames arrive in order on the media socket.** No primary
     source offers any ordering or timing guarantee. The webhook path ships a `sequenceId` for
     exactly this; this path ships nothing equivalent, though the payload carries an unread
@@ -222,7 +222,11 @@ because they are genuinely unresolved, not because any of them is currently bloc
     it closes the socket rather than merely stopping the wait — but azure-core clients ignore
     unknown keyword arguments, so a misremembered option name reads as configured and does nothing:
     the role-definition GUID's failure shape. `/research` owes the option names with the rest.
-20. **The daily ledger's lock is in-process only.** It covers today's race, two calls ending
+20. **Criterion 12's "every path out" is true inside the relays, not before them.** `budget_or_closed`
+    and `connect_realtime` both run before `started`, so a failure in either records nothing.
+    Pre-existing and arguably right — no model session existed, so there are no model minutes — but
+    the criterion says "including the paths that raise", so it is named rather than assumed settled.
+21. **The daily ledger's lock is in-process only.** It covers today's race, two calls ending
     together in one process. A second replica holds a second lock and loses updates again. ETag
     optimistic concurrency is the fix and is a deliberate not-yet (Marco, 2026-09-11): one replica
     runs, and the ETag path cannot be exercised until the Storage account exists.
@@ -245,11 +249,9 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    is not met — four tickets open, nothing provisioned, no call made, B5 not frozen — and no phase
    begins without written exit criteria from the prior one. The path to Phase 6 runs through the
    items below, in this order, and every one of steps 4 to 6 needs Marco's hands, voice, or both.
-0b. **`/code-review` the two review-fix commits** (`581b8f4`, `59a3d93`). Eight findings were
-   actioned and the fixes have not themselves been reviewed. Named, not invoked.
-0c. **The eight review findings were never filed as issues.** Both commits reference only the phase
-   spec `#43`. The drafted set and its blocking edges are in the handoff
-   `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
+0b. **The review findings were never filed as issues** — neither the original eight nor the second
+   round. Every fix commit references only the phase spec `#43`. The drafted set and its blocking
+   edges are in `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
 1. **Read `git log e42c063..HEAD`.** Phase 4's diff and Phase 5's. It is the entry condition that was
    waived, it is four phases of code that will land on one image, and it is the cheapest point at
    which any of it can be sent back.

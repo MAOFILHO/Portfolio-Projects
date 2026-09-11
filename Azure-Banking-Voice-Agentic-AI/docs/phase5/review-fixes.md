@@ -12,6 +12,17 @@ file records only what changed and what the fixes are pinned by.
 Each row names the test that fails if the fix is reverted. Every one of those tests was written
 first and observed red.
 
+> **Corrected 2026-09-11, by the `/code-review` of these very commits.** That claim was **false for
+> row 5**. The B1 fix carried two tests and only one of them pinned it: the second compared the
+> default row's grants to the smallest row's *by value*, and `(banking, anonymous)` and
+> `(triage, anonymous)` both grant exactly `{escalate_to_human}` — so it passed with the defect
+> restored. It tested the pair that was already innocent and never looked at the authenticated row,
+> which is the only place the two agents differ. Replaced by
+> `test_the_default_agent_is_least_privileged_in_every_auth_state`, which quantifies over every
+> auth state and was confirmed red against a reverted fix before this note was written. Recorded
+> here because a document claiming its fixes are pinned, while one of them is not, is the same
+> defect class this whole file is about.
+
 | # | Finding | Fixed by | Pinned by |
 |---|---|---|---|
 | 1 | **B3: the successor allowlist entry could never match a live deployment.** The guard compares `properties.model.name`, a *model* name. The entry spelled it `gpt-realtime-1-5`, a *deployment*-name form traced to `docs/phase0/findings.md:361`. The live Models API says `gpt-realtime-1.5`. Booting the pre-vetted successor would have been refused at startup by the allowlist that exists to permit it | the dot, in `boot.py` | `test_boot.py::test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it` |

@@ -154,7 +154,7 @@ ACTIVE_REALTIME_MODEL = ("gpt-realtime-mini", "2025-10-06")  # GA, retires 2027-
 # Pre-vetted fallback, not live today. Named here so migrating, when it's needed, is swapping
 # ACTIVE_REALTIME_MODEL's value plus a deployment-name change in infra -- not a from-scratch model
 # evaluation done under time pressure as 2027-04-06 approaches.
-SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1-5", "2026-02-23")  # GA, retires 2027-08-24, ~3.2x cost
+SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1.5", "2026-02-23")  # GA, retires 2027-08-24, ~3.2x cost
 
 ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 

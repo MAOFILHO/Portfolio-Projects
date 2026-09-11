@@ -28,7 +28,7 @@ from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential
 from fastapi import FastAPI, Request, WebSocket
 
-from .boot import assert_boot_safety, call_records_account_url, core_banking_url
+from .boot import app_base_url, assert_boot_safety, call_records_account_url, core_banking_url
 from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
@@ -67,11 +67,13 @@ except OSError as e:
 #: import time") and `realtime/client.py` ("Reads configuration at call time, not import time") --
 #: and this was the one file in that role not following it (/code-review, 2026-09-11).
 #:
-#: No default, same as every other address this project reads: a misconfigured deployment fails
-#: where a health check catches it, not mid-call in front of a caller.
+#: No default, same as every other address this project reads. **The refusal lives in `boot.py`
+#: and `lifespan()` calls it**, which is what makes a missing value a startup failure rather than a
+#: `KeyError` in the webhook -- reading it at call time alone did not, and briefly made this the
+#: one address that failed in front of a caller (/code-review, 2026-09-11).
 def _app_base_url():
     # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
-    return os.environ["APP_BASE_URL"]
+    return app_base_url()
 
 
 def callback_url():
@@ -133,6 +135,10 @@ async def lifespan(_app):
     """
     global _core_banking, _call_records, _call_automation
     assert_boot_safety()
+    # Read and discarded, for its refusal. Every other address this app needs is validated by being
+    # *used* here; this one is only used per-request, so without this line a missing value would
+    # not be discovered until a caller dialled (/code-review, 2026-09-11).
+    app_base_url()
     # The ACS client, built here for the reason the other two are: startup is where a side effect
     # belongs. Parsing a connection string makes no network call, so this is cheap -- what it buys
     # is that importing this module needs no ACS configuration at all.

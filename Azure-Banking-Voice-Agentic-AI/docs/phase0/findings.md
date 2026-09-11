@@ -356,6 +356,15 @@ Matches `docs/PLAN.md` decision 14 exactly: model `gpt-realtime-mini`, version `
 ("control ships here" per the phase plan), consistent with Phase 0 being provisioning-only. This is
 not a Phase 0 gap; it's the plan working as sequenced.
 
+> **Correction added 2026-09-11, text below left as written.** This paragraph's `"gpt-realtime-1-5"`
+> is a *deployment*-name spelling, and saying so was correct **of the guard as it was documented at
+> Phase 0** — a name comparison. Phase 2 then built the guard to compare `properties.model.name`, a
+> *model* name, and the hyphen was carried across into the allowlist unchanged. The live catalog
+> spells that model `gpt-realtime-1.5`, so the successor entry could not have matched anything Azure
+> would report until it was fixed. See `docs/phase5/review-fixes.md`. Kept rather than rewritten:
+> this is a closed phase record, and the sentence that seeded a later defect is worth being able to
+> find.
+
 **Honest gap worth naming for Phase 2's implementation, found by reading the documented guard
 literally**: `ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})`
 is a set of **deployment-name strings** (`"gpt-realtime-mini"`, `"gpt-realtime-1-5"`), and the guard

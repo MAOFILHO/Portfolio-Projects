@@ -1579,6 +1579,18 @@ class TheDayBoundary(unittest.TestCase):
         self.assertIsNone(asyncio.run(budget_or_closed(store, now=after)))
 
 
+class RefusesToSend(FakeRealtimeServer):
+    """A realtime connection that fails on the very first frame the relay sends.
+
+    Written once rather than three times inside the tests that use it (/code-review, 2026-09-11):
+    three verbatim copies of a four-line fake is three places for "the first frame" to stop meaning
+    the same thing.
+    """
+
+    async def send(self, message):
+        raise RuntimeError("the realtime connection broke on the first frame")
+
+
 class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
     """A brake that reads but never writes never trips (issue #50).
 
@@ -1664,10 +1676,6 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
         backend failing at the first frame is exactly the condition under which every call in a
         row takes this path.
         """
-        class RefusesToSend(FakeRealtimeServer):
-            async def send(self, message):
-                raise RuntimeError("the realtime connection broke on the first frame")
-
         with self.assertRaises(RuntimeError):
             self._run(FakeTransport(hang=True), RefusesToSend(hang=True))
         self._assert_charged()
@@ -1676,10 +1684,6 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
         # The other half of the same `finally`. `authenticator.end_call()` zeroes the keypad
         # buffer, and B2's rule is that the PIN does not outlive the call that keyed it -- a call
         # that skipped this left the buffer holding whatever it held.
-        class RefusesToSend(FakeRealtimeServer):
-            async def send(self, message):
-                raise RuntimeError("the realtime connection broke on the first frame")
-
         ended = []
         real_end_call = auth_module.Authenticator.end_call
 
@@ -1697,10 +1701,6 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
         # own docstring makes the stronger claim: "Its own minutes count too... a brake whose
         # usage was invisible in the one place it matters would not be a brake anybody could
         # audit." A closed call that failed on its first frame was invisible.
-        class RefusesToSend(FakeRealtimeServer):
-            async def send(self, message):
-                raise RuntimeError("the realtime connection broke on the first frame")
-
         with self.assertRaises(RuntimeError):
             asyncio.run(run_closed_call(
                 FakeTransport(hang=True), RefusesToSend(hang=True), self.call_records
