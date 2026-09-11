@@ -26,6 +26,7 @@ shape the SDK documents rather than from a live call, and this project has been 
 unverified assumption (`docs/PLAN.md`, decision 12). **A role assignment returning ARM 200 OK proves
 creation, not access** -- criterion 21 of the exit criteria requires a write that is then read back.
 """
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -215,6 +216,10 @@ class TableStorageCallRecordStore:
 
     def __init__(self, table_client):
         self._table = table_client
+        # Serialises the ledger's read-modify-write; see `record_minutes`. Built here rather than
+        # lazily because two calls ending together is exactly when a lazily-built lock would be
+        # built twice.
+        self._ledger_lock = asyncio.Lock()
 
     @classmethod
     def from_account_url(cls, account_url, credential):
@@ -224,6 +229,17 @@ class TableStorageCallRecordStore:
         importing it at module scope would make every test and every tool that merely reads this
         package pay for it, and would make the package unimportable anywhere it is not installed.
         The same reasoning keeps B3's ARM read out of import time.
+
+        **No SDK-level timeout is set here, deliberately.** The bound this seam needs lives in
+        `realtime/session.py` (`LEDGER_DEADLINE_SECONDS`), which wraps both the read and the write
+        and therefore holds for this client, for the fake, and for anything either is swapped for.
+        A transport timeout here would be better still -- it would close the socket rather than
+        just stop waiting on it -- but azure-core clients accept unknown keyword arguments and
+        ignore them, so a misremembered option name would look configured and do nothing. That is
+        the same failure shape as a role assignment returning 200 OK and granting nothing, which
+        this phase is already carrying as an open question. `/research` owes the exact option names
+        alongside the rest of this module's unverified SDK surface; until then the deadline is at
+        the seam, where it is tested (/code-review, 2026-09-11).
         """
         from azure.data.tables.aio import TableServiceClient
 
@@ -248,14 +264,33 @@ class TableStorageCallRecordStore:
         return _minutes(entity)
 
     async def record_minutes(self, day, minutes):
-        """Add to the day's total.
+        """Add to the day's total, one writer at a time.
 
-        **Read-then-write, not an atomic increment.** Table Storage has no server-side increment, and
-        this project runs a single replica with `maxReplicas: 1` -- so the race that would lose an
-        update needs two replicas, which the Bicep forbids. Written down rather than assumed: if the
-        scale rule ever changes, this is the line that breaks, and it breaks by *under*-counting,
-        which is the fail-open direction.
+        **Read-then-write, not an atomic increment.** Table Storage has no server-side increment,
+        so the total is computed here -- and both halves are awaits, which makes the gap between
+        them a point the event loop can hand another call the CPU. Two calls ending together would
+        otherwise read the same "before" figure and the second write would erase the first,
+        *under*-counting the day. B4's own module names undercounting as the fail-open direction
+        and B4's target is 0 fail-open events, so this is a brake defect, not a bookkeeping one.
+
+        **An in-process lock, which covers the race that exists.** An earlier version of this
+        comment argued no lock was needed because "the race that would lose an update needs two
+        replicas, which the Bicep forbids". Both halves were wrong: the only `maxReplicas: 1` in
+        `infra/` belongs to mock-core-banking, the voice agent has no Bicep module at all and its
+        single replica comes from a provisioning script's flags -- and the interleaving above
+        needs one process, not two replicas (/code-review, 2026-09-11).
+
+        **What it does not cover, stated rather than implied**: a second replica, whose two
+        processes hold two different locks. That needs optimistic concurrency on the entity's ETag
+        with a retry, which is a deliberate not-yet (Marco, 2026-09-11) -- the app runs one replica
+        today, and an ETag path cannot be exercised against real Table Storage until the Storage
+        account exists. If the scale rule ever changes, this is the line that breaks, and this
+        paragraph is what says so.
         """
+        async with self._ledger_lock:
+            await self._read_then_write(day, minutes)
+
+    async def _read_then_write(self, day, minutes):
         current = await self.minutes_used(day)
         entity = {
             "PartitionKey": LEDGER_PARTITION,

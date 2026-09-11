@@ -149,7 +149,13 @@ class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import check_b3_allowlist
 
-        for model_id in ("gpt-realtime-mini", "gpt-realtime-1-5", "gpt-4o-realtime-preview"):
+        # `gpt-realtime-1.5` carries the dot the live catalog uses, and is here because the
+        # allowlist's successor entry now spells it that way (/code-review, 2026-09-11). A pattern
+        # that recognised only the hyphen form would let the static check walk straight past the
+        # one entry most likely to be edited under deadline pressure.
+        for model_id in (
+            "gpt-realtime-mini", "gpt-realtime-1.5", "gpt-realtime-1-5", "gpt-4o-realtime-preview",
+        ):
             with self.subTest(model_id=model_id):
                 self.assertTrue(check_b3_allowlist.MODEL_PATTERN.search(f'X = "{model_id}"'))
 

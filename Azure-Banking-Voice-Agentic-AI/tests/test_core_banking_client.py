@@ -270,28 +270,28 @@ class AnAmountIsANumberOfDollars(unittest.IsolatedAsyncioTestCase):
 
     def test_a_bool_is_not_an_amount(self):
         with self.assertRaises(cb.CoreBankingRequestError):
-            cb._cents(True)
+            cb.to_cents(True)
 
     def test_a_string_is_not_an_amount(self):
         for value in ("100", "100.00", ""):
             with self.subTest(value=value):
                 with self.assertRaises(cb.CoreBankingRequestError):
-                    cb._cents(value)
+                    cb.to_cents(value)
 
     def test_none_is_not_an_amount(self):
         with self.assertRaises(cb.CoreBankingRequestError):
-            cb._cents(None)
+            cb.to_cents(None)
 
     def test_a_non_finite_amount_is_refused(self):
         for value in (float("nan"), float("inf"), float("-inf")):
             with self.subTest(value=value):
                 with self.assertRaises(cb.CoreBankingRequestError):
-                    cb._cents(value)
+                    cb.to_cents(value)
 
     def test_ordinary_amounts_still_convert(self):
-        self.assertEqual(cb._cents(150.00), 15000)
-        self.assertEqual(cb._cents(150), 15000)
-        self.assertEqual(cb._cents(0.014), 1)
+        self.assertEqual(cb.to_cents(150.00), 15000)
+        self.assertEqual(cb.to_cents(150), 15000)
+        self.assertEqual(cb.to_cents(0.014), 1)
 
 
 class RetryPolicy(unittest.IsolatedAsyncioTestCase):

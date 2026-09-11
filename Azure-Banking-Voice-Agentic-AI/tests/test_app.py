@@ -3,10 +3,12 @@ import os
 import unittest
 from unittest.mock import patch
 
-# app reads these at import time (os.environ[...], no default) and constructs a
-# CallAutomationClient from the connection string -- that parses the string locally with no
-# network call, so a syntactically valid fake is enough to import the module under test. This
-# must happen before the import below, hence the import order.
+# **No longer needed for the import itself** -- since 2026-09-11 `app` reads none of these at
+# import time and builds no client at module scope (/code-review, 2026-09-11; pinned by
+# `ImportingThisModuleHasNoSideEffects` below, which asserts it from a scrubbed subprocess). They
+# stay set because the handler tests below drive `incoming_call`, which reads the base URL and
+# asks for the ACS client the way a running app would. A syntactically valid fake connection
+# string is enough: parsing one makes no network call.
 os.environ.setdefault("ACS_CONNECTION_STRING", "endpoint=https://fake.communication.azure.com/;accesskey=ZmFrZWtleQ==")
 os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.io")
 # Read by lifespan() rather than at import, but the guard behind it has no default (issue #29) --
@@ -40,10 +42,25 @@ def _run_incoming_call(events):
 
 
 class AnswerCallRejectionPath(unittest.TestCase):
+    """The ACS client now lives where lifespan() puts it, so these install one first.
+
+    Previously it was a module-level object these tests patched attributes on directly. It is
+    built per test rather than once: `patch.object` restores what it replaced, but a client
+    shared across tests would still be one process-wide object four tests mutate in turn.
+    """
+
+    def setUp(self):
+        client = app.CallAutomationClient.from_connection_string(
+            os.environ["ACS_CONNECTION_STRING"]
+        )
+        patcher = patch.object(app, "_call_automation", client)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_answer_call_http_error_falls_back_to_reject_call(self):
         # ACS actually responded with an error status (e.g. call already ended) -- HttpResponseError.
-        with patch.object(app.call_automation_client, "answer_call", side_effect=HttpResponseError("busy")), \
-             patch.object(app.call_automation_client, "reject_call") as reject:
+        with patch.object(app.call_automation(), "answer_call", side_effect=HttpResponseError("busy")), \
+             patch.object(app.call_automation(), "reject_call") as reject:
             result = _run_incoming_call(_incoming_call_event(context="ctx-1"))
         self.assertEqual(result, {})  # no unhandled 500 -- webhook still acks cleanly
         reject.assert_called_once_with(incoming_call_context="ctx-1")
@@ -52,8 +69,8 @@ class AnswerCallRejectionPath(unittest.TestCase):
         # A timeout/connection failure talking to ACS at all is ServiceRequestError, a sibling of
         # HttpResponseError under AzureError, not a subclass of it -- this is the case that an
         # `except HttpResponseError` alone would miss and let escape as a 500.
-        with patch.object(app.call_automation_client, "answer_call", side_effect=ServiceRequestError("timeout")), \
-             patch.object(app.call_automation_client, "reject_call") as reject:
+        with patch.object(app.call_automation(), "answer_call", side_effect=ServiceRequestError("timeout")), \
+             patch.object(app.call_automation(), "reject_call") as reject:
             result = _run_incoming_call(_incoming_call_event(context="ctx-2"))
         self.assertEqual(result, {})
         reject.assert_called_once_with(incoming_call_context="ctx-2")
@@ -61,14 +78,14 @@ class AnswerCallRejectionPath(unittest.TestCase):
     def test_reject_call_also_failing_does_not_crash(self):
         # Best-effort fallback: if the call is already gone, reject_call fails too. That must not
         # surface as an unhandled 500 either.
-        with patch.object(app.call_automation_client, "answer_call", side_effect=HttpResponseError("gone")), \
-             patch.object(app.call_automation_client, "reject_call", side_effect=HttpResponseError("gone")):
+        with patch.object(app.call_automation(), "answer_call", side_effect=HttpResponseError("gone")), \
+             patch.object(app.call_automation(), "reject_call", side_effect=HttpResponseError("gone")):
             result = _run_incoming_call(_incoming_call_event())
         self.assertEqual(result, {})
 
     def test_successful_answer_call_does_not_call_reject(self):
-        with patch.object(app.call_automation_client, "answer_call") as answer, \
-             patch.object(app.call_automation_client, "reject_call") as reject:
+        with patch.object(app.call_automation(), "answer_call") as answer, \
+             patch.object(app.call_automation(), "reject_call") as reject:
             result = _run_incoming_call(_incoming_call_event())
         answer.assert_called_once()
         reject.assert_not_called()
@@ -187,6 +204,45 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         with patch.object(app, "_core_banking", None), \
              self.assertRaises(RuntimeError):
             app.core_banking()
+
+    def test_the_handler_refuses_to_run_without_an_initialised_call_automation_client(self):
+        with patch.object(app, "_call_automation", None), \
+             self.assertRaises(RuntimeError):
+            app.call_automation()
+
+
+class ImportingThisModuleHasNoSideEffects(unittest.TestCase):
+    """The rule the other three modules state and follow, finally true of the entry point too.
+
+    `mock-core-banking/azbank_core_banking/app.py` ("Importing this module must not open a
+    database or create a file"), `boot.py` ("deliberately not at import time") and
+    `realtime/client.py` ("Reads configuration at call time, not import time") all say it. This
+    module was the sibling deployable's entry point in the same role, and until 2026-09-11 it read
+    two environment variables with `os.environ[...]` and built a live `CallAutomationClient` at
+    module scope (/code-review, 2026-09-11).
+
+    A subprocess with a scrubbed environment, because the import already happened at the top of
+    this file with the variables set -- nothing in-process can un-import it, and a test that
+    merely reloaded the module would still be running under an environment that has them.
+    """
+
+    def test_it_imports_with_none_of_its_configuration_set(self):
+        import subprocess
+        import sys
+
+        env = {
+            k: v for k, v in os.environ.items()
+            if k not in ("ACS_CONNECTION_STRING", "APP_BASE_URL", "CORE_BANKING_URL",
+                         "CALL_RECORDS_ACCOUNT_URL", "AOAI_DEPLOYMENT")
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", "import azbank_voice_agent.app"],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"importing the entry point needed configuration:\n{result.stderr}",
+        )
 
 
 if __name__ == "__main__":

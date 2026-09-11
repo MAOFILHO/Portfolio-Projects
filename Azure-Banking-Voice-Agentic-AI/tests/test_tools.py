@@ -199,7 +199,7 @@ class ArgumentsTheModelCanActuallyEmit(DispatchCase):
 
     async def test_a_boolean_amount_moves_no_money(self):
         # `True * 100 == 100`, so this completed a $1.00 transfer and told the caller "Done".
-        # db.py rejects a bool at the system of record; the conversion in _cents turned it into a
+        # db.py rejects a bool at the system of record; the conversion in to_cents turned it into a
         # perfectly ordinary 100 cents before that guard could ever see it.
         out = await self.dispatch_raw(
             "transfer", '{"from_account": "chequing", "to_account": "savings", "amount": true}'

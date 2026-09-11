@@ -213,8 +213,25 @@ def _unknown_account_name(response):
     return detail.get("account") if isinstance(detail, dict) else None
 
 
-def _dollars(cents):
+def to_dollars(cents):
     return cents / 100
+
+
+def _recognised(value, allowed, what):
+    """`value` if the service answered with one of `allowed`, else `ValueError`.
+
+    **An outcome this client does not recognise is a service that did not answer the question.**
+    Raised as a `ValueError` so `_read` turns it into unavailable -- the one branch guaranteed not
+    to be mistaken for a verdict, or for "your card is stopped", which is the single most dangerous
+    thing to say wrongly on this call.
+
+    Written once. Two call sites carried this check and this reasoning as an eight-line comment
+    each, which is two places for the reasoning to drift from itself (/code-review, 2026-09-11).
+    `what` names the question in the message, so a log still says which one came back strange.
+    """
+    if value not in allowed:
+        raise ValueError(f"unrecognised {what} outcome {value!r}")
+    return value
 
 
 def _date(instant):
@@ -236,12 +253,12 @@ def _transaction(payload):
     return Transaction(
         kind=payload["kind"],
         counterparty=payload["counterparty"],
-        amount=_dollars(payload["amount_cents"]),
+        amount=to_dollars(payload["amount_cents"]),
         occurred_at=_date(payload["occurred_at"]),
     )
 
 
-def _cents(dollars):
+def to_cents(dollars):
     """Dollars to whole cents -- and the boundary that decides what is an amount at all.
 
     Round rather than truncate: 15000.000000000002 cents is a float artefact of the caller's
@@ -370,7 +387,7 @@ class HttpCoreBankingClient:
 
     async def list_accounts(self):
         return await self._get("/accounts", lambda p: {
-            a["name"]: _dollars(a["balance_cents"]) for a in p["accounts"]
+            a["name"]: to_dollars(a["balance_cents"]) for a in p["accounts"]
         })
 
     async def get_balance(self, account):
@@ -379,7 +396,7 @@ class HttpCoreBankingClient:
         # another route entirely, and "a#b" truncated the path and asked about account "a" -- whose
         # answer the caller was then given by name (probe, 2026-09-09).
         return await self._get(
-            f"/accounts/{quote(account, safe='')}", lambda p: _dollars(p["balance_cents"])
+            f"/accounts/{quote(account, safe='')}", lambda p: to_dollars(p["balance_cents"])
         )
 
     async def list_transactions(self, account):
@@ -397,7 +414,7 @@ class HttpCoreBankingClient:
                 return TransferOutcome(
                     outcome="declined",
                     reason=payload["reason"],
-                    available=_dollars(payload["available_cents"]),
+                    available=to_dollars(payload["available_cents"]),
                 )
             # `moved_cents` comes from the service, like the balances beside it -- never recomputed
             # here from the dollars that were asked for. The client knows what it sent, but what it
@@ -406,27 +423,20 @@ class HttpCoreBankingClient:
             # amount" covers every figure in the sentence, not only the balances).
             return TransferOutcome(
                 outcome="completed",
-                from_balance=_dollars(payload["from_balance_cents"]),
-                to_balance=_dollars(payload["to_balance_cents"]),
-                moved=_dollars(payload["moved_cents"]),
+                from_balance=to_dollars(payload["from_balance_cents"]),
+                to_balance=to_dollars(payload["to_balance_cents"]),
+                moved=to_dollars(payload["moved_cents"]),
             )
 
         return await self._post("/transfers", {
             "from_account": from_account,
             "to_account": to_account,
-            "amount_cents": _cents(amount),
+            "amount_cents": to_cents(amount),
         }, outcome)
 
     async def block_card(self, idempotency_key):
         def outcome(payload):
-            reported = payload["outcome"]
-            if reported not in (BLOCKED, ALREADY_BLOCKED):
-                # An outcome this client does not recognise is a service that did not answer the
-                # question. Raised as a ValueError so `_read` turns it into unavailable -- the one
-                # branch guaranteed not to be mistaken for "your card is stopped", which is the
-                # single most dangerous thing to say wrongly on this call.
-                raise ValueError(f"unrecognised card block outcome {reported!r}")
-            return reported
+            return _recognised(payload["outcome"], (BLOCKED, ALREADY_BLOCKED), "card block")
 
         return await self._post(
             "/card-blocks", {"idempotency_key": idempotency_key}, outcome
@@ -456,12 +466,9 @@ class HttpCoreBankingClient:
         Both are logged as the anomalies they would be rather than folded in silently.
         """
         def verdict(payload):
-            outcome = payload["outcome"]
-            if outcome not in ("accepted", "rejected"):
-                # An outcome this client does not recognise is a service that did not answer the
-                # question. Raised as a ValueError so `_read` turns it into unavailable -- the one
-                # branch guaranteed not to be mistaken for a verdict.
-                raise ValueError(f"unrecognised credential check outcome {outcome!r}")
+            outcome = _recognised(
+                payload["outcome"], ("accepted", "rejected"), "credential check"
+            )
             return outcome == "accepted"
 
         try:

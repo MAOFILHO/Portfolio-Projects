@@ -29,6 +29,7 @@ import unittest
 from unittest.mock import patch
 
 from azbank_voice_agent import boot
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.realtime.fake import (
@@ -47,11 +48,34 @@ _skip_unless_deliberate = unittest.skipUnless(
     f"successor-boot rehearsal is skip-by-default; set {RUN_FLAG}=1 to run it",
 )
 
+#: What the live Models API reports for the successor, written out rather than read from
+#: `boot.SUCCESSOR_REALTIME_MODEL`. **This is the whole point of the rehearsal.** Until
+#: 2026-09-11 the reader below answered with the constant itself, so the guard compared the
+#: allowlist entry to a copy of the allowlist entry and agreed with itself no matter what Azure
+#: would have said -- which is how a hyphen sat in a model name for two phases without a red
+#: test. Feeding a literal makes a drifted pin fail here, which is what a rehearsal is for
+#: (/code-review, 2026-09-11).
+CATALOG_SUCCESSOR = ("gpt-realtime-1.5", "2026-02-23")
+
+#: The rest of a valid environment, which the guard checks before it ever reads a model.
+#:
+#: **This rehearsal did not run at all until 2026-09-11.** Phase 3 (issue #29) made
+#: `CORE_BANKING_URL` a boot requirement and nothing updated the env fixture here, so setting the
+#: run flag produced a `SystemExit` about a missing core-banking address rather than a rehearsal
+#: of anything. Skip-by-default hid it: the suite stayed green because these tests never
+#: executed. Exactly the failure mode this module's own docstring warns about -- "a rehearsal
+#: that silently declines to run is worse than no rehearsal, because it reads green" -- and it
+#: had been true here for two phases.
+_BOOT_ENV = {"CORE_BANKING_URL": "http://core-banking.internal:8001"}
+
 
 @_skip_unless_deliberate
 class SuccessorBootRehearsal(unittest.TestCase):
     def setUp(self):
         self.core_banking = FakeCoreBankingClient()
+        # Phase 5 (issue #48) gave `run_call` a fourth collaborator and this rehearsal, being
+        # skipped, never grew one -- the same rot as `_BOOT_ENV` above and found in the same run.
+        self.call_records = FakeCallRecordStore()
         # This rehearsal proves the call *completes* on the successor, independent of B1 gate
         # policy (empty until Phase 4) -- patched open so the two concerns don't conflate.
         self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
@@ -59,16 +83,22 @@ class SuccessorBootRehearsal(unittest.TestCase):
         self.addCleanup(self._gate_patcher.stop)
 
     def test_the_boot_guard_admits_the_successor_and_says_so(self):
-        name, version = boot.SUCCESSOR_REALTIME_MODEL
+        name, version = CATALOG_SUCCESSOR
         self.assertTrue(name and version, "successor pin is not configured")
+        self.assertEqual(
+            boot.SUCCESSOR_REALTIME_MODEL, CATALOG_SUCCESSOR,
+            "the allowlist's successor entry has drifted from what the live catalog reports -- "
+            "the guard reads properties.model.name, so a pin Azure would never echo back cannot "
+            "boot",
+        )
 
         with self.assertLogs(boot.log, level="WARNING") as cm:
             live = boot.assert_boot_safety(
-                reader=lambda deployment: boot.SUCCESSOR_REALTIME_MODEL,
-                env={"AOAI_DEPLOYMENT": name},
+                reader=lambda deployment: CATALOG_SUCCESSOR,
+                env={**_BOOT_ENV, "AOAI_DEPLOYMENT": name},
             )
 
-        self.assertEqual(live, boot.SUCCESSOR_REALTIME_MODEL)
+        self.assertEqual(live, CATALOG_SUCCESSOR)
         self.assertTrue(
             any("deliberate migration" in line for line in cm.output),
             "booting on the successor must warn -- a silent migration is the thing B3 prevents",
@@ -85,12 +115,12 @@ class SuccessorBootRehearsal(unittest.TestCase):
         # architecture, is sequential: the guard admits the successor, and only *given that*
         # admission, a full turn completes -- so this test performs both steps in order, not one
         # in isolation.
-        name, _ = boot.SUCCESSOR_REALTIME_MODEL
+        name, _ = CATALOG_SUCCESSOR
         live = boot.assert_boot_safety(
-            reader=lambda deployment: boot.SUCCESSOR_REALTIME_MODEL,
-            env={"AOAI_DEPLOYMENT": name},
+            reader=lambda deployment: CATALOG_SUCCESSOR,
+            env={**_BOOT_ENV, "AOAI_DEPLOYMENT": name},
         )
-        self.assertEqual(live, boot.SUCCESSOR_REALTIME_MODEL, "guard did not admit the successor")
+        self.assertEqual(live, CATALOG_SUCCESSOR, "guard did not admit the successor")
 
         transport = FakeTransport(frames=[audio_frame("caller-on-successor")], hang=True)
         realtime = FakeRealtimeServer(

@@ -181,13 +181,31 @@ CLOSED = (
 )
 
 
+#: How long the relay waits for the day's ledger before treating silence as a closed day.
+#:
+#: **A deadline the store cannot be trusted to keep for us.** `core_banking/client.py` passes its
+#: own `TIMEOUT_SECONDS` on every request; this seam had nothing equivalent on either side until
+#: 2026-09-11, so the guard below is where the bound now lives -- at the seam rather than inside
+#: one implementation of it, which is what makes it hold for the fake, the real client, and
+#: anything either is later swapped for.
+#:
+#: Three seconds: long enough that an ordinary Table Storage round trip is nowhere near it, short
+#: enough that a caller who is going to hear "we're closed" hears it while still on the line.
+LEDGER_DEADLINE_SECONDS = 3.0
+
+
 async def budget_or_closed(call_records, now=None):
-    """The day's remaining budget, or `DailyBudgetSpent` -- B4's daily cap, and `T-B4-FAILCLOSED`.
+    """Serve this call, or raise `DailyBudgetSpent` -- B4's daily cap, and `T-B4-FAILCLOSED`.
 
     **Unreadable is the same as exhausted.** A store that raises, times out, or returns something
     this client cannot read produces the same exception an exhausted day does, and therefore the
     same closed path. There is no branch in which an unknown budget serves a call: an unknown budget
     is not permission.
+
+    **Returns nothing. It is a guard, not a query** -- returning normally is the whole answer. It
+    used to hand back the day's remaining minutes, which its only caller discarded (/code-review,
+    2026-09-11); a number nobody reads is a second, unmaintained account of the budget sitting
+    beside the ledger that actually holds it.
 
     **Where this is called from, and why it is not the webhook.** `docs/phase5/exit-criteria.md`
     criterion 11 said the budget is read "before `answer_call`", in the incoming-call webhook, so a
@@ -209,7 +227,23 @@ async def budget_or_closed(call_records, now=None):
     """
     day = day_key(now)
     try:
-        used = await call_records.minutes_used(day)
+        used = await asyncio.wait_for(
+            call_records.minutes_used(day), timeout=LEDGER_DEADLINE_SECONDS
+        )
+    except TimeoutError as e:
+        # **Criterion 11's "times out", finally implemented rather than asserted.** Until
+        # 2026-09-11 nothing here imposed a deadline and the table client was built without one,
+        # so a Storage endpoint that accepted the connection and then said nothing stalled the
+        # media socket with a caller already on it -- no closed sentence, no hangup, just silence
+        # for as long as the socket stayed open. The only evidence the branch worked was a fake
+        # that pre-raised the exception the code was supposed to produce (/code-review,
+        # 2026-09-11).
+        #
+        # Same standing as an unreadable ledger, and deliberately the same exception: a store that
+        # did not answer in time did not answer, and B4's rule is that an unknown budget is not
+        # permission.
+        log.warning("B4: the day's ledger did not answer in time, taking the closed path")
+        raise caps.DailyBudgetSpent("the day's ledger did not answer in time") from e
     except CallRecordStoreUnavailable as e:
         log.warning("B4: the day's ledger could not be read, taking the closed path: %r", e)
         raise caps.DailyBudgetSpent("the day's ledger could not be read") from e
@@ -219,7 +253,6 @@ async def budget_or_closed(call_records, now=None):
             used, caps.MAX_DAILY_MINUTES, day,
         )
         raise caps.DailyBudgetSpent(f"the day's {caps.MAX_DAILY_MINUTES} minutes are spent")
-    return caps.MAX_DAILY_MINUTES - used
 
 
 async def run_closed_call(transport, realtime, call_records, correlation_id=None, now=None):
@@ -237,22 +270,40 @@ async def run_closed_call(transport, realtime, call_records, correlation_id=None
     whose usage was invisible in the one place it matters would not be a brake anybody could audit.
     """
     started = time.monotonic()
-    await realtime.send(_session_update(gate.TRIAGE_AGENT))
-    item_id = _new_event_id()
-    await realtime.send(_spoken_note(CLOSED, item_id))
-    await realtime.send({"type": "response.create", "event_id": _new_event_id()})
 
     async def speak_once():
-        """Relay the closed sentence's audio, and stop at the end of that one response."""
+        """Relay the closed sentence's audio, and stop after `MAX_CLOSED_CALL_TURNS` responses.
+
+        **Counted against the constant rather than returning on the first `response.done`.** The
+        bound was previously structural: the relay returned at the first completed response, which
+        gave the right answer while `cost/caps.py`'s `MAX_CLOSED_CALL_TURNS` was referenced
+        nowhere -- so editing that value changed nothing, and the caps module's claim that the
+        relay enforces it was false (/code-review, 2026-09-11). Reading it here is what makes the
+        number the bound instead of a description of one.
+        """
+        turns = 0
         async for event in realtime:
             if event.type == "response.output_audio.delta":
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "response.done":
-                return
+                turns += 1
+                if turns >= caps.MAX_CLOSED_CALL_TURNS:
+                    return
             elif event.type == "error":
                 log.error("AOAI error event on the closed path")
 
     try:
+        # **The three frames are inside the `try` too** (/code-review, 2026-09-11). They used to
+        # go out above it, between `started` and the block whose `finally` charges the day -- so a
+        # closed call that failed on its first frame recorded nothing, against a docstring
+        # promising the opposite two paragraphs up. It also widens the `except` below by exactly
+        # one case: a caller who hangs up during these frames now takes the same
+        # ended-without-a-complete-response branch as one who hangs up during the audio, which is
+        # the same event and deserves the same line.
+        await realtime.send(_session_update(gate.TRIAGE_AGENT))
+        item_id = _new_event_id()
+        await realtime.send(_spoken_note(CLOSED, item_id))
+        await realtime.send({"type": "response.create", "event_id": _new_event_id()})
         # Two bounds, and the wall clock is the one that holds if the model never finishes: a turn
         # cap alone would wait forever for a `response.done` that is not coming.
         await asyncio.wait_for(speak_once(), timeout=caps.MAX_CLOSED_CALL_SECONDS)
@@ -276,8 +327,16 @@ async def _record_minutes(call_records, started, now=None):
     """
     minutes = (time.monotonic() - started) / 60
     try:
-        await call_records.record_minutes(day_key(now), minutes)
-    except CallRecordStoreUnavailable as e:
+        # **Bounded, for a reason the read's bound does not cover.** This runs in a `finally`, so a
+        # store that accepts the write and never acknowledges it would hang the relay *after* the
+        # call is over -- the caller is gone, nothing is left to refuse, and the task would sit
+        # there holding the connection. A timeout here is recorded exactly like any other failure
+        # to write: loudly, and swallowed (/code-review, 2026-09-11).
+        await asyncio.wait_for(
+            call_records.record_minutes(day_key(now), minutes),
+            timeout=LEDGER_DEADLINE_SECONDS,
+        )
+    except (CallRecordStoreUnavailable, TimeoutError) as e:
         # **Whole seconds, rounded, never the raw float** (B2). The run-wide scan checks a record's
         # raw formatting arguments as well as its rendered message, and an unrounded duration is
         # seventeen significant digits of essentially random decimals -- which is exactly the
@@ -367,23 +426,6 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
     # that frame is recent. A missed correlation degrades to the unattributed log line, which is
     # where this started.
     injected_frame_ids = collections.deque(maxlen=2 * (auth.MAX_ATTEMPTS + 1))
-
-    await realtime.send(_session_update(agent))
-    # **The greeting, asked for rather than waited for** (issue #51). Without this the agent says
-    # nothing until the caller speaks first and server-side turn detection fires -- every real call
-    # so far has shown 2.5 to 11 seconds of dead air, varying only with how quickly the caller
-    # talked.
-    #
-    # It was parked at Phase 3 kickoff and again at Phase 4's, as a greeting-path defect rather than
-    # an auth-path one. It stopped being parkable in the phase whose exit depends on a caller keying
-    # a PIN they were never asked for: the greeting is the thing that asks for it, so a caller who
-    # says nothing was waiting on a prompt that had not been triggered and never would be.
-    #
-    # One frame, here, and nothing else in this phase touches it -- so a regression on the first
-    # real call is attributable to this or to the intents and never to both. For the same reason
-    # `server_vad` is untouched: changing when the agent first speaks *and* how it detects turns in
-    # one phase would make the interrupt-the-caller defect unattributable too.
-    await realtime.send({"type": "response.create"})
 
     async def transport_to_model():
         nonlocal auth_state
@@ -568,11 +610,36 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 else:
                     log.error("AOAI error event received")
 
-    tasks = [
-        asyncio.create_task(transport_to_model()),
-        asyncio.create_task(model_to_transport()),
-    ]
     try:
+        # **Inside the `try`, so the `finally` below covers these two frames.** They used to sit
+        # above it: `started` was taken, three frames went out, and only then did the block whose
+        # `finally` records minutes and ends the auth state open. A realtime send that raised here
+        # skipped both, so a call that reached AOAI and burned wall clock left nothing in the day's
+        # ledger -- while `_record_minutes`'s own docstring said "on every path out"
+        # (/code-review, 2026-09-11). Moved below the nested definitions rather than dragging them
+        # into the block: defining a coroutine function has no side effect, so the order frames
+        # actually go out in is unchanged.
+        await realtime.send(_session_update(agent))
+        # **The greeting, asked for rather than waited for** (issue #51). Without this the agent says
+        # nothing until the caller speaks first and server-side turn detection fires -- every real call
+        # so far has shown 2.5 to 11 seconds of dead air, varying only with how quickly the caller
+        # talked.
+        #
+        # It was parked at Phase 3 kickoff and again at Phase 4's, as a greeting-path defect rather than
+        # an auth-path one. It stopped being parkable in the phase whose exit depends on a caller keying
+        # a PIN they were never asked for: the greeting is the thing that asks for it, so a caller who
+        # says nothing was waiting on a prompt that had not been triggered and never would be.
+        #
+        # One frame, here, and nothing else in this phase touches it -- so a regression on the first
+        # real call is attributable to this or to the intents and never to both. For the same reason
+        # `server_vad` is untouched: changing when the agent first speaks *and* how it detects turns in
+        # one phase would make the interrupt-the-caller defect unattributable too.
+        await realtime.send({"type": "response.create"})
+
+        tasks = [
+            asyncio.create_task(transport_to_model()),
+            asyncio.create_task(model_to_transport()),
+        ]
         done, pending = await asyncio.wait(
             tasks, timeout=caps.MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
         )

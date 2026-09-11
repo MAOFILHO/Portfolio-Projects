@@ -24,11 +24,13 @@ import logging
 
 from ..call_records import (
     REASONS,
+    CallRecordStore,
     CallRecordStoreUnavailable,
     EscalationRecord,
 )
 from ..core_banking import (
     ALREADY_BLOCKED,
+    CoreBankingClient,
     CoreBankingRequestError,
     CoreBankingUnavailable,
     UnknownAccountError,
@@ -213,7 +215,7 @@ def _account_name(args, key):
 
     Refused here, once, rather than in each client: it is a fact about the model's arguments, not a
     rule of core banking, and the two clients had already drifted on it. The amount's own rule
-    lives at the dollars-to-cents boundary instead (`client._cents`), because that one *is* about
+    lives at the dollars-to-cents boundary instead (`client.to_cents`), because that one *is* about
     money and both clients pass through it.
     """
     value = args[key]
@@ -238,8 +240,13 @@ class CallScope:
     Frozen, because nothing a tool does may change what the call is.
     """
 
-    core_banking: object
-    call_records: object = None
+    # **The protocols, not `object`.** Both fields carried `object` until 2026-09-11, in a package
+    # that defines `CoreBankingClient` and `CallRecordStore` for exactly this -- so the one object
+    # every tool reaches through told a reader nothing about what it holds, and mypy (non-strict
+    # here) had nothing to check the tool bodies against (/code-review, 2026-09-11). Structural
+    # Protocols, so the fakes satisfy them by shape and nothing needs to inherit anything.
+    core_banking: CoreBankingClient
+    call_records: CallRecordStore | None = None
     idempotency_key: str | None = None
     correlation_id: str | None = None
 

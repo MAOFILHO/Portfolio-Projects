@@ -105,7 +105,7 @@ class AllowlistShape(unittest.TestCase):
         # Pinned deliberately: widening B3 must edit this literal and show up in a diff.
         self.assertEqual(
             boot.ALLOWED_REALTIME_MODELS,
-            frozenset({("gpt-realtime-mini", "2025-10-06"), ("gpt-realtime-1-5", "2026-02-23")}),
+            frozenset({("gpt-realtime-mini", "2025-10-06"), ("gpt-realtime-1.5", "2026-02-23")}),
         )
         self.assertEqual(len(boot.ALLOWED_REALTIME_MODELS), 2)
 
@@ -113,6 +113,23 @@ class AllowlistShape(unittest.TestCase):
         for entry in boot.ALLOWED_REALTIME_MODELS:
             self.assertEqual(len(entry), 2)
             self.assertTrue(all(isinstance(part, str) and part for part in entry))
+
+    def test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it(self):
+        # **Literals, not `boot.SUCCESSOR_REALTIME_MODEL`.** The rehearsal in
+        # tests/test_successor_boot.py fed the constant back as the reader's own answer, so it
+        # compared the string to itself and could not notice the allowlist disagreeing with
+        # Azure. This is the pair the live Models API actually reports -- a dot, not a hyphen
+        # (docs/phase0/findings.md:244, docs/phase1/research-aoai-realtime-wire-format.md:341).
+        # The guard reads `properties.model.name`, which is a *model* name; the hyphen form
+        # traced to a findings line describing *deployment* names, which are a different
+        # namespace. Booting the pre-vetted successor would have been refused, defeating the one
+        # thing the successor entry exists for (/code-review, 2026-09-11).
+        catalog_pair = ("gpt-realtime-1.5", "2026-02-23")
+        live = boot.assert_boot_safety(
+            reader=lambda deployment: catalog_pair,
+            env={**_ENV, "AOAI_DEPLOYMENT": catalog_pair[0]},
+        )
+        self.assertEqual(live, catalog_pair)
 
 
 class ParsingTheLiveResponse(unittest.TestCase):

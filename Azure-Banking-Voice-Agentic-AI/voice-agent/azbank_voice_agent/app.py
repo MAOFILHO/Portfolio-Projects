@@ -57,16 +57,37 @@ except OSError as e:
         e,
     )
 
-ACS_CONNECTION_STRING = os.environ["ACS_CONNECTION_STRING"]
-APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
-CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
-WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
+#: Where this app answers its own callbacks and media, derived from one variable.
+#:
+#: **Read at call time, not at import.** Until 2026-09-11 these were four module-level statements
+#: running `os.environ[...]` on import, so importing the entry point required an ACS connection
+#: string and a base URL, and building a `CallAutomationClient` was an import side effect. Three
+#: other modules in this repo state the opposite rule as a rule -- the sibling deployable's entry
+#: point ("Importing this module must not open a database"), `boot.py` ("deliberately not at
+#: import time") and `realtime/client.py` ("Reads configuration at call time, not import time") --
+#: and this was the one file in that role not following it (/code-review, 2026-09-11).
+#:
+#: No default, same as every other address this project reads: a misconfigured deployment fails
+#: where a health check catches it, not mid-call in front of a caller.
+def _app_base_url():
+    # e.g. https://ca-azbank-echo-p0.<region>.azurecontainerapps.io
+    return os.environ["APP_BASE_URL"]
+
+
+def callback_url():
+    return f"{_app_base_url()}/api/callbacks"
+
+
+def ws_url():
+    return _app_base_url().replace("https://", "wss://") + "/ws"
+
 
 #: The process-wide collaborators, built once in lifespan(). Module-level rather than on app.state
 #: so that reading them does not depend on the WebSocket carrying a reference back to its
 #: application -- the relay's collaborators are handed in, and this is where they come from.
 _core_banking = None
 _call_records = None
+_call_automation = None
 
 
 def _process_wide(value, name):
@@ -92,6 +113,10 @@ def call_records():
     return _process_wide(_call_records, "call-record store")
 
 
+def call_automation():
+    return _process_wide(_call_automation, "call automation client")
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """B3 runs here, before the first call can arrive -- and deliberately not at import time, so
@@ -106,8 +131,14 @@ async def lifespan(_app):
     today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
-    global _core_banking, _call_records
+    global _core_banking, _call_records, _call_automation
     assert_boot_safety()
+    # The ACS client, built here for the reason the other two are: startup is where a side effect
+    # belongs. Parsing a connection string makes no network call, so this is cheap -- what it buys
+    # is that importing this module needs no ACS configuration at all.
+    _call_automation = CallAutomationClient.from_connection_string(
+        os.environ["ACS_CONNECTION_STRING"]
+    )
     # One core-banking client for the life of the process, deliberately -- **not one per call.**
     # The circuit breaker's whole job is to notice the same failure repeating, and a breaker that
     # is thrown away when a call ends can never trip: it would start every call fresh and pay the
@@ -125,12 +156,16 @@ async def lifespan(_app):
     finally:
         await _core_banking.aclose()
         await _call_records.aclose()
+        # Not awaited: the ACS client is the SDK's synchronous one and holds no async resources.
+        # It was never closed at all while it lived at module scope; closing it here is what
+        # moving it into a lifespan makes possible.
+        _call_automation.close()
         _core_banking = None
         _call_records = None
+        _call_automation = None
 
 
 app = FastAPI(lifespan=lifespan)
-call_automation_client = CallAutomationClient.from_connection_string(ACS_CONNECTION_STRING)
 
 
 @app.post("/api/incoming-call")
@@ -148,11 +183,11 @@ async def incoming_call(request: Request):
             correlation_id = event["data"].get("correlationId")
             log.info("IncomingCall, correlationId=%s", correlation_id)
             try:
-                call_automation_client.answer_call(
+                call_automation().answer_call(
                     incoming_call_context=incoming_call_context,
-                    callback_url=CALLBACK_URL,
+                    callback_url=callback_url(),
                     media_streaming=MediaStreamingOptions(
-                        transport_url=WS_URL,
+                        transport_url=ws_url(),
                         transport_type=StreamingTransportType.WEBSOCKET,
                         content_type=MediaStreamingContentType.AUDIO,
                         audio_channel_type=MediaStreamingAudioChannelType.MIXED,
@@ -184,7 +219,7 @@ async def incoming_call(request: Request):
                 # except below only keeps the (expected, logged) reject_call failure from itself
                 # propagating as a 500.
                 try:
-                    call_automation_client.reject_call(incoming_call_context=incoming_call_context)
+                    call_automation().reject_call(incoming_call_context=incoming_call_context)
                 except AzureError as reject_e:
                     log.error("reject_call also failed, correlationId=%s: %s", correlation_id, reject_e)
     return {}

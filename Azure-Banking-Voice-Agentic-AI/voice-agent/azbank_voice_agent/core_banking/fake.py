@@ -26,8 +26,8 @@ from .client import (
     Transaction,
     TransferOutcome,
     UnknownAccountError,
-    _cents,
-    _dollars,
+    to_cents,
+    to_dollars,
 )
 
 #: Same accounts and balances as the service seeds, in dollars (the units this side of the seam
@@ -193,11 +193,11 @@ class FakeCoreBankingClient:
     async def transfer(self, from_account, to_account, amount):
         self._check("transfer")
         # Put the amount through the real client's own conversion rather than a second copy of the
-        # rounding rule: what the service can actually receive is whatever `_cents` produces, and
+        # rounding rule: what the service can actually receive is whatever `to_cents` produces, and
         # a fake with its own arithmetic drifts from that silently. Applying the raw dollars left
         # balances like 2399.999 behind, which the real system cannot hold (/code-review,
         # 2026-09-08).
-        moved = _dollars(_cents(amount))
+        moved = to_dollars(to_cents(amount))
 
         # Amount before accounts, because that is the order the service applies: `TransferRequest`
         # validates the body before the route body runs, so a bad amount is a 422 whether or not

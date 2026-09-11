@@ -78,6 +78,11 @@ UTTERANCES = [
 _SAMPLE_RATE = 24000  # matches session.py's _AUDIO_CONFIG -- audio/pcm, 24000 Hz, mono
 _FRAME_MS = 20  # real ACS streams small chunks, not one giant frame -- mirrors that pacing
 
+#: One 20ms frame of PCM16 mono, in bytes. Two bytes per sample. Written once: the same expression
+#: appeared in `_chunk_to_frames` and `_silence_frames`, where the two copies had to agree for the
+#: silence frames to be the same size as the speech frames they pad (/code-review, 2026-09-11).
+_BYTES_PER_FRAME = int(_SAMPLE_RATE * _FRAME_MS / 1000) * 2
+
 
 def _synthesize_pcm16(text):
     """Shells out to macOS `say` + `afconvert` to get real, intelligible speech audio as raw
@@ -108,10 +113,9 @@ def _synthesize_pcm16(text):
 def _chunk_to_frames(pcm_bytes):
     """Splits raw PCM16 into ~20ms base64 ACS-shaped inbound frames (transport/acs.py's
     lowercase-keys inbound shape) -- real ACS streams small chunks continuously, not one frame."""
-    bytes_per_frame = int(_SAMPLE_RATE * _FRAME_MS / 1000) * 2  # 2 bytes/sample, mono
     frames = []
-    for i in range(0, len(pcm_bytes), bytes_per_frame):
-        chunk = pcm_bytes[i:i + bytes_per_frame]
+    for i in range(0, len(pcm_bytes), _BYTES_PER_FRAME):
+        chunk = pcm_bytes[i:i + _BYTES_PER_FRAME]
         b64 = base64.b64encode(chunk).decode("ascii")
         frames.append(json.dumps({"kind": "AudioData", "audioData": {"data": b64}}))
     return frames
@@ -127,9 +131,8 @@ def _silence_frames(seconds):
     passed. A real ACS call streams continuously, silence included; simply stopping sends after
     the spoken utterance (the original bug here) gives the server nothing to measure a pause from
     at all, so no turn ever ends and no B5 latency anchor ever fires."""
-    bytes_per_frame = int(_SAMPLE_RATE * _FRAME_MS / 1000) * 2
     n_frames = int(seconds * 1000 / _FRAME_MS)
-    b64_silence = base64.b64encode(b"\x00" * bytes_per_frame).decode("ascii")
+    b64_silence = base64.b64encode(b"\x00" * _BYTES_PER_FRAME).decode("ascii")
     frame = json.dumps({"kind": "AudioData", "audioData": {"data": b64_silence}})
     return [frame] * n_frames
 

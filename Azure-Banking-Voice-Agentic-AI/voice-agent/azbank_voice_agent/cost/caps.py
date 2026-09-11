@@ -38,7 +38,13 @@ MAX_DAILY_MINUTES = 120.0
 MAX_CLOSED_CALL_SECONDS = 20.0
 
 #: And the turn bound on the same path. One response cycle: the closed sentence, spoken once.
-#: Enforced by the relay rather than by the model choosing to be brief.
+#: Enforced by the relay rather than by the model choosing to be brief -- `run_closed_call`'s
+#: `speak_once` counts completed responses against this value.
+#:
+#: **It was referenced nowhere until 2026-09-11.** The bound held anyway, because the relay
+#: returned at the first `response.done`, so the behaviour was right and this constant was
+#: decoration: editing it changed nothing, and the sentence above described a rule no code read
+#: (/code-review, 2026-09-11).
 MAX_CLOSED_CALL_TURNS = 1
 
 

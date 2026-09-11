@@ -31,7 +31,16 @@ ACTIVE_REALTIME_MODEL = ("gpt-realtime-mini", "2025-10-06")  # GA, retires 2027-
 # one-line change plus a deployment change -- not a from-scratch model evaluation run under
 # deadline pressure as the active pin's retirement approaches. Full tier, ~3.2x the per-token
 # audio cost; that is the tier difference, not the version.
-SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1-5", "2026-02-23")  # GA, retires 2027-08-24
+# **A dot, not a hyphen.** This is a *model* name, because that is what the guard compares it
+# against: `parse_deployment_response` reads `properties.model.name`. The hyphen form this entry
+# carried until 2026-09-11 traced to docs/phase0/findings.md:361, which described *deployment*
+# names -- a different namespace, freely chosen at deployment time. The live Models API spells the
+# model `gpt-realtime-1.5`, so the old entry could never match anything Azure would report, and
+# booting the pre-vetted successor would have been refused at startup by the very allowlist that
+# exists to let it boot. Found by /code-review 2026-09-11; see test_boot.py's
+# `test_the_guard_admits_the_successor_spelled_the_way_the_catalog_spells_it`, which pins the
+# catalog spelling as a literal rather than reading it back out of this constant.
+SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1.5", "2026-02-23")  # GA, retires 2027-08-24
 
 ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 

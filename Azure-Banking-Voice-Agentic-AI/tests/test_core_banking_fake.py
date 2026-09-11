@@ -37,7 +37,7 @@ from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingCli
 #: bad amount outranks an unknown account. The next two are well-formed amounts naming a missing
 #: account, which is the only way to reach unknown-account.
 #:
-#: The last two never reach the wire at all, and that is the point of them: `_cents` refuses an
+#: The last two never reach the wire at all, and that is the point of them: `to_cents` refuses an
 #: amount that is not a finite number, so the real client and the fake refuse them identically by
 #: sharing that one function. `True` is the row that matters -- it is a valid JSON amount, and
 #: `True * 100` is an ordinary 100 cents, so db.py's own bool guard at the system of record could

@@ -14,9 +14,11 @@ import datetime
 import inspect
 import json
 import socket
+import time
 import unittest
 from unittest.mock import patch
 
+from azbank_voice_agent import auth as auth_module
 from azbank_voice_agent.agents import specs
 from azbank_voice_agent.auth import AttemptsExhausted, outcomes, sentence_for
 from azbank_voice_agent.call_records import REASONS
@@ -1384,6 +1386,30 @@ class TheClosedPath(unittest.TestCase):
         # one type, precisely so nobody downstream can treat one of them as benign.
         self._assert_budget_refused(FakeCallRecordStore(fail_with=store_unavailable("timed out")))
 
+    def test_a_store_that_never_answers_at_all_refuses(self):
+        """Criterion 11's "times out" branch, driven by a store that actually hangs.
+
+        The test above arranges a store that has *already decided* to fail, which proves the
+        client's own timeout is translated correctly but proves nothing about there being one.
+        Until 2026-09-11 there was not: no timeout was set when the table client was built and no
+        deadline wrapped the read, so a Storage endpoint that accepted the connection and never
+        replied stalled the media socket with a caller on it. The evidence for the criterion was a
+        fake pre-raising the exception the code was supposed to produce -- "a claim that outruns
+        its evidence", which the phase had named as its own risk (/code-review, 2026-09-11).
+        """
+        class NeverAnswers:
+            async def minutes_used(self, day):
+                await asyncio.Event().wait()  # a socket that is open and silent
+
+            async def record_minutes(self, day, minutes):
+                await asyncio.Event().wait()
+
+        started = time.monotonic()
+        self._assert_budget_refused(NeverAnswers())
+        # And it refused on a deadline rather than by luck: bounded, and bounded by roughly the
+        # configured value rather than by the suite's own patience.
+        self.assertLess(time.monotonic() - started, session_module.LEDGER_DEADLINE_SECONDS + 2)
+
     def test_a_store_that_answers_unreadably_refuses(self):
         # The real client raises the same type for a row it cannot parse -- proved directly in
         # tests/test_call_records.py. Arranged here through the fake so the branch is covered at
@@ -1394,14 +1420,16 @@ class TheClosedPath(unittest.TestCase):
 
     def test_an_intact_budget_serves_the_call(self):
         # Not trivially always-closed: without this, a brake wired permanently shut would pass every
-        # test above.
-        self.assertEqual(
-            asyncio.run(budget_or_closed(FakeCallRecordStore())), caps.MAX_DAILY_MINUTES
-        )
+        # test above. **Returning at all is the assertion** -- the guard hands back nothing since
+        # 2026-09-11, because its one caller discarded the remaining-minutes figure it used to
+        # compute (/code-review, 2026-09-11).
+        self.assertIsNone(asyncio.run(budget_or_closed(FakeCallRecordStore())))
 
     def test_a_day_just_under_its_budget_still_serves(self):
+        # The boundary still matters even though no figure comes back: a cap that refused the last
+        # minute of the day would be off by one in the direction that strands a real caller.
         store = FakeCallRecordStore(minutes={day_key(): caps.MAX_DAILY_MINUTES - 1})
-        self.assertEqual(asyncio.run(budget_or_closed(store)), 1)
+        self.assertIsNone(asyncio.run(budget_or_closed(store)))
 
     def test_the_caller_is_told_the_service_is_closed(self):
         transport, realtime = self._closed_call()
@@ -1432,6 +1460,33 @@ class TheClosedPath(unittest.TestCase):
         )
         asyncio.run(run_closed_call(transport, realtime, self.call_records))
         self.assertEqual(transport.sent_audio_payloads, ["were-closed"])
+
+    def test_the_turn_bound_is_the_named_constant_and_not_a_coincidence(self):
+        """`MAX_CLOSED_CALL_TURNS` actually decides where the path stops.
+
+        The bound above held structurally -- the relay returned on the first `response.done` --
+        while `cost/caps.py`'s constant was referenced nowhere in the codebase. So the test above
+        would have passed with the constant set to 1, to 50, or deleted, and the caps module's
+        claim that the bound is "enforced by the relay rather than by the model choosing to be
+        brief" pointed at a value that enforced nothing (/code-review, 2026-09-11).
+
+        Raising it has to change behaviour, or the constant is decoration.
+        """
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                audio_delta("were-closed"),
+                response_done(),
+                audio_delta("and-something-else"),
+                response_done(),
+            ],
+            respond_after_appends=0,
+        )
+        with patch.object(caps, "MAX_CLOSED_CALL_TURNS", 2):
+            asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertEqual(
+            transport.sent_audio_payloads, ["were-closed", "and-something-else"]
+        )
 
     def test_the_closed_path_is_bounded_in_wall_clock_too(self):
         """A model that never finishes must not hold the line open.
@@ -1519,7 +1574,9 @@ class TheDayBoundary(unittest.TestCase):
         with self.assertRaises(caps.DailyBudgetSpent):
             asyncio.run(budget_or_closed(store, now=before))
         # Rollover: a fresh budget, instantly, with no waiting and no clock patching of the module.
-        self.assertEqual(asyncio.run(budget_or_closed(store, now=after)), caps.MAX_DAILY_MINUTES)
+        # The refusal above and the return here are the whole contrast -- the same store, the same
+        # ledger, one minute apart.
+        self.assertIsNone(asyncio.run(budget_or_closed(store, now=after)))
 
 
 class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
@@ -1591,6 +1648,63 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             self._run(Exploding(hang=True), FakeRealtimeServer(hang=True))
+        self._assert_charged()
+
+    def test_a_send_that_fails_before_the_relay_starts_is_still_charged(self):
+        """The gap in "every path out": the three frames sent *before* the `try` opened.
+
+        `run_call` took its start time, sent the session update and the greeting, and only then
+        entered the `try` whose `finally` records minutes and ends the call's auth state. A
+        realtime send that raised on either of those two frames skipped both -- so a call that
+        reached AOAI, burned wall clock and failed left no trace in the day's ledger, and the
+        authenticator's buffer was never zeroed. The docstring on `_record_minutes` said "on
+        every path out" the whole time (/code-review, 2026-09-11).
+
+        Small minutes, but B4's own module names undercounting as the fail-open direction, and a
+        backend failing at the first frame is exactly the condition under which every call in a
+        row takes this path.
+        """
+        class RefusesToSend(FakeRealtimeServer):
+            async def send(self, message):
+                raise RuntimeError("the realtime connection broke on the first frame")
+
+        with self.assertRaises(RuntimeError):
+            self._run(FakeTransport(hang=True), RefusesToSend(hang=True))
+        self._assert_charged()
+
+    def test_a_send_that_fails_before_the_relay_starts_still_ends_the_auth_state(self):
+        # The other half of the same `finally`. `authenticator.end_call()` zeroes the keypad
+        # buffer, and B2's rule is that the PIN does not outlive the call that keyed it -- a call
+        # that skipped this left the buffer holding whatever it held.
+        class RefusesToSend(FakeRealtimeServer):
+            async def send(self, message):
+                raise RuntimeError("the realtime connection broke on the first frame")
+
+        ended = []
+        real_end_call = auth_module.Authenticator.end_call
+
+        def spy(self):
+            ended.append(True)
+            return real_end_call(self)
+
+        with patch.object(auth_module.Authenticator, "end_call", spy), \
+             self.assertRaises(RuntimeError):
+            self._run(FakeTransport(hang=True), RefusesToSend(hang=True))
+        self.assertEqual(ended, [True])
+
+    def test_the_closed_path_is_charged_even_if_its_first_frame_fails(self):
+        # The closed path had the same three-sends-before-the-`try` shape as `run_call`, and its
+        # own docstring makes the stronger claim: "Its own minutes count too... a brake whose
+        # usage was invisible in the one place it matters would not be a brake anybody could
+        # audit." A closed call that failed on its first frame was invisible.
+        class RefusesToSend(FakeRealtimeServer):
+            async def send(self, message):
+                raise RuntimeError("the realtime connection broke on the first frame")
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(run_closed_call(
+                FakeTransport(hang=True), RefusesToSend(hang=True), self.call_records
+            ))
         self._assert_charged()
 
     def test_the_minutes_recorded_are_the_minutes_the_call_took(self):

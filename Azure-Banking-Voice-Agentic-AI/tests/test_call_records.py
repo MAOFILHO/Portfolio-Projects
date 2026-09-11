@@ -11,6 +11,7 @@ is never consulted records nothing, and that failure passes every test in this f
 made at the whole-call seam, in tests/test_whole_call.py, which is the same two-claim structure the
 gate's tests use.
 """
+import asyncio
 import dataclasses
 import datetime
 import unittest
@@ -293,6 +294,37 @@ class TheDayLedger(unittest.IsolatedAsyncioTestCase):
         await TableStorageCallRecordStore(table).record_minutes(self.DAY, 1.0)
         self.assertEqual(table.entities[0]["PartitionKey"], LEDGER_PARTITION)
         self.assertEqual(table.entities[0]["RowKey"], self.DAY)
+
+    async def test_two_calls_ending_together_both_count_against_the_day(self):
+        """B4 loses no update when two calls end at the same instant.
+
+        **One process is enough.** `record_minutes` awaits a read and then awaits a write, and
+        every await is a point the event loop can hand the other call the CPU -- so both read the
+        same "before" figure and the second write erases the first. The comment here used to
+        answer this by saying the race "needs two replicas, which the Bicep forbids", which was
+        wrong twice over: the only `maxReplicas: 1` in `infra/` belongs to mock-core-banking, the
+        voice agent has no Bicep module at all, and the in-process interleaving above does not
+        care how many replicas there are (/code-review, 2026-09-11).
+
+        It loses updates by *under*-counting, which the module's own comment names as the
+        fail-open direction. B4's target is 0 fail-open events.
+
+        The table below yields between read and write, which is what a real round trip does -- it
+        does not create the race, it just makes its timing deterministic instead of leaving the
+        test to hope for an unlucky schedule.
+        """
+        class _YieldingLedger(_LedgerTable):
+            async def get_entity(self, partition_key, row_key):
+                entity = await super().get_entity(partition_key, row_key)
+                await asyncio.sleep(0)
+                return entity
+
+        store = TableStorageCallRecordStore(_YieldingLedger(rows={self.DAY: {"minutes": 0.0}}))
+        await asyncio.gather(
+            store.record_minutes(self.DAY, 1.0),
+            store.record_minutes(self.DAY, 1.0),
+        )
+        self.assertEqual(await store.minutes_used(self.DAY), 2.0)
 
     async def test_a_write_that_fails_raises_rather_than_being_swallowed_here(self):
         # Swallowing belongs to the relay, which knows the call is already over. The client's job is
