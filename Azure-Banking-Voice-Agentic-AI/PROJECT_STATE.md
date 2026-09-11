@@ -48,9 +48,13 @@ nothing redeployed, no call made.** What a caller dialling the number reaches to
 1's agent on the Phase 2 image — the gap between what is committed and what answers the phone is now
 **four** phases wide.
 
+**The Phase 5 `/code-review`'s eight findings are all fixed** — four of them on named constraints
+(B1, B3, B4 twice). Commits `581b8f4` and `59a3d93`; the gate-adjacent one landed separately, after
+Marco read its diff. Record: `docs/phase5/review-fixes.md`. **The fixes are themselves unreviewed.**
+
 | | |
 |---|---|
-| voice-agent tests | **480 pass**, 3 skipped by design (was 315) |
+| voice-agent tests | **491 pass**, 3 skipped by design (was 480) |
 | mock-core-banking tests | **90 pass** (was 47) |
 | B1 red-team | **18 distinct attack ideas → 593 concrete cases**, 542 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
@@ -148,9 +152,8 @@ because they are genuinely unresolved, not because any of them is currently bloc
 2. **`02-test-calls.sh` must not be re-run carelessly.** Stages 1-3 have no skip-if-already-confirmed
    guard — unconditionally prompts for 3 fresh billable calls before Stage 4's free, read-only
    evidence extraction can run. Candidate fix: an `--extract-only` flag.
-3. **R-03's Call-1 zero-DTMF anomaly is permanently unresolved for Call 1** — dropped as a Phase 1
-   entry criterion 2026-08-28 (Call 1's evidence no longer exists to settle it). Calls 2/3 already
-   confirm DTMF works in the common case.
+3. **R-03's Call-1 zero-DTMF anomaly is permanently unresolved**, and dropped as a Phase 1 entry
+   criterion 2026-08-28 — the evidence no longer exists. Calls 2/3 confirm DTMF in the common case.
 4. **Docker Hub vs ACR — still on Docker Hub.** Was due a deliberate decision at Phase 1 kickoff;
    didn't happen. ACR with managed-identity pull matches Phase 7's "no keys" direction but costs a
    real ~$5/mo.
@@ -169,10 +172,8 @@ because they are genuinely unresolved, not because any of them is currently bloc
    both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
    exit table** (`docs/PLAN.md`'s own words). Scoped as `server_vad` config tuning, not new code,
    once/if it reproduces again.
-10. **CLOSED by Phase 5 (#51).** The dead-air gap before the agent's first words is gone: the
-    relay sends an initial `response.create`, so the greeting -- which is what asks for the PIN
-    -- no longer waits for the caller to speak. Parked at two prior boundaries; unparked here
-    because this phase's exit depends on a caller keying a PIN they were never asked for.
+10. **CLOSED by Phase 5 (#51)** — the dead-air gap before the agent's first words. Moved to
+    `docs/phase5/review-fixes.md`; nothing past-tense stays here (decision 18).
 11. **No real DTMF tone has ever been consumed by this system.** Phase 0 proved tones *arrive*
     during active bidirectional streaming; every line that acts on one is Phase 4's and is exercised
     only against fakes, because Phase 4 deployed nothing. Closes at Phase 5's real-call exit.
@@ -203,22 +204,28 @@ because they are genuinely unresolved, not because any of them is currently bloc
     bodies by default.** Not verified against those packages' source, so it is not asserted either
     way. It matters because the relay's own FastAPI app receives the ACS webhook and, at Phase 5,
     the media WebSocket — a body-capturing default there would put DTMF frames into telemetry.
-    Cheap to settle by reading source, and it should be settled **before Phase 6 enables anything**.
-    Recorded 2026-09-10 after `/code-review` found it dropped rather than deferred: the research
-    named it, its sibling question became item 15, and this one reached no list at all.
+    Cheap to settle by reading source, and it must be settled **before Phase 6 enables anything**.
 17. **`transport/acs.py`'s audio branch is not total, unlike its DTMF branch.** A malformed
     `AudioData` frame raises `KeyError` on the inbound relay task, which ends the call; the DTMF
     branch is deliberately defensive for exactly that reason and the audio branch never was. Pinned
-    by `tests/test_acs.py::test_a_malformed_audio_frame_still_raises` so the behaviour is known
-    rather than folklore. **Not changed**: it is relay behaviour nobody asked to alter, on a path
-    the never-auto-accept rule covers. Recorded 2026-09-10 because a docstring claimed this item
-    existed before it did.
+    by `tests/test_acs.py::test_a_malformed_audio_frame_still_raises`, so it is known rather than
+    folklore. **Not changed**: relay behaviour nobody asked to alter, on a never-auto-accept path.
 18. **The relay imposes no deadline on the injected PIN-outcome frames.** The research is explicit
     that telling a rejection from silence needs the error type, a correlated id, **and the relay's
     own timeout**. The first two are implemented; the third is not, so an injection that is simply
     never answered still looks like an accepted one. Deliberately not built here: the authenticator
     carries "no timer of any kind" as a design decision, and putting one on the relay's PIN path is
     a Phase 5 design question rather than a fix.
+19. **The call-record store sets no SDK-level timeout, deliberately.** The deadline that makes
+    criterion 11's "times out" branch real is at the seam (`session.LEDGER_DEADLINE_SECONDS`),
+    tested, and holds for the fake and the real client alike. A transport timeout would be better —
+    it closes the socket rather than merely stopping the wait — but azure-core clients ignore
+    unknown keyword arguments, so a misremembered option name reads as configured and does nothing:
+    the role-definition GUID's failure shape. `/research` owes the option names with the rest.
+20. **The daily ledger's lock is in-process only.** It covers today's race, two calls ending
+    together in one process. A second replica holds a second lock and loses updates again. ETag
+    optimistic concurrency is the fix and is a deliberate not-yet (Marco, 2026-09-11): one replica
+    runs, and the ETag path cannot be exercised until the Storage account exists.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
@@ -234,6 +241,15 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
+0. **Phase 6 does not begin here.** Marco asked for it 2026-09-11; the answer is that Phase 5's exit
+   is not met — four tickets open, nothing provisioned, no call made, B5 not frozen — and no phase
+   begins without written exit criteria from the prior one. The path to Phase 6 runs through the
+   items below, in this order, and every one of steps 4 to 6 needs Marco's hands, voice, or both.
+0b. **`/code-review` the two review-fix commits** (`581b8f4`, `59a3d93`). Eight findings were
+   actioned and the fixes have not themselves been reviewed. Named, not invoked.
+0c. **The eight review findings were never filed as issues.** Both commits reference only the phase
+   spec `#43`. The drafted set and its blocking edges are in the handoff
+   `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
 1. **Read `git log e42c063..HEAD`.** Phase 4's diff and Phase 5's. It is the entry condition that was
    waived, it is four phases of code that will land on one image, and it is the cheapest point at
    which any of it can be sent back.
