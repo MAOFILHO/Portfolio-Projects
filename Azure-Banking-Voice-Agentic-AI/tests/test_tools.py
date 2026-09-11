@@ -311,6 +311,55 @@ class TheDispatcherIsAsync(unittest.TestCase):
         self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
 
 
+class TheDefaultsAreTheLeastPrivilegedOnes(unittest.IsolatedAsyncioTestCase):
+    """B1. The docstring has always claimed both defaults are least-privileged; the agent one was
+    not (/code-review, 2026-09-11).
+
+    `BANKING_AGENT` is the row granting all five banking tools. It was harmless only because the
+    *paired* default was `ANONYMOUS`, which grants nothing to anybody -- so the claim held by
+    coincidence of the pair rather than by either value being least-privileged. A caller that
+    passed an auth_state and forgot the agent got the most privileged identity in the table, which
+    is the fail-open direction on the one constraint whose whole point is failing closed.
+
+    The gate is **not** patched open here, unlike `DispatchCase` -- the refusal is the assertion.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+        self.scope = tools.CallScope(
+            core_banking=self.core_banking,
+            call_records=FakeCallRecordStore(),
+            idempotency_key="idem_aaaaaaaa",
+            correlation_id="corr-test",
+        )
+
+    async def test_omitting_the_agent_refuses_a_banking_tool_even_when_authenticated(self):
+        # The exact latent case: auth_state supplied, agent forgotten. Under the old default this
+        # returned a real balance read off the system of record.
+        answer = json.loads(await tools.dispatch_tool_call(
+            "get_balance", '{"account": "chequing"}',
+            auth_state=gate.AUTHENTICATED, scope=self.scope,
+        ))
+        self.assertEqual(answer, {"error": gate.REFUSAL})
+
+    async def test_the_default_pair_grants_exactly_what_the_least_privileged_row_grants(self):
+        # Not "grants nothing": the anonymous corollary changed in Phase 5 and asking for a person
+        # is reachable on every row. The claim is that the defaults land on the least-privileged
+        # row, whatever that row currently holds -- so this reads the table rather than restating
+        # it, and stays true when the table moves.
+        import inspect
+        signature = inspect.signature(tools.dispatch_tool_call)
+        defaults = (
+            signature.parameters["agent"].default,
+            signature.parameters["auth_state"].default,
+        )
+        least = min(gate.PERMISSIONS, key=lambda pair: len(gate.PERMISSIONS[pair]))
+        self.assertEqual(
+            gate.PERMISSIONS[defaults], gate.PERMISSIONS[least],
+            f"the defaults {defaults} do not land on a least-privileged row",
+        )
+
+
 class ToolsMatchDispatch(unittest.TestCase):
     def test_every_declared_tool_is_dispatchable_and_vice_versa(self):
         # TOOLS is what the model sees; _DISPATCH is what actually runs. If they drift, the model

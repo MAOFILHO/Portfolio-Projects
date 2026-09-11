@@ -357,7 +357,7 @@ _DISPATCH = {
 
 
 async def dispatch_tool_call(
-    name, arguments_json, agent=gate.BANKING_AGENT, auth_state=gate.ANONYMOUS, *, scope,
+    name, arguments_json, agent=gate.TRIAGE_AGENT, auth_state=gate.ANONYMOUS, *, scope,
 ):
     """Run one tool call, returning the JSON string for a function_call_output. Never raises --
     an unknown tool name, a missing or wrongly-typed argument, an unknown account, a malformed
@@ -369,11 +369,21 @@ async def dispatch_tool_call(
     so the caller hears a spoken refusal rather than silence.
 
     The agent/auth_state defaults are the *least* privileged values on purpose: a caller that
-    forgets to pass an auth_state gets ANONYMOUS, so forgetting fails closed rather than open.
+    forgets to pass an auth_state gets ANONYMOUS, and one that forgets the agent gets TRIAGE, so
+    forgetting fails closed rather than open.
     `scope` is keyword-only and has **no default** for the same reason -- forgetting it is a
     TypeError at the call site, not a None that fails somewhere later. What is inside it may be
     absent (see CallScope), because a missing idempotency key matters to one tool and a missing
     client matters to four; failing at the tool that needs the thing beats failing at all of them.
+
+    **The agent default was `BANKING_AGENT` until 2026-09-11**, which is the row granting all five
+    banking tools -- the most privileged identity in the table, sitting under a docstring calling
+    it the least. It was harmless only because the paired default was ANONYMOUS, so the sentence
+    above was true of the *pair* by coincidence rather than of either value. A caller that passed
+    an auth_state and forgot the agent got a real balance read off the system of record; only
+    `session.py` passes both explicitly, so it was latent, never live. Found by /code-review and
+    pinned by `TheDefaultsAreTheLeastPrivilegedOnes`, which drives the forgotten-agent case
+    through the real gate rather than a patched-open one.
     """
     if not gate.is_allowed(agent, auth_state, name):
         # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
