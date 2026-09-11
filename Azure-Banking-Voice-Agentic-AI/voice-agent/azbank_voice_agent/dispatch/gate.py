@@ -43,11 +43,18 @@ ANONYMOUS = "anonymous"
 AUTHENTICATED = "authenticated"
 
 # The agent identities issue #20's declarative AgentSpec table (agents/specs.py) introduces. A
-# call starts on TRIAGE_AGENT and is handed off to BANKING_AGENT mid-session for anything the
-# triage agent doesn't handle itself -- session.py's own agent variable is what actually changes;
-# these two constants are what the gate keys the permission table on.
+# call starts on TRIAGE_AGENT and is handed off mid-session for anything the triage agent doesn't
+# handle itself -- session.py's own agent variable is what actually changes; these constants are
+# what the gate keys the permission table on.
+#
+# CARDS_AGENT is Phase 5's (issue #47) and is the third specialist docs/PLAN.md decision 6 named at
+# scoping. It did not exist for three phases for one reason: Cards had no tool to be given, and an
+# agent with no tools is a row that proves nothing. Adding it is a row here and a row in
+# agents/specs.py -- and the claim that it needs nothing else is what issue #47 tests rather than
+# asserts.
 TRIAGE_AGENT = "triage"
 BANKING_AGENT = "banking"
+CARDS_AGENT = "cards"
 
 # --- the permission table: data, not logic -------------------------------------------------------
 #
@@ -72,6 +79,15 @@ BANKING_AGENT = "banking"
 # is a banking operation like the three beside it -- it reads the caller's own money -- so it sits
 # in the same row, under the same authentication, and the sharpened B1 definition covers it with no
 # new wording.
+#
+# **Phase 5 (issue #47) then added a third agent, which makes six rows.** Cards holds `block_card`
+# and nothing else, and grants it only to an authenticated call -- stopping somebody's card is a
+# banking operation on their account, whatever else it is. Cards while anonymous grants nothing, for
+# the same reason banking while anonymous does: routing is not authorization, and a caller may be
+# handed to Cards before authenticating.
+#
+#     cards   + anonymous       -> nothing
+#     cards   + authenticated   -> block_card
 #
 # Triage grants nothing in either state because it has no banking tools of its own -- authenticating
 # does not change what triage is for. Banking grants nothing while anonymous because routing is not
@@ -102,6 +118,8 @@ PERMISSIONS: dict[tuple[str, str], frozenset[str]] = {
     (BANKING_AGENT, AUTHENTICATED): frozenset(
         {"get_balance", "transfer", "list_accounts", "list_transactions"}
     ),
+    (CARDS_AGENT, ANONYMOUS): frozenset(),
+    (CARDS_AGENT, AUTHENTICATED): frozenset({"block_card"}),
 }
 
 # What the caller hears when the gate refuses. Deliberately vague about *why*: a refusal that

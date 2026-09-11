@@ -7,12 +7,19 @@ BANKING mid-call -- the same realtime session reconfigured via session.update, n
 session (docs/PLAN.md decision 6: "One persistent realtime session per call; agent swap via
 session.update").
 
-Only two agents exist because only one specialist's tools exist: docs/PLAN.md decision 6 names a
-longer chain (Triage -> Accounts -> Cards), but "Cards" has no tools behind it yet -- block_card is
-decision 5's stated future scope, not something dispatch/tools.py declares today. Adding a real
-Cards specialist later is a new AgentSpec row plus new tools in dispatch/tools.py, not a change to
-this module's shape, session.py's handoff handling, or the gate (issue #20's acceptance criterion:
-"adding an agent requires no change to enforcement or dispatch logic").
+**Three agents since Phase 5** (issue #47): triage, banking, and cards. For three phases there were
+two, because Cards had no tools behind it -- `block_card` was decision 5's stated future scope, and
+an agent with no tools is a row that proves nothing. Issue #20's acceptance criterion said adding one
+would be "a new AgentSpec row plus new tools in dispatch/tools.py, not a change to this module's
+shape, session.py's handoff handling, or the gate". Phase 5 is where that was tested rather than
+asserted, and it held: the third agent cost a row here, a row in dispatch/gate.py's PERMISSIONS, and
+nothing else.
+
+Triage declares an edge to both specialists. Neither specialist declares an edge to anything --
+including to each other. A caller who has been handed to Cards and then asks about a balance cannot
+be routed onward by a model that decides to; `handoff_target()` checks the edge against the *calling*
+agent's own `handoff_to`, so an undeclared handoff falls through to the gate and is refused like any
+other unrecognised tool name.
 
 **Tool scope here is defence in depth, not the control** -- dispatch/gate.py's own docstring says
 this directly. Narrowing which tools an agent's session.update declares reduces what the model is
@@ -55,12 +62,14 @@ TRIAGE = AgentSpec(
         "check them -- the system does that on its own and will tell you the result. "
         "If you are told the PIN was wrong, ask them to key it again without saying anything "
         "about how many tries are left. "
-        "You have no banking tools of your own -- for anything about a balance or moving money, "
-        "hand the call to the banking specialist right away rather than trying to help directly "
-        "or making the caller repeat themselves once you do."
+        "You have no banking tools of your own. For anything about a balance, recent activity or "
+        "moving money, hand the call to the banking agent right away. If the caller's card is "
+        "lost or stolen, or they want it stopped, hand the call to the cards agent right away. "
+        "Either way, do it rather than trying to help directly, and don't make the caller repeat "
+        "themselves once you do."
     ),
     tool_names=frozenset(),
-    handoff_to=frozenset({gate.BANKING_AGENT}),
+    handoff_to=frozenset({gate.BANKING_AGENT, gate.CARDS_AGENT}),
 )
 
 BANKING = AgentSpec(
@@ -77,9 +86,40 @@ BANKING = AgentSpec(
     handoff_to=frozenset(),
 )
 
+CARDS = AgentSpec(
+    identity=gate.CARDS_AGENT,
+    instructions=(
+        "You handle lost and stolen cards on a phone banking call, continuing a call the triage "
+        "agent already greeted -- don't greet the caller again, just continue. Be brief and "
+        "clear, like a real phone call. "
+        # The confirmation is the model's, and it is stated in two places on purpose -- here and in
+        # the tool's own description (dispatch/tools.py). It is deliberately NOT a second tool call
+        # and NOT a state the gate knows about: putting a conversational step inside the control
+        # would give the gate a second job, and the gate has exactly one.
+        "Before you block a card, say plainly that blocking cannot be undone on this line and ask "
+        "the caller to confirm they want it blocked. Only call block_card once they have "
+        "confirmed. "
+        # Said here rather than left to the model's instincts: a caller who asks twice, or whose
+        # first request the agent is unsure about, must not be talked out of the most urgent thing
+        # they can ask for. The idempotency key makes a second call safe, so the honest answer to
+        # "did that work" is to call the tool again.
+        "If the caller asks again, or you are not sure the block went through, call block_card "
+        "again -- it is safe to repeat and will tell you if the card was already blocked. "
+        "If you are told it was already blocked, say so plainly rather than saying you have just "
+        "blocked it."
+    ),
+    tool_names=frozenset({"block_card"}),
+    handoff_to=frozenset(),
+)
+
 #: Every agent that exists, keyed by identity. session.py and this module's own helpers below are
 #: the only readers -- neither branches on which agent it has, both just look this table up.
-AGENTS = {spec.identity: spec for spec in (TRIAGE, BANKING)}
+#:
+#: Three since Phase 5 (issue #47). Adding CARDS required a row here, a row in dispatch/gate.py's
+#: PERMISSIONS, and nothing else -- not session.py's handoff handling, not `is_allowed()`, not
+#: `handoff_target()`. That was issue #20's acceptance criterion stated as a claim three phases ago
+#: and it is now a claim that has been tested.
+AGENTS = {spec.identity: spec for spec in (TRIAGE, BANKING, CARDS)}
 
 
 def handoff_tool_name(target_identity):

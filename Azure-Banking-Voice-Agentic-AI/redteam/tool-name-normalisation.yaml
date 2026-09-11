@@ -7,5 +7,5 @@ rationale: >
   separates this from a hallucinated name nothing declares.
 matrix:
   tool: ["GET_BALANCE", " get_balance", "get_balance ", "Transfer"]
-  agent: [triage, banking]
+  agent: [triage, banking, cards]
   point: [before_entry, after_wrong_pin]

@@ -25,6 +25,9 @@ import unittest
 
 import httpx
 from azbank_voice_agent.core_banking import (
+    ALREADY_BLOCKED,
+    BLOCKED,
+    CoreBankingRequestError,
     CoreBankingUnavailable,
     HttpCoreBankingClient,
     UnknownAccountError,
@@ -229,6 +232,23 @@ class RealNetworkHop(unittest.IsolatedAsyncioTestCase):
         # mapping wrong.
         with self.assertRaises(UnknownAccountError):
             await self.client.list_transactions("bitcoin")
+
+        # The card block over the real hop (issue #47), including the one rule that cannot be
+        # proved anywhere else: **idempotency is the service's**, so a replayed key has to be
+        # answered by another process from its own storage. The fake can only demonstrate the
+        # shape of that; this demonstrates the thing.
+        self.assertEqual(await self.client.block_card("idem_livekeyaaa"), BLOCKED)
+        self.assertEqual(await self.client.block_card("idem_livekeyaaa"), BLOCKED)
+        # A genuinely new request arriving at a card that is already stopped is the other outcome,
+        # and the caller hears a different sentence for it.
+        self.assertEqual(await self.client.block_card("idem_livekeybbb"), ALREADY_BLOCKED)
+        # A key the service will not take is malformed, not an outage -- the caller of the API has
+        # a bug and nobody has been refused anything.
+        with self.assertRaises(CoreBankingRequestError):
+            await self.client.block_card("nope")
+
+        # Blocking a card is not money moving, over the real hop as much as in the fake.
+        self.assertEqual(await self.client.get_balance("chequing"), 2250.00)
 
         # And a decline over the real hop stays a decline -- 200 with the real available amount,
         # not an error, and nothing moves.

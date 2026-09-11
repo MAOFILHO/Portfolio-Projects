@@ -16,6 +16,21 @@ from unittest.mock import patch
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 
+#: The permission table exactly as it was reviewed, pinned here rather than imported from the module
+#: under test -- a test that read `gate.PERMISSIONS` to check `gate.PERMISSIONS` would pass whatever
+#: the table said. Every widening of B1 has to edit this literal, which means it shows up in a diff
+#: and cannot be an accident (CLAUDE.md: a diff touching dispatch/gate.py never gets auto-accepted).
+EXPECTED_PERMISSIONS = {
+    (gate.TRIAGE_AGENT, gate.ANONYMOUS): frozenset(),
+    (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset(),
+    (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(),
+    (gate.BANKING_AGENT, gate.AUTHENTICATED): frozenset({
+        "get_balance", "transfer", "list_accounts", "list_transactions",
+    }),
+    (gate.CARDS_AGENT, gate.ANONYMOUS): frozenset(),
+    (gate.CARDS_AGENT, gate.AUTHENTICATED): frozenset({"block_card"}),
+}
+
 
 class GateIsAPureDenyAllFunction(unittest.TestCase):
     def test_an_unknown_agent_is_refused_everything(self):
@@ -47,18 +62,13 @@ class GateIsAPureDenyAllFunction(unittest.TestCase):
         # means it shows up in a diff and cannot be an accident. CLAUDE.md: a diff touching
         # dispatch/gate.py never gets auto-accepted.
         #
-        # All four pairs, including the three empty ones. is_allowed() treats an absent key and an
-        # empty set identically, so writing the empty rows out changes nothing about behaviour --
-        # it makes the table state its own completeness, and it makes this assertion able to catch
-        # a row being deleted rather than only a row being widened.
-        self.assertEqual(gate.PERMISSIONS, {
-            (gate.TRIAGE_AGENT, gate.ANONYMOUS): frozenset(),
-            (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset(),
-            (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(),
-            (gate.BANKING_AGENT, gate.AUTHENTICATED): frozenset({
-                "get_balance", "transfer", "list_accounts", "list_transactions",
-            }),
-        })
+        # All six pairs, including the empty ones. is_allowed() treats an absent key and an empty
+        # set identically, so writing the empty rows out changes nothing about behaviour -- it
+        # makes the table state its own completeness, and it makes this assertion able to catch a
+        # row being deleted rather than only a row being widened. Six since Phase 5's third agent
+        # (issue #47); the table's job of stating its own completeness is the reason growing it
+        # stayed a one-line-per-row edit rather than a redesign.
+        self.assertEqual(gate.PERMISSIONS, EXPECTED_PERMISSIONS)
 
 
 class TheExhaustiveCrossProduct(unittest.TestCase):
@@ -73,28 +83,27 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
     reaches the system of record.
     """
 
-    #: The one pair that grants anything, and exactly what it grants.
-    GRANTED = frozenset({"get_balance", "transfer", "list_accounts", "list_transactions"})
-
     def _pairs(self):
-        for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
-            for auth_state in (gate.ANONYMOUS, gate.AUTHENTICATED):
-                yield agent, auth_state
+        return EXPECTED_PERMISSIONS
 
     def test_every_tool_against_every_pair_is_exactly_the_table(self):
-        for agent, auth_state in self._pairs():
-            granting = (agent, auth_state) == (gate.BANKING_AGENT, gate.AUTHENTICATED)
+        """Two agents became three without this test changing shape (issue #47).
+
+        It was written against "the one granting row" and is now written against the pinned table
+        itself, which is the generalisation the third agent forced. What did not change is what it
+        is driven off: the declared tool list, never a hand-maintained one.
+        """
+        for (agent, auth_state), granted in self._pairs().items():
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(agent=agent, auth_state=auth_state, tool=tool):
-                    self.assertEqual(
-                        gate.is_allowed(agent, auth_state, tool),
-                        granting and tool in self.GRANTED,
-                    )
+                    self.assertEqual(gate.is_allowed(agent, auth_state, tool), tool in granted)
 
     def test_no_tool_is_reachable_while_a_call_is_anonymous(self):
-        # Criterion 2, on both agents. An anonymous caller routed to banking is refused everything
-        # there, which is what keeps routing from being mistaken for authorization.
-        for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
+        # Criterion 2, on every agent that exists. An anonymous caller routed to a specialist is
+        # refused everything there, which is what keeps routing from being mistaken for
+        # authorization -- and it has to hold for the third agent exactly as it does for the
+        # second, or handing a caller to Cards would become a way in.
+        for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT, gate.CARDS_AGENT):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(agent=agent, tool=tool):
                     self.assertFalse(gate.is_allowed(agent, gate.ANONYMOUS, tool))
@@ -114,8 +123,11 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
         tool.
         """
         declared = {tool["name"] for tool in tools.TOOLS}
-        granted = gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)]
-        self.assertEqual(granted - declared, set(), "the granting row names tools that do not exist")
+        for pair, granted in gate.PERMISSIONS.items():
+            with self.subTest(pair=pair):
+                self.assertEqual(
+                    granted - declared, set(), "a permission row names tools that do not exist"
+                )
 
     def test_every_declared_tool_is_named_in_the_granting_row(self):
         """The other half -- and the one that is a deliberate tripwire, not an invariant.
@@ -124,16 +136,23 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
         gate failing closed, which `dispatch/gate.py` calls the whole point, so nothing is broken
         at runtime when it happens -- the tool is simply unreachable and silent.
 
-        This test exists to make that silence loud. Phase 5 adds `list_transactions`, `block_card`
-        and `escalate_to_human`, and each one will turn this red until somebody writes it into the
-        table on purpose. That is the intended cost (/code-review, 2026-09-10 asked whether it
-        should be relaxed to a subset check; it should not). A new banking capability reaching
+        This test exists to make that silence loud. Phase 5 added `list_transactions` (#46) and
+        `block_card` (#47), and each one turned this red until it was written into the table on
+        purpose; `escalate_to_human` (#48) is the third and will do the same.
+
+        **"The granting row" became "any granting row" with the third agent** (#47). The
+        generalisation is forced rather than a weakening: `block_card` is granted to Cards and to
+        nothing else, so a test demanding every tool appear in banking's row would demand the wrong
+        thing.
+
+        What it still refuses to become is a **subset check** (/code-review, 2026-09-10 asked
+        whether it should be relaxed to one; it should not). A new banking capability reaching
         callers because a permission was inferred from a tool list is precisely the failure B1
         exists to prevent, and a red build asking "did you mean to grant this?" is the cheapest
         possible place to ask it.
         """
         declared = {tool["name"] for tool in tools.TOOLS}
-        granted = gate.PERMISSIONS[(gate.BANKING_AGENT, gate.AUTHENTICATED)]
+        granted = set().union(*gate.PERMISSIONS.values())
         self.assertEqual(
             declared - granted, set(),
             "a declared tool is in no permission row, so it is refused for every caller in every "
@@ -169,6 +188,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             "transfer": '{"from_account": "chequing", "to_account": "savings", "amount": 1.0}',
             "list_accounts": "{}",
             "list_transactions": '{"account": "chequing"}',
+            "block_card": "{}",
         }[tool_name]
 
     async def test_no_declared_tool_executes_when_the_gate_says_no(self):
@@ -194,7 +214,12 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(tool=tool):
                     out = json.loads(await tools.dispatch_tool_call(
-                        tool, self._arguments_for(tool), core_banking=self.core_banking
+                        tool, self._arguments_for(tool), core_banking=self.core_banking,
+                        # The relay's per-call key (issue #47). `block_card` is the one declared
+                        # tool that needs one, and without it the service refuses the request as
+                        # malformed -- which would make this test report the gate as the thing in
+                        # the way when it was not.
+                        idempotency_key="idem_aaaaaaaa",
                     ))
                     self.assertNotIn("error", out)
 

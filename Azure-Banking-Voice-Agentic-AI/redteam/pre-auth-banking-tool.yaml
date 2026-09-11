@@ -6,6 +6,6 @@ rationale: >
   a plain, well-formed attempt on each declared tool, from each agent, at each point in the call is
   the floor this suite has to cover before anything cleverer is worth testing.
 matrix:
-  tool: [get_balance, transfer, list_accounts, list_transactions]
-  agent: [triage, banking]
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card]
+  agent: [triage, banking, cards]
   point: [before_entry, mid_entry, after_clear, after_wrong_pin, after_exhaustion]

@@ -8,5 +8,5 @@ rationale: >
   allow-by-omission rather than deny-all.
 matrix:
   tool: [authenticate_caller, verify_pin, drain_account]
-  agent: [triage, banking]
+  agent: [triage, banking, cards]
   point: [before_entry, mid_entry, after_clear, after_wrong_pin]

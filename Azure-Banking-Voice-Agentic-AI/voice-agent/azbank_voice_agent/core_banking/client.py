@@ -51,6 +51,14 @@ import httpx
 
 log = logging.getLogger("core_banking")
 
+#: What a block attempt did, as the service reports it. Spelled here as well as in the service
+#: because the two deployables are shared-nothing (docs/PLAN.md decision 9): this side may not
+#: import that side's package, and the dispatcher has to switch on the value to compose two
+#: different sentences. **Both are outcomes of a working system**, like a declined transfer --
+#: neither is an error and neither raises.
+BLOCKED = "blocked"
+ALREADY_BLOCKED = "already_blocked"
+
 #: Per-attempt budget: connect plus read. See the module docstring for why 1.0.
 TIMEOUT_SECONDS = 1.0
 
@@ -150,6 +158,20 @@ class CoreBankingClient(Protocol):
         ...
 
     async def get_balance(self, account: str) -> float:
+        ...
+
+    async def block_card(self, idempotency_key: str) -> str:
+        """Block the profile's card. Returns BLOCKED or ALREADY_BLOCKED; never raises for either.
+
+        **The key is the caller's, and it is what makes a repeat safe.** The service stores it
+        beside the outcome it produced and answers a replay from that record rather than blocking
+        again -- so this is a write that may be repeated, which is exactly what `transfer` is not.
+        The no-retry rule still applies at the transport: `_post` sends one attempt, because a key
+        makes a *deliberate* repeat safe and does not make a silent one a good idea.
+
+        Blocking is irreversible in this prototype. There is no unblock on this protocol, and the
+        service has no route for one.
+        """
         ...
 
     async def list_transactions(self, account: str) -> list[Transaction]:
@@ -394,6 +416,21 @@ class HttpCoreBankingClient:
             "to_account": to_account,
             "amount_cents": _cents(amount),
         }, outcome)
+
+    async def block_card(self, idempotency_key):
+        def outcome(payload):
+            reported = payload["outcome"]
+            if reported not in (BLOCKED, ALREADY_BLOCKED):
+                # An outcome this client does not recognise is a service that did not answer the
+                # question. Raised as a ValueError so `_read` turns it into unavailable -- the one
+                # branch guaranteed not to be mistaken for "your card is stopped", which is the
+                # single most dangerous thing to say wrongly on this call.
+                raise ValueError(f"unrecognised card block outcome {reported!r}")
+            return reported
+
+        return await self._post(
+            "/card-blocks", {"idempotency_key": idempotency_key}, outcome
+        )
 
     async def verify_pin(self, pin):
         """Ask the system of record whether this PIN is right. True, False, or unavailable.

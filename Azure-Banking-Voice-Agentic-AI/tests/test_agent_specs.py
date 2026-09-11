@@ -18,19 +18,34 @@ class TheAgentTableIsDeclarative(unittest.TestCase):
         self.assertEqual(specs.AGENTS[gate.TRIAGE_AGENT].identity, gate.TRIAGE_AGENT)
         self.assertEqual(specs.AGENTS[gate.BANKING_AGENT].identity, gate.BANKING_AGENT)
 
-    def test_triage_has_no_real_banking_tools_only_a_handoff(self):
-        declared = [tool["name"] for tool in specs.tools_for(gate.TRIAGE_AGENT)]
-        self.assertEqual(declared, ["handoff_to_banking"])
+    def test_triage_has_no_real_banking_tools_only_handoffs(self):
+        # Two handoffs since Phase 5's third agent (issue #47), and still no banking tool of its
+        # own: authenticating does not change what triage is for, and neither does a second
+        # specialist existing.
+        declared = sorted(tool["name"] for tool in specs.tools_for(gate.TRIAGE_AGENT))
+        self.assertEqual(declared, ["handoff_to_banking", "handoff_to_cards"])
 
-    def test_banking_declares_every_tool_dispatch_knows_about(self):
-        # Today's only specialist covers the whole declared tool list -- if a new tool is added
-        # to dispatch/tools.py without a home in some agent's tool_names, it becomes unreachable
-        # from any call. This would fail then, rather than silently.
-        declared = {tool["name"] for tool in specs.tools_for(gate.BANKING_AGENT)}
-        self.assertEqual(declared, {tool["name"] for tool in TOOLS})
+    def test_every_declared_tool_has_a_home_on_some_agent(self):
+        """A tool no agent declares is a tool no call can reach (issue #47 generalised this).
 
-    def test_banking_has_no_handoff_of_its_own(self):
-        self.assertEqual(specs.AGENTS[gate.BANKING_AGENT].handoff_to, frozenset())
+        It used to read "banking declares every tool", which was true while banking was the only
+        specialist and became the wrong question the moment Cards existed -- `block_card` belongs
+        to Cards and to nothing else. What the test is actually for is unchanged: a tool added to
+        dispatch/tools.py with no home is unreachable and silent, and this makes that loud.
+        """
+        homed = set().union(*(spec.tool_names for spec in specs.AGENTS.values()))
+        self.assertEqual(homed, {tool["name"] for tool in TOOLS})
+
+    def test_no_specialist_declares_a_handoff_of_its_own(self):
+        # Neither specialist can route onward -- not back to triage and not to each other. A model
+        # on Cards that decides the caller now wants a balance cannot move the call itself;
+        # handoff_target() checks the edge against the calling agent's own handoff_to.
+        for identity in (gate.BANKING_AGENT, gate.CARDS_AGENT):
+            with self.subTest(agent=identity):
+                self.assertEqual(specs.AGENTS[identity].handoff_to, frozenset())
+
+    def test_cards_declares_exactly_one_tool(self):
+        self.assertEqual(specs.AGENTS[gate.CARDS_AGENT].tool_names, frozenset({"block_card"}))
 
 
 class HandoffTargetRecognisesOnlyRealHandoffTools(unittest.TestCase):

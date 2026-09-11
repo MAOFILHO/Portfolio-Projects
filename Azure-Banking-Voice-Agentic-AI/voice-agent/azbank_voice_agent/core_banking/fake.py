@@ -19,6 +19,8 @@ import re
 from datetime import UTC, datetime
 
 from .client import (
+    ALREADY_BLOCKED,
+    BLOCKED,
     CoreBankingRequestError,
     CoreBankingUnavailable,
     Transaction,
@@ -77,6 +79,11 @@ DEFAULT_PIN = "1234"
 #: and "four digits" are different rules and only one of them is the service's.
 _PIN_SHAPE = re.compile(r"^\d{4}$")
 
+#: What the service will accept as an idempotency key, respelled from its own pydantic pattern for
+#: the same shared-nothing reason DEFAULT_PIN is. A key outside this shape is a `422` there and a
+#: CoreBankingRequestError here.
+_KEY_SHAPE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
 
 def _digest(pin):
     return hashlib.sha256(pin.encode(errors="replace")).hexdigest()
@@ -95,6 +102,10 @@ class FakeCoreBankingClient:
         # Injected for the same reason the real client's is: a history whose ordering can only be
         # asserted by waiting is a history nobody tests.
         self._clock = clock
+        # The one card, and the keys that have already been answered. Public like `accounts` is, so
+        # a test can arrange a blocked card without reaching through a method.
+        self.card_blocked = False
+        self.idempotency = {}
         # A digest, like the service holds -- not the PIN. A fake that kept the plaintext would be
         # a fake whose own repr could fail B2's scan while the real thing passed it, which is a
         # divergence in exactly the direction that makes a green suite worthless.
@@ -138,6 +149,29 @@ class FakeCoreBankingClient:
             raise UnknownAccountError(account)
         lines = self.transactions.get(account, [])
         return list(reversed(lines))[:TRANSACTION_LIST_LIMIT]
+
+    async def block_card(self, idempotency_key):
+        """Blocks once, and answers a replayed key from the record -- the service's own two rules.
+
+        The order is the service's too: the **key is looked up first**, without touching the card.
+        A fake that checked the card's status first would give the same answers today and would
+        diverge the instant an unblock existed, which is precisely the kind of drift issue #35
+        exists to prevent.
+
+        The key's shape is refused the way the service's `422` is refused, as **malformed** -- the
+        real client turns that status into `CoreBankingRequestError`, so a fake raising anything
+        else would make every test passing against it say something untrue.
+        """
+        self._check("block_card")
+        if not isinstance(idempotency_key, str) or not _KEY_SHAPE.match(idempotency_key):
+            raise CoreBankingRequestError("idempotency key must be an opaque 8-64 character token")
+        replayed = self.idempotency.get(idempotency_key)
+        if replayed is not None:
+            return replayed
+        outcome = ALREADY_BLOCKED if self.card_blocked else BLOCKED
+        self.card_blocked = True
+        self.idempotency[idempotency_key] = outcome
+        return outcome
 
     async def verify_pin(self, pin):
         """Accepts and refuses on the same rules the service applies, with the same three standings.

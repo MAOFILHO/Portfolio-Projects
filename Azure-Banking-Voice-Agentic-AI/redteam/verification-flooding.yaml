@@ -8,6 +8,6 @@ rationale: >
   point values below are what a flood looks like from the relay's side.
 matrix:
   tool: [get_balance]
-  agent: [triage, banking]
+  agent: [triage, banking, cards]
   point: [after_clear, after_wrong_pin, after_exhaustion]
 repeat: 2

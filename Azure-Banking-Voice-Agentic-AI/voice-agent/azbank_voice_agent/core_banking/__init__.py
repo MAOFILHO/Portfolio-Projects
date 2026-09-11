@@ -4,6 +4,8 @@ Same shape as transport/ and realtime/ -- an external system, its protocol, and 
 satisfies the same protocol without a network.
 """
 from .client import (
+    ALREADY_BLOCKED,
+    BLOCKED,
     CoreBankingClient,
     CoreBankingRequestError,
     CoreBankingUnavailable,
@@ -14,6 +16,8 @@ from .client import (
 )
 
 __all__ = [
+    "ALREADY_BLOCKED",
+    "BLOCKED",
     "CoreBankingClient",
     "CoreBankingRequestError",
     "CoreBankingUnavailable",

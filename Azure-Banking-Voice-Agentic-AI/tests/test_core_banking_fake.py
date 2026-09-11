@@ -22,6 +22,8 @@ and applying a sub-cent amount the service would have rejected outright).
 import unittest
 
 from azbank_voice_agent.core_banking import (
+    ALREADY_BLOCKED,
+    BLOCKED,
     CoreBankingRequestError,
     CoreBankingUnavailable,
     UnknownAccountError,
@@ -250,3 +252,70 @@ class ListsTransactionsLikeTheService(unittest.IsolatedAsyncioTestCase):
             len(await first.list_transactions("chequing")),
             len(await second.list_transactions("chequing")),
         )
+
+
+class BlocksACardLikeTheService(unittest.IsolatedAsyncioTestCase):
+    """The fake's block obeys the service's two rules, in the service's order (issue #47).
+
+    The order is the part that can silently drift: the **key is looked up first**, without touching
+    the card. A fake that checked card status first would answer identically today and diverge the
+    instant an unblock existed -- and almost every test in this project runs against this object.
+    """
+
+    KEY = "idem_aaaaaaaa"
+    OTHER_KEY = "idem_bbbbbbbb"
+
+    async def test_a_first_block_blocks(self):
+        client = FakeCoreBankingClient()
+        self.assertEqual(await client.block_card(self.KEY), BLOCKED)
+        self.assertTrue(client.card_blocked)
+
+    async def test_a_replayed_key_repeats_the_recorded_outcome(self):
+        client = FakeCoreBankingClient()
+        self.assertEqual(await client.block_card(self.KEY), BLOCKED)
+        self.assertEqual(await client.block_card(self.KEY), BLOCKED)
+
+    async def test_a_replay_is_answered_from_the_record_not_from_the_card(self):
+        # The same sentinel arrangement test_db.py uses on the other side of the seam: an outcome
+        # the card's own status could never produce. A fake that fell through to the status check
+        # would answer `already_blocked` here.
+        client = FakeCoreBankingClient()
+        await client.block_card(self.KEY)
+        client.idempotency[self.KEY] = "sentinel"
+        self.assertEqual(await client.block_card(self.KEY), "sentinel")
+
+    async def test_a_fresh_key_against_a_blocked_card_is_already_blocked(self):
+        client = FakeCoreBankingClient()
+        await client.block_card(self.KEY)
+        self.assertEqual(await client.block_card(self.OTHER_KEY), ALREADY_BLOCKED)
+
+    async def test_a_malformed_key_is_malformed_not_unavailable(self):
+        # The service answers 422 and the real client turns that into CoreBankingRequestError. A
+        # fake raising anything else would make tests passing against it say something untrue.
+        client = FakeCoreBankingClient()
+        for key in (None, "", "short", "has spaces", 1234, "x" * 65):
+            with self.subTest(key=repr(key)):
+                with self.assertRaises(CoreBankingRequestError):
+                    await client.block_card(key)
+        self.assertFalse(client.card_blocked)
+
+    async def test_it_is_recorded_like_every_other_call(self):
+        client = FakeCoreBankingClient()
+        await client.block_card(self.KEY)
+        self.assertIn("block_card", client.calls)
+
+    async def test_an_arranged_failure_reaches_it_too(self):
+        client = FakeCoreBankingClient(fail_with=CoreBankingUnavailable("down"))
+        with self.assertRaises(CoreBankingUnavailable):
+            await client.block_card(self.KEY)
+
+    async def test_blocking_moves_no_money_and_writes_no_transaction(self):
+        client = FakeCoreBankingClient()
+        before_accounts = dict(client.accounts)
+        before_history = await client.list_transactions("chequing")
+        await client.block_card(self.KEY)
+        self.assertEqual(client.accounts, before_accounts)
+        self.assertEqual(await client.list_transactions("chequing"), before_history)
+
+    async def test_there_is_no_unblock(self):
+        self.assertFalse([name for name in dir(FakeCoreBankingClient) if "unblock" in name.lower()])

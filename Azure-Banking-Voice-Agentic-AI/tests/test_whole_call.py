@@ -96,8 +96,8 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         # call starts on TRIAGE, which has no banking tools of its own -- only a way to hand off.
         transport, realtime = _balance_call()
         asyncio.run(run_call(transport, realtime, self.core_banking))
-        declared = [tool["name"] for tool in realtime.session_config["tools"]]
-        self.assertEqual(declared, ["handoff_to_banking"])
+        declared = sorted(tool["name"] for tool in realtime.session_config["tools"])
+        self.assertEqual(declared, ["handoff_to_banking", "handoff_to_cards"])
 
     def test_tool_arguments_and_agent_speech_never_reach_a_log_line(self):
         # B2 (CLAUDE.md): dispatch/tools.py already promises never to log tool arguments --
@@ -760,7 +760,10 @@ class WholeCallWithMidCallHandoff(unittest.TestCase):
         # RealtimeConnection, which nothing here ever constructs.
         configs = realtime.session_configs
         self.assertEqual(len(configs), 2)
-        self.assertEqual([t["name"] for t in configs[0]["tools"]], ["handoff_to_banking"])
+        self.assertEqual(
+            sorted(t["name"] for t in configs[0]["tools"]),
+            ["handoff_to_banking", "handoff_to_cards"],
+        )
         self.assertEqual(
             sorted(t["name"] for t in configs[1]["tools"]),
             ["get_balance", "list_accounts", "list_transactions", "transfer"],
@@ -979,3 +982,154 @@ class WholeCallListingTransactions(unittest.TestCase):
         asyncio.run(run_call(transport, realtime, self.core_banking))
         self.assertEqual(self._result(realtime), {"error": tools_module.MALFORMED})
         self.assertNotIn("list_transactions", self.core_banking.calls)
+
+
+class WholeCallBlockingACard(unittest.TestCase):
+    """The Cards agent, reached by handoff, blocking a card once (issue #47).
+
+    Two claims, the pair the gate's tests already use. The tool is genuinely reachable on a real
+    call path through the third agent. And the idempotency key is genuinely the relay's, generated
+    once per call, so a model that calls the tool twice blocks once.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def _call(self, blocks=1, keyed=True, agent=gate.CARDS_AGENT):
+        frames = [*_keyed(DEFAULT_PIN)] if keyed else []
+        frames.append(audio_frame("ive-lost-my-card"))
+        events = [function_call(specs.handoff_tool_name(agent), "{}", call_id="call-handoff")]
+        events += [
+            function_call("block_card", "{}", call_id=f"call-block-{i}") for i in range(blocks)
+        ]
+        events.append(response_done())
+        transport = FakeTransport(frames=frames, hang=True)
+        realtime = FakeRealtimeServer(events=events, respond_after_appends=1)
+        return transport, realtime
+
+    def _result(self, realtime, call_id="call-block-0"):
+        return json.loads(dict(realtime.tool_outputs)[call_id])
+
+    def test_an_authenticated_caller_can_block_their_card(self):
+        transport, realtime = self._call()
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertIn("blocked", self._result(realtime)["result"])
+        self.assertTrue(self.core_banking.card_blocked)
+
+    def test_the_caller_is_told_it_cannot_be_undone(self):
+        # Said in the sentence at the end of the operation as well as before it. The caller will
+        # remember the operation by what they were told when it finished.
+        transport, realtime = self._call()
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertIn("can't be unblocked", self._result(realtime)["result"])
+
+    def test_a_second_block_on_the_same_call_blocks_nothing_twice(self):
+        transport, realtime = self._call(blocks=2)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        # One key, sent twice, so the service answers the second from its record of the first --
+        # and the caller hears the same thing rather than a second confirmation of a second block.
+        self.assertEqual(len(self.core_banking.idempotency), 1)
+        self.assertEqual(
+            self._result(realtime, "call-block-0")["result"],
+            self._result(realtime, "call-block-1")["result"],
+        )
+
+    def test_the_key_is_the_relays_and_is_scoped_to_the_call(self):
+        # Two calls, two keys. A key scoped to the process would let one caller's block answer
+        # another caller's request, which is the failure a per-call key exists to prevent.
+        keys = []
+        for _ in range(2):
+            client = FakeCoreBankingClient()
+            transport, realtime = self._call()
+            asyncio.run(run_call(transport, realtime, client))
+            keys.extend(client.idempotency)
+        self.assertEqual(len(set(keys)), 2)
+
+    def test_the_key_carries_no_decimal_digit(self):
+        """B2 (issue #53's constraint, enforced where the key is made).
+
+        A random hex identifier is drawn from an alphabet more than half digits, so across enough
+        calls it will eventually spell a four-digit run by chance and turn the run-wide scan red on
+        a coincidence. Driven off the generator rather than off one sample, so the property is the
+        thing asserted rather than one lucky draw.
+        """
+        for _ in range(200):
+            key = session_module._new_idempotency_key()
+            self.assertFalse(any(character.isdigit() for character in key), key)
+
+    def test_a_key_and_a_frame_id_are_not_mistaken_for_each_other(self):
+        self.assertTrue(session_module._new_idempotency_key().startswith("idem_"))
+        self.assertTrue(session_module._new_event_id().startswith("evt_"))
+
+    def test_an_anonymous_caller_is_refused_and_the_card_is_untouched(self):
+        transport, realtime = self._call(keyed=False)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self._result(realtime), {"error": gate.REFUSAL})
+        self.assertFalse(self.core_banking.card_blocked)
+        self.assertNotIn("block_card", self.core_banking.calls)
+
+    def test_the_banking_agent_cannot_block_a_card(self):
+        # block_card is Cards's and nobody else's. A caller routed to banking who asks for it is
+        # refused, which is what keeps the agent table and the permission table agreeing.
+        transport, realtime = self._call(agent=gate.BANKING_AGENT)
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        self.assertEqual(self._result(realtime), {"error": gate.REFUSAL})
+        self.assertFalse(self.core_banking.card_blocked)
+
+
+class TheThirdAgentNeededNothingElse(unittest.TestCase):
+    """Issue #20's scaling claim, tested rather than asserted (issue #47).
+
+    `agents/specs.py` has said since Phase 2 that adding an agent is a table row rather than a
+    change to enforcement, dispatch, or handoff handling. Three phases later there was finally a
+    third agent to try it with. These are the specific things that would have had to change if the
+    claim were false.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+
+    def test_routing_to_cards_reconfigures_the_one_session(self):
+        transport = FakeTransport(frames=[audio_frame("lost-my-card")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_cards", "{}", call_id="call-handoff"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        configs = realtime.session_configs
+        self.assertEqual(len(configs), 2)
+        self.assertEqual([t["name"] for t in configs[1]["tools"]], ["block_card"])
+        self.assertNotEqual(configs[0]["instructions"], configs[1]["instructions"])
+
+    def test_the_banking_agent_cannot_forge_an_edge_to_cards(self):
+        # Banking declares no handoff at all, so `handoff_to_cards` from banking is not a handoff --
+        # it falls through to the gate as an unrecognised tool name and is refused. This is the
+        # Phase 2 fix for hallucinated handoffs, still holding with three agents in the table.
+        self.assertIsNone(specs.handoff_target("handoff_to_cards", gate.BANKING_AGENT))
+
+    def test_cards_cannot_route_the_call_onward(self):
+        for target in (gate.TRIAGE_AGENT, gate.BANKING_AGENT):
+            with self.subTest(target=target):
+                self.assertIsNone(
+                    specs.handoff_target(specs.handoff_tool_name(target), gate.CARDS_AGENT)
+                )
+
+    def test_a_forged_handoff_from_cards_is_refused_on_a_real_call(self):
+        transport = FakeTransport(frames=[audio_frame("now-my-balance")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_cards", "{}", call_id="call-handoff"),
+                function_call("handoff_to_banking", "{}", call_id="call-forged"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking))
+        # Two configurations, not three: the forged handoff reconfigured nothing.
+        self.assertEqual(len(realtime.session_configs), 2)
+        self.assertEqual(
+            json.loads(dict(realtime.tool_outputs)["call-forged"]), {"error": gate.REFUSAL}
+        )

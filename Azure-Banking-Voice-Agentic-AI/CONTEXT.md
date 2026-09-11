@@ -31,8 +31,8 @@ _Avoid_: connection, socket
 ### The agent
 
 **Agent**:
-One named conversational role, defined by its own instructions and the tools it is shown. Two exist:
-triage and banking.
+One named conversational role, defined by its own instructions and the tools it is shown. Three
+exist: triage, banking and cards.
 _Avoid_: assistant, bot, persona
 
 **Triage agent**:
@@ -40,8 +40,14 @@ The agent a call opens on. Greets the caller, works out what they need, and hand
 banking tools of its own.
 
 **Banking agent**:
-The agent that handles balance and money requests, reached by handoff from triage.
+The agent that handles balance, activity and money requests, reached by handoff from triage.
 _Avoid_: specialist, accounts agent
+
+**Cards agent**:
+The agent that stops a lost or stolen card, reached by handoff from triage. Holds one tool and
+nothing else. Declares no handoff of its own — a caller handed here who then asks about money cannot
+be routed onward by a model that decides to.
+_Avoid_: specialist, fraud agent, security agent
 
 **Handoff**:
 Moving a call from one agent to another. Routing, not a banking action — a handoff is never gated.
@@ -126,6 +132,24 @@ the same database transaction as the balances, so the two can never disagree. Si
 account's own point of view: negative is money that left it. A **transfer** is the act; a transaction
 is the record of it on one side.
 _Avoid_: payment, entry, statement line, activity (as a countable thing), history item
+
+**Card**:
+The one payment card this profile holds. Named, not numbered — this prototype has no card numbers,
+and no digit of one exists anywhere to be spoken, logged or stored.
+_Avoid_: debit card, credit card, plastic
+
+**Block**:
+Stopping the card, at the caller's request, after they have confirmed. **Irreversible on this line**
+— there is no unblock tool and no unblock route, and the caller is told so before and after. A block
+that already happened is reported as already done rather than done again.
+_Avoid_: cancel, freeze, suspend, lock, deactivate
+
+**Idempotency key**:
+An opaque token the relay generates once per call and sends with a block, so that asking twice
+blocks once. The system of record stores it beside the outcome it produced and answers a repeat from
+that record. Scoped to the call, never chosen by the model, and never containing a decimal digit —
+an identifier that could spell four digits by chance would fail B2's scan on a coincidence.
+_Avoid_: request id, nonce, transaction id, dedup key
 
 ### Outcomes
 

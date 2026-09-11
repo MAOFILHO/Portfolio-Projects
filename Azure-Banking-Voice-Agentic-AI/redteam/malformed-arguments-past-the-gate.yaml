@@ -7,7 +7,7 @@ rationale: >
   would be worth far more to an attacker if the parse happened before the gate did. It does not,
   and these cases are what says so.
 matrix:
-  tool: [get_balance, transfer, list_accounts, list_transactions]
-  agent: [triage, banking]
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card]
+  agent: [triage, banking, cards]
   point: [before_entry, mid_entry, after_clear, after_wrong_pin, after_exhaustion]
 arguments: malformed

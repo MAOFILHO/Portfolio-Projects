@@ -827,3 +827,60 @@ class ListingTransactions(unittest.IsolatedAsyncioTestCase):
         transactions = await _client(recorder).list_transactions("chequing")
         self.assertEqual(transactions[0].amount, -1.00)
         self.assertIsNone(transactions[0].occurred_at)
+
+
+class BlockingACard(unittest.IsolatedAsyncioTestCase):
+    """The one write this project retries deliberately rather than never (issue #47).
+
+    `transfer` is never repeated because a POST that timed out may already have committed. A block
+    carries a key the service stores beside the outcome, so a *deliberate* repeat is safe -- but
+    the transport still sends one attempt, because a key makes a repeat safe and does not make a
+    silent one a good idea.
+    """
+
+    KEY = "idem_aaaaaaaa"
+
+    async def test_it_reports_what_the_service_reported(self):
+        for reported in (cb.BLOCKED, cb.ALREADY_BLOCKED):
+            with self.subTest(outcome=reported):
+                recorder = Recorder(_json({"outcome": reported}))
+                self.assertEqual(await _client(recorder).block_card(self.KEY), reported)
+
+    async def test_the_key_goes_in_the_body_not_the_path(self):
+        # The same rule the PIN follows, for a related reason: `_send` logs the method and path of
+        # every failed request, so anything in a path is in a log line.
+        recorder = Recorder(_json({"outcome": cb.BLOCKED}))
+        await _client(recorder).block_card(self.KEY)
+        request = recorder.requests[0]
+        self.assertNotIn(self.KEY, str(request.url))
+        self.assertEqual(json.loads(request.content)["idempotency_key"], self.KEY)
+
+    async def test_it_is_never_retried(self):
+        # attempts=1, like every other write. A silent second block is not what a key is for.
+        recorder = Recorder(_json({}, status=503))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).block_card(self.KEY)
+        self.assertEqual(recorder.count, 1)
+
+    async def test_an_outcome_this_client_does_not_recognise_is_unavailable(self):
+        """Never mistaken for "your card is stopped", which is the worst thing to say wrongly here.
+
+        A service answering something new -- a third outcome, a renamed one, a typo -- has not
+        answered the question, and `_read` turns that into unavailable, the one branch guaranteed
+        to carry no claim about the card.
+        """
+        recorder = Recorder(_json({"outcome": "maybe"}))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).block_card(self.KEY)
+
+    async def test_a_422_is_a_malformed_request_not_an_outage(self):
+        # The caller of the API has a bug -- a key the service will not take. Nobody has been
+        # refused anything, and the caller hears "say that again" rather than "the bank is down".
+        recorder = Recorder(_json({"error": "malformed_request"}, status=422))
+        with self.assertRaises(cb.CoreBankingRequestError):
+            await _client(recorder).block_card("nope")
+
+    async def test_a_body_that_is_not_json_is_unavailable(self):
+        recorder = Recorder(httpx.Response(200, text="<html>gateway</html>"))
+        with self.assertRaises(cb.CoreBankingUnavailable):
+            await _client(recorder).block_card(self.KEY)

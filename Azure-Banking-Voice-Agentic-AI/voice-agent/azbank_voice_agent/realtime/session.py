@@ -97,6 +97,22 @@ def _spoken_note(text, event_id):
 _DIGIT_FREE = str.maketrans("0123456789", "qrstuvwxyz")
 
 
+def _new_idempotency_key():
+    """The key one call's card block is made under: unique, opaque, and digit-free.
+
+    **Generated here, not by the model** (issue #47). The tool declares no key parameter at all,
+    because a model that could choose its own key could defeat the mechanism by choosing a fresh one
+    for every attempt -- which is exactly the repeat the key exists to collapse. Scoped to the call
+    for the same reason it is not scoped to the process: two callers must not share a key, and one
+    caller's second request must.
+
+    Digit-free through the same translation `_new_event_id` uses, and for the same B2 reason -- see
+    that function. The rule lives in one place so a second identifier cannot quietly be exempt from
+    it. The prefix is `idem_` so a key and a frame id are not mistaken for each other in a log.
+    """
+    return "idem_" + uuid.uuid4().hex.translate(_DIGIT_FREE)
+
+
 def _new_event_id():
     """An id for one frame the relay sends: unique, opaque, and carrying no decimal digit at all.
 
@@ -176,6 +192,13 @@ async def run_call(transport, realtime, core_banking):
     # dispatcher gets -- which is what makes an unreachable service fail authentication closed
     # without a second fail-closed path (issue #35).
     authenticator = auth.Authenticator(core_banking)
+
+    # One key for this call's card block, generated before anything can ask for one (issue #47).
+    # Built once per call rather than per tool call, which is the whole mechanism: a model that
+    # calls block_card twice sends the same key twice and the system of record answers the second
+    # from its record of the first. A key made per tool call would be two different keys and two
+    # attempts at blocking.
+    idempotency_key = _new_idempotency_key()
 
     # The ids this relay stamped on its own frames, so an `error` naming one can be told from an
     # error about anything else. Bounded rather than a growing set: a call whose credential check
@@ -324,7 +347,8 @@ async def run_call(transport, realtime, core_banking):
                 # client's whole timeout budget -- audio would stop being relayed in both
                 # directions and barge-in would stop working while it waited.
                 output = await dispatch_tool_call(
-                    event.name, event.arguments, agent, auth_state, core_banking=core_banking
+                    event.name, event.arguments, agent, auth_state,
+                    core_banking=core_banking, idempotency_key=idempotency_key,
                 )
                 await realtime.send({
                     "type": "conversation.item.create",
