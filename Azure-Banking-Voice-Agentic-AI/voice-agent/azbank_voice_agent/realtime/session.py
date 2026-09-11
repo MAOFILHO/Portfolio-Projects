@@ -358,6 +358,21 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
     injected_frame_ids = collections.deque(maxlen=2 * (auth.MAX_ATTEMPTS + 1))
 
     await realtime.send(_session_update(agent))
+    # **The greeting, asked for rather than waited for** (issue #51). Without this the agent says
+    # nothing until the caller speaks first and server-side turn detection fires -- every real call
+    # so far has shown 2.5 to 11 seconds of dead air, varying only with how quickly the caller
+    # talked.
+    #
+    # It was parked at Phase 3 kickoff and again at Phase 4's, as a greeting-path defect rather than
+    # an auth-path one. It stopped being parkable in the phase whose exit depends on a caller keying
+    # a PIN they were never asked for: the greeting is the thing that asks for it, so a caller who
+    # says nothing was waiting on a prompt that had not been triggered and never would be.
+    #
+    # One frame, here, and nothing else in this phase touches it -- so a regression on the first
+    # real call is attributable to this or to the intents and never to both. For the same reason
+    # `server_vad` is untouched: changing when the agent first speaks *and* how it detects turns in
+    # one phase would make the interrupt-the-caller defect unattributable too.
+    await realtime.send({"type": "response.create"})
 
     async def transport_to_model():
         nonlocal auth_state

@@ -90,8 +90,12 @@ class WholeCallAgainstBothFakes(unittest.TestCase):
         self.assertEqual(call_id, "call-1")
         self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
         # The whole exchange, in order: configure, hear, answer the tool, ask for a new response.
+        # The whole exchange, in order. The second frame is the greeting request added by issue
+        # #51 -- the agent is asked to speak before the caller does, rather than waiting for
+        # server-side turn detection to fire.
         self.assertEqual(realtime.sent_types, [
             "session.update",
+            "response.create",
             "input_audio_buffer.append",
             "input_audio_buffer.append",
             "conversation.item.create",
@@ -525,7 +529,13 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         (/code-review, 2026-09-10).
         """
         realtime = self._run(_keyed(DEFAULT_PIN))
-        requests = [m for m in realtime.sent if m["type"] == "response.create"]
+        # **Stamped** response requests only. Since issue #51 the relay also sends an unstamped
+        # `response.create` to open the call with a greeting, and that frame is not part of this
+        # mechanism -- it is an ordinary request like the one a handoff sends. Filtering on the
+        # stamp is what keeps this test about attribution rather than about frame counting.
+        requests = [
+            m for m in realtime.sent if m["type"] == "response.create" and m.get("event_id")
+        ]
         self.assertEqual(len(requests), 1)
         self.assertTrue(requests[0].get("event_id"), "the response request is unaddressable")
         # And it is a different frame from the item, so a rejection says which half failed.
@@ -537,7 +547,8 @@ class TheInjectedItemIsAddressable(unittest.TestCase):
         with patch.object(session_module.uuid, "uuid4", side_effect=_repeatable_uuids()):
             realtime = self._run(_keyed(DEFAULT_PIN))
             stamped = next(
-                m for m in realtime.sent if m["type"] == "response.create"
+                m for m in realtime.sent
+                if m["type"] == "response.create" and m.get("event_id")
             )["event_id"]
 
         self.core_banking = FakeCoreBankingClient()
@@ -1611,3 +1622,94 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
             self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
                       FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
         self.assertTrue(any("undercounting" in line for line in cm.output))
+
+
+class TheAgentGreetsWithoutWaiting(unittest.TestCase):
+    """The dead-air gap, unparked (issue #51).
+
+    Parked at Phase 3 kickoff and again at Phase 4's, as a greeting-path defect rather than an
+    auth-path one. It stopped being parkable in the phase whose exit depends on a caller keying a
+    PIN they were never asked for: the greeting is the thing that asks, so a caller who said nothing
+    was waiting on a prompt that had not been triggered and never would be.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+        self.call_records = FakeCallRecordStore()
+
+    def test_the_agent_speaks_before_the_caller_does(self):
+        """The property, stated as what an observer would see.
+
+        The fake model holds its events until a caller frame has been forwarded, so the assertion
+        that actually bites is the one below about ordering. This one says the plain thing: a call
+        where the caller never says a word still produces speech.
+        """
+        transport = FakeTransport(frames=[], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("hello-please-key-your-pin"), response_done()],
+            respond_after_appends=0,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
+        self.assertEqual(transport.sent_audio_payloads, ["hello-please-key-your-pin"])
+
+    def test_the_response_is_requested_immediately_after_the_session_is_configured(self):
+        transport = FakeTransport(frames=[audio_frame("hi")], hang=True)
+        realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
+        self.assertEqual(realtime.sent_types[:2], ["session.update", "response.create"])
+
+    def test_nothing_is_appended_before_the_greeting_is_asked_for(self):
+        # The ordering that makes the dead air go away: the request must not be behind the first
+        # caller frame, or it would be the thing it replaced.
+        transport = FakeTransport(frames=[audio_frame("hi")], hang=True)
+        realtime = FakeRealtimeServer(events=[response_done()], respond_after_appends=1)
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
+        greeting = realtime.sent_types.index("response.create")
+        appended = realtime.sent_types.index("input_audio_buffer.append")
+        self.assertLess(greeting, appended)
+
+    def test_a_handoff_does_not_fire_a_second_greeting(self):
+        # Handoff already sends its own session.update + response.create pair. What must not happen
+        # is the opening greeting being re-sent, which would have the specialist greet the caller
+        # again -- the thing every specialist's instructions explicitly tell it not to do.
+        transport = FakeTransport(frames=[audio_frame("balance-please")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call("handoff_to_banking", "{}", call_id="handoff"),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
+        self.assertEqual(realtime.sent_types.count("session.update"), 2)
+        self.assertEqual(realtime.sent_types.count("response.create"), 2)
+
+    def test_the_closed_path_does_not_gain_a_greeting_turn(self):
+        # The closed path builds its own opening -- session.update, the closed item, one request --
+        # and must stay at one turn. A greeting ahead of the closed sentence would double the cost
+        # of refusing a call.
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("were-closed"), response_done()], respond_after_appends=0
+        )
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertEqual(realtime.sent_types.count("response.create"), 1)
+
+    def test_turn_detection_is_untouched_by_this_change(self):
+        """`server_vad` is not this ticket's business, deliberately.
+
+        The intermittent interrupt-the-caller defect is scoped as turn-detection tuning. Changing
+        when the agent first speaks *and* how it detects turns in one phase would make a regression
+        on the real call unattributable to either.
+        """
+        self.assertEqual(
+            session_module._AUDIO_CONFIG["input"]["turn_detection"],
+            {
+                "type": "server_vad",
+                "threshold": 0.5,
+                "prefix_padding_ms": 300,
+                "silence_duration_ms": 200,
+                "create_response": True,
+                "interrupt_response": True,
+            },
+        )
