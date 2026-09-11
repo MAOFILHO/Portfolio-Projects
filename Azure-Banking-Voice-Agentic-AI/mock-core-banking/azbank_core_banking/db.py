@@ -14,8 +14,13 @@ the database file with no carve-out: a scan that had to skip a column would be a
 made to pass by moving the leak into it. Nothing in this module ever writes, returns, formats, or
 raises the submitted value.
 
-Deliberately stdlib `sqlite3` and hand-written SQL: a handful of statements against two small tables
-does not earn an ORM dependency, and the schema is small enough to read in full. The digest is
+**History is written by this module, not assembled by a caller** (issue #44). A completed transfer
+records its own two lines inside the same transaction as the balance updates, so the history and the
+balances cannot disagree -- the same reasoning that makes the resulting balances read back out of the
+table rather than computed. A declined transfer records nothing, because nothing happened.
+
+Deliberately stdlib `sqlite3` and hand-written SQL: a handful of statements against three small
+tables does not earn an ORM dependency, and the schema is small enough to read in full. The digest is
 stdlib `hashlib` for the same reason -- see SEED_CREDENTIAL_DIGEST for why it is unsalted.
 """
 import hashlib
@@ -23,6 +28,7 @@ import hmac
 import sqlite3
 import threading
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 #: Serialises every function here, because the service is **one connection** shared by every
 #: request: `build_app` opens it once and closes over it, and FastAPI runs `def` routes on a
@@ -54,9 +60,25 @@ DEMO_PIN = "1234"
 #: derivation costs. A stated prototype choice, and the line where production would differ.
 SEED_CREDENTIAL_DIGEST = hashlib.sha256(DEMO_PIN.encode()).hexdigest()
 
+#: How many transactions the service will return for one account, most recent first. **The bound is
+#: the service's, not the model's restraint** (issue #44): a voice channel must never be handed a
+#: payload it could not read aloud, and "the caller will probably not ask for more" is not a bound.
+#: Five is what fits in a sentence a caller can follow on a phone without asking for it again.
+TRANSACTION_LIST_LIMIT = 5
+
 #: One row, always, because there is one profile (CONTEXT.md): a single set of credentials and
 #: accounts that authentication unlocks and that never identifies anyone. The CHECK is what says so
 #: in the schema rather than in a comment -- a second credential cannot be inserted.
+#:
+#: **`transactions` holds no prose** (issue #44). `kind` and `counterparty` are tokens, and the
+#: sentence a caller hears is composed in the voice agent from them -- the same rule the rest of this
+#: service already keeps, and the inversion #26 criterion 8 exists to prevent. A `description` column
+#: would have been a caller-facing sentence living in the system of record.
+#:
+#: `amount_cents` is **signed**: negative is money leaving this account. One transfer therefore
+#: writes two rows, a debit on the source and a credit on the destination, which is what makes each
+#: account's own history readable on its own. The CHECK is there because a zero-amount transaction is
+#: not a thing that happened; `transfer` already refuses a non-positive amount before reaching here.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     name          TEXT    PRIMARY KEY,
@@ -65,8 +87,46 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS credentials (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     pin_digest TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS transactions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account      TEXT    NOT NULL,
+    kind         TEXT    NOT NULL,
+    counterparty TEXT,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents <> 0),
+    occurred_at  TEXT    NOT NULL
 )
 """
+
+#: The one kind of transaction this prototype can produce. Named rather than inlined so the voice
+#: agent's sentence has a token to switch on and a second kind is a row rather than a rewrite.
+TRANSFER = "transfer"
+
+#: A small history on a fresh database, so a demo call has something to read on the first run rather
+#: than an empty list (issue #44). Fixed timestamps, not relative ones: a demo that reads differently
+#: depending on when the container started is a demo whose output nobody can check.
+#:
+#: **This history predates the seeded balances rather than explaining them.** That is how a real
+#: statement works -- the opening balance already reflects everything before the first line shown --
+#: and trying to make the two reconcile would mean seeding balances that drift every time a line is
+#: added here.
+SEED_TRANSACTIONS = [
+    # (account, kind, counterparty, amount_cents, occurred_at)
+    ("chequing", TRANSFER, "savings", -12500, "2026-09-02T14:31:07Z"),
+    ("savings", TRANSFER, "chequing", 12500, "2026-09-02T14:31:07Z"),
+    ("chequing", TRANSFER, "savings", -4000, "2026-09-05T09:12:44Z"),
+    ("savings", TRANSFER, "chequing", 4000, "2026-09-05T09:12:44Z"),
+]
+
+
+def _utc_now():
+    """When a transaction happened, as an ISO-8601 UTC instant.
+
+    UTC and nothing else. The container's locale is not a fact about when money moved, and a
+    timestamp whose meaning depends on where the process happened to be running is not a timestamp
+    anybody can query against later.
+    """
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class UnknownAccount(LookupError):
@@ -102,6 +162,26 @@ class TransferResult:
     available_cents: int | None = None
 
 
+@dataclass(frozen=True)
+class Transaction:
+    """One line of one account's history. Tokens and figures, never prose.
+
+    `amount_cents` is **signed from this account's point of view**: negative is money that left it.
+    The caller hears "a transfer of $125.00 to savings" or "$125.00 from chequing", and which of
+    those two sentences it is comes from the sign -- composed in the voice agent, like every other
+    sentence, never here.
+
+    `counterparty` is the other account's name, or None for a kind that has no other side. Nothing
+    produces such a kind today; the column is nullable because a deposit or a fee would be one, and
+    forcing a placeholder name into it would be inventing a fact.
+    """
+
+    kind: str
+    counterparty: str | None
+    amount_cents: int
+    occurred_at: str
+
+
 def initialise(conn):
     """Creates the schema if absent and seeds accounts and credential **only if empty**.
 
@@ -127,6 +207,15 @@ def initialise(conn):
             conn.execute(
                 "INSERT INTO credentials (id, pin_digest) VALUES (1, ?)",
                 (SEED_CREDENTIAL_DIGEST,),
+            )
+        # Same "if empty" rule as the two above, and for the same reason: a restart must not append
+        # the demo history a second time to a database that already has it.
+        history_seeded = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] > 0
+        if not history_seeded:
+            conn.executemany(
+                "INSERT INTO transactions (account, kind, counterparty, amount_cents, occurred_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                SEED_TRANSACTIONS,
             )
         conn.commit()
 
@@ -181,6 +270,53 @@ def get_balance(conn, account):
     return row[0]
 
 
+def list_transactions(conn, account, limit=TRANSACTION_LIST_LIMIT):
+    """The account's most recent transactions, newest first. Raises UnknownAccount if it does not
+    exist.
+
+    **Bounded here, by the service** (issue #44). The caller does not get to ask for more, because
+    the caller is a voice channel and the bound is about what can be read aloud rather than about
+    what is convenient to send.
+
+    **An account with no transactions returns an empty list.** "Nothing has happened yet" is a normal
+    answer from a working system, not an error and not an unknown account -- exactly the distinction
+    a declined transfer already keeps against an unknown one.
+
+    Ordered by `occurred_at` then `id`, both descending. `id` is not decoration: the seeded history
+    writes two rows sharing one instant, and so does every real transfer, so an order that stopped at
+    the timestamp would be unstable between reads.
+    """
+    _require_account(conn, account)
+    with _LOCK:
+        rows = conn.execute(
+            "SELECT kind, counterparty, amount_cents, occurred_at FROM transactions "
+            "WHERE account = ? ORDER BY occurred_at DESC, id DESC LIMIT ?",
+            (account, limit),
+        ).fetchall()
+    return [
+        Transaction(kind=kind, counterparty=counterparty, amount_cents=amount, occurred_at=at)
+        for kind, counterparty, amount, at in rows
+    ]
+
+
+def _record_transfer(conn, from_account, to_account, amount_cents, occurred_at):
+    """The two rows one transfer writes: a debit on the source, a credit on the destination.
+
+    **Called only from inside `transfer`'s `with conn:` block**, so the history and the balances
+    commit together or neither does. A history written outside that transaction could survive a
+    rollback and tell the caller about money that never moved -- which is the same class of defect as
+    computing the resulting balance instead of reading it back.
+    """
+    conn.executemany(
+        "INSERT INTO transactions (account, kind, counterparty, amount_cents, occurred_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [
+            (from_account, TRANSFER, to_account, -amount_cents, occurred_at),
+            (to_account, TRANSFER, from_account, amount_cents, occurred_at),
+        ],
+    )
+
+
 def _require_account(conn, account):
     """Raise UnknownAccount unless the account exists. Named for the raise, because that is the
     whole reason to call it -- `get_balance(conn, x)` on a line that discards the balance reads
@@ -188,7 +324,7 @@ def _require_account(conn, account):
     get_balance(conn, account)
 
 
-def transfer(conn, from_account, to_account, amount_cents):
+def transfer(conn, from_account, to_account, amount_cents, now=None):
     """Move money between two accounts. Returns a TransferResult; raises only for bad inputs.
 
     The outcomes are kept distinct on purpose (CONTEXT.md): an unknown account **raises**, an
@@ -197,6 +333,14 @@ def transfer(conn, from_account, to_account, amount_cents):
     raises too -- the caller has a bug, the account holder has not been refused anything. So is a
     fractional one: cents are whole or they are not cents, and a float reaching an INTEGER column
     is stored REAL, which is the one way a value that is not integer cents can enter persistence.
+
+    **A completed transfer also writes its own history** (issue #44), inside the same transaction as
+    the balance updates, so the two can never disagree. **A declined transfer writes nothing** -- a
+    decline is a working system saying no, and nothing happened to record.
+
+    `now` is injected for tests, exactly as the circuit breaker's clock is on the other side of the
+    seam: a history whose ordering can only be asserted by waiting a second is a history nobody
+    tests. It has no production caller.
     """
     if not isinstance(amount_cents, int) or isinstance(amount_cents, bool):
         raise ValueError(f"transfer amount must be whole cents, got {amount_cents!r}")
@@ -235,6 +379,11 @@ def transfer(conn, from_account, to_account, amount_cents):
             conn.execute(
                 "UPDATE accounts SET balance_cents = balance_cents + ? WHERE name = ?",
                 (amount_cents, to_account),
+            )
+            # Inside the transaction, deliberately: a rollback must take the history with it.
+            _record_transfer(
+                conn, from_account, to_account, amount_cents,
+                _utc_now() if now is None else now,
             )
             from_balance = get_balance(conn, from_account)
             to_balance = get_balance(conn, to_account)

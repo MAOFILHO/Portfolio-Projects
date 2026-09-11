@@ -142,6 +142,36 @@ def build_app(database=None):
             raise _unknown_account(e) from None
         return {"name": account, "balance_cents": balance}
 
+    @app.get("/accounts/{account}/transactions")
+    def get_transactions(account: str):
+        """One account's recent history, **bounded by this service** (issue #44).
+
+        No `limit` query parameter, deliberately. A bound the caller can raise is not a bound, and
+        the reason this one exists is that the caller is a voice channel -- the constraint is about
+        what a person can follow when it is read to them, which is not a fact the caller knows
+        better than the service does.
+
+        An account with no transactions is a `200` with an empty list. An unknown one is the same
+        `404` the balance route gives, naming the account, so the voice agent's existing
+        unknown-account sentence covers this route with no new branch.
+        """
+        try:
+            transactions = db.list_transactions(conn, account)
+        except db.UnknownAccount as e:
+            raise _unknown_account(e) from None
+        return {
+            "account": account,
+            "transactions": [
+                {
+                    "kind": t.kind,
+                    "counterparty": t.counterparty,
+                    "amount_cents": t.amount_cents,
+                    "occurred_at": t.occurred_at,
+                }
+                for t in transactions
+            ],
+        }
+
     @app.post("/transfers")
     def create_transfer(request: TransferRequest):
         try:

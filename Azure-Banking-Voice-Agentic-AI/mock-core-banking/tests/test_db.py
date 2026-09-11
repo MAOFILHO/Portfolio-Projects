@@ -9,6 +9,7 @@ import hashlib
 import sqlite3
 import threading
 import unittest
+import unittest.mock
 
 from azbank_core_banking import db
 
@@ -268,3 +269,150 @@ class ConcurrentRequests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Transactions(unittest.TestCase):
+    """The account history (issue #44): what it holds, when it is written, and what bounds it.
+
+    The rules that matter are all about *not* disagreeing with the balances: history is written
+    inside the transfer's own transaction, a decline writes nothing, and a rollback takes the
+    history with it.
+    """
+
+    def test_a_fresh_database_has_a_seeded_history(self):
+        # So a demo call has something to read on the first run. An empty list is a correct answer
+        # and a terrible demo.
+        conn = _fresh(self)
+        self.assertTrue(db.list_transactions(conn, "chequing"))
+        self.assertTrue(db.list_transactions(conn, "savings"))
+
+    def test_an_existing_history_is_left_alone(self):
+        # Same "if empty" rule the balances and the credential already have: a restart must not
+        # append the demo history a second time.
+        conn = _fresh(self)
+        before = len(db.list_transactions(conn, "chequing", limit=100))
+        db.initialise(conn)
+        self.assertEqual(len(db.list_transactions(conn, "chequing", limit=100)), before)
+
+    def test_a_completed_transfer_writes_both_sides(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        debit = db.list_transactions(conn, "chequing")[0]
+        credit = db.list_transactions(conn, "savings")[0]
+        self.assertEqual(debit.amount_cents, -15000)
+        self.assertEqual(debit.counterparty, "savings")
+        self.assertEqual(credit.amount_cents, 15000)
+        self.assertEqual(credit.counterparty, "chequing")
+        self.assertEqual(debit.occurred_at, credit.occurred_at)
+        self.assertEqual(debit.kind, db.TRANSFER)
+
+    def test_the_sign_is_from_the_accounts_own_point_of_view(self):
+        """Money leaving an account is negative *in that account's history*.
+
+        Asserted on its own rather than folded into the test above, because this is the fact the
+        voice agent's sentence turns on: which of "to savings" and "from chequing" the caller hears
+        comes from the sign and from nothing else.
+        """
+        conn = _fresh(self)
+        db.transfer(conn, "savings", "chequing", 2500, now="2026-09-11T10:00:00Z")
+        self.assertLess(db.list_transactions(conn, "savings")[0].amount_cents, 0)
+        self.assertGreater(db.list_transactions(conn, "chequing")[0].amount_cents, 0)
+
+    def test_a_declined_transfer_writes_no_history(self):
+        # A decline is a working system saying no. Nothing happened, so there is nothing to record.
+        conn = _fresh(self)
+        before = db.list_transactions(conn, "chequing", limit=100)
+        result = db.transfer(conn, "chequing", "savings", 900000, now="2026-09-11T10:00:00Z")
+        self.assertEqual(result.outcome, "declined")
+        self.assertEqual(db.list_transactions(conn, "chequing", limit=100), before)
+
+    def test_a_raising_transfer_writes_no_history(self):
+        conn = _fresh(self)
+        before = db.list_transactions(conn, "chequing", limit=100)
+        with self.assertRaises(db.UnknownAccount):
+            db.transfer(conn, "chequing", "bitcoin", 100, now="2026-09-11T10:00:00Z")
+        self.assertEqual(db.list_transactions(conn, "chequing", limit=100), before)
+
+    def test_history_and_balances_commit_together(self):
+        """The history is written inside the transfer's own transaction.
+
+        Driven by making the *balance* write fail after the history write would have happened: if
+        the two were in separate transactions, the history would survive and the service would tell
+        a caller about money that never moved. The failure is injected by dropping the accounts
+        table mid-transaction, which is the cheapest way to make the second UPDATE raise without
+        reaching into `transfer`'s internals.
+        """
+        conn = _fresh(self)
+        before = len(db.list_transactions(conn, "chequing", limit=100))
+        original = db.get_balance(conn, "chequing")
+        real_record = db._record_transfer
+
+        def record_then_break(*args, **kwargs):
+            real_record(*args, **kwargs)
+            raise sqlite3.OperationalError("injected failure after the history was written")
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(unittest.mock.patch.object(db, "_record_transfer", record_then_break))
+            with self.assertRaises(sqlite3.OperationalError):
+                db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+
+        self.assertEqual(db.get_balance(conn, "chequing"), original)
+        self.assertEqual(len(db.list_transactions(conn, "chequing", limit=100)), before)
+
+    def test_the_list_is_bounded_by_the_service(self):
+        conn = _fresh(self)
+        for i in range(db.TRANSACTION_LIST_LIMIT + 4):
+            db.transfer(conn, "chequing", "savings", 100, now=f"2026-09-11T10:00:{i:02d}Z")
+        self.assertEqual(
+            len(db.list_transactions(conn, "chequing")), db.TRANSACTION_LIST_LIMIT
+        )
+
+    def test_the_list_is_newest_first(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 100, now="2026-09-11T10:00:00Z")
+        db.transfer(conn, "chequing", "savings", 200, now="2026-09-11T11:00:00Z")
+        recent = db.list_transactions(conn, "chequing")
+        self.assertEqual(recent[0].occurred_at, "2026-09-11T11:00:00Z")
+        self.assertEqual(recent[0].amount_cents, -200)
+
+    def test_two_rows_sharing_one_instant_order_stably(self):
+        # Every transfer writes two rows at the same instant, and so does the seeded history. An
+        # order that stopped at the timestamp would be whatever SQLite felt like returning.
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 100, now="2026-09-11T10:00:00Z")
+        db.transfer(conn, "chequing", "savings", 200, now="2026-09-11T10:00:00Z")
+        first = [t.amount_cents for t in db.list_transactions(conn, "chequing")]
+        second = [t.amount_cents for t in db.list_transactions(conn, "chequing")]
+        self.assertEqual(first, second)
+        self.assertEqual(first[0], -200)
+
+    def test_an_account_with_no_history_is_an_empty_list_not_an_error(self):
+        conn = _fresh(self)
+        conn.execute("INSERT INTO accounts (name, balance_cents) VALUES ('tfsa', 0)")
+        conn.commit()
+        self.assertEqual(db.list_transactions(conn, "tfsa"), [])
+
+    def test_an_unknown_account_raises(self):
+        conn = _fresh(self)
+        with self.assertRaises(db.UnknownAccount):
+            db.list_transactions(conn, "bitcoin")
+
+    def test_amounts_in_history_are_integer_cents(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        for transaction in db.list_transactions(conn, "chequing", limit=100):
+            self.assertIsInstance(transaction.amount_cents, int)
+
+    def test_a_transaction_carries_no_prose(self):
+        """Tokens and figures only -- the sentence is the voice agent's to compose.
+
+        The same rule `NoCallerFacingProse` enforces over the HTTP bodies, asserted one layer down
+        so a prose column could not be added here and then merely hidden by a route that happened
+        not to return it.
+        """
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        for transaction in db.list_transactions(conn, "chequing", limit=100):
+            for value in (transaction.kind, transaction.counterparty):
+                if value is not None:
+                    self.assertNotIn(" ", value)

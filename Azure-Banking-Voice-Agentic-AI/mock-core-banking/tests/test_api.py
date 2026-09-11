@@ -12,6 +12,8 @@ T-UNKNOWN-ACCT -- which is exactly what these tests exist to prevent regressing.
 """
 import contextlib
 import logging
+import os
+import tempfile
 import unittest
 
 from azbank_core_banking import db
@@ -260,6 +262,12 @@ class NoCallerFacingProse(ServiceCase):
             client.post("/credential-checks", json={"pin": db.DEMO_PIN}),
             client.post("/credential-checks", json={"pin": "9999"}),
             client.post("/credential-checks", json={"pin": "abcd"}),   # 422
+            # The history route (issue #44). Its `kind` and `counterparty` are tokens for the same
+            # reason every outcome here is one: the sentence a caller hears about a transaction is
+            # composed in the voice agent. A `description` column would have put prose back in the
+            # system of record through a route nobody was watching.
+            client.get("/accounts/chequing/transactions"),
+            client.get("/accounts/bitcoin/transactions"),             # 404
         ]
         for response in responses:
             with self.subTest(url=str(response.url), status=response.status_code):
@@ -279,3 +287,92 @@ class NoCallerFacingProse(ServiceCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransactionsRoute(ServiceCase):
+    """The history route (issue #44). Same status mapping as the balance route, no new branch.
+
+        unknown account    -> 404, naming the account
+        no transactions    -> 200, empty list
+        found              -> 200, bounded, newest first
+    """
+
+    def test_a_fresh_service_has_a_seeded_history(self):
+        response = self.client().get("/accounts/chequing/transactions")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["transactions"])
+
+    def test_an_unknown_account_is_404_naming_the_account(self):
+        response = self.client().get("/accounts/bitcoin/transactions")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"]["account"], "bitcoin")
+
+    def test_an_account_with_no_history_is_200_and_empty(self):
+        """Not a 404 and not an error: "nothing has happened yet" is a normal answer.
+
+        Both seeded accounts have a seeded history, so this needs an account that genuinely has
+        none -- which means a database this test arranges rather than the shared in-memory one.
+        An earlier version asserted only that the body was a list, which is a test whose name
+        outran what it checked.
+        """
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        directory = stack.enter_context(tempfile.TemporaryDirectory())
+        path = os.path.join(directory, "core-banking.sqlite3")
+        with contextlib.closing(db.connect(path)) as conn:
+            conn.execute("INSERT INTO accounts (name, balance_cents) VALUES ('tfsa', 0)")
+            conn.commit()
+        client = stack.enter_context(TestClient(build_app(database=path)))
+
+        response = client.get("/accounts/tfsa/transactions")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["transactions"], [])
+
+    def test_a_transfer_shows_up_on_both_accounts(self):
+        client = self.client()
+        client.post("/transfers", json={
+            "from_account": "chequing", "to_account": "savings", "amount_cents": 15000,
+        })
+        debit = client.get("/accounts/chequing/transactions").json()["transactions"][0]
+        credit = client.get("/accounts/savings/transactions").json()["transactions"][0]
+        self.assertEqual(debit["amount_cents"], -15000)
+        self.assertEqual(debit["counterparty"], "savings")
+        self.assertEqual(credit["amount_cents"], 15000)
+        self.assertEqual(credit["counterparty"], "chequing")
+
+    def test_the_route_is_bounded_and_takes_no_limit_from_the_caller(self):
+        """The bound is the service's. A `limit` the caller could raise would not be a bound.
+
+        Asserted by asking for more and getting the service's number anyway -- FastAPI ignores an
+        unknown query parameter, so a route that later grew one would fail this rather than
+        silently start honouring it.
+        """
+        client = self.client()
+        for _ in range(db.TRANSACTION_LIST_LIMIT + 4):
+            client.post("/transfers", json={
+                "from_account": "chequing", "to_account": "savings", "amount_cents": 100,
+            })
+        body = client.get("/accounts/chequing/transactions?limit=500").json()
+        self.assertEqual(len(body["transactions"]), db.TRANSACTION_LIST_LIMIT)
+
+    def test_the_route_is_newest_first(self):
+        client = self.client()
+        client.post("/transfers", json={
+            "from_account": "chequing", "to_account": "savings", "amount_cents": 111,
+        })
+        newest = client.get("/accounts/chequing/transactions").json()["transactions"][0]
+        self.assertEqual(newest["amount_cents"], -111)
+
+    def test_a_declined_transfer_adds_no_line(self):
+        client = self.client()
+        before = client.get("/accounts/chequing/transactions").json()["transactions"]
+        client.post("/transfers", json={
+            "from_account": "chequing", "to_account": "savings", "amount_cents": 900000,
+        })
+        after = client.get("/accounts/chequing/transactions").json()["transactions"]
+        self.assertEqual(before, after)
+
+    def test_every_amount_on_the_wire_is_integer_cents(self):
+        body = self.client().get("/accounts/chequing/transactions").json()
+        for transaction in body["transactions"]:
+            self.assertIsInstance(transaction["amount_cents"], int)
