@@ -221,12 +221,13 @@ because they are genuinely unresolved, not because any of them is currently bloc
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-01, R-02, R-03 (partial, see item 3), R-04, R-05, R-06 resolved.** **R-04 reconfirmed
-2026-09-01 for Phase 1's stateful agent loop** (IDLE, reconfirmed 2026-09-08). **R-08 answered in
-Phase 0 (~79–114 demo runs/month, gate passes) but stale — PARKED as of 2026-09-08, and promoted to
-a precondition of *provisioning*, not of Phase 3's code.** mock-core-banking's Container App would
-be this project's **second** Container App, and fixed cost is the line the whole $25/mo ceiling
-turns on — so R-08 gets recomputed against a two-app fixed cost before anything is deployed, not
-before Phase 3 is built. **R-09** (number irreplaceability) is a standing hard rule, not something
+2026-09-01 for Phase 1's stateful agent loop** (IDLE, reconfirmed 2026-09-08). **R-08 recomputed 2026-09-11 against a two-Container-App fixed cost and PASSES**
+(`COSTS.md`, "R-08, recomputed"): fixed $14.60/mo, **45–67 demo runs/month against a gate of 5**.
+The second container is $7.88 rather than $5.72 because the free grant is per subscription and the
+first app consumes all of it. **One input is unpriced** — Table Storage's rate, which `/research`
+owes before provisioning — and a sensitivity table shows the gate still clears by four times even
+at an implausible $5/mo for it. The Phase 0 figure (79.2) is superseded and kept: it measured a
+one-container system. **R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
 
 ## Next actions (in order)

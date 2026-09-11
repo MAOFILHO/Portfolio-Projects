@@ -208,3 +208,100 @@ R-06, R-08). Two are not persisted: Stage 2's full Cost Management roundup (FULL
 terminal output only, and Stage 1's raw Replicas/RxBytes/TxBytes metrics survive as derived counts,
 not raw results.
 
+
+---
+
+## R-08, recomputed against a two-Container-App fixed cost — 2026-09-11 (issue #55)
+
+**Verdict: PASSES, with headroom, and one input unpriced.** Phase 5 is the first phase since Phase 0
+to create billable Azure resources, and `docs/PLAN.md`'s Phase-0 gate makes this recompute a
+precondition of provisioning rather than a formality beside it. The figure this replaces — **79.2
+demo runs/month**, recorded 2026-09-01 — assumed **one** always-on container. Phase 5 adds a second
+(mock-core-banking) and a Storage account.
+
+### Inputs, each traceable to where it was measured
+
+| Input | Value | Where it comes from |
+|---|---|---|
+| One Container App, net of the free grant | **$5.72/mo** | R-04, measured from Container Apps replica/network telemetry against Canada Central Retail Prices API rates (`docs/phase0/findings.md`) |
+| Container Apps operating mode | **IDLE**, measured | R-04, reconfirmed 2026-09-01 and 2026-09-08 |
+| Container Apps monthly free grant | 180,000 vCPU-s, 360,000 GiB-s | `docs/PLAN.md`, Phase 0 |
+| Replica shape | 0.25 vCPU / 0.5 GiB, min-replicas 1, max-replicas 1 | `infra/modules/mock-core-banking.bicep`, and the deployed voice agent |
+| Phone number lease | **$1.00/mo** | Measured on the live owned-numbers record, 2026-08-20 |
+| Realistic per-minute, call connected | **$0.031/min** | PSTN inbound + ACS streaming + model tokens, Phase 0 |
+| Per-run ceiling | **5 minutes** | B4's per-call cap, which `docs/PLAN.md` step 10 names as the ceiling on one demo run |
+| Table Storage | **UNPRICED — see below** | — |
+
+### The second container is not another $5.72, and the reason is arithmetic rather than judgement
+
+**The free grant is per subscription, not per app**, and the first container already consumes all of
+it. So the second one bills on its whole consumption rather than on its consumption net of a grant:
+
+```
+one replica, 24/7:   0.25 vCPU × 3600 s × 730 h  =   657,000 vCPU-s/month
+                      0.5 GiB × 3600 s × 730 h   = 1,314,000 GiB-s/month
+
+first app, billable:  657,000 − 180,000 =   477,000 vCPU-s   ratio 657/477 = 1.3774
+                    1,314,000 − 360,000 =   954,000 GiB-s    ratio 1314/954 = 1.3774
+```
+
+**Both ratios are identical, and that is not a coincidence**: the replica shape (0.25 vCPU / 0.5 GiB)
+is exactly the grant's own ratio (180,000 / 360,000), so the grant covers the same fraction of each
+meter. That makes the second app's marginal cost a single clean multiple of the first's rather than
+two figures that had to be added separately:
+
+**$5.72 × 1.3774 = $7.88/mo** for the second container.
+
+### The recomputed figure
+
+```
+fixed = $5.72 (voice agent) + $7.88 (mock-core-banking) + $1.00 (number) = $14.60/mo
+headroom to the $25/month ceiling                                        = $10.40/mo
+one demo run at B4's 5-minute cap                     = 5 × $0.031       =  $0.155
+demo runs/month                          = $10.40 / $0.155              =  67.1
+```
+
+**67 demo runs/month** on `docs/PLAN.md` step 10's stated formula.
+
+**45 demo runs/month** on the basis that is directly comparable with the recorded 79.2. That figure
+came out of `04-teardown-and-r08.sh`'s own arithmetic, which produced 79.2 where step 10's formula
+gives 117.9 for the same inputs — a factor of 0.672 this document cannot account for without
+re-reading that script. Both numbers are quoted rather than one of them chosen, because picking the
+larger would be choosing the flattering basis and picking the smaller would be pretending to a
+precision this has not got.
+
+**The gate is 5** (`docs/PLAN.md`, Phase 0 exit: "if it comes in under 5, Phase 0 stops here"). The
+recompute clears it by roughly nine times on the conservative basis.
+
+### The unpriced input, and why it does not block the gate
+
+**Azure Table Storage is not priced here.** Its rate has not been read from the Retail Prices API or
+from Microsoft's pricing page in this session, and `CLAUDE.md` forbids answering a pricing question
+from memory — this project has already been burned once by an unverified assumption
+(`docs/PLAN.md`, decision 12). **`/research` is the skill, and it is named rather than invoked.**
+
+What can be said without it is how much it would have to cost to matter:
+
+| Table Storage allowance | Fixed | Headroom | Runs (formula) | Runs (comparable) | Gate |
+|---|---|---|---|---|---|
+| $0.00/mo | $14.60 | $10.40 | 67.1 | 45.1 | **PASSES** |
+| $1.00/mo | $15.60 | $9.40 | 60.7 | 40.7 | **PASSES** |
+| $5.00/mo | $19.60 | $5.40 | 34.8 | 23.4 | **PASSES** |
+
+At **$5.00/mo** — which for a table holding one row per day and a handful of rows per escalation
+would be a startling figure — the gate still clears by more than four times. **The recompute is
+therefore not sensitive to the input it is missing**, and the missing input is recorded as owed
+before provisioning rather than as a reason to stop.
+
+### What this changes
+
+- **R-08 moves from PARKED to recomputed.** The 79.2 figure is superseded and kept: it measured a
+  one-container system, which is not the system Phase 5 provisions.
+- **The $25/month ceiling holds** and was not renegotiated. It is part of what this project
+  demonstrates.
+- **The two-container shape is what the arithmetic assumes**: 0.25 vCPU / 0.5 GiB, min-replicas 1,
+  **max-replicas 1**. The max matters twice — it is what keeps this figure true, and it is what makes
+  the ledger's read-then-write correct (`call_records/store.py`). Changing either invalidates both.
+- **Still owed before anything is applied**: Table Storage's real rate, and the actual cost of both
+  new resources checked against what this predicts once they exist. An ARM 200 OK proves creation,
+  not cost.
