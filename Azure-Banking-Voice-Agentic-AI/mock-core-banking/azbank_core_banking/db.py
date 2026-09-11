@@ -95,8 +95,34 @@ CREATE TABLE IF NOT EXISTS transactions (
     counterparty TEXT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents <> 0),
     occurred_at  TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cards (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    status     TEXT NOT NULL CHECK (status IN ('active', 'blocked')),
+    blocked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS idempotency (
+    key         TEXT PRIMARY KEY,
+    outcome     TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
 )
 """
+
+#: The profile's single card is either of these and nothing else. The schema says so with a CHECK
+#: rather than a comment, for the same reason the credentials table does: an invariant enforced by
+#: the storage cannot be broken by a caller who did not read the comment.
+CARD_ACTIVE = "active"
+CARD_BLOCKED = "blocked"
+
+#: What a block attempt did. **Both are a working system answering** -- neither is an error, and the
+#: route returns 200 for either, the same standing a declined transfer already has.
+#:
+#: `BLOCKED` means this attempt is what blocked the card. `ALREADY_BLOCKED` means it was blocked
+#: before this attempt arrived, whether by a replay of the same idempotency key or by an earlier
+#: attempt under a different one. **The caller is told which**, because "I have blocked it" and "it
+#: was already blocked" are different sentences and a caller who asked twice deserves the second.
+BLOCKED = "blocked"
+ALREADY_BLOCKED = "already_blocked"
 
 #: The one kind of transaction this prototype can produce. Named rather than inlined so the voice
 #: agent's sentence has a token to switch on and a second kind is a row rather than a rewrite.
@@ -216,6 +242,16 @@ def initialise(conn):
                 "INSERT INTO transactions (account, kind, counterparty, amount_cents, occurred_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 SEED_TRANSACTIONS,
+            )
+        # The one card, active. Same "if empty" rule as everything above -- and here it is what makes
+        # "a blocked card resets when the container restarts" true: the filesystem is ephemeral, so a
+        # fresh container seeds an active card, while a restart that still has its database keeps the
+        # block. Phase 3 settled that behaviour for balances and this inherits it rather than
+        # inventing a second story (issue #45).
+        card_seeded = conn.execute("SELECT COUNT(*) FROM cards").fetchone()[0] > 0
+        if not card_seeded:
+            conn.execute(
+                "INSERT INTO cards (id, status, blocked_at) VALUES (1, ?, NULL)", (CARD_ACTIVE,)
             )
         conn.commit()
 
@@ -393,6 +429,81 @@ def transfer(conn, from_account, to_account, amount_cents, now=None):
         to_balance_cents=to_balance,
         moved_cents=amount_cents,
     )
+
+
+def card_status(conn):
+    """The profile's card status. Exposed so a test can pin it without reaching for SQL, exactly as
+    `credential_digest` is -- there is deliberately no HTTP route for it, because nothing in the
+    caller-facing product asks "is my card blocked" except by trying to block it."""
+    with _LOCK:
+        row = conn.execute("SELECT status FROM cards WHERE id = 1").fetchone()
+    return None if row is None else row[0]
+
+
+def recorded_outcome(conn, idempotency_key):
+    """What this key produced last time, or None if it has never been seen.
+
+    Exposed for the same reason `card_status` is: a test that had to infer idempotency from the
+    card's status could not tell "the key was recognised" from "the card happened to be blocked
+    already", and those are the two behaviours this table exists to keep apart.
+    """
+    with _LOCK:
+        row = conn.execute(
+            "SELECT outcome FROM idempotency WHERE key = ?", (idempotency_key,)
+        ).fetchone()
+    return None if row is None else row[0]
+
+
+def block_card(conn, idempotency_key, now=None):
+    """Block the profile's single card, at most once per key. Returns BLOCKED or ALREADY_BLOCKED.
+
+    **Idempotency is a property of the system of record, not of the client's memory** (issue #45).
+    A client that remembered its own keys would forget them the moment its process restarted, and
+    the whole reason a key exists is that the client may not be sure its first request landed. So
+    the key is stored here, beside the outcome it produced, and a repeat is answered from the record
+    rather than re-executed.
+
+    **Two different things can make a second attempt a no-op, and they are kept apart.** A *replayed
+    key* is answered with whatever that key produced the first time -- which for the key that did the
+    blocking is BLOCKED, so a caller whose request was retried hears the same thing they would have
+    heard if it had landed once. A *fresh key against an already-blocked card* is ALREADY_BLOCKED,
+    because that is a genuinely new request arriving at a card that is already stopped.
+
+    **Blocking is irreversible here.** There is no unblock, no route to one, and no state transition
+    back. A blocked card resets when the container restarts, which is the ephemeral-filesystem
+    behaviour Phase 3 settled for balances.
+
+    The read, the check and the two writes are all inside one lock and one transaction, for the
+    reason `transfer` spells out: a gap between deciding and acting is a gap two requests can both
+    pass through.
+    """
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise ValueError("idempotency key must be a non-empty string")
+
+    with _LOCK:
+        replayed = recorded_outcome(conn, idempotency_key)
+        if replayed is not None:
+            # Answered from the record, without touching the card. This is the branch that makes a
+            # retried request safe, and it must not re-execute anything to reach its answer.
+            return replayed
+
+        already = card_status(conn) == CARD_BLOCKED
+        outcome = ALREADY_BLOCKED if already else BLOCKED
+        with conn:
+            if not already:
+                conn.execute(
+                    "UPDATE cards SET status = ?, blocked_at = ? WHERE id = 1",
+                    (CARD_BLOCKED, _utc_now() if now is None else now),
+                )
+            # Recorded whichever way it went, and inside the same transaction as the block itself.
+            # Recording only the successful block would mean a replayed ALREADY_BLOCKED key fell
+            # through to the status check every time -- which happens to give the same answer today
+            # and would stop doing so the moment an unblock existed. The record is the contract.
+            conn.execute(
+                "INSERT INTO idempotency (key, outcome, recorded_at) VALUES (?, ?, ?)",
+                (idempotency_key, outcome, _utc_now() if now is None else now),
+            )
+    return outcome
 
 
 def connect(database):

@@ -268,6 +268,11 @@ class NoCallerFacingProse(ServiceCase):
             # system of record through a route nobody was watching.
             client.get("/accounts/chequing/transactions"),
             client.get("/accounts/bitcoin/transactions"),             # 404
+            # The block route (issue #45), all three of its shapes. Both its outcomes are
+            # snake_case tokens; the sentence a caller hears about a card is the voice agent's.
+            client.post("/card-blocks", json={"idempotency_key": "block_aaaaaaaa"}),
+            client.post("/card-blocks", json={"idempotency_key": "block_bbbbbbbb"}),
+            client.post("/card-blocks", json={"idempotency_key": "nope"}),   # 422
         ]
         for response in responses:
             with self.subTest(url=str(response.url), status=response.status_code):
@@ -376,3 +381,91 @@ class TransactionsRoute(ServiceCase):
         body = self.client().get("/accounts/chequing/transactions").json()
         for transaction in body["transactions"]:
             self.assertIsInstance(transaction["amount_cents"], int)
+
+
+class CardBlockRoute(ServiceCase):
+    """Creating a card block (issue #45). `200` for both outcomes; neither is an error.
+
+        blocked          -> 200   this request is what stopped the card
+        already_blocked  -> 200   a working system saying it was already stopped
+        malformed key    -> 422   the caller has a bug
+
+    `already_blocked` is deliberately not a `409`. Nobody has been refused anything and the request
+    was not malformed -- it is the same standing a declined transfer has, and a `4xx` would file it
+    alongside unknown-account.
+    """
+
+    KEY = "block_aaaaaaaa"
+    OTHER_KEY = "block_bbbbbbbb"
+
+    def test_a_first_block_is_200_and_blocked(self):
+        response = self.client().post("/card-blocks", json={"idempotency_key": self.KEY})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"outcome": db.BLOCKED})
+
+    def test_a_replayed_key_is_200_and_the_same_outcome(self):
+        client = self.client()
+        client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        response = client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"outcome": db.BLOCKED})
+
+    def test_a_fresh_key_against_a_blocked_card_is_already_blocked(self):
+        client = self.client()
+        client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        response = client.post("/card-blocks", json={"idempotency_key": self.OTHER_KEY})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"outcome": db.ALREADY_BLOCKED})
+
+    def test_a_missing_or_malformed_key_is_a_422_with_the_field_named(self):
+        for body in ({}, {"idempotency_key": ""}, {"idempotency_key": "short"},
+                     {"idempotency_key": "has spaces in it"}, {"idempotency_key": 1234},
+                     {"idempotency_key": "x" * 65}):
+            with self.subTest(shape=sorted(body)):
+                response = self.client().post("/card-blocks", json=body)
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(
+                    response.json(),
+                    {"error": "malformed_request", "fields": ["body.idempotency_key"]},
+                )
+
+    def test_a_malformed_request_blocks_nothing(self):
+        client = self.client()
+        client.post("/card-blocks", json={"idempotency_key": ""})
+        # The card is still active, proved the only way the product offers: by blocking it and
+        # getting `blocked` rather than `already_blocked`.
+        response = client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        self.assertEqual(response.json()["outcome"], db.BLOCKED)
+
+    def test_there_is_no_unblock_route_and_no_status_route(self):
+        """Nothing reverses a block, and nothing reports card status.
+
+        Asserted as "does not succeed" rather than as a specific code: `DELETE /card-blocks`
+        answers `405` because the path exists for `POST`, while an unknown path answers `404`.
+        Pinning either number would be pinning FastAPI's routing table rather than the property,
+        which is that none of these does anything.
+        """
+        client = self.client()
+        for method, path in (("post", "/card-unblocks"), ("delete", "/card-blocks"),
+                             ("get", "/card"), ("get", "/cards")):
+            with self.subTest(route=f"{method} {path}"):
+                self.assertGreaterEqual(getattr(client, method)(path).status_code, 400)
+
+    def test_blocking_a_card_moves_no_money(self):
+        client = self.client()
+        client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        self.assertEqual(
+            client.get("/accounts").json(),
+            {"accounts": [
+                {"name": "chequing", "balance_cents": 240000},
+                {"name": "savings", "balance_cents": 50000},
+            ]},
+        )
+
+    def test_blocking_a_card_writes_no_transaction(self):
+        # A block is not money moving, so it has no place in an account's history.
+        client = self.client()
+        before = client.get("/accounts/chequing/transactions").json()["transactions"]
+        client.post("/card-blocks", json={"idempotency_key": self.KEY})
+        after = client.get("/accounts/chequing/transactions").json()["transactions"]
+        self.assertEqual(before, after)

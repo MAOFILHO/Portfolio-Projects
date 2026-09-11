@@ -416,3 +416,95 @@ class Transactions(unittest.TestCase):
             for value in (transaction.kind, transaction.counterparty):
                 if value is not None:
                     self.assertNotIn(" ", value)
+
+
+class CardBlocks(unittest.TestCase):
+    """Blocking the profile's one card, and the idempotency record that makes a retry safe (#45).
+
+    The two behaviours this keeps apart are easy to conflate and give the same answer today: a
+    *replayed key* is answered from the record without touching the card, and a *fresh key against
+    an already-blocked card* is a genuinely new request arriving at a stopped card. They are tested
+    separately, and the replay test asserts the record was consulted rather than the status.
+    """
+
+    def test_the_card_is_seeded_active(self):
+        self.assertEqual(db.card_status(_fresh(self)), db.CARD_ACTIVE)
+
+    def test_a_first_block_blocks(self):
+        conn = _fresh(self)
+        self.assertEqual(db.block_card(conn, "key_aaaaaaaa"), db.BLOCKED)
+        self.assertEqual(db.card_status(conn), db.CARD_BLOCKED)
+
+    def test_a_replayed_key_returns_the_recorded_outcome(self):
+        conn = _fresh(self)
+        first = db.block_card(conn, "key_aaaaaaaa")
+        second = db.block_card(conn, "key_aaaaaaaa")
+        self.assertEqual(first, db.BLOCKED)
+        self.assertEqual(second, db.BLOCKED)
+
+    def test_a_replay_is_answered_from_the_record_not_from_the_card(self):
+        """The replay branch must not reach the card at all.
+
+        Driven by recording an outcome the card's own status could never produce: if the replay
+        branch fell through to the status check, it would answer `already_blocked` instead. This is
+        why the key is stored for both outcomes rather than only for the successful block.
+        """
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        conn.execute("UPDATE idempotency SET outcome = 'sentinel' WHERE key = 'key_aaaaaaaa'")
+        conn.commit()
+        self.assertEqual(db.block_card(conn, "key_aaaaaaaa"), "sentinel")
+
+    def test_a_fresh_key_against_a_blocked_card_is_already_blocked(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        self.assertEqual(db.block_card(conn, "key_bbbbbbbb"), db.ALREADY_BLOCKED)
+
+    def test_both_outcomes_are_recorded_against_their_keys(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        db.block_card(conn, "key_bbbbbbbb")
+        self.assertEqual(db.recorded_outcome(conn, "key_aaaaaaaa"), db.BLOCKED)
+        self.assertEqual(db.recorded_outcome(conn, "key_bbbbbbbb"), db.ALREADY_BLOCKED)
+
+    def test_an_unseen_key_has_no_recorded_outcome(self):
+        self.assertIsNone(db.recorded_outcome(_fresh(self), "key_never_used"))
+
+    def test_the_card_is_blocked_exactly_once_however_many_attempts_arrive(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa", now="2026-09-11T10:00:00Z")
+        first_blocked_at = conn.execute("SELECT blocked_at FROM cards WHERE id = 1").fetchone()[0]
+        db.block_card(conn, "key_bbbbbbbb", now="2026-09-11T11:00:00Z")
+        db.block_card(conn, "key_aaaaaaaa", now="2026-09-11T12:00:00Z")
+        after = conn.execute("SELECT blocked_at FROM cards WHERE id = 1").fetchone()[0]
+        self.assertEqual(first_blocked_at, after)
+
+    def test_an_empty_or_non_string_key_raises(self):
+        conn = _fresh(self)
+        for key in ("", "   ", None, 1234, b"key_aaaaaaaa"):
+            with self.subTest(key=key):
+                with self.assertRaises(ValueError):
+                    db.block_card(conn, key)
+        self.assertEqual(db.card_status(conn), db.CARD_ACTIVE)
+
+    def test_there_is_no_unblock(self):
+        # Stated as a prototype edge (issue #45): no route, no tool, no state transition back.
+        # Asserted on the module rather than trusted to a comment, because "we just did not write
+        # one" and "there must not be one" look identical in a diff.
+        self.assertFalse([name for name in dir(db) if "unblock" in name.lower()])
+
+    def test_a_second_card_cannot_be_inserted(self):
+        conn = _fresh(self)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO cards (id, status) VALUES (2, 'active')")
+
+    def test_a_status_outside_the_two_cannot_be_stored(self):
+        conn = _fresh(self)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("UPDATE cards SET status = 'melted' WHERE id = 1")
+
+    def test_an_existing_card_is_left_alone_by_re_initialising(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        db.initialise(conn)
+        self.assertEqual(db.card_status(conn), db.CARD_BLOCKED)

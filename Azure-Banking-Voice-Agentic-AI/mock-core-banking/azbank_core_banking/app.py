@@ -7,13 +7,16 @@ reason the voice agent can tell the outcomes apart:
     declined by business rule -> 200   a normal outcome of a working system, carrying the real
                                        available amount
     rejected credential       -> 200   likewise: a working check saying no (issue #34)
+    already-blocked card      -> 200   likewise: a working system saying it was already stopped
+                                       (issue #45)
     malformed request         -> 422   the caller has a bug; nobody has been refused anything
     anything unexpected       -> 5xx   the client treats it as unavailable
 
 A decline is deliberately **not** a 4xx. Mapping it to one would put it in the same bucket as
 unknown-account and blur the distinction T-UNKNOWN-ACCT rests on. A **rejected credential** is not
 a 4xx for the same reason and gets the same 200: nobody has been refused a banking operation, and
-the request was not malformed.
+the request was not malformed. An **already-blocked card** joins them (issue #45) -- a caller who
+asks twice has not been refused anything, and a 409 would file that alongside unknown-account too.
 
 **The submitted PIN travels in the request body, never in a path or a query string.** The voice
 agent's client logs the request path on every failed call, deliberately, because it is the one
@@ -52,6 +55,23 @@ class TransferRequest(BaseModel):
     from_account: str
     to_account: str
     amount_cents: int = Field(gt=0)
+
+
+class CardBlockRequest(BaseModel):
+    """One block attempt, carrying the key that makes a retry safe (issue #45).
+
+    The shape is constrained here so a missing or unusable key is a `422` from the framework rather
+    than something the route has to remember to check -- the same reasoning as `amount_cents` and
+    `pin` above.
+
+    **The pattern says "an opaque identifier", not "digit-free".** Keeping decimal digits out of the
+    key is a B2 concern belonging to the voice agent, which is what generates it; a service enforcing
+    the caller's own telemetry policy would be a service with an opinion about a constraint it cannot
+    see. The bound on length is this service's business, because an unbounded key is an unbounded
+    row.
+    """
+
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9_-]{8,64}$")
 
 
 class CredentialCheckRequest(BaseModel):
@@ -196,6 +216,22 @@ def build_app(database=None):
             "to_balance_cents": result.to_balance_cents,
             "moved_cents": result.moved_cents,
         }
+
+    @app.post("/card-blocks")
+    def create_card_block(request: CardBlockRequest):
+        """Block the profile's card. `200` either way, carrying which of the two happened.
+
+        Resource-shaped like the transfer and credential-check routes: a block is a thing that gets
+        created, and its answer is the created thing's outcome. **Neither outcome is an error** --
+        "I blocked it" and "it was already blocked" are both a working system answering, so neither
+        is a `4xx`, for the same reason a declined transfer is not one.
+
+        **There is no unblock route**, and there is no route that reports card status either. The
+        only way to learn the card is blocked is to try to block it, which is all the caller-facing
+        product ever asks.
+        """
+        outcome = db.block_card(conn, request.idempotency_key)
+        return {"outcome": outcome}
 
     @app.post("/credential-checks")
     def create_credential_check(request: CredentialCheckRequest):
