@@ -41,6 +41,18 @@ TABLE_NAME = "callrecords"
 #: The partition each record kind lives under. Named constants rather than inline strings because a
 #: partition key typo is a record that is written successfully and can never be found.
 ESCALATION_PARTITION = "escalation"
+LEDGER_PARTITION = "ledger"
+
+#: The timezone "today" means, **written down here rather than inherited from the container's
+#: locale** (issue #49). A day boundary that moved with whatever the host happened to be set to
+#: would make the ledger, a log line and a query disagree about which day a call belonged to -- and
+#: the disagreement would only ever show up as a cap that tripped at the wrong time.
+#:
+#: UTC, not Eastern, even though the number is Canadian and the caller is not. The ledger is an
+#: operational record of what this system spent, not a customer-facing statement, and every other
+#: timestamp this project writes is already UTC. One timezone across the whole system beats one that
+#: is locally intuitive in one place.
+LEDGER_TIMEZONE = UTC
 
 #: The reasons an escalation may carry, and the whole set of them. **A fixed set, not free prose**
 #: (docs/PLAN.md decision 17): the record exists so that whoever picks this up can query it, and a
@@ -85,6 +97,32 @@ class CallRecordStoreUnavailable(RuntimeError):
     """
 
 
+def _is_not_found(error):
+    """True for the SDK's "no such entity". Read off the status code rather than the exception type.
+
+    `azure-data-tables` raises `ResourceNotFoundError` for a missing entity, which is an
+    `HttpResponseError` carrying `status_code == 404`. Matching on the code rather than importing the
+    type keeps this module importable without the SDK -- the same reason the real client's own import
+    is lazy -- and a 404 is the thing that actually means "not there" whatever the type is called.
+    """
+    return getattr(error, "status_code", None) == 404
+
+
+def _minutes(entity):
+    """The minutes on a ledger row, or a refusal to guess.
+
+    A row this client cannot read is not an answer. Returning 0.0 for an unreadable row would be the
+    silent-fallback defect CLAUDE.md names by example, applied to the one number B4 depends on --
+    and it would fail open, which is the direction that costs money.
+    """
+    try:
+        return float(entity["minutes"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise CallRecordStoreUnavailable(
+            f"the day's ledger row could not be read: {e!r}"
+        ) from e
+
+
 @dataclass(frozen=True)
 class EscalationRecord:
     """One caller who asked for a person, and what the call knew about why.
@@ -116,6 +154,17 @@ class EscalationRecord:
         )
 
 
+def day_key(now=None):
+    """The ledger key for the day `now` falls in: a date, in the stated timezone.
+
+    A date rather than a datetime, because that is what "today's budget" is keyed on, and a string
+    rather than a `date`, because it is a partition key on the way out and a log line on the way
+    through. `now` is injected so a rollover can be tested instantly rather than over a day.
+    """
+    moment = datetime.now(LEDGER_TIMEZONE) if now is None else now
+    return moment.astimezone(LEDGER_TIMEZONE).date().isoformat()
+
+
 class CallRecordStore(Protocol):
     """What the relay needs from the call-record store. Satisfied by the real client and the fake.
 
@@ -130,6 +179,28 @@ class CallRecordStore(Protocol):
         Reaching a person matters more than recording that somebody asked to, so a failure here is
         logged loudly and the call still ends with the same apology. This is the one place in the
         phase where the store failing is not fail-closed, and it is deliberate.
+        """
+        ...
+
+    async def minutes_used(self, day: str) -> float:
+        """How many call minutes `day` has already spent. Raises CallRecordStoreUnavailable.
+
+        **Raising is the whole point.** B4 fails closed, so "I could not read the budget" and "the
+        budget is spent" take the same branch and the caller hears the same sentence. A method that
+        returned 0.0 when it could not read would be a brake that opens under exactly the conditions
+        it exists for.
+
+        A day nothing has been recorded against is **0.0, not an error** -- that is a working store
+        answering about a quiet day, which is a different fact from a store that did not answer.
+        """
+        ...
+
+    async def record_minutes(self, day: str, minutes: float) -> None:
+        """Add `minutes` to `day`'s total. Raises CallRecordStoreUnavailable if it could not.
+
+        Called when a call ends, on every path out (issue #50) -- including the paths that raise,
+        and including the closed path's own short call. A brake whose usage was invisible in the one
+        place it matters would not be a brake anybody could audit.
         """
         ...
 
@@ -161,6 +232,42 @@ class TableStorageCallRecordStore:
 
     async def aclose(self):
         await self._table.close()
+
+    async def minutes_used(self, day):
+        try:
+            entity = await self._table.get_entity(LEDGER_PARTITION, day)
+        except Exception as e:
+            if _is_not_found(e):
+                # A day nothing has been recorded against. A working store answering about a quiet
+                # day -- not a store that failed to answer, and the distinction is what keeps B4
+                # from refusing every call on the first call of every day.
+                return 0.0
+            raise CallRecordStoreUnavailable(
+                f"could not read the day's ledger: {type(e).__name__}"
+            ) from e
+        return _minutes(entity)
+
+    async def record_minutes(self, day, minutes):
+        """Add to the day's total.
+
+        **Read-then-write, not an atomic increment.** Table Storage has no server-side increment, and
+        this project runs a single replica with `maxReplicas: 1` -- so the race that would lose an
+        update needs two replicas, which the Bicep forbids. Written down rather than assumed: if the
+        scale rule ever changes, this is the line that breaks, and it breaks by *under*-counting,
+        which is the fail-open direction.
+        """
+        current = await self.minutes_used(day)
+        entity = {
+            "PartitionKey": LEDGER_PARTITION,
+            "RowKey": day,
+            "minutes": current + minutes,
+        }
+        try:
+            await self._table.upsert_entity(entity)
+        except Exception as e:
+            raise CallRecordStoreUnavailable(
+                f"could not record the day's minutes: {type(e).__name__}"
+            ) from e
 
     async def record_escalation(self, record):
         # RowKey is the instant plus the correlation id: unique because no two calls share an id,

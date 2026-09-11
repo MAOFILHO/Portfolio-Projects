@@ -21,9 +21,12 @@ class FakeCallRecordStore:
     was written rather than through a reader method that could itself be wrong.
     """
 
-    def __init__(self, fail_with=None):
+    def __init__(self, fail_with=None, minutes=None):
         self.fail_with = fail_with
         self.escalations = []
+        # day -> minutes spent. Public and pre-loadable, so a test can arrange "today is already
+        # spent" without simulating a day's worth of calls.
+        self.minutes = dict(minutes or {})
         # Every method that was asked for, in order. The same spy the core-banking fake keeps, and
         # for the same reason: a store that computes perfectly and is never consulted records
         # nothing, and that failure passes every test of what it would have recorded.
@@ -37,6 +40,21 @@ class FakeCallRecordStore:
     async def record_escalation(self, record):
         self._check("record_escalation")
         self.escalations.append(record)
+
+    async def minutes_used(self, day):
+        """A day nothing has been recorded against is 0.0, exactly as the real client answers.
+
+        The distinction the real client draws between "no row" and "could not read" is the one this
+        has to keep: a store that answered 0.0 when it could not read would be a brake that opens
+        under the conditions it exists for, and every fail-closed test in the suite runs against
+        this object.
+        """
+        self._check("minutes_used")
+        return self.minutes.get(day, 0.0)
+
+    async def record_minutes(self, day, minutes):
+        self._check("record_minutes")
+        self.minutes[day] = self.minutes.get(day, 0.0) + minutes
 
 
 def unavailable(message="the call-record store is down"):

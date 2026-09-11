@@ -31,8 +31,9 @@ from fastapi import FastAPI, Request, WebSocket
 from .boot import assert_boot_safety, call_records_account_url, core_banking_url
 from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
+from .cost import caps
 from .realtime.client import connect_realtime
-from .realtime.session import run_call
+from .realtime.session import budget_or_closed, run_call, run_closed_call
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("app")
@@ -210,6 +211,17 @@ async def media_stream(websocket: WebSocket):
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
+    # **B4's daily cap, before anything expensive starts** (issue #49). An exhausted day and an
+    # unreadable ledger take the same branch and the caller hears the same sentence -- an unknown
+    # budget is not permission. `budget_or_closed`'s own docstring records why this is read here
+    # rather than in the incoming-call webhook, which is where the exit criteria placed it.
+    try:
+        await budget_or_closed(call_records())
+    except caps.DailyBudgetSpent:
+        async with connect_realtime() as realtime:
+            await run_closed_call(websocket, realtime, call_records(), correlation_id)
+        log.info("WS closed (service closed) correlationId=%s", correlation_id)
+        return
     async with connect_realtime() as realtime:
         # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
         # escalation record has to carry it, and a relay that reached back through the transport for

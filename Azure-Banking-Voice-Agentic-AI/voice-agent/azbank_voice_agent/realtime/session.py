@@ -14,13 +14,15 @@ import asyncio
 import collections
 import json
 import logging
+import time
 import uuid
 
 from fastapi import WebSocketDisconnect
 
 from .. import auth
 from ..agents import specs
-from ..call_records import EscalationRequested
+from ..call_records import CallRecordStoreUnavailable, EscalationRequested
+from ..call_records.store import day_key
 from ..cost import caps
 from ..dispatch import gate
 from ..dispatch.tools import CallScope, dispatch_tool_call
@@ -167,7 +169,122 @@ def _session_update(identity):
     }
 
 
-async def run_call(transport, realtime, core_banking, call_records, correlation_id=None):
+#: What the caller hears when the day's budget is gone, or cannot be read (issue #49). Composed here
+#: like every other sentence the caller hears, and deliberately **the same sentence for both**: a
+#: caller who could tell "we are closed" from "we could not check" would have been handed a probing
+#: oracle for exactly the condition that costs money.
+#:
+#: Short on purpose. The closed path is bounded to one turn and a few seconds, and a long apology
+#: would be a brake spending money to say it is not spending money.
+CLOSED = (
+    "Sorry -- the service is closed right now. Please call back later."
+)
+
+
+async def budget_or_closed(call_records, now=None):
+    """The day's remaining budget, or `DailyBudgetSpent` -- B4's daily cap, and `T-B4-FAILCLOSED`.
+
+    **Unreadable is the same as exhausted.** A store that raises, times out, or returns something
+    this client cannot read produces the same exception an exhausted day does, and therefore the
+    same closed path. There is no branch in which an unknown budget serves a call: an unknown budget
+    is not permission.
+
+    **Where this is called from, and why it is not the webhook.** `docs/phase5/exit-criteria.md`
+    criterion 11 said the budget is read "before `answer_call`", in the incoming-call webhook, so a
+    call that will not be served costs the webhook and nothing more. It is read here instead, on the
+    media socket, and that is a deliberate change recorded rather than a criterion quietly missed:
+
+      * The closed path has to **answer and speak** -- a caller must hear "we're closed" rather than
+        a dead line, which is the user story the criterion itself rests on. So the call is answered
+        either way, and what the earlier placement actually saved was the realtime connection.
+      * A decision made in the webhook has to reach the media socket somehow, and every way of
+        carrying it is either process-wide mutable state or a marker in the WebSocket URL. **The
+        second is client-controllable**: the media endpoint is public and unauthenticated until
+        Phase 7, so a marker there would let whoever opens the socket choose to be served. That is
+        fail-open, on the one constraint whose whole point is failing closed.
+      * Read here, the check is on the only path a call actually takes and cannot be bypassed.
+
+    The cost of the change is the realtime connection a closed call still opens, which is what the
+    closed path needs anyway to say anything at all.
+    """
+    day = day_key(now)
+    try:
+        used = await call_records.minutes_used(day)
+    except CallRecordStoreUnavailable as e:
+        log.warning("B4: the day's ledger could not be read, taking the closed path: %r", e)
+        raise caps.DailyBudgetSpent("the day's ledger could not be read") from e
+    if used >= caps.MAX_DAILY_MINUTES:
+        log.warning(
+            "B4: daily cap reached (%.1f of %.1f minutes for %s), taking the closed path",
+            used, caps.MAX_DAILY_MINUTES, day,
+        )
+        raise caps.DailyBudgetSpent(f"the day's {caps.MAX_DAILY_MINUTES} minutes are spent")
+    return caps.MAX_DAILY_MINUTES - used
+
+
+async def run_closed_call(transport, realtime, call_records, correlation_id=None, now=None):
+    """Answer, say the service is closed, hang up. **Hard-bounded, by the relay.**
+
+    One turn and a short wall clock, neither of them the model choosing to be brief (issue #49). A
+    closed path that could run for a full call would be a brake that spends money to refuse spending
+    money, which is a brake nobody should trust.
+
+    It reuses the injection mechanism Phase 4 built for PIN outcomes -- an item followed by a
+    response request -- rather than inventing a second way of making the agent say something it did
+    not decide. That is one mechanism to understand, one to review, and one that can go wrong.
+
+    **Its own minutes count too.** Recorded on the way out like any other call, because a brake
+    whose usage was invisible in the one place it matters would not be a brake anybody could audit.
+    """
+    started = time.monotonic()
+    await realtime.send(_session_update(gate.TRIAGE_AGENT))
+    item_id = _new_event_id()
+    await realtime.send(_spoken_note(CLOSED, item_id))
+    await realtime.send({"type": "response.create", "event_id": _new_event_id()})
+
+    async def speak_once():
+        """Relay the closed sentence's audio, and stop at the end of that one response."""
+        async for event in realtime:
+            if event.type == "response.output_audio.delta":
+                await transport.send_text(acs.outbound_audio_frame(event.delta))
+            elif event.type == "response.done":
+                return
+            elif event.type == "error":
+                log.error("AOAI error event on the closed path")
+
+    try:
+        # Two bounds, and the wall clock is the one that holds if the model never finishes: a turn
+        # cap alone would wait forever for a `response.done` that is not coming.
+        await asyncio.wait_for(speak_once(), timeout=caps.MAX_CLOSED_CALL_SECONDS)
+    except (TimeoutError, WebSocketDisconnect):
+        log.warning("closed path ended without a complete response")
+    finally:
+        await _record_minutes(call_records, started, now)
+    log.info("closed call ended, correlationId=%s", correlation_id)
+
+
+async def _record_minutes(call_records, started, now=None):
+    """Charge the day for what this call actually used. Never raises.
+
+    On **every path out**, which is why it is called from a `finally` (issue #50). A call that
+    crashed still counts against the day: minutes that went unrecorded are minutes the cap cannot
+    see, and a cap that undercounts fails open.
+
+    A store that cannot be written is logged loudly and swallowed. The call is already over, so
+    there is nothing left to refuse -- and raising here would turn a bookkeeping failure into a
+    relay failure on a call that had otherwise finished normally.
+    """
+    minutes = (time.monotonic() - started) / 60
+    try:
+        await call_records.record_minutes(day_key(now), minutes)
+    except CallRecordStoreUnavailable as e:
+        log.error(
+            "B4: %.3f minutes were NOT recorded against the day's ledger -- the cap is now "
+            "undercounting by that much: %r", minutes, e,
+        )
+
+
+async def run_call(transport, realtime, core_banking, call_records, correlation_id=None, now=None):
     """Relay one call: media transport <-> realtime connection, with core banking behind the gate.
 
     `transport` satisfies transport.protocol.MediaTransport; `realtime` satisfies
@@ -193,6 +310,7 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
     # and there is no path back. Both are passed to every tool call rather than read from a module
     # global so that a call's authorisation state can never be ambient: it is always an argument
     # the dispatcher had to be given.
+    started = time.monotonic()
     agent = gate.TRIAGE_AGENT
     auth_state = gate.ANONYMOUS
 
@@ -458,4 +576,9 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         # The third point the buffer is zeroed at, after submit and clear -- on call end, whatever
         # the outcome. In a finally because "whatever the outcome" includes the paths that raise.
         authenticator.end_call()
+        # And the day is charged for this call, on every path out -- a clean hangup, either B4 cap,
+        # exhausted attempts, an escalation, or an unhandled failure (issue #50). A call that ended
+        # badly still counts against the day, because minutes the cap cannot see are minutes it
+        # fails open on.
+        await _record_minutes(call_records, started, now)
     log.info("call ended")

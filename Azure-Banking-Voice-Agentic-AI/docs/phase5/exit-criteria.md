@@ -208,6 +208,25 @@ teardown-adjacent infrastructure.
     - `cost/caps.py` keeps its per-call constants **unchanged**: 20 turns, 5 minutes. Neither moves.
     - **The day's budget is read before `answer_call`**, in the incoming-call webhook, so a call that
       will not be served costs the webhook and nothing more.
+
+      > **Changed while building, 2026-09-11 (issue #49).** It is read on the **media socket**
+      > instead, immediately before the realtime connection is opened. Three reasons, recorded
+      > rather than the criterion quietly missed:
+      >
+      > 1. The closed path has to **answer and speak** — the user story this criterion rests on is
+      >    that a caller hears "we're closed" rather than a dead line. So the call is answered
+      >    either way, and what the earlier placement actually saved was the realtime connection,
+      >    which the closed path needs in order to say anything at all.
+      > 2. A decision made in the webhook has to reach the media socket somehow. Every way of
+      >    carrying it is either process-wide mutable state or a marker in the WebSocket URL — and
+      >    **the second is client-controllable**, because that endpoint is public and
+      >    unauthenticated until Phase 7. A marker there would let whoever opens the socket choose
+      >    to be served, which is fail-open on the one constraint whose point is failing closed.
+      > 3. Read on the media socket, the check sits on the only path a call actually takes and
+      >    cannot be bypassed.
+      >
+      > The cost is the realtime connection a closed call still opens. `budget_or_closed`'s own
+      > docstring carries this reasoning where somebody changing it will read it.
     - **The closed path**: answer, inject the closed sentence through the mechanism Phase 4 built for
       PIN outcomes, hang up. **Hard-bounded to a single turn and a short wall clock**, enforced by the
       relay rather than by the model choosing to be brief. A brake that cost a full call would be a

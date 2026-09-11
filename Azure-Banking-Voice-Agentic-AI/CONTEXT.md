@@ -60,6 +60,14 @@ nothing is transferred anywhere and the caller is told so. The record is the del
 while anonymous, which is the one thing besides the PIN check that is.
 _Avoid_: transfer, handoff (means moving a call between agents, above), callback, warm transfer
 
+**Closed path**:
+What a caller gets when the day's minute budget is spent, **or when it cannot be read**. The call is
+answered, the caller is told plainly that the service is closed, and the call ends — bounded by the
+relay to one turn and a few seconds, because a brake that ran for a full call would spend money to
+refuse spending money. The two causes are deliberately indistinguishable to the caller: telling them
+apart would be a probing oracle for the one condition that costs money.
+_Avoid_: busy signal, rejected call, rate limited, out of hours
+
 **Call-record store**:
 Where the voice agent keeps facts about calls — escalation records, and the day's consumed minutes.
 Separate from the system of record, which holds money and has never heard of calls. Reached with a

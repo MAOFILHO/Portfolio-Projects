@@ -10,6 +10,8 @@ been forwarded (`respond_after_appends`), so the two relay tasks can't race. Tha
 real deployment, which answers after server-side turn detection fires -- not before.
 """
 import asyncio
+import datetime
+import inspect
 import json
 import socket
 import unittest
@@ -20,6 +22,7 @@ from azbank_voice_agent.auth import AttemptsExhausted, outcomes, sentence_for
 from azbank_voice_agent.call_records import REASONS
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.call_records.fake import unavailable as store_unavailable
+from azbank_voice_agent.call_records.store import day_key
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
 from azbank_voice_agent.cost import caps
@@ -35,7 +38,7 @@ from azbank_voice_agent.realtime.fake import (
     speech_stopped,
     transcript_delta,
 )
-from azbank_voice_agent.realtime.session import run_call
+from azbank_voice_agent.realtime.session import budget_or_closed, run_call, run_closed_call
 from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame, unknown_frame
 
 
@@ -1203,7 +1206,9 @@ class WholeCallEscalation(unittest.TestCase):
         # The second claim: a store nobody consults records nothing, and that failure passes every
         # test of what it would have recorded.
         self._run()
-        self.assertEqual(self.call_records.calls, ["record_escalation"])
+        # `record_minutes` follows on every path out (issue #50) -- what this asserts is that the
+        # escalation itself reached the store, in order, before the call's own bookkeeping.
+        self.assertEqual(self.call_records.calls[0], "record_escalation")
 
     def test_the_caller_is_told_before_the_call_ends(self):
         # The ordering the whole design turns on: output, then a response request, and only then the
@@ -1316,3 +1321,293 @@ class WholeCallEscalation(unittest.TestCase):
         record = self.call_records.escalations[0]
         for value in (record.correlation_id, record.reason, record.occurred_at):
             self.assertNotIn(DEFAULT_PIN, str(value))
+
+
+class TheClosedPath(unittest.TestCase):
+    """**`T-B4-FAILCLOSED`** -- a test, not a name (issue #49).
+
+    Three ways the store can fail to answer, and an exhausted day, all produce the same closed path.
+    Asserted on **what the caller is told and on the call ending**, never on an internal flag: a
+    brake is only a brake if the caller hears the refusal, and an assertion on a boolean somewhere
+    would pass just as happily for a brake nobody consulted.
+    """
+
+    def setUp(self):
+        self.call_records = FakeCallRecordStore()
+
+    def _closed_call(self):
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("were-closed"), response_done()], respond_after_appends=0
+        )
+        return transport, realtime
+
+    def _spoken_notes(self, realtime):
+        return [
+            part["text"]
+            for message in realtime.sent
+            if message["type"] == "conversation.item.create"
+            and message["item"].get("type") == "message"
+            for part in message["item"]["content"]
+        ]
+
+    def _assert_budget_refused(self, store):
+        with self.assertRaises(caps.DailyBudgetSpent):
+            asyncio.run(budget_or_closed(store))
+
+    def test_an_exhausted_day_refuses(self):
+        self._assert_budget_refused(
+            FakeCallRecordStore(minutes={day_key(): caps.MAX_DAILY_MINUTES})
+        )
+
+    def test_a_day_over_its_budget_refuses(self):
+        self._assert_budget_refused(
+            FakeCallRecordStore(minutes={day_key(): caps.MAX_DAILY_MINUTES + 99})
+        )
+
+    def test_a_store_that_raises_refuses(self):
+        self._assert_budget_refused(FakeCallRecordStore(fail_with=store_unavailable()))
+
+    def test_a_store_that_times_out_refuses(self):
+        # A timeout is not a distinct standing: the client turns every way of not answering into
+        # one type, precisely so nobody downstream can treat one of them as benign.
+        self._assert_budget_refused(FakeCallRecordStore(fail_with=store_unavailable("timed out")))
+
+    def test_a_store_that_answers_unreadably_refuses(self):
+        # The real client raises the same type for a row it cannot parse -- proved directly in
+        # tests/test_call_records.py. Arranged here through the fake so the branch is covered at
+        # this seam too.
+        self._assert_budget_refused(
+            FakeCallRecordStore(fail_with=store_unavailable("the row could not be read"))
+        )
+
+    def test_an_intact_budget_serves_the_call(self):
+        # Not trivially always-closed: without this, a brake wired permanently shut would pass every
+        # test above.
+        self.assertEqual(
+            asyncio.run(budget_or_closed(FakeCallRecordStore())), caps.MAX_DAILY_MINUTES
+        )
+
+    def test_a_day_just_under_its_budget_still_serves(self):
+        store = FakeCallRecordStore(minutes={day_key(): caps.MAX_DAILY_MINUTES - 1})
+        self.assertEqual(asyncio.run(budget_or_closed(store)), 1)
+
+    def test_the_caller_is_told_the_service_is_closed(self):
+        transport, realtime = self._closed_call()
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertEqual(self._spoken_notes(realtime), [session_module.CLOSED])
+
+    def test_the_closed_sentence_is_injected_through_phase_fours_mechanism(self):
+        # An item followed by a response request -- not a second way of making the agent say
+        # something it did not decide.
+        transport, realtime = self._closed_call()
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertEqual(
+            realtime.sent_types, ["session.update", "conversation.item.create", "response.create"]
+        )
+
+    def test_the_closed_path_is_bounded_to_one_turn(self):
+        # The relay stops at the first `response.done`. A second scripted response is never reached,
+        # so the bound is the relay's rather than the model choosing to be brief.
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                audio_delta("were-closed"),
+                response_done(),
+                audio_delta("and-something-else"),
+                response_done(),
+            ],
+            respond_after_appends=0,
+        )
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertEqual(transport.sent_audio_payloads, ["were-closed"])
+
+    def test_the_closed_path_is_bounded_in_wall_clock_too(self):
+        """A model that never finishes must not hold the line open.
+
+        The turn bound alone would wait forever for a `response.done` that is not coming, which is
+        exactly the shape of "the brake became the cost".
+        """
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(hang=True)
+        with patch.object(caps, "MAX_CLOSED_CALL_SECONDS", 0.05):
+            asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertTrue(self._spoken_notes(realtime))
+
+    def test_the_closed_path_never_reaches_core_banking(self):
+        # It has no client at all: `run_closed_call` does not take one. Asserted on the signature so
+        # the property is structural rather than a matter of what the body happens to do today.
+        self.assertNotIn("core_banking", inspect.signature(run_closed_call).parameters)
+
+    def test_the_closed_paths_own_minutes_are_charged(self):
+        # A brake whose usage was invisible in the one place it matters would not be a brake
+        # anybody could audit.
+        transport, realtime = self._closed_call()
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertIn("record_minutes", self.call_records.calls)
+        self.assertGreater(self.call_records.minutes[day_key()], 0)
+
+    def test_an_unwritable_ledger_does_not_break_the_closed_path(self):
+        # The call is already over; raising here would turn a bookkeeping failure into a relay
+        # failure on a call that had otherwise finished.
+        transport, realtime = self._closed_call()
+        self.call_records.fail_with = store_unavailable()
+        asyncio.run(run_closed_call(transport, realtime, self.call_records))
+
+    def test_an_unwritable_ledger_is_logged_as_undercounting(self):
+        transport, realtime = self._closed_call()
+        self.call_records.fail_with = store_unavailable()
+        with self.assertLogs("bridge", level="ERROR") as cm:
+            asyncio.run(run_closed_call(transport, realtime, self.call_records))
+        self.assertTrue(any("undercounting" in line for line in cm.output))
+
+    def test_exhausted_and_unreadable_are_one_branch_not_two(self):
+        """Fail-closed is one branch, not two that could drift (issue #49).
+
+        And the caller hears one sentence: somebody who could tell "we are closed" from "we could
+        not check" would have a probing oracle for exactly the condition that costs money.
+        """
+        spent = FakeCallRecordStore(minutes={day_key(): caps.MAX_DAILY_MINUTES})
+        unreadable = FakeCallRecordStore(fail_with=store_unavailable())
+        for store in (spent, unreadable):
+            with self.subTest(store=type(store).__name__), \
+                 self.assertRaises(caps.DailyBudgetSpent):
+                asyncio.run(budget_or_closed(store))
+
+
+class TheDayBoundary(unittest.TestCase):
+    """"Today" is a date in a stated timezone, tested against an injected clock (issue #49).
+
+    The same arrangement the circuit breaker's open window uses, and for the same reason: a rollover
+    asserted by waiting would be a test that takes a day.
+    """
+
+    def test_the_day_is_a_date_in_the_stated_timezone(self):
+        moment = datetime.datetime(2026, 9, 11, 23, 59, tzinfo=datetime.UTC)
+        self.assertEqual(day_key(moment), "2026-09-11")
+
+    def test_a_moment_in_another_zone_is_converted_not_truncated(self):
+        # 2026-09-12 01:30 in UTC+2 is still 2026-09-11 in UTC. A key that took the local date would
+        # charge the call to tomorrow.
+        elsewhere = datetime.timezone(datetime.timedelta(hours=2))
+        moment = datetime.datetime(2026, 9, 12, 1, 30, tzinfo=elsewhere)
+        self.assertEqual(day_key(moment), "2026-09-11")
+
+    def test_minutes_land_on_different_days_across_a_rollover(self):
+        store = FakeCallRecordStore()
+        before = datetime.datetime(2026, 9, 11, 23, 59, tzinfo=datetime.UTC)
+        after = datetime.datetime(2026, 9, 12, 0, 1, tzinfo=datetime.UTC)
+        asyncio.run(store.record_minutes(day_key(before), 5.0))
+        asyncio.run(store.record_minutes(day_key(after), 3.0))
+        self.assertEqual(store.minutes, {"2026-09-11": 5.0, "2026-09-12": 3.0})
+
+    def test_a_spent_day_does_not_refuse_the_next_one(self):
+        before = datetime.datetime(2026, 9, 11, 23, 59, tzinfo=datetime.UTC)
+        after = datetime.datetime(2026, 9, 12, 0, 1, tzinfo=datetime.UTC)
+        store = FakeCallRecordStore(minutes={day_key(before): caps.MAX_DAILY_MINUTES})
+        with self.assertRaises(caps.DailyBudgetSpent):
+            asyncio.run(budget_or_closed(store, now=before))
+        # Rollover: a fresh budget, instantly, with no waiting and no clock patching of the module.
+        self.assertEqual(asyncio.run(budget_or_closed(store, now=after)), caps.MAX_DAILY_MINUTES)
+
+
+class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
+    """A brake that reads but never writes never trips (issue #50).
+
+    The previous class proves a spent day refuses calls. This proves the day ever becomes spent --
+    and specifically that it does so on **every** way a call can end, including the ways that raise.
+    Minutes that go unrecorded are minutes the cap cannot see, and a cap that undercounts fails
+    open, which is the direction that costs money.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+        self.call_records = FakeCallRecordStore()
+
+    def _run(self, transport, realtime):
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
+
+    def _assert_charged(self):
+        self.assertIn("record_minutes", self.call_records.calls)
+        self.assertGreaterEqual(self.call_records.minutes.get(day_key(), -1), 0)
+
+    def test_a_clean_hangup_is_charged(self):
+        self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
+                  FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+        self._assert_charged()
+
+    def test_a_turn_cap_is_charged(self):
+        with patch.object(caps, "MAX_CALL_TURNS", 1):
+            self._run(FakeTransport(frames=[audio_frame("hi")], hang=True),
+                      FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+        self._assert_charged()
+
+    def test_a_wall_clock_cap_is_charged(self):
+        with patch.object(caps, "MAX_CALL_SECONDS", 0.05):
+            self._run(FakeTransport(hang=True), FakeRealtimeServer(hang=True))
+        self._assert_charged()
+
+    def test_exhausted_attempts_are_charged(self):
+        frames = _keyed("9999") + _keyed("8888") + _keyed("7777")
+        self._run(FakeTransport(frames=frames, hang=True),
+                  FakeRealtimeServer(events=[], respond_after_appends=0))
+        self._assert_charged()
+
+    def test_an_escalation_is_charged(self):
+        transport = FakeTransport(frames=[audio_frame("a-person-please")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(
+                    "escalate_to_human", json.dumps({"reason": REASONS[0]}), call_id="esc"
+                ),
+                response_done(),
+            ],
+            respond_after_appends=1,
+        )
+        self._run(transport, realtime)
+        self._assert_charged()
+
+    def test_an_unhandled_failure_is_charged(self):
+        """The path that matters most, and the one a `finally` exists for.
+
+        A relay failure propagates out of `run_call` -- it is not an expected ending -- and the day
+        still has to be charged for the minutes the call burned before it broke. Arranged by making
+        the transport raise something the relay does not catch.
+        """
+        class Exploding(FakeTransport):
+            async def receive_text(self):
+                raise RuntimeError("the transport broke")
+
+        with self.assertRaises(RuntimeError):
+            self._run(Exploding(hang=True), FakeRealtimeServer(hang=True))
+        self._assert_charged()
+
+    def test_the_minutes_recorded_are_the_minutes_the_call_took(self):
+        # Not a constant, and not the per-call ceiling: a cap fed a fixed number per call would be
+        # a call counter wearing a minute cap's name.
+        self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
+                  FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+        recorded = self.call_records.minutes[day_key()]
+        self.assertGreater(recorded, 0)
+        self.assertLess(recorded, caps.MAX_CALL_SECONDS / 60)
+
+    def test_two_calls_accumulate_against_the_same_day(self):
+        for _ in range(2):
+            self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
+                      FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+        self.assertEqual(
+            [name for name in self.call_records.calls if name == "record_minutes"],
+            ["record_minutes"] * 2,
+        )
+
+    def test_an_unwritable_ledger_does_not_break_a_call_that_had_finished(self):
+        self.call_records.fail_with = store_unavailable()
+        self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
+                  FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+
+    def test_an_unwritable_ledger_says_so_loudly(self):
+        self.call_records.fail_with = store_unavailable()
+        with self.assertLogs("bridge", level="ERROR") as cm:
+            self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
+                      FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
+        self.assertTrue(any("undercounting" in line for line in cm.output))

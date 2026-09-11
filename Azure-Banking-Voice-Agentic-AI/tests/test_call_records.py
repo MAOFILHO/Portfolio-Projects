@@ -12,6 +12,7 @@ made at the whole-call seam, in tests/test_whole_call.py, which is the same two-
 gate's tests use.
 """
 import dataclasses
+import datetime
 import unittest
 
 from azbank_voice_agent.call_records import (
@@ -22,7 +23,12 @@ from azbank_voice_agent.call_records import (
     TableStorageCallRecordStore,
 )
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore, unavailable
-from azbank_voice_agent.call_records.store import ESCALATION_PARTITION
+from azbank_voice_agent.call_records.store import (
+    ESCALATION_PARTITION,
+    LEDGER_PARTITION,
+    LEDGER_TIMEZONE,
+    day_key,
+)
 from azbank_voice_agent.cost import caps
 
 
@@ -196,3 +202,118 @@ class EscalationHasItsOwnType(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _LedgerTable(_Table):
+    """A table that can also be read. `get_entity` raises a 404-shaped error when the row is
+    absent, which is the shape `azure-data-tables` produces for a missing entity."""
+
+    def __init__(self, rows=None, raises=None, read_raises=None):
+        super().__init__(raises=raises)
+        self.rows = dict(rows or {})
+        self.read_raises = read_raises
+
+    async def get_entity(self, partition_key, row_key):
+        if self.read_raises is not None:
+            raise self.read_raises
+        if row_key not in self.rows:
+            raise _NotFound()
+        return self.rows[row_key]
+
+    async def upsert_entity(self, entity):
+        if self.raises is not None:
+            raise self.raises
+        self.rows[entity["RowKey"]] = entity
+        self.entities.append(entity)
+
+
+class _NotFound(Exception):
+    """Stands in for the SDK's ResourceNotFoundError: an exception carrying `status_code == 404`.
+
+    Matched on the code rather than the type by the module under test, which is what lets that
+    module stay importable without the SDK installed.
+    """
+
+    status_code = 404
+
+
+class TheDayLedger(unittest.IsolatedAsyncioTestCase):
+    """B4's state, and the distinction the whole brake rests on (issue #49).
+
+    "No row for today" and "I could not read today's row" are different facts. The first is a
+    working store answering about a quiet day and must be 0.0; the second is not an answer and must
+    raise, because an unknown budget is not permission.
+    """
+
+    DAY = "2026-09-11"
+
+    async def test_a_day_with_no_row_is_zero_not_an_error(self):
+        # Otherwise the first call of every day would take the closed path -- fail-closed working
+        # exactly as specified and completely useless.
+        store = TableStorageCallRecordStore(_LedgerTable())
+        self.assertEqual(await store.minutes_used(self.DAY), 0.0)
+
+    async def test_a_recorded_day_reports_its_minutes(self):
+        table = _LedgerTable(rows={self.DAY: {"PartitionKey": "ledger", "RowKey": self.DAY,
+                                              "minutes": 12.5}})
+        self.assertEqual(
+            await TableStorageCallRecordStore(table).minutes_used(self.DAY), 12.5
+        )
+
+    async def test_an_unreadable_store_raises_rather_than_answering_zero(self):
+        # The silent-fallback defect applied to the one number B4 depends on. Answering 0.0 here
+        # would open the brake under exactly the conditions it exists for.
+        store = TableStorageCallRecordStore(_LedgerTable(read_raises=RuntimeError("down")))
+        with self.assertRaises(CallRecordStoreUnavailable):
+            await store.minutes_used(self.DAY)
+
+    async def test_a_row_missing_its_field_raises_rather_than_answering_zero(self):
+        table = _LedgerTable(rows={self.DAY: {"PartitionKey": "ledger", "RowKey": self.DAY}})
+        with self.assertRaises(CallRecordStoreUnavailable):
+            await TableStorageCallRecordStore(table).minutes_used(self.DAY)
+
+    async def test_a_row_whose_field_is_not_a_number_raises(self):
+        table = _LedgerTable(rows={self.DAY: {"minutes": "quite a lot"}})
+        with self.assertRaises(CallRecordStoreUnavailable):
+            await TableStorageCallRecordStore(table).minutes_used(self.DAY)
+
+    async def test_recording_adds_to_what_was_there(self):
+        table = _LedgerTable(rows={self.DAY: {"minutes": 10.0}})
+        store = TableStorageCallRecordStore(table)
+        await store.record_minutes(self.DAY, 2.5)
+        self.assertEqual(await store.minutes_used(self.DAY), 12.5)
+
+    async def test_recording_on_a_fresh_day_starts_from_zero(self):
+        store = TableStorageCallRecordStore(_LedgerTable())
+        await store.record_minutes(self.DAY, 2.5)
+        self.assertEqual(await store.minutes_used(self.DAY), 2.5)
+
+    async def test_the_row_is_keyed_by_the_day_in_the_ledger_partition(self):
+        table = _LedgerTable()
+        await TableStorageCallRecordStore(table).record_minutes(self.DAY, 1.0)
+        self.assertEqual(table.entities[0]["PartitionKey"], LEDGER_PARTITION)
+        self.assertEqual(table.entities[0]["RowKey"], self.DAY)
+
+    async def test_a_write_that_fails_raises_rather_than_being_swallowed_here(self):
+        # Swallowing belongs to the relay, which knows the call is already over. The client's job is
+        # to say what happened.
+        store = TableStorageCallRecordStore(_LedgerTable(raises=RuntimeError("down")))
+        with self.assertRaises(CallRecordStoreUnavailable):
+            await store.record_minutes(self.DAY, 1.0)
+
+    async def test_an_unreadable_ledger_fails_the_write_too(self):
+        # `record_minutes` reads before it writes, so an unreadable store cannot produce a write
+        # that silently resets the day's total to this call's minutes alone.
+        store = TableStorageCallRecordStore(_LedgerTable(read_raises=RuntimeError("down")))
+        with self.assertRaises(CallRecordStoreUnavailable):
+            await store.record_minutes(self.DAY, 1.0)
+
+
+class TheDayKey(unittest.TestCase):
+    def test_the_timezone_is_written_down_not_inherited(self):
+        # The point of the constant: a day boundary that moved with the host's locale would make
+        # the ledger, a log line and a query disagree about which day a call belonged to.
+        self.assertIs(LEDGER_TIMEZONE, datetime.UTC)
+
+    def test_it_is_a_date_string(self):
+        self.assertRegex(day_key(), r"^\d{4}-\d{2}-\d{2}$")
