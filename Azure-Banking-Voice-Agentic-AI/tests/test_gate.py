@@ -13,6 +13,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
 
@@ -21,15 +22,20 @@ from azbank_voice_agent.dispatch import gate, tools
 #: the table said. Every widening of B1 has to edit this literal, which means it shows up in a diff
 #: and cannot be an accident (CLAUDE.md: a diff touching dispatch/gate.py never gets auto-accepted).
 EXPECTED_PERMISSIONS = {
-    (gate.TRIAGE_AGENT, gate.ANONYMOUS): frozenset(),
-    (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset(),
-    (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset(),
+    (gate.TRIAGE_AGENT, gate.ANONYMOUS): frozenset({"escalate_to_human"}),
+    (gate.TRIAGE_AGENT, gate.AUTHENTICATED): frozenset({"escalate_to_human"}),
+    (gate.BANKING_AGENT, gate.ANONYMOUS): frozenset({"escalate_to_human"}),
     (gate.BANKING_AGENT, gate.AUTHENTICATED): frozenset({
-        "get_balance", "transfer", "list_accounts", "list_transactions",
+        "get_balance", "transfer", "list_accounts", "list_transactions", "escalate_to_human",
     }),
-    (gate.CARDS_AGENT, gate.ANONYMOUS): frozenset(),
-    (gate.CARDS_AGENT, gate.AUTHENTICATED): frozenset({"block_card"}),
+    (gate.CARDS_AGENT, gate.ANONYMOUS): frozenset({"escalate_to_human"}),
+    (gate.CARDS_AGENT, gate.AUTHENTICATED): frozenset({"block_card", "escalate_to_human"}),
 }
+
+#: The one tool every row grants, in every auth state (issue #48). Named so the tests below can say
+#: "every *banking* tool is refused while anonymous" without restating the exception three times --
+#: and so that a second such tool could not be added without editing this line.
+REACHABLE_WHILE_ANONYMOUS = frozenset({"escalate_to_human"})
 
 
 class GateIsAPureDenyAllFunction(unittest.TestCase):
@@ -98,20 +104,48 @@ class TheExhaustiveCrossProduct(unittest.TestCase):
                 with self.subTest(agent=agent, auth_state=auth_state, tool=tool):
                     self.assertEqual(gate.is_allowed(agent, auth_state, tool), tool in granted)
 
-    def test_no_tool_is_reachable_while_a_call_is_anonymous(self):
-        # Criterion 2, on every agent that exists. An anonymous caller routed to a specialist is
-        # refused everything there, which is what keeps routing from being mistaken for
-        # authorization -- and it has to hold for the third agent exactly as it does for the
-        # second, or handing a caller to Cards would become a way in.
+    def test_no_banking_tool_is_reachable_while_a_call_is_anonymous(self):
+        """B1's floor, on every agent that exists.
+
+        **The wording changed in Phase 5 and the property did not** (issue #48). This used to read
+        "no tool is reachable"; `escalate_to_human` is granted in every row, so the accurate
+        statement is that no *banking* tool is. Escalation reaches the call-record store and never
+        the core-banking client, so B1's sharpened definition is untouched -- and the exception is
+        named in one constant above rather than spelled out here, so a second one could not be
+        added quietly.
+
+        An anonymous caller routed to a specialist is still refused every banking operation there,
+        which is what keeps routing from being mistaken for authorization.
+        """
         for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT, gate.CARDS_AGENT):
             for tool in (t["name"] for t in tools.TOOLS):
+                if tool in REACHABLE_WHILE_ANONYMOUS:
+                    continue
                 with self.subTest(agent=agent, tool=tool):
                     self.assertFalse(gate.is_allowed(agent, gate.ANONYMOUS, tool))
 
-    def test_authenticating_grants_triage_nothing(self):
+    def test_exactly_one_tool_is_reachable_while_a_call_is_anonymous(self):
+        """The other direction, and the mechanical statement of the item Marco signed off.
+
+        Not "some tools are refused" but "exactly this set is not". A tool added to a row later
+        turns this red, which is the point: widening what an unauthenticated caller can reach is a
+        decision, and this is where it has to be made on purpose.
+        """
+        reachable = {
+            tool["name"] for tool in tools.TOOLS
+            for agent in (gate.TRIAGE_AGENT, gate.BANKING_AGENT, gate.CARDS_AGENT)
+            if gate.is_allowed(agent, gate.ANONYMOUS, tool["name"])
+        }
+        self.assertEqual(reachable, set(REACHABLE_WHILE_ANONYMOUS))
+
+    def test_authenticating_grants_triage_no_banking_tool(self):
         # Triage has no banking tools of its own, and authenticating does not change what triage
-        # is for. This is the row most likely to be widened by accident later.
+        # is for. This is the row most likely to be widened by accident later. Escalation is the
+        # one thing it does hold, in both states, which is why it is excluded here rather than
+        # making this test say something weaker.
         for tool in (t["name"] for t in tools.TOOLS):
+            if tool in REACHABLE_WHILE_ANONYMOUS:
+                continue
             with self.subTest(tool=tool):
                 self.assertFalse(gate.is_allowed(gate.TRIAGE_AGENT, gate.AUTHENTICATED, tool))
 
@@ -181,6 +215,16 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.core_banking = FakeCoreBankingClient()
+        self.call_records = FakeCallRecordStore()
+        # Everything call-scoped, built once. `escalate_to_human` needs the store and `block_card`
+        # needs the key, so a scope carrying neither would fail the reachability test below on two
+        # tools for reasons that have nothing to do with the gate.
+        self.scope = tools.CallScope(
+            core_banking=self.core_banking,
+            call_records=self.call_records,
+            idempotency_key="idem_aaaaaaaa",
+            correlation_id="corr-test",
+        )
 
     def _arguments_for(self, tool_name):
         return {
@@ -189,6 +233,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             "list_accounts": "{}",
             "list_transactions": '{"account": "chequing"}',
             "block_card": "{}",
+            "escalate_to_human": '{"reason": "not_understood"}',
         }[tool_name]
 
     async def test_no_declared_tool_executes_when_the_gate_says_no(self):
@@ -199,7 +244,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(tool=tool):
                     out = json.loads(await tools.dispatch_tool_call(
-                        tool, self._arguments_for(tool), core_banking=self.core_banking
+                        tool, self._arguments_for(tool), scope=self.scope
                     ))
                     self.assertEqual(out, {"error": gate.REFUSAL})
         self.assertEqual(self.core_banking.accounts, before)  # no tool mutated anything
@@ -214,12 +259,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
             for tool in (t["name"] for t in tools.TOOLS):
                 with self.subTest(tool=tool):
                     out = json.loads(await tools.dispatch_tool_call(
-                        tool, self._arguments_for(tool), core_banking=self.core_banking,
-                        # The relay's per-call key (issue #47). `block_card` is the one declared
-                        # tool that needs one, and without it the service refuses the request as
-                        # malformed -- which would make this test report the gate as the thing in
-                        # the way when it was not.
-                        idempotency_key="idem_aaaaaaaa",
+                        tool, self._arguments_for(tool), scope=self.scope
                     ))
                     self.assertNotIn("error", out)
 
@@ -227,7 +267,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
         with patch.object(gate, "is_allowed", return_value=False), \
              self.assertLogs("dispatch", level="WARNING") as cm:
             await tools.dispatch_tool_call(
-                "get_balance", '{"account": "chequing"}', core_banking=self.core_banking
+                "get_balance", '{"account": "chequing"}', scope=self.scope
             )
         self.assertTrue(any("gate refused" in line for line in cm.output))
 
@@ -235,8 +275,7 @@ class EveryDeclaredToolIsBehindTheGate(unittest.IsolatedAsyncioTestCase):
         # The spoken refusal must not tell a caller which state would have worked -- that turns
         # the gate into a probing oracle.
         out = json.loads(await tools.dispatch_tool_call(
-            "get_balance", "{}", gate.BANKING_AGENT, "no-such-state",
-            core_banking=self.core_banking,
+            "get_balance", "{}", gate.BANKING_AGENT, "no-such-state", scope=self.scope,
         ))
         self.assertEqual(out, {"error": gate.REFUSAL})
         for leak in ("authenticated", "anonymous", "permission", "auth_state"):

@@ -11,6 +11,6 @@ rationale: >
   would report no breach for precisely the cases written to catch one.
 prior_call: authenticated
 matrix:
-  tool: [get_balance, transfer, list_accounts, list_transactions, block_card]
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card, escalate_to_human]
   agent: [triage, banking, cards]
   point: [before_entry, after_wrong_pin]

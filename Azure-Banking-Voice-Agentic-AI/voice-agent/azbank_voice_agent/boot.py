@@ -44,6 +44,12 @@ AMBIENT_SDK_KEY_VAR = "AZURE_OPENAI_API_KEY"
 #: Where mock-core-banking lives. No default, ever -- see core_banking_url() below.
 CORE_BANKING_URL_VAR = "CORE_BANKING_URL"
 
+#: The Table Storage endpoint the call-record store writes to (issue #48). An **account URL, never a
+#: connection string** -- the difference is the whole no-keys stance: a connection string carries an
+#: account key, and this project authenticates with the Container App's managed identity instead.
+#: No default either, for the reason below.
+CALL_RECORDS_ACCOUNT_URL_VAR = "CALL_RECORDS_ACCOUNT_URL"
+
 _ARM_API_VERSION = "2023-05-01"
 
 
@@ -62,6 +68,36 @@ def core_banking_url(env=None):
             f"{CORE_BANKING_URL_VAR} is not set -- refusing to start without an address for "
             "mock-core-banking. There is no default: an unconfigured backend must fail at boot, "
             "not on the first tool call."
+        )
+    return url
+
+
+def call_records_account_url(env=None):
+    """The configured Table Storage endpoint, or a refusal to start (issue #48).
+
+    Same fail-closed rule `core_banking_url` states and for the same reason: a misconfigured
+    deployment should die at startup, where a health check catches it and the revision never takes
+    traffic. There is an extra reason here. B4's daily cap (issue #49) reads this store before a call
+    is answered and takes the closed path when it cannot; a store that was never configured would
+    make every call take the closed path, which is fail-closed working exactly as specified and
+    indistinguishable, from the caller's side, from an outage. Better to not start.
+
+    **Refuses a connection string outright.** Somebody pasting one here would get working software
+    with the no-keys property silently gone, and that is the kind of regression nobody notices until
+    a key leaks. A connection string is recognisable: it is `Key=Value;` pairs, never a URL.
+    """
+    env = os.environ if env is None else env
+    url = env.get(CALL_RECORDS_ACCOUNT_URL_VAR)
+    if not url:
+        raise SystemExit(
+            f"{CALL_RECORDS_ACCOUNT_URL_VAR} is not set -- refusing to start without an address for "
+            "the call-record store. There is no default: an unconfigured store would make every "
+            "call take B4's closed path, which is indistinguishable from an outage."
+        )
+    if not url.startswith(("http://", "https://")):
+        raise SystemExit(
+            f"{CALL_RECORDS_ACCOUNT_URL_VAR} must be an account URL, not a connection string. This "
+            "project authenticates to Storage with a managed identity and holds no account key."
         )
     return url
 

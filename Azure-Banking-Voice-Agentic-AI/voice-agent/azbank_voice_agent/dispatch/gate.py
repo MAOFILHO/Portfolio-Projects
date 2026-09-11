@@ -25,12 +25,24 @@ front of it. Phase 4 only *added permissions* here; it never introduced the cont
 is_allowed() is unchanged from the day it was written.
 
 **B1, as of Phase 4** (`docs/phase4/exit-criteria.md`, approved 2026-09-10): no *banking* operation
--- balance, transfer, or list -- reaches the core-banking client while the call's auth state is not
-authenticated. PIN verification is the only operation reachable while anonymous, and it does not
-come through here at all: it has no tool, and the call's authenticator holds the client directly.
-The earlier wording, "zero authenticated-only tool invocations", was written when nothing legitimate
-could reach that client before authentication, and a detector reading it literally would have scored
-the PIN check itself as a breach.
+-- balance, transfer, list, and from Phase 5 also transactions and card block -- reaches the
+core-banking client while the call's auth state is not authenticated. The earlier wording, "zero
+authenticated-only tool invocations", was written when nothing legitimate could reach that client
+before authentication, and a detector reading it literally would have scored the PIN check itself as
+a breach.
+
+**The corollary changed in Phase 5** (`docs/phase5/exit-criteria.md`, approved 2026-09-11). Through
+Phase 4 this file said "no tool at all is reachable while a call is anonymous", and that was true
+because verification has no tool. Phase 5 grants `escalate_to_human` to every row, so the accurate
+statement is now:
+
+    the set of operations reachable while a call is anonymous is EXACTLY PIN verification and
+    escalate_to_human, and neither is a banking operation
+
+Verification still does not come through here at all -- it has no tool, and the call's authenticator
+holds the client directly. Escalation does come through here, reaches the call-record store and
+nothing else, and never touches the core-banking client. B1's target is unchanged: 0 breaches across
+>=120 adversarial cases, L1, blocking.
 """
 
 # Authentication states. Named here since Phase 2, before anything could reach the second one, so
@@ -89,37 +101,60 @@ CARDS_AGENT = "cards"
 #     cards   + anonymous       -> nothing
 #     cards   + authenticated   -> block_card
 #
-# Triage grants nothing in either state because it has no banking tools of its own -- authenticating
-# does not change what triage is for. Banking grants nothing while anonymous because routing is not
-# authorization: a caller may be handed to the banking agent before authenticating, and is refused
-# everything there. Handoff itself stays outside this table; gating it would put a routing decision
-# inside the control and give the gate a second job.
+# **Phase 5 (issue #48) then granted `escalate_to_human` to every row, including the anonymous
+# ones.** That is a deliberate, signed-off change to a sentence this project has repeated for two
+# phases, and it is the only grant here that is not a banking operation:
+#
+#     every agent + every state -> escalate_to_human
+#
+# B1's target does not move and its sharpened definition holds exactly -- escalation reaches nothing
+# that holds money, so no *banking* operation becomes reachable while a call is anonymous. What
+# stops being true is the corollary "no tool at all is reachable while a call is anonymous". The set
+# of things reachable while anonymous is now **exactly PIN verification and asking for a person**.
+#
+# **Two tests say that, at two layers, and neither says both halves.** tests/test_gate.py pins the
+# set of *tools* an anonymous caller may invoke as exactly {escalate_to_human}. The red-team
+# harness's detector watches the *core-banking client*, and its assertion is unchanged and still
+# reads "exactly verification" -- because escalation never reaches that client at all. Said
+# precisely because the exit criteria predicted the harness's assertion would have to widen and it
+# did not, which is a claim that would have outrun its evidence if it had been left standing.
+#
+# The reason it is granted anonymously: the alternative is a caller who cannot get through the PIN
+# check and is therefore also cut off from a human, which is a worse bank. Approved by Marco
+# 2026-09-11, recorded in docs/phase5/exit-criteria.md, and reversible by editing these rows.
+#
+# Triage grants **no banking tool** in either state because it has none of its own -- authenticating
+# does not change what triage is for. Banking and Cards grant nothing while anonymous because routing
+# is not authorization: a caller may be handed to a specialist before authenticating, and is refused
+# every banking operation there. Handoff itself stays outside this table; gating it would put a
+# routing decision inside the control and give the gate a second job.
 #
 # **There is no row for a PIN check, because there is no tool for one.** The spoken second factor
 # was cut at Phase 4 kickoff, which removed the one tool that would have had to be callable before
 # authentication. Verification reaches the core-banking client directly from the call's
-# authenticator, never through a tool call, so no tool at all is reachable while a call is anonymous
-# -- and that is what B1's sharpened breach definition asserts.
+# authenticator, never through a tool call. Until Phase 5 that also made "no tool at all is
+# reachable while a call is anonymous" true; `escalate_to_human` is what changed it, and the block
+# above says exactly what replaced it.
 #
-# Keyed on (TRIAGE_AGENT | BANKING_AGENT, ANONYMOUS | AUTHENTICATED) -- issue #20 gave the gate two
-# real identities to key on instead of one, and this table is what makes that keying mean something:
-# is_allowed() below never branches on which agent is asking, it only ever looks up this table, so a
-# new agent (or a new specialist added to agents/specs.py later) needs a row here to get anything,
-# not a code change.
+# Keyed on (TRIAGE_AGENT | BANKING_AGENT | CARDS_AGENT, ANONYMOUS | AUTHENTICATED) -- issue #20 gave
+# the gate real identities to key on instead of one, and this table is what makes that keying mean
+# something: is_allowed() below never branches on which agent is asking, it only ever looks up this
+# table, so a new agent needs a row here to get anything, not a code change. Phase 5's third agent
+# is the proof of that rather than the claim (issue #47).
 #
 # The history that shaped it: an earlier version granted these same three tools to an ANONYMOUS
 # caller on the reasoning that nothing real was behind them yet. That was reviewed and rejected
 # 2026-09-07, and the table shipped empty for two phases so that no phase ever existed in which a
 # real network path to the system of record was reachable with nothing in front of it.
 PERMISSIONS: dict[tuple[str, str], frozenset[str]] = {
-    (TRIAGE_AGENT, ANONYMOUS): frozenset(),
-    (TRIAGE_AGENT, AUTHENTICATED): frozenset(),
-    (BANKING_AGENT, ANONYMOUS): frozenset(),
+    (TRIAGE_AGENT, ANONYMOUS): frozenset({"escalate_to_human"}),
+    (TRIAGE_AGENT, AUTHENTICATED): frozenset({"escalate_to_human"}),
+    (BANKING_AGENT, ANONYMOUS): frozenset({"escalate_to_human"}),
     (BANKING_AGENT, AUTHENTICATED): frozenset(
-        {"get_balance", "transfer", "list_accounts", "list_transactions"}
+        {"get_balance", "transfer", "list_accounts", "list_transactions", "escalate_to_human"}
     ),
-    (CARDS_AGENT, ANONYMOUS): frozenset(),
-    (CARDS_AGENT, AUTHENTICATED): frozenset({"block_card"}),
+    (CARDS_AGENT, ANONYMOUS): frozenset({"escalate_to_human"}),
+    (CARDS_AGENT, AUTHENTICATED): frozenset({"block_card", "escalate_to_human"}),
 }
 
 # What the caller hears when the gate refuses. Deliberately vague about *why*: a refusal that

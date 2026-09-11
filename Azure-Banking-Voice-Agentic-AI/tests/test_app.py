@@ -14,6 +14,7 @@ os.environ.setdefault("APP_BASE_URL", "https://fake.example.azurecontainerapps.i
 os.environ.setdefault("CORE_BANKING_URL", "http://core-banking.test:8001")
 
 from azbank_voice_agent import app
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.realtime.fake import FakeRealtimeConnectCM, FakeRealtimeServer
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
@@ -74,16 +75,46 @@ class AnswerCallRejectionPath(unittest.TestCase):
         self.assertEqual(result, {})
 
 
+class _ClosableStub:
+    """Stands in for a collaborator lifespan() builds and closes. Not a fake in this project's
+    sense -- the real fakes satisfy the protocols and these tests never call a protocol method."""
+
+    async def aclose(self):
+        pass
+
+
+class _StubStoreFactory:
+    """`TableStorageCallRecordStore` is used as a class with a classmethod constructor, so the
+    stand-in has to answer that constructor rather than being callable."""
+
+    @staticmethod
+    def from_account_url(account_url, credential):
+        return _ClosableStub()
+
+
 class BootGuardIsOnTheStartupPath(unittest.TestCase):
     """B3 exists is one claim; B3 runs before any call is served is another. Same discipline as
     the gate's in-path proof -- a guard nothing calls protects nothing."""
 
     @staticmethod
     def _run_lifespan():
+        """Enter and leave the lifespan with both clients stubbed out.
+
+        The two collaborators lifespan() builds reach for real configuration and, for the store, for
+        `azure-data-tables`. Neither is what these tests are about -- they are about B3 running
+        before any call is served -- so both constructors are replaced. Patching them rather than
+        setting environment variables keeps the test from asserting anything about configuration it
+        is not testing.
+        """
         async def enter_and_exit():
             async with app.lifespan(app.app):
                 pass
-        asyncio.run(enter_and_exit())
+        with patch.object(app, "HttpCoreBankingClient", lambda **kwargs: _ClosableStub()), \
+             patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
+             patch.object(app, "TableStorageCallRecordStore", _StubStoreFactory()), \
+             patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
+             patch.object(app, "DefaultAzureCredential", lambda: None):
+            asyncio.run(enter_and_exit())
 
     def test_startup_runs_the_boot_guard(self):
         calls = []
@@ -119,21 +150,36 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         # relay's own responsibility and is covered end to end by tests/test_whole_call.py.
         calls = []
 
-        async def fake_run_call(transport, realtime, core_banking):
-            calls.append((transport, realtime, core_banking))
+        async def fake_run_call(transport, realtime, core_banking, call_records, correlation_id=None):
+            calls.append((transport, realtime, core_banking, call_records, correlation_id))
 
         fake_ws = FakeWebSocket()
         realtime = FakeRealtimeServer()
         core_banking = FakeCoreBankingClient()
-        # The process-wide client lifespan() would have built (issue #28). Patched rather than
-        # constructed per call, because per-call construction is exactly what the design rules out.
+        call_records = FakeCallRecordStore()
+        # The process-wide collaborators lifespan() would have built (issues #28, #48). Patched
+        # rather than constructed per call, because per-call construction is exactly what the design
+        # rules out -- a breaker thrown away with the call can never trip.
         with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(realtime)), \
              patch.object(app, "_core_banking", core_banking), \
+             patch.object(app, "_call_records", call_records), \
              patch.object(app, "run_call", fake_run_call):
             asyncio.run(app.media_stream(fake_ws))
         self.assertTrue(fake_ws.accepted)
-        # All three collaborators reached the relay.
-        self.assertEqual(calls, [(fake_ws, realtime, core_banking)])
+        # All four collaborators reached the relay, and so did the correlation id -- which the
+        # handler reads off the WebSocket's headers and hands in, rather than the relay fetching it.
+        self.assertEqual(
+            calls,
+            [(fake_ws, realtime, core_banking, call_records, fake_ws.headers.get("x-ms-call-correlation-id"))],
+        )
+
+    def test_the_handler_refuses_to_run_without_an_initialised_store(self):
+        # The same rule the core-banking client already has, for the same reason: a store built on
+        # first use would be built per call, and a per-call store is one whose failures nobody
+        # accumulates.
+        with patch.object(app, "_call_records", None), \
+             self.assertRaises(RuntimeError):
+            app.call_records()
 
     def test_the_handler_refuses_to_run_without_an_initialised_client(self):
         # A handler called outside the app's lifespan must fail loudly rather than quietly

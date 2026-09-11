@@ -6,6 +6,6 @@ rationale: >
   case that tells the two apart. If scoping were quietly load-bearing, these cases would be the
   ones that revealed it -- by passing for the wrong reason on banking and failing on triage.
 matrix:
-  tool: [get_balance, transfer, list_accounts, list_transactions, block_card]
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card, escalate_to_human]
   agent: [triage]
   point: [before_entry, mid_entry, after_clear, after_wrong_pin, after_exhaustion]

@@ -22,6 +22,11 @@ import dataclasses
 import json
 import logging
 
+from ..call_records import (
+    REASONS,
+    CallRecordStoreUnavailable,
+    EscalationRecord,
+)
 from ..core_banking import (
     ALREADY_BLOCKED,
     CoreBankingRequestError,
@@ -59,6 +64,20 @@ TRANSFER_UNCONFIRMED = (
 #: case ("core banking rejected the request with 422") is diagnostic text for a log, and it was
 #: reaching the caller verbatim before /code-review caught it (2026-09-08).
 MALFORMED = "I can't do that with those details -- could you say that again?"
+
+#: What the caller hears when they are escalated. **Honest about there being nobody to transfer them
+#: to** (docs/PLAN.md decision 17): a real transfer needs a real second number and a real person,
+#: neither of which exists in this prototype. Saying "putting you through" and then hanging up would
+#: be a lie the caller finds out about a second later.
+#:
+#: Composed here, like every other outcome sentence. The model is told to apologise too, in the
+#: tool's own description -- and the two are not redundant: the model speaks before the tool runs,
+#: this is what the tool call comes back with, and a call that ends must not depend on the model
+#: having chosen good words on the turn before.
+ESCALATED = (
+    "I'm sorry I couldn't help with that. There's nobody I can put you through to on this line, so "
+    "I'll end the call here -- I've made a note that you called and why."
+)
 
 # No account enum. Phase 1 built one from the in-memory dict at import time, which made the *tool
 # schema* the authority on which accounts exist -- and meant the model refused an unknown account
@@ -149,6 +168,35 @@ TOOLS = [
         ),
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "type": "function",
+        "name": "escalate_to_human",
+        # **The reason is an enum, not a string.** The record exists so that whoever picks this up
+        # can query it, and a reason the model phrased its own way is not queryable. The schema is
+        # a request rather than a guarantee -- the model can send anything -- which is why the
+        # handler checks the value again rather than trusting this.
+        #
+        # The description says the call ends, because the model composes what the caller hears
+        # immediately before it does. A model that thought it was queuing a transfer would say
+        # something that is about to become untrue.
+        "description": (
+            "Hand the caller to a person. Use this when you cannot help them, when they ask for a "
+            "person, or when they cannot get through the PIN check. Apologise and tell them the "
+            "call is ending -- there is nobody to transfer them to on this line, so this ends the "
+            "call and records that they called and why."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "enum": list(REASONS),
+                    "description": "Why the caller is being escalated.",
+                },
+            },
+            "required": ["reason"],
+        },
+    },
 ]
 
 
@@ -174,15 +222,37 @@ def _account_name(args, key):
     return value
 
 
-async def _get_balance(core_banking, args, idempotency_key):
-    return await core_banking.get_balance(_account_name(args, "account"))
+@dataclasses.dataclass(frozen=True)
+class CallScope:
+    """Everything a tool may need that belongs to the call rather than to the tool call.
+
+    Handed to every handler, including the handlers that use none of it. **A dispatcher that
+    special-cased one tool's signature would be a dispatcher with a branch in the one place B1
+    depends on there being none**, and the alternative -- five positional arguments on six handlers,
+    four of them unused -- is not smaller, only longer.
+
+    `core_banking` is the system of record. `call_records` is the store this phase added, which holds
+    facts about calls rather than about money. `idempotency_key` is generated once per call by the
+    relay. `correlation_id` is ACS's own id for the call, handed in rather than fetched.
+
+    Frozen, because nothing a tool does may change what the call is.
+    """
+
+    core_banking: object
+    call_records: object = None
+    idempotency_key: str | None = None
+    correlation_id: str | None = None
 
 
-async def _transfer(core_banking, args, idempotency_key):
+async def _get_balance(scope, args):
+    return await scope.core_banking.get_balance(_account_name(args, "account"))
+
+
+async def _transfer(scope, args):
     from_account = _account_name(args, "from_account")
     to_account = _account_name(args, "to_account")
     amount = args["amount"]
-    result = await core_banking.transfer(from_account, to_account, amount)
+    result = await scope.core_banking.transfer(from_account, to_account, amount)
     if result.outcome == "declined":
         return f"I can't do that -- you have ${result.available:.2f} available in {from_account}."
     # `result.moved`, not `amount`: dollars become whole cents on the way to the service, and at
@@ -195,11 +265,11 @@ async def _transfer(core_banking, args, idempotency_key):
     )
 
 
-async def _list_accounts(core_banking, args, idempotency_key):
-    return await core_banking.list_accounts()
+async def _list_accounts(scope, args):
+    return await scope.core_banking.list_accounts()
 
 
-async def _list_transactions(core_banking, args, idempotency_key):
+async def _list_transactions(scope, args):
     """The account's history as data, not as a sentence.
 
     Returned in the same spirit as `_list_accounts`: dictionaries of figures and tokens that the
@@ -210,11 +280,11 @@ async def _list_transactions(core_banking, args, idempotency_key):
     `dataclasses.asdict` rather than a hand-written dict: a field added to `Transaction` should
     reach the model without a second place to remember to update it.
     """
-    transactions = await core_banking.list_transactions(_account_name(args, "account"))
+    transactions = await scope.core_banking.list_transactions(_account_name(args, "account"))
     return [dataclasses.asdict(transaction) for transaction in transactions]
 
 
-async def _block_card(core_banking, args, idempotency_key):
+async def _block_card(scope, args):
     """Stop the card, and say which of the two things happened.
 
     **The two outcomes get different sentences**, because "I have stopped it" and "it was already
@@ -227,28 +297,60 @@ async def _block_card(core_banking, args, idempotency_key):
     here as well as before the tool is called, because the sentence the caller hears at the end of
     the operation is the one they will remember it by.
     """
-    outcome = await core_banking.block_card(idempotency_key)
+    outcome = await scope.core_banking.block_card(scope.idempotency_key)
     if outcome == ALREADY_BLOCKED:
         return "That card was already blocked, so there was nothing more to stop."
     return "Done -- that card is blocked now, and it can't be unblocked on this line."
 
 
-#: Name -> handler. Every handler takes the same three arguments, including the ones that ignore
-#: the third: `block_card` is the only tool that needs a call-scoped idempotency key today, and a
-#: dispatcher that special-cased one tool's signature would be a dispatcher with a branch in the
-#: one place B1 depends on there being none. Uniform is cheaper to read than clever.
+async def _escalate_to_human(scope, args):
+    """Write the escalation record, and say the sentence that ends the call.
+
+    **This handler does not end the call itself.** It returns a normal result, the relay sends it as
+    a function_call_output and asks for a response, and only then does the relay raise. That ordering
+    is the whole reason the caller hears an apology rather than a dropped line.
+
+    **A failed record still escalates** (docs/phase5/exit-criteria.md criterion 9). Reaching a person
+    matters more than recording that somebody asked to, so a store that raises is logged loudly and
+    the caller hears the same sentence. This is the one place in the phase where the store failing is
+    not fail-closed, and it is deliberate rather than an oversight -- the alternative is a caller who
+    is refused a human because a table was unreachable.
+
+    **It never touches the core-banking client.** That is what keeps B1 untouched by a tool that is
+    reachable while anonymous: escalation is not a banking operation and reaches nothing that holds
+    money. `core_banking` is in the signature because every handler has the same one.
+    """
+    reason = args.get("reason")
+    if reason not in REASONS:
+        # The schema's enum is a request, not a guarantee -- the model can send anything, including
+        # a reason it invented that reads perfectly well. Checked here so the fixed set is enforced
+        # where the record is made rather than where it is declared.
+        raise CoreBankingRequestError(f"escalation reason must be one of {REASONS}, got {reason!r}")
+    try:
+        await scope.call_records.record_escalation(
+            EscalationRecord.now(scope.correlation_id, reason)
+        )
+    except CallRecordStoreUnavailable as e:
+        # Loudly: this is the one durable trace that a caller asked for a person, and losing it is
+        # worth an error line even though it is not worth refusing them.
+        log.error("escalation record NOT written, the call is ending anyway: %r", e)
+    return ESCALATED
+
+
+#: Name -> handler. Every handler takes `(scope, args)` -- see CallScope for why uniform beats
+#: clever here.
 _DISPATCH = {
     "get_balance": _get_balance,
     "transfer": _transfer,
     "list_accounts": _list_accounts,
     "list_transactions": _list_transactions,
     "block_card": _block_card,
+    "escalate_to_human": _escalate_to_human,
 }
 
 
 async def dispatch_tool_call(
-    name, arguments_json, agent=gate.BANKING_AGENT, auth_state=gate.ANONYMOUS, *,
-    core_banking, idempotency_key=None,
+    name, arguments_json, agent=gate.BANKING_AGENT, auth_state=gate.ANONYMOUS, *, scope,
 ):
     """Run one tool call, returning the JSON string for a function_call_output. Never raises --
     an unknown tool name, a missing or wrongly-typed argument, an unknown account, a malformed
@@ -261,14 +363,10 @@ async def dispatch_tool_call(
 
     The agent/auth_state defaults are the *least* privileged values on purpose: a caller that
     forgets to pass an auth_state gets ANONYMOUS, so forgetting fails closed rather than open.
-    `core_banking` is keyword-only and has **no default** for the same reason -- forgetting it is a
-    TypeError at the call site, not a None that fails somewhere later.
-
-    `idempotency_key` is the relay's, generated once per call and passed through to whichever tool
-    needs it. It **does default to None**, unlike `core_banking`, and that asymmetry is deliberate:
-    a missing client is a bug on every tool, while a missing key only matters to `block_card`,
-    where the service refuses it as malformed and the caller is told to say it again. Failing at
-    the one tool that needs it beats a TypeError on four tools that do not.
+    `scope` is keyword-only and has **no default** for the same reason -- forgetting it is a
+    TypeError at the call site, not a None that fails somewhere later. What is inside it may be
+    absent (see CallScope), because a missing idempotency key matters to one tool and a missing
+    client matters to four; failing at the tool that needs the thing beats failing at all of them.
     """
     if not gate.is_allowed(agent, auth_state, name):
         # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
@@ -285,7 +383,7 @@ async def dispatch_tool_call(
         return json.dumps({"error": gate.REFUSAL})
     try:
         args = json.loads(arguments_json) if arguments_json else {}
-        result = await _DISPATCH[name](core_banking, args, idempotency_key)
+        result = await _DISPATCH[name](scope, args)
     except UnknownAccountError as e:
         # Caught before KeyError below: UnknownAccountError is a LookupError, and so is KeyError.
         # Order matters here -- an unknown account is a real answer to give the caller, not the

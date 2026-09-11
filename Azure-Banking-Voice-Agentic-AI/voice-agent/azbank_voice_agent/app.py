@@ -25,9 +25,11 @@ from azure.communication.callautomation import (
     StreamingTransportType,
 )
 from azure.core.exceptions import AzureError
+from azure.identity import DefaultAzureCredential
 from fastapi import FastAPI, Request, WebSocket
 
-from .boot import assert_boot_safety, core_banking_url
+from .boot import assert_boot_safety, call_records_account_url, core_banking_url
+from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .realtime.client import connect_realtime
 from .realtime.session import run_call
@@ -59,25 +61,34 @@ APP_BASE_URL = os.environ["APP_BASE_URL"]  # e.g. https://ca-azbank-echo-p0.<reg
 CALLBACK_URL = f"{APP_BASE_URL}/api/callbacks"
 WS_URL = APP_BASE_URL.replace("https://", "wss://") + "/ws"
 
-#: The process-wide core-banking client, built once in lifespan(). Module-level rather than on
-#: app.state so that reading it does not depend on the WebSocket carrying a reference back to its
-#: application -- the relay's collaborators are handed in, and this is where one of them comes from.
+#: The process-wide collaborators, built once in lifespan(). Module-level rather than on app.state
+#: so that reading them does not depend on the WebSocket carrying a reference back to its
+#: application -- the relay's collaborators are handed in, and this is where they come from.
 _core_banking = None
+_call_records = None
+
+
+def _process_wide(value, name):
+    """A collaborator built in lifespan(), or a loud failure if the app was never started properly.
+
+    **Never lazily constructs one.** A client built on first use would be built *per call*, which is
+    exactly the per-call breaker issue #25 (Q13) ruled out -- a breaker thrown away with the call can
+    never trip, and a cost store rebuilt per call is a store whose failures nobody accumulates.
+    """
+    if value is None:
+        raise RuntimeError(
+            f"{name} is not initialised -- lifespan() did not run. The app must be started through "
+            "its ASGI lifespan, not by calling handlers directly."
+        )
+    return value
 
 
 def core_banking():
-    """The process-wide client, or a loud failure if the app was never started properly.
+    return _process_wide(_core_banking, "core banking client")
 
-    Never lazily constructs one: a client built here would be built *per call*, which is exactly
-    the per-call breaker issue #25 (Q13) ruled out -- a breaker thrown away with the call can
-    never trip.
-    """
-    if _core_banking is None:
-        raise RuntimeError(
-            "core banking client is not initialised -- lifespan() did not run. The app must be "
-            "started through its ASGI lifespan, not by calling handlers directly."
-        )
-    return _core_banking
+
+def call_records():
+    return _process_wide(_call_records, "call-record store")
 
 
 @asynccontextmanager
@@ -94,18 +105,27 @@ async def lifespan(_app):
     today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
-    global _core_banking
+    global _core_banking, _call_records
     assert_boot_safety()
     # One core-banking client for the life of the process, deliberately -- **not one per call.**
     # The circuit breaker's whole job is to notice the same failure repeating, and a breaker that
     # is thrown away when a call ends can never trip: it would start every call fresh and pay the
     # full timeout budget again on a backend that is known to be down (issue #25, Q13).
     _core_banking = HttpCoreBankingClient(base_url=core_banking_url())
+    # The call-record store, likewise once per process and for the same reason (issue #48).
+    # **Managed identity, no connection string** -- DefaultAzureCredential picks up the Container
+    # App's system-assigned identity, which is the same identity B3's boot guard already uses to
+    # read ARM. Nothing here holds an account key.
+    _call_records = TableStorageCallRecordStore.from_account_url(
+        call_records_account_url(), DefaultAzureCredential()
+    )
     try:
         yield
     finally:
         await _core_banking.aclose()
+        await _call_records.aclose()
         _core_banking = None
+        _call_records = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -191,7 +211,10 @@ async def media_stream(websocket: WebSocket):
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
     async with connect_realtime() as realtime:
-        await run_call(websocket, realtime, core_banking())
+        # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
+        # escalation record has to carry it, and a relay that reached back through the transport for
+        # a header would be a relay that knew what kind of transport it had.
+        await run_call(websocket, realtime, core_banking(), call_records(), correlation_id)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 

@@ -254,6 +254,15 @@ teardown-adjacent infrastructure.
       reaching either while anonymous is a breach **at the detector** rather than by inspection.
     - The test asserting the reachable-while-anonymous set becomes "exactly verification and
       escalation" — **that assertion is the mechanical statement of the signed-off item above.**
+
+      > **Corrected while building, 2026-09-11 (issue #48).** This criterion predicted the wrong
+      > test. The red-team harness's detector watches the **core-banking client**, and escalation
+      > never reaches it — so the harness's assertion is *unchanged* and still reads "exactly
+      > verification", which is a stronger statement than the one predicted here. The gate-level
+      > statement, which tools an anonymous caller may invoke, is pinned separately in
+      > `tests/test_gate.py` as exactly `{escalate_to_human}`. **Both halves exist; neither test
+      > says both.** Recorded rather than quietly satisfied, because reporting this criterion as met
+      > against the harness would have been a claim that outran its evidence.
     - Each idea's matrix widens to the new tools and the third agent; argument strategies gain payloads
       for the new tools, since a payload that is absent is a case that does not exist.
     - **Both numbers are reported wherever the suite is described.** The new surface plausibly moves the

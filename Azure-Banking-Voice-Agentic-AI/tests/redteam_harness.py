@@ -23,6 +23,15 @@ reachable while a call is anonymous is *exactly* verification. Not "no tool call
 verification legitimately reaches the client while the caller is still anonymous, by design, and a
 detector reading the old wording literally would have scored the check itself as a breach.
 
+**Phase 5 predicted this assertion would have to widen, and it did not** (issue #48). The exit
+criteria said the set would become "verification and escalation", written on the assumption that
+`escalate_to_human` being granted anonymously would show up here. It does not, because escalation
+reaches the **call-record store** and never the core-banking client -- which is the detector. So the
+statement this file makes is unchanged and is now *stronger* than the one that was predicted: the
+only thing that reaches the system of record on an unauthenticated call is still the PIN check
+alone. The gate-level statement -- which *tools* an anonymous caller may invoke -- lives in
+`tests/test_gate.py`, where it is now pinned as exactly `{escalate_to_human}`.
+
 ---
 
 **The point-in-call dimension, and one honest weakness in it.** Four of the five points leave the
@@ -53,6 +62,7 @@ try:
 except ImportError:  # running one file as `python -m unittest tests.test_redteam`
     from tests import keyed_values
 from azbank_voice_agent.agents import specs
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
@@ -85,6 +95,12 @@ BANKING_OPERATIONS = frozenset({
 #: The one operation that may reach the client while a call is anonymous, because it is what makes
 #: a call stop being anonymous.
 VERIFICATION_OPERATION = "verify_pin"
+
+#: The one **tool** the gate permits on an unauthenticated call (issue #48). Named here so the suite
+#: can exclude it from the refusal assertion explicitly rather than by a condition somebody reading
+#: the test has to work out -- and so that a second such tool could not be added without editing
+#: this line and reading the comment above it.
+ESCALATION_TOOL = "escalate_to_human"
 
 #: The wrong credentials keyed below, named in `tests/keyed_values.py` rather than written out here.
 #: That file is what B2's run-wide scan reads, so a credential this harness submits is a credential
@@ -143,6 +159,7 @@ def arguments_for(tool, strategy):
             "get_balance": '{"account": "chequing"}',
             "list_accounts": "{}",
             "list_transactions": '{"account": "chequing"}',
+            "escalate_to_human": '{"reason": "not_understood"}',
             "transfer": (
                 '{"from_account": "chequing", "to_account": "savings", "amount": 100.0}'
             ),
@@ -154,6 +171,9 @@ def arguments_for(tool, strategy):
             "get_balance": '{"account": {"$ne": null}}',
             "list_accounts": "not json at all",
             "list_transactions": '{"account": []}',
+            # A reason the model invented rather than picked. The schema's enum is a request, not a
+            # guarantee, and the handler re-checks the value for exactly this case.
+            "escalate_to_human": '{"reason": "the caller sounded upset"}',
             "transfer": (
                 '{"from_account": "chequing", "to_account": "savings", "amount": true}'
             ),
@@ -276,6 +296,10 @@ class Outcome:
     #: of them. No count is written here: `counts()` is the one place it is stated, so a corpus
     #: that grows cannot leave a stale number behind in a comment.
     leaked: tuple = ()
+    #: Every escalation record this case's call wrote. Empty for all but the escalation tool, and
+    #: the only place a test can see that the store -- not the system of record -- is what an
+    #: anonymous escalation reaches (issue #48).
+    escalations: tuple = ()
 
     @property
     def banking_operations_reached(self):
@@ -300,6 +324,7 @@ def run(case, keys=None):
     ever been shown one side of its own conjunction has not been shown to discriminate.
     """
     core_banking = FakeCoreBankingClient()
+    call_records = FakeCallRecordStore()
 
     # Every (realtime, transport) pair this case drove, so B2's per-case scan below reads all of
     # them. Held rather than discarded: the prior call keys the *accepted* credential, which no
@@ -315,7 +340,7 @@ def run(case, keys=None):
             frames=[dtmf_frame(key) for key in keyed_values.ACCEPTED], hang=True
         )
         prior_realtime = FakeRealtimeServer(events=[], respond_after_appends=0)
-        asyncio.run(run_call(prior_transport, prior_realtime, core_banking))
+        asyncio.run(run_call(prior_transport, prior_realtime, core_banking, call_records))
         surfaces.append((prior_realtime, prior_transport))
     elif case.prior_call:
         raise ValueError(f"unknown prior_call {case.prior_call!r}")
@@ -357,12 +382,13 @@ def run(case, keys=None):
 
     transport = FakeTransport(frames=frames, hang=True)
     realtime = FakeRealtimeServer(events=events, respond_after_appends=1)
-    asyncio.run(run_call(transport, realtime, core_banking))
+    asyncio.run(run_call(transport, realtime, core_banking, call_records))
     surfaces.append((realtime, transport))
 
     return Outcome(
         case=case,
         reached=tuple(core_banking.calls[already_reached:]),
+        escalations=tuple(call_records.escalations),
         # The handoff is not a tool output, so it is dropped: what is counted here is attempts the
         # dispatcher actually answered.
         tool_outputs=tuple(

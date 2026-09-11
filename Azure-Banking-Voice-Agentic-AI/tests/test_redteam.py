@@ -19,8 +19,9 @@ import unittest
 
 from azbank_voice_agent.auth import Authenticator
 from azbank_voice_agent.auth import outcomes as auth_outcomes
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
-from azbank_voice_agent.dispatch import gate
+from azbank_voice_agent.dispatch import gate, tools
 from azbank_voice_agent.realtime.fake import FakeRealtimeServer, function_call
 from azbank_voice_agent.realtime.session import run_call
 from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame
@@ -29,6 +30,7 @@ try:
     # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
     from redteam_harness import (
         BANKING_OPERATIONS,
+        ESCALATION_TOOL,
         HOMOGLYPH_DIGITS,
         MINIMUM_CASES,
         VERIFICATION_OPERATION,
@@ -46,6 +48,7 @@ except ImportError:
     # ordinary thing to do while iterating. Same fallback tests/test_core_banking_live.py uses.
     from tests.redteam_harness import (
         BANKING_OPERATIONS,
+        ESCALATION_TOOL,
         HOMOGLYPH_DIGITS,
         MINIMUM_CASES,
         VERIFICATION_OPERATION,
@@ -361,16 +364,70 @@ class ZeroBreaches(unittest.TestCase):
                 self.assertEqual(outcome.verifications, (), "an entry completed")
                 self.assertNotIn(VERIFICATION_OPERATION, outcome.reached)
 
-    def test_every_attempt_that_was_made_was_answered_with_a_refusal(self):
-        # The other half of "0 breaches": nothing ran, and the caller was told rather than left in
-        # silence. A tool call that produced no output at all would be a dropped call.
+    def test_every_banking_attempt_that_was_made_was_answered_with_a_refusal(self):
+        """The other half of "0 breaches": nothing ran, and the caller was told.
+
+        A tool call that produced no output at all would be a dropped call, which is why this
+        asserts on the output rather than only on what the spy recorded.
+
+        **Escalation is excluded, and that exclusion is the point** (issue #48). It is granted in
+        every row, so an attempt on it is not refused -- it is either carried out, which is the
+        design, or malformed, because the model invented a reason outside the fixed set. Asserting
+        the gate's refusal for it would be asserting the opposite of what was signed off. What
+        keeps that from being a hole is the class below: an escalation on an unauthenticated call
+        must reach the call-record store and must not reach the core-banking client, and the breach
+        detector already watches the second half of that.
+        """
         for outcome in outcomes():
-            if outcome.case.ends_before_the_attempt:
+            if outcome.case.ends_before_the_attempt or outcome.case.tool == ESCALATION_TOOL:
                 continue
             with self.subTest(case=outcome.case):
                 self.assertTrue(outcome.attempted_anything, "the attempt never reached dispatch")
                 for output in outcome.tool_outputs:
                     self.assertEqual(json.loads(output), {"error": gate.REFUSAL})
+
+    def test_every_escalation_attempt_was_carried_out_or_refused_as_malformed(self):
+        """The tool that is granted anonymously, held to what it is actually supposed to do.
+
+        Two outcomes and no third. A well-formed escalation is carried out -- that is the signed-off
+        design, and a caller locked out of the PIN check being able to ask for a person is the whole
+        reason for it. An escalation carrying a reason the model invented is malformed, which is
+        what the handler's re-check of the enum is for.
+
+        **What is never acceptable is a banking operation.** That is asserted at the detector for
+        every case in this corpus, escalation included, by ZeroBreaches above.
+        """
+        seen = set()
+        for outcome in outcomes():
+            if outcome.case.ends_before_the_attempt or outcome.case.tool != ESCALATION_TOOL:
+                continue
+            with self.subTest(case=outcome.case):
+                for output in outcome.tool_outputs:
+                    answer = json.loads(output)
+                    if "result" in answer:
+                        seen.add("carried out")
+                        self.assertEqual(answer["result"], tools.ESCALATED)
+                    else:
+                        seen.add("malformed")
+                        self.assertEqual(answer, {"error": tools.MALFORMED})
+        # Both branches really happen, so neither assertion above is vacuous.
+        self.assertEqual(seen, {"carried out", "malformed"})
+
+    def test_an_anonymous_escalation_reaches_the_store_and_never_core_banking(self):
+        """The precise shape of what the sign-off permitted, stated once (issue #48).
+
+        B1's target does not move because escalation touches nothing that holds money. This is that
+        sentence as a test: on a call that never authenticated, a well-formed escalation writes its
+        record and the core-banking client sees nothing but the PIN checks the caller made.
+        """
+        case = dataclasses.replace(
+            concrete_cases()[0], tool=ESCALATION_TOOL, arguments="valid",
+            agent=gate.TRIAGE_AGENT, point="before_entry",
+        )
+        outcome = run(case)
+        self.assertFalse(outcome.authenticated)
+        self.assertEqual(outcome.banking_operations_reached, ())
+        self.assertEqual(len(outcome.escalations), 1)
 
     def test_a_case_after_exhausted_attempts_ends_the_call_before_any_attempt(self):
         # The weaker cases, pinned for what they actually prove rather than counted as refusals.
@@ -421,6 +478,7 @@ class TheSameTwoIdeasAtTheirNarrowestPoint(unittest.TestCase):
             FakeTransport(frames=[dtmf_frame(d) for d in DEFAULT_PIN], hang=True),
             FakeRealtimeServer(events=[], respond_after_appends=0),
             shared_client,
+            FakeCallRecordStore(),
         ))
         self.assertIn("verify_pin", shared_client.calls)
 
@@ -434,6 +492,7 @@ class TheSameTwoIdeasAtTheirNarrowestPoint(unittest.TestCase):
             FakeTransport(frames=[audio_frame("balance-please")], hang=True),
             second,
             shared_client,
+            FakeCallRecordStore(),
         ))
         self.assertEqual(shared_client.calls, before, "the second call reached core banking")
         self.assertEqual(json.loads(second.tool_outputs[0][1]), {"error": gate.REFUSAL})

@@ -20,9 +20,10 @@ from fastapi import WebSocketDisconnect
 
 from .. import auth
 from ..agents import specs
+from ..call_records import EscalationRequested
 from ..cost import caps
 from ..dispatch import gate
-from ..dispatch.tools import dispatch_tool_call
+from ..dispatch.tools import CallScope, dispatch_tool_call
 from ..transport import acs
 
 log = logging.getLogger("bridge")
@@ -166,13 +167,21 @@ def _session_update(identity):
     }
 
 
-async def run_call(transport, realtime, core_banking):
+async def run_call(transport, realtime, core_banking, call_records, correlation_id=None):
     """Relay one call: media transport <-> realtime connection, with core banking behind the gate.
 
     `transport` satisfies transport.protocol.MediaTransport; `realtime` satisfies
-    realtime.client.RealtimeConnection; `core_banking` satisfies core_banking.CoreBankingClient.
-    None of the three is constructed here -- that is what lets a whole call run against fakes with
-    no patching (issue #18, extended to the third collaborator by issue #28).
+    realtime.client.RealtimeConnection; `core_banking` satisfies core_banking.CoreBankingClient;
+    `call_records` satisfies call_records.CallRecordStore. None of the four is constructed here --
+    that is what lets a whole call run against fakes with no patching (issue #18, extended to the
+    third collaborator by issue #28 and to the fourth by issue #48).
+
+    `correlation_id` is ACS's own id for this call, read off the media WebSocket's headers by
+    `app.py` and **handed in rather than fetched**: the relay takes its collaborators, and a relay
+    that reached back through the transport for a header would be a relay that knew what kind of
+    transport it had. It defaults to None because the probe and every fake-driven test genuinely
+    have no such id, and an escalation record carrying None is a record that says so rather than a
+    record that lies.
 
     No resampling -- both sides are pcm16/24kHz/mono, confirmed live (docs/phase1/
     research-aoai-realtime-wire-format.md). No barge-in, no reconnection: ends when either side
@@ -199,6 +208,15 @@ async def run_call(transport, realtime, core_banking):
     # from its record of the first. A key made per tool call would be two different keys and two
     # attempts at blocking.
     idempotency_key = _new_idempotency_key()
+
+    # Everything call-scoped a tool may need, in one object handed to every tool call. Built once,
+    # here, where the call's state already lives -- the dispatcher never reaches for any of it.
+    scope = CallScope(
+        core_banking=core_banking,
+        call_records=call_records,
+        idempotency_key=idempotency_key,
+        correlation_id=correlation_id,
+    )
 
     # The ids this relay stamped on its own frames, so an `error` naming one can be told from an
     # error about anything else. Bounded rather than a growing set: a call whose credential check
@@ -347,8 +365,7 @@ async def run_call(transport, realtime, core_banking):
                 # client's whole timeout budget -- audio would stop being relayed in both
                 # directions and barge-in would stop working while it waited.
                 output = await dispatch_tool_call(
-                    event.name, event.arguments, agent, auth_state,
-                    core_banking=core_banking, idempotency_key=idempotency_key,
+                    event.name, event.arguments, agent, auth_state, scope=scope,
                 )
                 await realtime.send({
                     "type": "conversation.item.create",
@@ -359,6 +376,18 @@ async def run_call(transport, realtime, core_banking):
                     },
                 })
                 await realtime.send({"type": "response.create"})
+                # **After the output is sent and a response is asked for, never before** (issue
+                # #48). The caller hears an apology because the model is given something to say and
+                # asked to say it; raising as soon as the tool returned would end the call on the
+                # same silence a dropped line produces.
+                #
+                # Read off the output rather than off the tool name alone: an escalation the gate
+                # refused, or one whose reason code the model invented, comes back as an error and
+                # must not end the call -- the caller is told to say it again, which is what every
+                # other malformed tool call already does.
+                if event.name == "escalate_to_human" and "error" not in json.loads(output):
+                    log.info("escalation requested, ending call")
+                    raise EscalationRequested("the caller was escalated to a person")
             elif event.type == "response.output_audio_transcript.delta":
                 # The only transcript available without provisioning a separate transcription
                 # deployment (see the input_audio_transcription comment above) -- what the agent
@@ -414,7 +443,15 @@ async def run_call(transport, realtime, core_banking):
             # or the caller ran out of PIN attempts. AttemptsExhausted travels this same branch
             # with its own type rather than reusing CallLimitExceeded, so a security event and a
             # cost event stay distinguishable in every log that ever reads them.
-            expected = (WebSocketDisconnect, caps.CallLimitExceeded, auth.AttemptsExhausted)
+            # Escalation joins the list with its own type, for the reason AttemptsExhausted has
+            # one: a routing event, a security event and a cost event stay distinguishable in every
+            # log that ever reads them.
+            expected = (
+                WebSocketDisconnect,
+                caps.CallLimitExceeded,
+                auth.AttemptsExhausted,
+                EscalationRequested,
+            )
             if exc is not None and not isinstance(exc, expected):
                 raise exc
     finally:

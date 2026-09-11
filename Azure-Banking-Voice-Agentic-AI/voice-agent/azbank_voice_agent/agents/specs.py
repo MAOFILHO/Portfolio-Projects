@@ -52,6 +52,27 @@ class AgentSpec:
     handoff_to: frozenset[str] = frozenset()
 
 
+#: Said to every agent, in the same words (issue #48). Escalation is the one tool every agent holds
+#: in every auth state, so its instruction is shared rather than written three times and allowed to
+#: drift -- drifted prose is a defect here, because this is prose the model acts on.
+#:
+#: **It does not mention the PIN.** Only triage talks about the PIN, which is a Phase 4 rule with a
+#: test behind it -- the fewer agents whose instructions discuss a keyed credential, the fewer that
+#: can be talked into asking for one out loud. The PIN case is appended to triage's copy alone,
+#: below, because triage is where a caller who cannot get through the check actually is.
+_ESCALATION_INSTRUCTION = (
+    "If you can't help the caller, or if they ask for a person, call escalate_to_human with the "
+    "reason that fits. There is nobody to transfer them to on this line, so it ends the call -- "
+    "apologise and say so rather than promising to put them through."
+)
+
+#: Triage's extra clause. A caller who cannot get through the check is the reason escalation is
+#: granted while anonymous at all, and a model that did not know it could offer them a person would
+#: leave them with nothing.
+_TRIAGE_ESCALATION_CLAUSE = (
+    " If they can't get through the PIN check at all, that is one of the reasons to use it."
+)
+
 TRIAGE = AgentSpec(
     identity=gate.TRIAGE_AGENT,
     instructions=(
@@ -66,23 +87,32 @@ TRIAGE = AgentSpec(
         "moving money, hand the call to the banking agent right away. If the caller's card is "
         "lost or stolen, or they want it stopped, hand the call to the cards agent right away. "
         "Either way, do it rather than trying to help directly, and don't make the caller repeat "
-        "themselves once you do."
+        "themselves once you do. "
+        + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE
     ),
-    tool_names=frozenset(),
+    tool_names=frozenset({"escalate_to_human"}),
     handoff_to=frozenset({gate.BANKING_AGENT, gate.CARDS_AGENT}),
 )
 
 BANKING = AgentSpec(
     identity=gate.BANKING_AGENT,
     instructions=(
-        "You are a phone banking specialist, continuing a call the triage agent already greeted -- "
-        "don't greet the caller again, just continue. Be brief and clear, like a real phone call. "
+        # "specialist" is on the banking agent's own Avoid list in CONTEXT.md and sat here for
+        # three phases anyway. Fixed in the diff that was rewriting these instructions regardless
+        # (issue #47) -- a glossary that the code does not follow is a description of a previous
+        # version, not a definition.
+        "You are the banking agent on a phone banking call, continuing a call the triage agent "
+        "already greeted -- don't greet the caller again, just continue. Be brief and clear, like "
+        "a real phone call. "
         "Always use the tools to check a balance, list recent activity or make a transfer -- "
         "never state a balance, describe activity or confirm a transfer without calling the "
         "matching tool first. If a transfer can't go through, say why and state the actual "
-        "available amount."
+        "available amount. "
+        + _ESCALATION_INSTRUCTION
     ),
-    tool_names=frozenset({"get_balance", "transfer", "list_accounts", "list_transactions"}),
+    tool_names=frozenset({
+        "get_balance", "transfer", "list_accounts", "list_transactions", "escalate_to_human",
+    }),
     handoff_to=frozenset(),
 )
 
@@ -106,9 +136,10 @@ CARDS = AgentSpec(
         "If the caller asks again, or you are not sure the block went through, call block_card "
         "again -- it is safe to repeat and will tell you if the card was already blocked. "
         "If you are told it was already blocked, say so plainly rather than saying you have just "
-        "blocked it."
+        "blocked it. "
+        + _ESCALATION_INSTRUCTION
     ),
-    tool_names=frozenset({"block_card"}),
+    tool_names=frozenset({"block_card", "escalate_to_human"}),
     handoff_to=frozenset(),
 )
 

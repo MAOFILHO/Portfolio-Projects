@@ -39,8 +39,16 @@ What survives intact is the property the phase exists to demonstrate: **a secret
 the model, and a gate that opens only on a fact the system of record verified.** A second factor
 nobody dials would not have strengthened that.
 
-One consequence is worth stating in its own right, because it makes the gate's story stronger rather
-than weaker: **with no authentication tool, no tool at all is reachable while a call is anonymous.**
+One consequence was worth stating in its own right, because it made the gate's story stronger rather
+than weaker: with no authentication tool, no tool at all was reachable while a call was anonymous.
+
+> **Superseded by Phase 5, deliberately** (`docs/phase5/exit-criteria.md`, approved 2026-09-11).
+> `escalate_to_human` is granted in every permission row, including the anonymous ones, so that a
+> caller who cannot get through the PIN check is not also cut off from a person. The accurate
+> sentence is now: **the set of operations reachable while a call is anonymous is exactly PIN
+> verification and `escalate_to_human`**, and neither is a banking operation. B1's target and its
+> sharpened definition are untouched. Left here as a correction rather than an edit, so the reasoning
+> that was true for Phase 4 is still readable.
 
 ---
 

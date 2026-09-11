@@ -44,14 +44,27 @@ The agent that handles balance, activity and money requests, reached by handoff 
 _Avoid_: specialist, accounts agent
 
 **Cards agent**:
-The agent that stops a lost or stolen card, reached by handoff from triage. Holds one tool and
-nothing else. Declares no handoff of its own — a caller handed here who then asks about money cannot
-be routed onward by a model that decides to.
+The agent that stops a lost or stolen card, reached by handoff from triage. Holds one card tool, plus
+**escalation**, which every agent holds. Declares no handoff of its own — a caller handed here who
+then asks about money cannot be routed onward by a model that decides to.
 _Avoid_: specialist, fraud agent, security agent
 
 **Handoff**:
 Moving a call from one agent to another. Routing, not a banking action — a handoff is never gated.
-_Avoid_: transfer (means moving money, below), escalation (means routing to a human)
+_Avoid_: transfer (means moving money, below), escalation (means asking for a person, below)
+
+**Escalation**:
+A caller asking for a person, and what the agent does about it: an apology, a record, and the call
+ending. **There is nobody on the other end** — this prototype has no second number and no human, so
+nothing is transferred anywhere and the caller is told so. The record is the deliverable. Reachable
+while anonymous, which is the one thing besides the PIN check that is.
+_Avoid_: transfer, handoff (means moving a call between agents, above), callback, warm transfer
+
+**Call-record store**:
+Where the voice agent keeps facts about calls — escalation records, and the day's consumed minutes.
+Separate from the system of record, which holds money and has never heard of calls. Reached with a
+managed identity; no key is held anywhere.
+_Avoid_: database, log, audit trail, cost table
 
 **Tool call**:
 The model's request to run one named function. An attempt, not an outcome — whether it succeeds is
@@ -69,6 +82,8 @@ _Avoid_: guard, permission check, authorization layer
 **Auth state**:
 Whether the caller on this call has been authenticated. Either anonymous or authenticated; nothing
 in between. The PIN check below is the one thing that moves a call from the first to the second.
+While a call is anonymous, exactly two things are reachable: the PIN check, and **escalation**.
+Neither is a banking operation, which is why B1 is untouched by the second one.
 _Avoid_: logged in, verified, session state
 
 **PIN check**:

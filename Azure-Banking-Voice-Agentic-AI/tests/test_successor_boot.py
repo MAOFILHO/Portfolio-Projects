@@ -103,7 +103,7 @@ class SuccessorBootRehearsal(unittest.TestCase):
             respond_after_appends=1,
         )
 
-        asyncio.run(run_call(transport, realtime, self.core_banking))
+        asyncio.run(run_call(transport, realtime, self.core_banking, self.call_records))
 
         self.assertEqual(
             transport.sent_audio_payloads, ["successor-greeting", "successor-answers"]

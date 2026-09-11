@@ -9,9 +9,11 @@ see tests/test_gate.py for the gate itself).
 """
 import dataclasses
 import json
+import typing
 import unittest
 from unittest.mock import patch
 
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking import CoreBankingUnavailable, Transaction, UnknownAccountError
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.dispatch import gate, tools
@@ -20,13 +22,20 @@ from azbank_voice_agent.dispatch import gate, tools
 class DispatchCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.core_banking = FakeCoreBankingClient()
+        self.call_records = FakeCallRecordStore()
+        self.scope = tools.CallScope(
+            core_banking=self.core_banking,
+            call_records=self.call_records,
+            idempotency_key="idem_aaaaaaaa",
+            correlation_id="corr-test",
+        )
         self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
         self._gate_patcher.start()
         self.addCleanup(self._gate_patcher.stop)
 
     async def dispatch(self, name, arguments_json):
         return json.loads(await tools.dispatch_tool_call(
-            name, arguments_json, core_banking=self.core_banking
+            name, arguments_json, scope=self.scope
         ))
 
 
@@ -178,7 +187,7 @@ class ArgumentsTheModelCanActuallyEmit(DispatchCase):
         # Not json.loads()'d: these cases are about what comes back, including when it comes back
         # from a payload that is not JSON at all.
         return json.loads(await tools.dispatch_tool_call(
-            name, arguments_json, core_banking=self.core_banking
+            name, arguments_json, scope=self.scope
         ))
 
     async def test_a_string_amount_is_refused_and_moves_no_money(self):
@@ -294,7 +303,10 @@ class TheDispatcherIsAsync(unittest.TestCase):
         # that fails somewhere later. Same fail-closed reasoning as the agent/auth_state defaults,
         # which deliberately default to the *least* privileged values.
         import inspect
-        parameter = inspect.signature(tools.dispatch_tool_call).parameters["core_banking"]
+        # `scope` since issue #48 -- the call-scoped collaborators became an object once there
+        # were four of them rather than one. The rule it is pinned for is unchanged: forgetting it
+        # is a TypeError at the call site, not a None that fails somewhere later.
+        parameter = inspect.signature(tools.dispatch_tool_call).parameters["scope"]
         self.assertIs(parameter.default, inspect.Parameter.empty)
         self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
 
@@ -306,15 +318,35 @@ class ToolsMatchDispatch(unittest.TestCase):
         declared = {tool["name"] for tool in tools.TOOLS}
         self.assertEqual(declared, set(tools._DISPATCH))
 
+    #: Parameters whose value set genuinely is fixed, named one by one. `escalate_to_human`'s reason
+    #: is a fixed set by design (docs/PLAN.md decision 17): the record exists so somebody can query
+    #: it, and a reason the model phrased its own way is not queryable. Listed by `(tool, parameter)`
+    #: rather than skipped by type, so a future account parameter cannot join the exemption by
+    #: accident.
+    ENUMERATED_ON_PURPOSE: typing.ClassVar = {("escalate_to_human", "reason")}
+
     def test_no_tool_schema_enumerates_account_names(self):
         # Issue #28: the system of record decides which accounts exist, not the tool schema. An
         # enum here would put a second, staler copy of that answer in front of the model -- and it
         # is what made Phase 1's "unknown account" behaviour a matter of the model reasoning about
         # a schema rather than the service answering.
         for tool in tools.TOOLS:
-            for parameter in tool["parameters"]["properties"].values():
-                with self.subTest(tool=tool["name"]):
+            for name, parameter in tool["parameters"]["properties"].items():
+                if (tool["name"], name) in self.ENUMERATED_ON_PURPOSE:
+                    continue
+                with self.subTest(tool=tool["name"], parameter=name):
                     self.assertNotIn("enum", parameter)
+
+    def test_the_only_enumerated_parameter_is_the_one_that_is_meant_to_be(self):
+        # The other direction: an enum appearing anywhere else turns the test above red, and this
+        # turns red if the exemption above outlives the parameter it was written for.
+        enumerated = {
+            (tool["name"], name)
+            for tool in tools.TOOLS
+            for name, parameter in tool["parameters"]["properties"].items()
+            if "enum" in parameter
+        }
+        self.assertEqual(enumerated, self.ENUMERATED_ON_PURPOSE)
 
     def test_no_tool_schema_names_an_account_in_prose_either(self):
         # Dropping the enum but leaving "e.g. chequing or savings" in the description puts the same

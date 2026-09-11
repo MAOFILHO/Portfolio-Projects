@@ -18,12 +18,14 @@ class TheAgentTableIsDeclarative(unittest.TestCase):
         self.assertEqual(specs.AGENTS[gate.TRIAGE_AGENT].identity, gate.TRIAGE_AGENT)
         self.assertEqual(specs.AGENTS[gate.BANKING_AGENT].identity, gate.BANKING_AGENT)
 
-    def test_triage_has_no_real_banking_tools_only_handoffs(self):
-        # Two handoffs since Phase 5's third agent (issue #47), and still no banking tool of its
-        # own: authenticating does not change what triage is for, and neither does a second
-        # specialist existing.
+    def test_triage_has_no_banking_tool_only_handoffs_and_escalation(self):
+        # Two handoffs since Phase 5's third agent (issue #47), and `escalate_to_human` since #48 --
+        # which every agent holds in every state. Still no banking tool of its own: authenticating
+        # does not change what triage is for, and neither does a second specialist existing.
         declared = sorted(tool["name"] for tool in specs.tools_for(gate.TRIAGE_AGENT))
-        self.assertEqual(declared, ["handoff_to_banking", "handoff_to_cards"])
+        self.assertEqual(
+            declared, ["escalate_to_human", "handoff_to_banking", "handoff_to_cards"]
+        )
 
     def test_every_declared_tool_has_a_home_on_some_agent(self):
         """A tool no agent declares is a tool no call can reach (issue #47 generalised this).
@@ -44,8 +46,19 @@ class TheAgentTableIsDeclarative(unittest.TestCase):
             with self.subTest(agent=identity):
                 self.assertEqual(specs.AGENTS[identity].handoff_to, frozenset())
 
-    def test_cards_declares_exactly_one_tool(self):
-        self.assertEqual(specs.AGENTS[gate.CARDS_AGENT].tool_names, frozenset({"block_card"}))
+    def test_cards_declares_one_card_tool_and_escalation(self):
+        self.assertEqual(
+            specs.AGENTS[gate.CARDS_AGENT].tool_names,
+            frozenset({"block_card", "escalate_to_human"}),
+        )
+
+    def test_every_agent_can_offer_a_person(self):
+        # The mechanical statement of issue #48's design: escalation is not one agent's tool, it is
+        # every agent's, in both auth states. A caller who cannot be helped is never left with the
+        # agent that could not help them and no way out.
+        for identity, spec in specs.AGENTS.items():
+            with self.subTest(agent=identity):
+                self.assertIn("escalate_to_human", spec.tool_names)
 
 
 class HandoffTargetRecognisesOnlyRealHandoffTools(unittest.TestCase):

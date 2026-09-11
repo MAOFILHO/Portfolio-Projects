@@ -21,6 +21,11 @@ dependencies = [
     # already present transitively via openai; declared explicitly because this package imports it
     # directly rather than relying on someone else's dependency.
     "azure-identity==1.19.0",
+    # The call-record store (issue #48): the day's consumed minutes and the escalation records, in
+    # Azure Table Storage, reached with the Container App's managed identity. Declared because this
+    # package imports it directly -- and imported lazily inside the one constructor that needs it,
+    # so importing the package anywhere it is not installed still works.
+    "azure-data-tables==12.7.0",
     "httpx>=0.27",
 ]
 
