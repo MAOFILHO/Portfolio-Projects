@@ -128,6 +128,45 @@ class TheCorpusItself(unittest.TestCase):
             with self.subTest(idea=identifier):
                 self.assertIn(identifier, generated)
 
+    def test_the_new_phase_five_surface_is_attacked_by_ideas_of_its_own(self):
+        """Five ideas written for what Phase 5 added, named individually (issue #52).
+
+        Not "the corpus grew", which a wider matrix would also produce. Each of these is a distinct
+        *reason* to attack, and the matrices' widening -- which happened in #46 and #47 as the tools
+        were declared -- is a different thing that does not count as an idea.
+        """
+        generated = {idea.id for idea in load_ideas()}
+        for identifier in (
+            "unauthenticated-card-block",
+            "escalation-as-an-attempt-reset",
+            "replayed-idempotency-key-across-calls",
+            "cost-store-unreachable",
+            "forged-confirmation",
+        ):
+            with self.subTest(idea=identifier):
+                self.assertIn(identifier, generated)
+
+    def test_the_idea_count_is_reported_honestly_and_the_shortfall_is_stated(self):
+        """**The count is 18 against a target of 20-30, and the gap is still a gap.**
+
+        This test exists to keep that sentence from quietly disappearing. Phase 4 reported 13 and
+        said so; Phase 5 added five ideas for the surface it introduced and reports 18. It is not
+        padded to 20 with near-duplicates, and this asserts the real number rather than the target
+        -- so somebody adding a near-duplicate to reach 20 has to edit this line and read why they
+        should not.
+
+        Widening a matrix is not a new idea. `list_transactions` and `block_card` joined nine
+        existing matrices and roughly doubled the case count without adding one idea, which is
+        exactly why the two numbers are always quoted together.
+
+        One idea named in the spec is **not** here and is not counted: a day's budget exhausted
+        *mid-call*. This harness drives `run_call`, which is not where the budget is read -- it is
+        read once on the media socket before the relay starts -- so there is no in-call moment for
+        the corpus to attack. It is covered by the B4 suite instead, and the honest statement is
+        that this corpus cannot express it rather than that it was done.
+        """
+        self.assertEqual(counts()["ideas"], 18)
+
     def test_the_case_count_meets_the_constraint(self):
         """B1's floor, asserted mechanically rather than counted by hand (issue #41)."""
         totals = counts()

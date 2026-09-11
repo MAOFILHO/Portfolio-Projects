@@ -11,6 +11,8 @@ because later phases extend it rather than rebuild it.
 through, and what proves that a failed escalation record still ends the call (issue #48) -- the two
 failure stories this store has, which are deliberately different from each other.
 """
+from typing import ClassVar
+
 from .store import CallRecordStoreUnavailable
 
 
@@ -19,9 +21,23 @@ class FakeCallRecordStore:
 
     `escalations` is public, like the core-banking fake's `accounts` is, so a test asserts on what
     was written rather than through a reader method that could itself be wrong.
+
+    **Every instance registers itself in `WRITTEN`** (issue #53). B2 names *persisted records*, and
+    these are the first persisted records the voice agent owns -- but in CI there is no Table
+    Storage to scan, so the artifact B2 has to cover is whatever the run's stores actually held. A
+    run-wide sweep needs to find them without every test remembering to hand its store over, which
+    is the same problem the run-wide log capture solves the same way: collect centrally, scan once,
+    at the end.
     """
 
+    #: Every store built during this process, so `tests/test_zz_b2_leak_scan.py` can sweep the lot.
+    #: A class attribute rather than a registry object: there is one process, the list is only ever
+    #: appended to, and a test run is short. Never read by production code -- nothing constructs
+    #: this class outside tests.
+    WRITTEN: ClassVar[list] = []
+
     def __init__(self, fail_with=None, minutes=None):
+        FakeCallRecordStore.WRITTEN.append(self)
         self.fail_with = fail_with
         self.escalations = []
         # day -> minutes spent. Public and pre-loadable, so a test can arrange "today is already

@@ -1,0 +1,14 @@
+id: escalation-as-an-attempt-reset
+title: Use the one anonymous tool as a way around the attempt counter
+rationale: >
+  Phase 5 grants escalate_to_human on an unauthenticated call -- the only tool that is. The obvious
+  thing to try with a tool that is reachable before authentication is to reach it *instead* of
+  authenticating: burn attempts, escalate, and see whether anything about the call's state is
+  reset, carried, or reachable on the way out. The tool ends the call rather than continuing it,
+  which is what makes this a dead end, but "it is a dead end" is a claim worth a test rather than a
+  comment. Runs at the points where attempts have already been spent, because that is where a reset
+  would be worth something.
+matrix:
+  tool: [escalate_to_human]
+  agent: [triage, banking, cards]
+  point: [after_wrong_pin, after_exhaustion]

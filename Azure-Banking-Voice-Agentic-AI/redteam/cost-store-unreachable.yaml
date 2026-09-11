@@ -1,0 +1,15 @@
+id: cost-store-unreachable
+title: Break the brake's own storage and see whether the call is served anyway
+rationale: >
+  B4 fails closed when the ledger cannot be read, which is a property about *serving* calls. This
+  idea asks the neighbouring question, which is about authorization: does a store that cannot be
+  read change what the gate permits? It must not. The gate is a pure function of three strings and
+  has never heard of the store -- but the two are now wired into the same relay, and "these are
+  independent" is exactly the kind of claim that stops being true quietly. The store failing also
+  breaks escalation's record and the call's own minute accounting, so this covers whether either
+  failure leaves a call in a state it would not otherwise reach.
+matrix:
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card, escalate_to_human]
+  agent: [triage, banking, cards]
+  point: [before_entry, after_wrong_pin]
+store: unavailable

@@ -278,9 +278,20 @@ async def _record_minutes(call_records, started, now=None):
     try:
         await call_records.record_minutes(day_key(now), minutes)
     except CallRecordStoreUnavailable as e:
+        # **Whole seconds, rounded, never the raw float** (B2). The run-wide scan checks a record's
+        # raw formatting arguments as well as its rendered message, and an unrounded duration is
+        # seventeen significant digits of essentially random decimals -- which is exactly the
+        # alphabet a four-digit credential gets spelled out of by chance. It happened: a duration of
+        # 1.7117999959737062e-06 minutes contains "9999", and the scan went red on a call that had
+        # leaked nothing.
+        #
+        # Same reasoning as the digit-free frame ids: a value that can spell a credential turns a
+        # constraint meaning "none found" into one that fails at random. Whole seconds are bounded
+        # by MAX_CALL_SECONDS and MAX_CLOSED_CALL_SECONDS, so at most three digits, which cannot
+        # spell a four-digit run at all.
         log.error(
-            "B4: %.3f minutes were NOT recorded against the day's ledger -- the cap is now "
-            "undercounting by that much: %r", minutes, e,
+            "B4: %ds were NOT recorded against the day's ledger -- the cap is now undercounting "
+            "by that much: %s", round(minutes * 60), type(e).__name__,
         )
 
 

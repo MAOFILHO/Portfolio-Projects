@@ -42,12 +42,15 @@ legitimate reason to emit a decimal digit while a caller is keying, and
 asserts that it emits none. The two rules together are the coverage; neither alone is.
 """
 import contextlib
+import dataclasses
 import logging
 import pathlib
 import re
 import tempfile
 import unittest
 
+from azbank_voice_agent.call_records import REASONS, EscalationRecord
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN
 
 try:
@@ -243,3 +246,120 @@ class NoPinReachedALogRecordAnywhereInThisRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def offending_records_in_the_call_record_stores(secrets=SECRETS):
+    """Every credential found in anything a call-record store held during this run (issue #53).
+
+    **B2 names persisted records**, and Phase 5 created the first ones the voice agent owns: the
+    escalation records and the day's ledger. In CI there is no Table Storage to scan, so the
+    artifact is whatever the run's stores actually held -- swept from `FakeCallRecordStore.WRITTEN`,
+    which every store registers itself in, for the same reason the log capture is run-wide rather
+    than per-test: a scan each test has to remember to ask for is a scan that stops covering things
+    quietly.
+
+    Every field of every record is stringified and searched, with **no carve-out for any column**.
+    A scan that had to skip a field would be a scan that could be made to pass by moving the leak
+    into it -- the same rule that lets the SQLite scan cover the database file whole.
+    """
+    offenders = []
+    for store in FakeCallRecordStore.WRITTEN:
+        for record in store.escalations:
+            for field, value in dataclasses.asdict(record).items():
+                if _carries(value, secrets):
+                    offenders.append(("escalation", field, value))
+        for day, minutes in store.minutes.items():
+            if _carries(day, secrets) or _carries(minutes, secrets):
+                offenders.append(("ledger", day, minutes))
+    return offenders
+
+
+def _carries(value, secrets):
+    """Does this field hold a credential? **Matched by type, not by one rule for everything.**
+
+    A **text** field is substring-matched, exactly as a log record is: a credential smuggled into a
+    correlation id or a reason code is a credential in a persisted record, wherever in the string it
+    sits.
+
+    A **numeric** field is compared as a number. That is not a carve-out -- it is the correct
+    matcher for the type, and it is strictly *more* precise than the substring rule rather than
+    weaker: a PIN written into a numeric column arrives as `1234.0` and is caught, while the day's
+    accumulated minutes are not accused of carrying "9999" because their decimal expansion happens
+    to contain it.
+
+    It had to be this way round, and the scan is what proved it: the ledger's minutes are a genuine
+    float of a genuine measurement, and substring-matching their seventeen significant digits turned
+    a constraint meaning "none found" into one that failed at random. That is the same defect the
+    digit-free frame ids exist to prevent, arriving through a new door -- and the answer there was
+    to stop the value being able to spell a credential, which is not available here because a
+    measurement is not an identifier anybody gets to choose.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return any(secret in str(value) for secret in secrets)
+    return any(float(secret) == float(value) for secret in secrets)
+
+
+class NoPinReachedAPersistedRecordAnywhereInThisRun(unittest.TestCase):
+    """B2's fourth surface, over the records this phase introduced (issue #53).
+
+    B2 names four surfaces: transcripts, log lines, OTel span attributes, and persisted records.
+    Three are covered.
+
+    **Span attributes are not, and that is reported rather than quietly counted.** Nothing in this
+    project emits a span -- the observability path is Phase 6 -- so there is no surface to scan and
+    no honest way to call the constraint fully met. B2 is reported as covering three of its four
+    named surfaces, and the fourth is stated as unmet every time the result is quoted.
+    """
+
+    def test_the_suite_really_wrote_some_records_to_scan(self):
+        # Without this, a scan over an empty collection would report "0 occurrences" forever --
+        # which is the vacuous-pass failure the deliberate-leak self-test exists to prevent for the
+        # log scan, applied to this one.
+        written = [store for store in FakeCallRecordStore.WRITTEN if store.escalations]
+        self.assertTrue(written, "no escalation record was written anywhere in this run")
+
+    def test_the_ledger_was_written_too(self):
+        charged = [store for store in FakeCallRecordStore.WRITTEN if store.minutes]
+        self.assertTrue(charged, "no minutes were recorded anywhere in this run")
+
+    def test_no_persisted_record_carries_a_credential(self):
+        offenders = offending_records_in_the_call_record_stores()
+        self.assertEqual(
+            offenders, [],
+            f"B2 breach: {len(offenders)} persisted record(s) carried a credential. "
+            f"First: {offenders[0]}" if offenders else "",
+        )
+
+    def test_the_scan_would_catch_one(self):
+        """The deliberate leak, following `TheDetectorItselfWorks`.
+
+        A scanner that silently stopped working would pass forever, so one is planted. The record is
+        built directly rather than through a call, because no call path can produce one -- which is
+        the property the test above asserts and this one proves is genuinely being checked.
+        """
+        planted = FakeCallRecordStore()
+        planted.escalations.append(
+            EscalationRecord(
+                correlation_id=f"corr-{SECRETS[0]}", reason=REASONS[0],
+                occurred_at="2026-09-11T10:00:00Z",
+            )
+        )
+        self.addCleanup(FakeCallRecordStore.WRITTEN.remove, planted)
+        self.assertTrue(offending_records_in_the_call_record_stores())
+
+    def test_span_attributes_are_reported_as_uncovered_rather_than_counted(self):
+        """The one B2 surface with nothing behind it, asserted so it cannot be quietly claimed.
+
+        Nothing in this project emits a span. If something starts to, this test turns red and
+        whoever added it has to decide deliberately whether the scan now covers it -- which is
+        better than the surface silently becoming real and unscanned.
+        """
+        import azbank_voice_agent
+        package = pathlib.Path(azbank_voice_agent.__file__).parent
+        emitters = [
+            path for path in package.rglob("*.py")
+            if "opentelemetry" in path.read_text() or "start_as_current_span" in path.read_text()
+        ]
+        self.assertEqual(
+            emitters, [], "something now emits spans; B2's fourth surface has to join the scan"
+        )

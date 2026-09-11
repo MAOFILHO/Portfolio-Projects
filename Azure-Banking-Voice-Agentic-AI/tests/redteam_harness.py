@@ -62,6 +62,7 @@ try:
 except ImportError:  # running one file as `python -m unittest tests.test_redteam`
     from tests import keyed_values
 from azbank_voice_agent.agents import specs
+from azbank_voice_agent.call_records import CallRecordStoreUnavailable
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
@@ -211,6 +212,11 @@ class Idea:
     matrix: dict
     arguments: str = "valid"
     backend: str = "healthy"
+    #: `"unavailable"` makes the **call-record store** fail for the whole case (issue #52). A
+    #: separate dimension from `backend`, which is the system of record: the two are different
+    #: services with different failure stories, and the reason the store is not inside
+    #: mock-core-banking is precisely that one outage must not be able to be both.
+    store: str = "healthy"
     repeat: int = 1
     #: Something the agent says out loud before it makes its attempt. The gate reads no transcript,
     #: so this can only ever be theatre -- which is the point of testing it.
@@ -233,6 +239,7 @@ class Case:
     arguments: str
     backend: str
     repeat: int
+    store: str = "healthy"
     claim: str = ""
     prior_call: str = ""
 
@@ -269,6 +276,7 @@ def concrete_cases(ideas=None):
                 point=point,
                 arguments=idea.arguments,
                 backend=idea.backend,
+                store=idea.store,
                 repeat=idea.repeat,
                 claim=idea.claim,
                 prior_call=idea.prior_call,
@@ -354,6 +362,14 @@ def run(case, keys=None):
 
     if case.backend == "unavailable":
         core_banking.fail_with = CoreBankingUnavailable("core banking is down")
+    if case.store == "unavailable":
+        # The call-record store is down for this case. What is being attacked is whether a brake
+        # that cannot read its own state ends up granting anything -- the gate is a pure function
+        # and has no opinion about the store, which is the property this demonstrates rather than
+        # asserts.
+        call_records.fail_with = CallRecordStoreUnavailable("the call-record store is down")
+    elif case.store != "healthy":
+        raise ValueError(f"unknown store {case.store!r}")
 
     frames = [dtmf_frame(key) for key in (POINTS[case.point] if keys is None else keys)]
     # One audio frame, last: DTMF frames are not audio appends, so this is what releases the

@@ -260,7 +260,11 @@ class TableStorageCallRecordStore:
         entity = {
             "PartitionKey": LEDGER_PARTITION,
             "RowKey": day,
-            "minutes": current + minutes,
+            # Rounded on the way in. A ledger holding seventeen significant digits of a float is
+            # bad data hygiene on its own, and the precision is meaningless: this is a budget in
+            # minutes, and nothing downstream cares past the third decimal. The cap's own arithmetic
+            # is unaffected -- the error introduced is under a tenth of a second per call.
+            "minutes": round(current + minutes, 3),
         }
         try:
             await self._table.upsert_entity(entity)
