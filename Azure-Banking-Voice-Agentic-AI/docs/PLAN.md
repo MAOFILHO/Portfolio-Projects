@@ -671,6 +671,23 @@ caps, **fail-closed**, `T-B4-FAILCLOSED`.
 `mock-core-banking` are now in the hot path for authenticated intents, making this the realistic
 latency figure, turn count stated.
 
+**Status 2026-09-11 — built to the edge of Azure, exit NOT met.** Spec #43, tickets #44-60, exit
+criteria `docs/phase5/exit-criteria.md` (approved 2026-09-11), evidence `docs/phase5/exit-check.md`.
+**13 of 18 tickets done.** Everything buildable without Azure is committed: all three remaining
+intents, a third agent (Cards), the call-record store, B4's daily cap and closed path, and the
+greeting. voice-agent 480 tests, mock-core-banking 90, **B1 0 breaches across 593 cases from 18
+ideas**, **B2 0 occurrences**, B4 blocking by construction.
+
+**What is NOT met, and is not reported as met**: nothing is provisioned, nothing redeployed, no call
+made, **B5 is not frozen**, and all four wire-format questions are still open. The red-team idea
+count is **18 against a target of 20-30** — reported rather than padded, and the gap is still a gap.
+B2 still covers three of its four named surfaces; span attributes are uncovered because nothing emits
+spans.
+
+**One corollary of B1 changed here, on sign-off** (see decision 7): `escalate_to_human` is reachable
+while anonymous, so "no tool at all is reachable while a call is anonymous" is false and has been
+rewritten everywhere. B1's target did not move.
+
 ### Phase 6 — Observability
 **Tooling pinned 2026-08-21** (see "Observability tooling" below): the **Azure Monitor OpenTelemetry
 Distro**, targeting the **Application Insights** resource this phase creates — not a third-party SaaS.

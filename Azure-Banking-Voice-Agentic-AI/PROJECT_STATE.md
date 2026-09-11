@@ -12,6 +12,8 @@ account of what happened:
 | 3 | `docs/phase3/archive.md` (exit criteria: `docs/phase3/exit-criteria.md`) |
 | 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
 
+Phase 5 is **current, not closed** — `docs/phase5/exit-criteria.md` and `docs/phase5/exit-check.md`.
+
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
 
@@ -27,84 +29,85 @@ live bearing on the current moment:
    **"Phase 3: APPROVED" (2026-09-09) signed off the exit criteria; it did not authorise
    provisioning**, which was never in Phase 3's scope and needs its own approval.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
-4. **No phase begins without written exit criteria and Marco's explicit approval.** Phase 5 has none
-   yet. Phase 4's were written and approved 2026-09-10 (`docs/phase4/exit-criteria.md`), including
-   the item that needed its own sign-off: **B1's breach definition is sharpened** — no *banking*
-   operation reaches the core-banking client while the call is unauthenticated, with PIN
-   verification the only operation reachable while anonymous. That sharpened definition is now what
-   the suite enforces, and it stands for every later phase.
+4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list, and from
+   Phase 5 also transactions and card block — reaches the core-banking client while the call is
+   unauthenticated. **Its corollary changed in Phase 5, on sign-off**: `escalate_to_human` is granted
+   in every row, so "no tool at all is reachable while a call is anonymous" is now **false** and has
+   been rewritten everywhere it appeared. The accurate sentence is that the set reachable while
+   anonymous is **exactly the PIN check and asking for a person**, neither of which is a banking
+   operation. B1's target has not moved: 0 breaches, ≥120 cases, L1, blocking.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 4 built and awaiting sign-off; Phase 5 not begun
+## Current phase — Phase 5 built to the edge of Azure; 13 of 18 tickets done
 
-**Phase 4 (auth gate permissions) is built, ticket by ticket.** Spec **#33**, tickets **#34-42**.
-The gate grants for the first time, on a PIN the model never sees. Criterion-by-criterion evidence:
-`docs/phase4/exit-check.md`.
+**Phase 5 (intents + cost controls).** Spec **#43**, tickets **#44-60**, exit criteria written and
+approved 2026-09-11. Criterion-by-criterion evidence: `docs/phase5/exit-check.md`.
+
+**Everything that can be built and proved without Azure is done. Nothing has been provisioned,
+nothing redeployed, no call made.** What a caller dialling the number reaches today is still Phase
+1's agent on the Phase 2 image — the gap between what is committed and what answers the phone is now
+**four** phases wide.
 
 | | |
 |---|---|
-| voice-agent tests | 315 pass, 3 skipped by design |
-| mock-core-banking tests | 47 pass |
-| B1 red-team | **13 distinct attack ideas → 211 concrete cases**, 194 reaching an attempt |
+| voice-agent tests | **480 pass**, 3 skipped by design (was 315) |
+| mock-core-banking tests | **90 pass** (was 47) |
+| B1 red-team | **18 distinct attack ideas → 593 concrete cases**, 542 reaching an attempt |
 | B1 breaches / B2 occurrences | **0 / 0**, both blocking |
+| B4 | complete and blocking in CI, by construction |
+| B5 | **not frozen** — the probe is repaired but has not been run |
 | `make lint`, B3 static check | clean, passing |
-
-**Everything on this branch after `e42c063` is committed and unreviewed by Marco** — that is
-`git log e42c063..HEAD`, and it is stated as a range on purpose. A fixed count was written here
-twice and was wrong both times, for a structural reason rather than carelessness: the commit that
-updates the number is itself uncounted at the moment it is written. A range does not have that
-failure mode.
-
-What the range holds: the first `/code-review`'s remediation, the remaining Phase 4 findings, what
-`/research` found, and the second and third reviews' findings. **Every commit in it except the
-findings one touches the DTMF/PIN path**, so the never-auto-accept rule binds them.
-
-Blow-by-blow accounts are archives, not current state: `docs/phase4/findings.md` for what each pass
-found and fixed, `docs/phase4/research-carried-findings.md` for the sourced research behind the
-third. What a later session needs without reading either:
-
-- **No constraint's target has moved**, through any of it. B1's verdict of 0 breaches has been
-  unchanged and never at risk; the B1 wording edits propagated an already-approved sentence.
-- **The red-team idea count is 13 against a target of 20-30**, reported rather than padded, and the
-  gap is still a gap. It moved from 11 by making the loader generate two real uncounted ideas.
-- **B2 covers three of its four named surfaces.** Span attributes are not covered, because nothing
-  emits spans; that is Phase 6 work and is not reported as met.
-- **Phase 5's real call must press `*` and `#`, not only digits.** The DTMF tone vocabulary has no
-  documented spelling for either key on this path, and a digits-only call would leave that open
-  while looking like it closed it.
 
 Both red-team numbers are always quoted together. A case count with no idea count behind it is the
 same empty claim as a percentile with no N.
 
-**Nothing was provisioned, nothing redeployed, no real call made.** What a caller dialling the
-number reaches today is still Phase 1's agent on the Phase 2 image.
+**What the phase added**: `list_transactions`, a Cards agent and `block_card` with a relay-generated
+idempotency key, `escalate_to_human` with the call-record store behind it, B4's daily cap and the
+closed path, minutes charged on every path out, and the greeting. The exit check carries the detail;
+three things a later session needs without reading it:
+
+- **The red-team idea count is 18 against a target of 20-30**, reported rather than padded, and the
+  gap is still a gap. Widening a matrix is not an idea — the two new tools roughly doubled the case
+  count while adding none.
+- **B2 still covers three of its four surfaces.** Span attributes are uncovered because nothing emits
+  spans; a test now fails if anything starts to.
+- **Two exit criteria predicted the wrong thing and were corrected in place** rather than smoothed
+  over: the red-team assertion that did not need to widen, and the budget read that moved out of the
+  webhook because a marker in the WebSocket URL would be client-controllable and therefore
+  fail-open. Both corrections are inline in `docs/phase5/exit-criteria.md`.
 
 ### Needs Marco
 
-0. **Review everything after `e42c063`** — `git log e42c063..HEAD`, oldest first. In order it is
-   the first `/code-review` remediation (DTMF/PIN path and `tests/test_gate.py`), the remaining
-   Phase 4 findings (tests, corpus, `Makefile`, docs — no production module), what `/research`
-   found (**`transport/acs.py` and `realtime/session.py`**), and the second and third reviews'
-   findings (**`realtime/session.py`**). **This is the one thing blocking the gate.** Read the
+0. **Review `git log e42c063..HEAD`** — Phase 4's diff *and* Phase 5's, oldest first. This was Phase
+   5's one unmet entry condition and it was **waived rather than satisfied** on 2026-09-11. Read the
    range from `git log`, never a count written here: a count was written twice and wrong twice,
-   because the commit that updates it is uncounted when it is written.
-1. **Phase 4 sign-off.** Every criterion is met (`docs/phase4/exit-check.md`). Three carry a stated
-   limit rather than a clean pass: criterion 7's injected item is confirmed in shape but unverified
-   in acceptance by the live deployment, criterion 9's idea count is 13 against a target of 20-30,
-   reported rather than padded, and criterion 10's OTel surface is vacuous because no span exists.
-2. **Done 2026-09-10 — `/research` ran and its findings are implemented.** The shape is settled; the
-   deployment's acceptance of it is not, and only a real call can settle that. What Marco still owns
-   here is the review of the resulting diff, which is item 0.
-3. **One test failure seen once, not reproduced in 98 runs.** Reading and evidence:
-   `docs/phase4/findings.md`. Not evidence about B1 or B2, both of which are in-process and were
-   re-run 98 times with identical verdicts. **Still unexplained**, but a recurrence now keeps its
-   name and the spawned service's own words — nothing more to do until it happens again.
+   because the commit that updates it is uncounted when it is written. **Most of Phase 5's commits
+   touch `dispatch/gate.py`, the DTMF/PIN path, or both**, so the never-auto-accept rule binds them.
+1. **`/research`, before anything is applied.** Two facts are written from documentation rather than
+   from a live source, and the module says so in its own header: the **role definition GUID** in
+   `infra/modules/call-records-store.bicep`, where being wrong produces a role assignment that
+   returns 200 OK and grants nothing; and **Table Storage's rate**, which is R-08's one unpriced
+   input. Named, not invoked.
+2. **A human review of both Bicep modules.** No `bicep` CLI exists here and there is still no
+   `main.bicep`, so human review is the only check there is.
+3. **A phone.** Tickets #58 and #59 need Marco dialling, and **the call must press `*` and `#`** — a
+   digits-only call closes nothing while looking like it did.
+
+### The four wire-format questions — all still open
+
+No real DTMF tone has ever been consumed by this system. Nothing below is answered, and each closes
+on the acceptance call or not at all:
+
+1. Does this deployment and model version **accept the injected system message**?
+2. How are **`*` and `#` spelled** on the media-streaming path?
+3. Did **DTMF and audio frames arrive in produced order**? The payload's `timestamp` is still unread.
+4. Does a **real keyed tone drive the authenticator** at all?
 
 ### Still open from Phase 3
 
-1. **Known-partial:** exit criterion 9's "Bicep module reviewed" is **unvalidated** — no `bicep` CLI
-   is available here, and `infra/` contains only this one module (no `main.bicep`), so "consistent
-   with the existing modules' shape" has nothing to be consistent with yet.
+1. **Known-partial:** "Bicep module reviewed" is still **unvalidated by any tool**. `infra/` now holds
+   two modules rather than one, so "consistent with the existing modules' shape" finally has a
+   sibling — but nothing has been compiled, linted or what-if'd.
 
 ## Live Azure state
 
@@ -114,12 +117,14 @@ agent**, on the Phase 2 image; Phase 3's network path is built but not deployed.
 
 - Resource group `rg-azure-banking-voice-agentic-ai`.
 - AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
-  **Verified live 2026-09-10** at the Phase 4 gate, deployment and Models API both: the pin retires
-  **2027-04-06**, ~6.9 months out, so no stop-and-ask. Successor `gpt-realtime-1.5` still GA
+  **Re-verified live 2026-09-11** at the Phase 5 gate, deployment and Models API both: the pin
+  retires **2027-04-06**, ~6.8 months out, so no stop-and-ask. Successor `gpt-realtime-1.5` still GA
   (retires 2027-08-24). No drift from `docs/PLAN.md` decision 14. Evidence:
-  `docs/phase4/exit-check.md`.
+  `docs/phase5/exit-check.md`.
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`.
+- **Verified live 2026-09-11**: the resource group holds exactly what it held before — **no Storage
+  account, no second Container App**. Nothing this phase describes has been provisioned.
 - Container App `ca-azbank-echo-p0`, min-replicas=1 (**billing now**), running
   `docker.io/maofilho/azbank-echo-p0:p3`, revision `--0000002`, `Healthy`, 100% traffic. Its
   system-assigned identity (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI
@@ -164,13 +169,10 @@ because they are genuinely unresolved, not because any of them is currently bloc
    both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
    exit table** (`docs/PLAN.md`'s own words). Scoped as `server_vad` config tuning, not new code,
    once/if it reproduces again.
-10. **Dead air before the agent speaks first — PARKED, deliberately, still.** 2.5-11s on every real
-    call: `session.py` sends no initial `response.create`, so nothing prompts the greeting until the
-    caller talks first. Parked at Phase 3 kickoff and again at Phase 4's, and it has a **sharper
-    edge now**: the greeting is what asks for the PIN, so a caller who says nothing is waiting on a
-    prompt that has not been triggered and will never be asked to authenticate. Still the greeting
-    path's defect rather than the auth path's. Small fix whenever it's wanted; this line exists so
-    it isn't re-litigated at every phase boundary.
+10. **CLOSED by Phase 5 (#51).** The dead-air gap before the agent's first words is gone: the
+    relay sends an initial `response.create`, so the greeting -- which is what asks for the PIN
+    -- no longer waits for the caller to speak. Parked at two prior boundaries; unparked here
+    because this phase's exit depends on a caller keying a PIN they were never asked for.
 11. **No real DTMF tone has ever been consumed by this system.** Phase 0 proved tones *arrive*
     during active bidirectional streaming; every line that acts on one is Phase 4's and is exercised
     only against fakes, because Phase 4 deployed nothing. Closes at Phase 5's real-call exit.
@@ -232,39 +234,26 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-1. **Recompute R-08 against a two-Container-App fixed cost.** If it still clears the gate, that is
-   when to approve the **provisioning step itself** — not part of Phase 3's scope, and with its own
-   diff (`infra/modules/mock-core-banking.bicep`) to review first, which no tooling here can
-   validate.
-2. **Handoff written and committed 2026-09-10**:
-   `docs/handoffs/2026-09-10-phase4-built-reviewed-thrice-awaiting-signoff.md`. Read it before
-   Phase 5 — it carries what Phase 5 inherits and the traps this phase hit, neither of which is in
-   the exit check. `/clear` is safe at this boundary: nothing is uncommitted and no handoff is
-   outstanding.
-3. **Sign off Phase 4, or send back what does not hold.** The items needing Marco are listed under
-   "Needs Marco" above. `/code-review` has now run **three times** on this phase (2026-09-10) and
-   every finding is implemented. Whether a fourth is worth running is Marco's call, not Claude's.
-4. **One ADR is offered and not written** (`docs/adr/`): the shared core-banking client that made
-   B1's restatement necessary. Hard to reverse, and it would read as arbitrary without the
-   reasoning. The second candidate — a binary gate carrying two factors — died with the KBA cut.
-5. **Phase 5 needs written exit criteria and approval before any of it begins.** It is where the
-   real-call exit closes Phase 4's known-partial, where B5 freezes, and where mock-core-banking's
-   provisioning finally has to happen — which is what makes the R-08 recompute in item 1 a
-   precondition of Phase 5 rather than of anything already built.
-
-   **Its spec is written and filed: #43** (`ready-for-agent`, 2026-09-11). Scope, seams, testing and
-   out-of-scope are there. Four design questions were settled with Marco while scoping it: the B4
-   cost store is **Azure Table Storage**, it holds the escalation record too as **one seam with two
-   operations**, `block_card` gets a **third agent (Cards)**, and the dead-air item 10 above is
-   **unparked and fixed in Phase 5**, because Phase 5's exit depends on a greeting the caller never
-   hears today.
-
-   **Exit criteria written and approved 2026-09-11**: `docs/phase5/exit-criteria.md`, 32 criteria.
-   Marco's message was `APPROVED: Phase 5. /implement all 18 tickets.` — which is the verbatim
-   provisioning token *and* the instruction to begin. That file's banner states precisely what the
-   one message is read as covering and what it is not, including the `escalate_to_human`-while-
-   anonymous sign-off (read as given, reversible by one `PERMISSIONS` row) and **Phase 4's sign-off,
-   which was waived rather than met**. `git log e42c063..HEAD` is still owed a human read.
+1. **Read `git log e42c063..HEAD`.** Phase 4's diff and Phase 5's. It is the entry condition that was
+   waived, it is four phases of code that will land on one image, and it is the cheapest point at
+   which any of it can be sent back.
+2. **`/research`: the role definition GUID and Table Storage's rate.** Both are written from
+   documentation, both are named as unverified in the module that uses them, and the first one
+   failing produces a role assignment that returns 200 OK and grants nothing. Named, not invoked.
+3. **Review the two Bicep modules** (`infra/modules/`). Human review is the only check that exists.
+4. **Then #57**: provision the Storage account and the second Container App, grant the data role and
+   **prove it with a write that is read back** — an ARM 200 OK proves creation, not access — build and
+   push an image carrying Phases 3 to 5, redeploy, and make a **smoke call nobody is grading** before
+   the acceptance run.
+5. **Then #58**: the acceptance call. Scripted in advance, authenticating with a real keyed PIN,
+   **pressing `*` and `#`**, reaching all four intents, hitting a refusal before authenticating, and
+   ending by escalating. Evidence read out of `workspace-rgazurebankingvoiceagenticai1D`, never the
+   stale `...aiCS`.
+6. **Then #59 and #60**: B5 frozen with its turn count and what was in the path, then the close-out —
+   `docs/PLAN.md`'s Phase 5 section, this file's phase move, and a committed handoff.
+7. **One ADR is still offered and not written** (`docs/adr/`): the shared core-banking client that
+   made B1's restatement necessary. A second candidate now exists — **the corollary change**, which is
+   the kind of decision that reads as arbitrary later without the reasoning beside it.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls
 for. It sits outside `PROJECT_ROOT` and needs approval by absolute path, same as the CI workflow
