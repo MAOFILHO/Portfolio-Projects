@@ -251,6 +251,20 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    provisioning finally has to happen — which is what makes the R-08 recompute in item 1 a
    precondition of Phase 5 rather than of anything already built.
 
+   **Its spec is written and filed: #43** (`ready-for-agent`, 2026-09-11). Scope, seams, testing and
+   out-of-scope are there. Four design questions were settled with Marco while scoping it: the B4
+   cost store is **Azure Table Storage**, it holds the escalation record too as **one seam with two
+   operations**, `block_card` gets a **third agent (Cards)**, and the dead-air item 10 above is
+   **unparked and fixed in Phase 5**, because Phase 5's exit depends on a greeting the caller never
+   hears today.
+
+   **Exit criteria written and approved 2026-09-11**: `docs/phase5/exit-criteria.md`, 32 criteria.
+   Marco's message was `APPROVED: Phase 5. /implement all 18 tickets.` — which is the verbatim
+   provisioning token *and* the instruction to begin. That file's banner states precisely what the
+   one message is read as covering and what it is not, including the `escalate_to_human`-while-
+   anonymous sign-off (read as given, reversible by one `PERMISSIONS` row) and **Phase 4's sign-off,
+   which was waived rather than met**. `git log e42c063..HEAD` is still owed a human read.
+
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls
 for. It sits outside `PROJECT_ROOT` and needs approval by absolute path, same as the CI workflow
 did. `CONTEXT.md` (this project's own glossary) is written and committed.
