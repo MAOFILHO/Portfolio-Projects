@@ -24,10 +24,8 @@ live bearing on the current moment:
 
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
-2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** This binds the
-   pending mock-core-banking provisioning, which also has R-08 as a precondition (below).
-   **"Phase 3: APPROVED" (2026-09-09) signed off the exit criteria; it did not authorise
-   provisioning**, which was never in Phase 3's scope and needs its own approval.
+2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
+   was typed 2026-09-12 and used: the Storage account and mock-core-banking are now provisioned.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list, and from
    Phase 5 also transactions and card block — reaches the core-banking client while the call is
@@ -38,15 +36,18 @@ live bearing on the current moment:
    operation. B1's target has not moved: 0 breaches, ≥120 cases, L1, blocking.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 5 built to the edge of Azure; 13 of 18 tickets done
+## Current phase — Phase 5 provisioned and redeployed; 14 of 18 tickets done
 
 **Phase 5 (intents + cost controls).** Spec **#43**, tickets **#44-60**, exit criteria written and
 approved 2026-09-11. Criterion-by-criterion evidence: `docs/phase5/exit-check.md`.
 
-**Everything that can be built and proved without Azure is done. Nothing has been provisioned,
-nothing redeployed, no call made.** What a caller dialling the number reaches today is still Phase
-1's agent on the Phase 2 image — the gap between what is committed and what answers the phone is now
-**four** phases wide.
+**Provisioned and redeployed 2026-09-12 (#57), no call made yet.** The Storage account and
+mock-core-banking are live; `ca-azbank-echo-p0` runs the Phase 3-5 image. **The first redeploy
+crash-looped** — `azure-data-tables`' async client needs `aiohttp`, undeclared until now; the prior
+revision kept serving throughout, so no caller was ever affected. Fixed, redeployed again, and the
+Storage write-then-read is **proven live** through the real managed identity: `0.01 -> 0.02` on a
+`record_minutes` / `minutes_used` round trip, exec'd into the running container. What remains of #57
+is the smoke call; ticket #58's acceptance call is separate and still needs it too.
 
 **Three rounds of `/code-review` are actioned and closed.** Record: `docs/phase5/review-fixes.md`.
 
@@ -78,17 +79,13 @@ without reading it:
 
 ### Needs Marco
 
-0. **Review `git log e42c063..HEAD`** — see next action 1. Count it from `git log`, never from a
-   number written here; that number has been wrong twice, because the commit updating it is
-   uncounted as it is written. **Most of the range touches `dispatch/` or the DTMF/PIN path**, so the
-   never-auto-accept rule binds it.
+0. *(done 2026-09-12 — Tier 1 and 2 of `docs/phase5/commit-review-digest.md` reviewed; gate
+   confirmed fine. Tier 3, the lower-risk material, is still unreviewed.)*
 1. **`/research` still owes open items 15, 16 and 19** — the `RequestResponse` category, whether the
    FastAPI instrumentation captures request bodies, and the azure-core SDK timeout option names.
-   *(The role GUID and Table Storage's rate are no longer owed — read live 2026-09-12.)*
-2. **A human review of both Bicep modules** — of their intent, not their syntax. Bicep CLI v0.47.16
-   compiles both clean as of 2026-09-12. No `main.bicep` exists, so neither has been what-if'd.
-3. **A phone.** Tickets #58 and #59 need Marco dialling, and **the call must press `*` and `#`** — a
-   digits-only call closes nothing while looking like it did.
+2. *(done — Bicep header diffs reviewed and committed 2026-09-12.)*
+3. **A phone.** The #57 smoke call, then #58 and #59 need Marco dialling, and **the call must press
+   `*` and `#`** — a digits-only call closes nothing while looking like it did.
 
 ### The four wire-format questions — all still open
 
@@ -108,26 +105,26 @@ on the acceptance call or not at all:
 ## Live Azure state
 
 Verify this against the API before acting on it (`CLAUDE.md`, Resume discipline) — it is a snapshot
-and goes stale between sessions. **What a caller dialling the number reaches today is Phase 1's
-agent**, on the Phase 2 image; Phase 3's network path is built but not deployed.
+and goes stale between sessions. **A caller dialling the number today reaches the Phase 3-5 image**,
+redeployed 2026-09-12; no real call has exercised it yet.
 
 - Resource group `rg-azure-banking-voice-agentic-ai`.
 - AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
-  **Re-verified live 2026-09-11** at the Phase 5 gate, deployment and Models API both: the pin
-  retires **2027-04-06**, ~6.8 months out, so no stop-and-ask. Successor `gpt-realtime-1.5` still GA
-  (retires 2027-08-24). No drift from `docs/PLAN.md` decision 14. Evidence:
-  `docs/phase5/exit-check.md`.
+  **Re-verified live 2026-09-11**: pin retires **2027-04-06**, ~6.8 months out, no stop-and-ask.
+  Successor `gpt-realtime-1.5` still GA (retires 2027-08-24). `docs/phase5/exit-check.md`.
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`.
-- **Verified live 2026-09-11**: the resource group holds exactly what it held before — **no Storage
-  account, no second Container App**. Nothing this phase describes has been provisioned.
+- **Storage account `stazbankcallrecords`**, provisioned 2026-09-12, table `callrecords`. Write-then-
+  read proven live through the voice agent's managed identity.
+- **Container App `ca-azbank-core-banking`**, provisioned 2026-09-12, internal-only, `Healthy`, one
+  replica, image `docker.io/maofilho/azbank-core-banking-p5:p5`.
 - Container App `ca-azbank-echo-p0`, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p3`, revision `--0000002`, `Healthy`, 100% traffic. Its
-  system-assigned identity (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI
-  resource only, which is what B3's boot guard reads. Deployment history:
+  `docker.io/maofilho/azbank-echo-p0:p5b`, revision `--0000004`, `Healthy`, 100% traffic, zero
+  restarts. Its system-assigned identity (`5e09fe34-8913-4aa2-80ac-618af308a88f`) now holds `Reader`
+  on the AOAI resource **and** `Storage Table Data Contributor` scoped to `stazbankcallrecords`.
+  `CORE_BANKING_URL` and `CALL_RECORDS_ACCOUNT_URL` are set. Deployment history:
   `docs/phase2/archive.md`.
-- **Data-plane auth to AOAI is still the `AOAI_KEY` secret** — only the B3 ARM read uses the managed
-  identity.
+- **Data-plane auth to AOAI is still the `AOAI_KEY` secret**; Storage auth is managed identity only.
 - **Logs: query `workspace-rgazurebankingvoiceagenticai1D`** (`bf520f2c-e2bc-4488-8965-9317a7922c74`),
   never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
   exist, not two.
@@ -223,8 +220,8 @@ because they are genuinely unresolved, not because any of them is currently bloc
     right, since no model session existed, but named rather than assumed settled.
 21. **The daily ledger's lock is in-process only.** It covers two calls ending together in one
     process; a second replica holds a second lock and loses updates again. ETag optimistic
-    concurrency is the fix and a deliberate not-yet (Marco, 2026-09-11): one replica runs, and the
-    ETag path cannot be exercised until the Storage account exists.
+    concurrency is the fix and a deliberate not-yet (Marco, 2026-09-11): one replica runs today, so
+    the ETag path has nothing to exercise it against yet, even with the Storage account now live.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
@@ -251,17 +248,12 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 0b. **The review findings were never filed as issues** — neither the original eight nor the second
    round. Every fix commit references only the phase spec `#43`. The drafted set and its blocking
    edges are in `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
-1. **Read `git log e42c063..HEAD`.** The waived entry condition, four phases landing on one image,
-   and the cheapest point to send any of it back. **Reading order:
-   `docs/phase5/commit-review-digest.md`** — tiered by risk, naming what it read versus summarised.
-   A reading order, not a substitute: the never-auto-accept rule wants a human on the diff.
+1. *(done — Tier 1 and 2 of `docs/phase5/commit-review-digest.md` reviewed; gate confirmed fine.)*
 2. *(done — GUID and Table Storage rate, read live 2026-09-12.)*
-3. **Review the two Bicep modules** (`infra/modules/`). Intent, not syntax. Both headers changed
-   2026-09-12 to record what was verified; a diff touching either is never auto-accepted.
-4. **Then #57**: provision the Storage account and the second Container App, grant the data role and
-   **prove it with a write that is read back** — an ARM 200 OK proves creation, not access — build and
-   push an image carrying Phases 3 to 5, redeploy, and make a **smoke call nobody is grading** before
-   the acceptance run.
+3. *(done — Bicep header diffs reviewed and committed 2026-09-12.)*
+4. **#57, nearly done**: Storage account and second Container App provisioned, image built and
+   pushed, voice agent redeployed, write-then-read proven live. **Only the smoke call remains** — a
+   short call nobody is grading, before the acceptance run.
 5. **Then #58**: the acceptance call. Scripted in advance, authenticating with a real keyed PIN,
    **pressing `*` and `#`**, reaching all four intents, hitting a refusal before authenticating, and
    ending by escalating. Evidence read out of `workspace-rgazurebankingvoiceagenticai1D`, never the
