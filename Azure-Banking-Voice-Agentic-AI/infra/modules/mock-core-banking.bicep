@@ -70,6 +70,15 @@ resource coreBanking 'Microsoft.App/containerApps@2024-03-01' = {
         external: false
         targetPort: 8001
         transport: 'http'
+        // **allowInsecure: true, found live 2026-09-12 on the first real call.** Container Apps
+        // ingress terminates TLS at the platform edge even for internal-only traffic; with this
+        // left at its default (false), a plain-HTTP request gets a 301 to HTTPS instead of an
+        // answer. `CORE_BANKING_URL` is deliberately `http://...` -- this module's own output --
+        // and the voice agent's client never follows redirects, so every credential check failed
+        // unreadably. Caught by the smoke call, not by review: B1's fail-closed path took it
+        // correctly (no attempt consumed, caller told the service was unavailable), but no PIN
+        // could ever succeed. TLS for this hop stays deferred to Phase 7, as already decided above.
+        allowInsecure: true
       }
     }
     template: {
