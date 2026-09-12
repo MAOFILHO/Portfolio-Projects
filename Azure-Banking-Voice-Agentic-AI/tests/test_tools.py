@@ -496,3 +496,46 @@ class ListingTransactionsAtTheDispatcher(DispatchCase):
         result = (await self.dispatch("list_transactions", '{"account": "chequing"}'))["result"]
         expected = [f.name for f in dataclasses.fields(Transaction)]
         self.assertEqual(sorted(result[0]), sorted(expected))
+
+
+class EscalationHandlesAMissingStore(unittest.IsolatedAsyncioTestCase):
+    """A `CallScope` with no `call_records` at all -- distinct from one whose store raises.
+
+    `call_records` is `None`-able on `CallScope` (its own docstring: "a missing client matters to
+    four" tools). Reaching for `.record_escalation` on `None` is an `AttributeError`, and
+    `dispatch_tool_call`'s except clauses do not name it -- so before this fix it escaped the
+    "never raises" contract and dropped the call on the one tool anonymous callers are told to
+    reach for when everything else has failed.
+
+    Never live in production, where `app.py` always builds a real store before either `run_call` or
+    `run_closed_call` is entered -- caught reading this file cold (/code-review, 2026-09-12), the
+    same way the `BANKING_AGENT` default was: harmless only because nothing legitimate reaches the
+    gap, not because the gap wasn't there.
+    """
+
+    def setUp(self):
+        self.core_banking = FakeCoreBankingClient()
+        self.scope = tools.CallScope(core_banking=self.core_banking, call_records=None)
+        self._gate_patcher = patch.object(gate, "is_allowed", return_value=True)
+        self._gate_patcher.start()
+        self.addCleanup(self._gate_patcher.stop)
+
+    async def dispatch(self):
+        return await tools.dispatch_tool_call(
+            "escalate_to_human", json.dumps({"reason": "not_understood"}), scope=self.scope,
+        )
+
+    async def test_dispatch_tool_call_does_not_raise(self):
+        # The assertion is that this line completes at all. Before the fix it raised AttributeError,
+        # which is not one of dispatch_tool_call's declared exceptions -- so this test failing means
+        # a raise made it out of an `await`, not an assertion below not matching.
+        await self.dispatch()
+
+    async def test_the_caller_is_still_escalated(self):
+        answer = json.loads(await self.dispatch())
+        self.assertEqual(answer, {"result": tools.ESCALATED})
+
+    async def test_the_missing_store_is_logged_loudly(self):
+        with self.assertLogs("dispatch", level="ERROR") as cm:
+            await self.dispatch()
+        self.assertTrue(any("escalation record NOT written" in line for line in cm.output))

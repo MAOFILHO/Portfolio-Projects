@@ -326,6 +326,15 @@ async def _escalate_to_human(scope, args):
     **It never touches the core-banking client.** That is what keeps B1 untouched by a tool that is
     reachable while anonymous: escalation is not a banking operation and reaches nothing that holds
     money. `core_banking` is in the signature because every handler has the same one.
+
+    **A missing store is handled the same way a failed one is, not left to raise.** `call_records`
+    is `None`-able on `CallScope` (see its docstring: "a missing client matters to four" tools, this
+    being one), and reaching for `.record_escalation` on `None` is an `AttributeError` --
+    `dispatch_tool_call`'s except clauses do not name it, so it would have escaped the "never
+    raises" contract and dropped the call on the one tool anonymous callers are told to reach for
+    when everything else has failed. Never live in production, where `app.py` always builds a real
+    store; caught by /code-review 2026-09-12 reading this file cold, and pinned by
+    `tests/test_tools.py::EscalationHandlesAMissingStore`.
     """
     reason = args.get("reason")
     if reason not in REASONS:
@@ -333,6 +342,13 @@ async def _escalate_to_human(scope, args):
         # a reason it invented that reads perfectly well. Checked here so the fixed set is enforced
         # where the record is made rather than where it is declared.
         raise CoreBankingRequestError(f"escalation reason must be one of {REASONS}, got {reason!r}")
+    if scope.call_records is None:
+        # Same standing as the store raising, below: reaching a person matters more than recording
+        # that somebody asked to. Logged as its own case rather than folded into the except branch
+        # beneath it, so a reader of this line does not mistake it for the store having been asked
+        # and having refused.
+        log.error("escalation record NOT written, no call-record store was given to this call")
+        return ESCALATED
     try:
         await scope.call_records.record_escalation(
             EscalationRecord.now(scope.correlation_id, reason)
