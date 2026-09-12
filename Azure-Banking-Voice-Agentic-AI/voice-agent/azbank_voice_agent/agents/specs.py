@@ -60,10 +60,24 @@ class AgentSpec:
 #: test behind it -- the fewer agents whose instructions discuss a keyed credential, the fewer that
 #: can be talked into asking for one out loud. The PIN case is appended to triage's copy alone,
 #: below, because triage is where a caller who cannot get through the check actually is.
+#:
+#: **"last resort", not "first response", stated explicitly** (found live, 2026-09-12, immediately
+#: after the routing-invisibility fix above landed). A caller asked for a balance before keying a
+#: PIN -- exactly the case triage's own instructions cover ("hand the call to the banking agent
+#: right away") -- and the model escalated instead, ending the call about a second after the
+#: request, before a single DTMF frame could arrive. "If you can't help the caller" was read as
+#: covering "can't help *with this one request, right now*", which every unauthenticated banking
+#: ask matches, making it a plausible-looking excuse to escalate on the very first refusable thing
+#: a caller says. It never touched B1 or B4 -- escalation is a permitted anonymous action and the
+#: call ended the way an escalation is supposed to -- it just ended the wrong conversation.
 _ESCALATION_INSTRUCTION = (
-    "If you can't help the caller, or if they ask for a person, call escalate_to_human with the "
-    "reason that fits. There is nobody to transfer them to on this line, so it ends the call -- "
-    "apologise and say so rather than promising to put them through."
+    "Escalating ends the call, so treat it as a last resort, not your first response to a request "
+    "you can't fulfil right this second. Only escalate when the caller explicitly asks for a "
+    "person, or when there is genuinely nothing else on this line that could help them -- a "
+    "request that a specific tool or a handoff could still answer is neither of those, even if the "
+    "answer turns out to be no. When you do escalate, call escalate_to_human with the reason that "
+    "fits. There is nobody to transfer them to on this line, so it ends the call -- apologise and "
+    "say so rather than promising to put them through."
 )
 
 #: Triage's extra clause. A caller who cannot get through the check is the reason escalation is
@@ -117,7 +131,8 @@ TRIAGE = AgentSpec(
         "moving money, hand the call to the banking agent right away. If the caller's card is "
         "lost or stolen, or they want it stopped, hand the call to the cards agent right away. "
         "Either way, do it rather than trying to help directly, and don't make the caller repeat "
-        "themselves once you do. "
+        "themselves once you do. This applies even before the PIN is confirmed -- hand the call "
+        "off, do not escalate, and let the specialist tell them what needs to wait. "
         + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE + _ROUTING_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({"escalate_to_human"}),
