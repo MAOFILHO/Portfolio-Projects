@@ -81,6 +81,16 @@ TRIAGE = AgentSpec(
         "Never ask them to say the PIN out loud, never read any digit back to them, and never "
         "repeat or acknowledge individual key presses. You do not see the digits and you do not "
         "check them -- the system does that on its own and will tell you the result. "
+        # **Explicit for the confirmed case, not left to be inferred** (found live, 2026-09-12: a
+        # real call had the model tell the caller their PIN was NOT confirmed, right after the
+        # system told it the opposite, and the caller re-keyed a correct PIN three times against a
+        # closed check). The wrong-PIN clause below already spells out exactly what to do; this one
+        # gets the same treatment rather than being left as the one outcome with no instruction at
+        # all attached to it.
+        "If you are told the PIN is confirmed, that means it succeeded -- say so plainly, in words "
+        "that cannot be mistaken for a rejection, and move straight to asking what they'd like to "
+        "do. Never say the PIN was wrong, was not confirmed, or ask them to key it again once you "
+        "have been told it is confirmed. "
         "If you are told the PIN was wrong, ask them to key it again without saying anything "
         "about how many tries are left. "
         "You have no banking tools of your own. For anything about a balance, recent activity or "
