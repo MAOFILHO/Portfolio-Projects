@@ -417,6 +417,17 @@ Stated here so none of it is discovered later and reported as a surprise.
 8. **No durable ACS-side call-diagnostics path exists.** App-side container logs deliver correctly;
    ACS-side call diagnostics were never configured. It matters more now that a gate's and a brake's
    failures need auditing. Phase 6 is its real fix.
+9. **Added 2026-09-12, live acceptance calls.** One call had the model correctly refuse a pre-auth
+   balance request, then go silent — no further tool call, no error or exception anywhere in the
+   trace — until Marco hung up. B1 held throughout; no balance was ever released. No root cause found
+   in the trace. Marco's explicit call (option B, live): accept the day's cumulative evidence and stop
+   chasing a clean repro rather than pursue this further today. Distinct from every other silence
+   mode already fixed this phase (mid-PIN interruption, routing narration, PIN-outcome inversion).
+10. **Criterion 20's frozen figure covers the real-call pool only.** The probe pool
+    (`scripts/b5_probe.py`) needs a `core-banking-url` reachable from wherever it runs;
+    `ca-azbank-core-banking`'s ingress is internal-only by design (criterion 22), confirmed
+    unreachable from outside the Container Apps environment on 2026-09-12. Not closed by loosening
+    the ingress — recorded as a stated limit on the frozen figure instead.
 
 ## Deliberately parked, carried forward
 

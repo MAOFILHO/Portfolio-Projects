@@ -115,7 +115,7 @@ Modelled on FNOL's C1/C14 — named, measurable, adversarially tested, CI-gating
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
 | **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the frozen allowlist | **0 violations** | startup guard + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
-| **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
+| **B5** | **Turn Latency** — p95 turn round-trip | **FROZEN 2026-09-12: p95 1025ms, N=13 real-call turns with an allowed tool call** (`docs/phase5/exit-check.md`; probe pool not gathered, see criterion 20) | L3 + production OTel |
 
 **B5 is measured, not asserted, in two stages — Phase 0 cannot produce it.** Phase 0 runs an echo
 WebSocket with no realtime session, so it can only measure **transport RTT**, not turn latency; 3
@@ -125,7 +125,10 @@ calls is not a sample size a percentile can be drawn from. So:
 - After Phase 2 (first real turns through a live realtime connection, **N≥100 turns**), B5 gets a
   **provisional** p95 with the turn count that backs it.
 - After Phase 5 (tool calls to `mock-core-banking` now in the hot path for authenticated intents),
-  B5 is **frozen** — this is the realistic number, since tool calls are the slowest leg.
+  B5 is **frozen** — this is the realistic number, since tool calls are the slowest leg. **Frozen
+  2026-09-12 at p95 1025ms, N=13**, real-call pool only (`docs/phase5/exit-check.md`, criterion 20) —
+  the probe pool could not be gathered, since `mock-core-banking`'s internal-only ingress is
+  unreachable from outside the Container Apps environment.
 - Any p95 reported anywhere in this project **states the turn count behind it**. A percentile without
   a stated N is not a finding.
 
@@ -671,18 +674,42 @@ caps, **fail-closed**, `T-B4-FAILCLOSED`.
 `mock-core-banking` are now in the hot path for authenticated intents, making this the realistic
 latency figure, turn count stated.
 
-**Status 2026-09-11 — built to the edge of Azure, exit NOT met.** Spec #43, tickets #44-60, exit
-criteria `docs/phase5/exit-criteria.md` (approved 2026-09-11), evidence `docs/phase5/exit-check.md`.
-**13 of 18 tickets done.** Everything buildable without Azure is committed: all three remaining
-intents, a third agent (Cards), the call-record store, B4's daily cap and closed path, and the
-greeting. voice-agent 480 tests, mock-core-banking 90, **B1 0 breaches across 593 cases from 18
-ideas**, **B2 0 occurrences**, B4 blocking by construction.
+**Status 2026-09-12 — CLOSED, exit met, two criteria met with a stated limit.** Spec #43, tickets
+#44-60 all done, exit criteria `docs/phase5/exit-criteria.md` (approved 2026-09-11), evidence
+`docs/phase5/exit-check.md`. voice-agent 491 tests, mock-core-banking 90, **B1 0 breaches across 593
+cases from 18 ideas — held across every live call today too**, **B2 0 occurrences**, B4 blocking by
+construction.
 
-**What is NOT met, and is not reported as met**: nothing is provisioned, nothing redeployed, no call
-made, **B5 is not frozen**, and all four wire-format questions are still open. The red-team idea
-count is **18 against a target of 20-30** — reported rather than padded, and the gap is still a gap.
-B2 still covers three of its four named surfaces; span attributes are uncovered because nothing emits
-spans.
+**B5 is frozen**: N=13 authenticated turns with an allowed tool call reaching `mock-core-banking`,
+p95 1025ms, avg 692ms — real calls, full ACS media relay, tool calls in the hot path as planned.
+**Stated limit**: the probe pool (`scripts/b5_probe.py`) could not be gathered — `mock-core-banking`'s
+internal-only ingress (criterion 22, deliberate) is unreachable from outside the Container Apps
+environment, confirmed live rather than assumed, and not worked around by loosening it.
+
+**The acceptance call (criterion 25) is met with a stated limit, Marco's own explicit call.** No
+single continuous call landed all five required elements in one run — eight scripted attempts across
+the day each covered part of it, several derailed by real model-behaviour defects found and fixed
+live (below). Every required element fired at least once across the day's calls (real PIN, `*`
+pressed, a pre-auth refusal, all four intents, calls ending on escalation), and Marco chose to accept
+that cumulative evidence rather than chase a ninth clean call. Recorded as scattered coverage, not
+smoothed into a pass of the literal wording.
+
+**Three real defects found live and fixed, beyond the two smoke-call defects (missing `aiohttp`;
+HTTP→HTTPS internal-ingress redirect)**: premature escalation on a caller's first request (`5a742e4`);
+routing narrated aloud and a refusal's tool call skipped (`513212c`); and that second fix over-reached,
+banning the word "transfer" on the banking agent too and blocking its own transfer confirmations —
+caught in `/code-review`, fixed the same session (narrowed to triage/cards only), redeployed, and
+verified live with a passing authenticated `transfer` call. **One defect remains unresolved and
+accepted as-is**: a call that refused correctly pre-auth then went silent with no error in the trace,
+Marco's explicit choice not to chase it further today (B1 held; no data was ever released).
+
+**Wire-format questions: two closed, two still open.** Closed: the injected PIN-outcome system
+message is accepted and spoken plainly; real keyed DTMF drives the authenticator end to end. Still
+open, one accepted as a known gap: `#`'s exact media-path spelling is unconfirmed (it shares a
+catch-all log outcome with any post-auth digit, unlike `*` which has its own); frame ordering via
+`timestamp` remains uninstrumented. The red-team idea count stayed **18 against a target of 20-30** —
+reported rather than padded. B2 still covers three of its four named surfaces; span attributes remain
+uncovered because nothing emits spans, and that is Phase 6's fix.
 
 **One corollary of B1 changed here, on sign-off** (see decision 7): `escalate_to_human` is reachable
 while anonymous, so "no tool at all is reachable while a call is anonymous" is false and has been

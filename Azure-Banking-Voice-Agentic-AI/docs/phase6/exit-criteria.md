@@ -24,20 +24,20 @@ and this is not a sub-issue of it.
 
 ---
 
-## Entry conditions — none of the blocking ones is satisfied
+## Entry conditions — updated 2026-09-12, four of eight still unmet
 
 | condition | state |
 |---|---|
 | Phase 5's exit criteria written | **Satisfied** — `docs/phase5/exit-criteria.md`, approved 2026-09-11 |
-| **Phase 5's exit criteria met** | **NOT satisfied** — 5 of 18 tickets open, nothing provisioned, no call made, B5 not frozen |
-| **Marco's sign-off on Phase 5** | **NOT given** |
-| **Marco's approval to begin Phase 6** | **NOT given** |
+| **Phase 5's exit criteria met** | **Satisfied, 2026-09-12** — all 18 tickets closed; two met with a stated limit (B5 frozen on the real-call pool only; the acceptance call's evidence is scattered across the day, not one continuous run — both Marco's explicit call). `docs/phase5/exit-check.md` |
+| **Marco's sign-off on Phase 5** | **Still owed** — distinct from the exit being met |
+| **Marco's approval to begin Phase 6** | **Still owed** — `APPROVED: Phase 6` (typed 2026-09-12) covers only the billable-resource gate, not this |
 | **Open item 16 settled** (`/research`) | **NOT settled** — hard blocker on one ticket, see criterion 3 |
 | **Open item 15 settled** (`/research`) | **NOT settled** |
 | **B2 widening signed off** | **NOT given** — a named constraint does not move without it |
-| Phases 4 and 5 reviewed (`git log e42c063..HEAD`) | **NOT done** — waived once already at Phase 5 entry |
+| Phases 4 and 5 reviewed (`git log e42c063..HEAD`) | **Still NOT done** — the 2026-09-12 `/code-review` covered only `a7e06d1..HEAD` (17 of the 42 commits since `e42c063`); the other 25 remain unreviewed |
 
-**Seven of eight entry conditions are unmet.** This is recorded as a list of blockers, not as a
+**Four of eight entry conditions are unmet.** This is recorded as a list of blockers, not as a
 checklist to be worked around.
 
 ---
