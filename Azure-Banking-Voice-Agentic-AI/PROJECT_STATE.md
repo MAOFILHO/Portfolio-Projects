@@ -78,14 +78,13 @@ without reading it:
 
 ### Needs Marco
 
-0. **Review `git log e42c063..HEAD`** — see next action 1. Read the range from `git log`, never a
-   count written here: a count here has been wrong twice, because the commit updating it is
-   uncounted as it is written. **Most of those commits touch `dispatch/`, the DTMF/PIN path, or
-   both**, so the never-auto-accept rule binds them.
+0. **Review `git log e42c063..HEAD`** — see next action 1. Count it from `git log`, never from a
+   number written here; that number has been wrong twice, because the commit updating it is
+   uncounted as it is written. **Most of the range touches `dispatch/` or the DTMF/PIN path**, so the
+   never-auto-accept rule binds it.
 1. **`/research` still owes open items 15, 16 and 19** — the `RequestResponse` category, whether the
    FastAPI instrumentation captures request bodies, and the azure-core SDK timeout option names.
-   *(The role GUID and Table Storage's rate were read live 2026-09-12 and are no longer owed:
-   `COSTS.md`, and the module header. Skill named, not invoked.)*
+   *(The role GUID and Table Storage's rate are no longer owed — read live 2026-09-12.)*
 2. **A human review of both Bicep modules** — of their intent, not their syntax. Bicep CLI v0.47.16
    compiles both clean as of 2026-09-12. No `main.bicep` exists, so neither has been what-if'd.
 3. **A phone.** Tickets #58 and #59 need Marco dialling, and **the call must press `*` and `#`** — a
@@ -246,16 +245,17 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
    is banked and valid; it satisfies **one** of Phase 6's eight entry conditions — "Marco's approval
    to begin Phase 6" — plus the separate `APPROVED: Phase 6` billable-resource gate, and nothing else.
    **Six entry conditions stay unmet**: Phase 5's exit, Phase 5's sign-off, open item 15, open item 16,
-   the unsigned B2 widening, and the 25 unreviewed commits. Design and exit criteria:
-   `docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11. The path runs through the items
-   below, in this order; every one of steps 4 to 6 needs Marco's hands, voice, or both.
+   the unsigned B2 widening, and the unreviewed commits. Design: `docs/phase6/exit-criteria.md`, 19
+   decisions settled 2026-09-11. The path runs through the items below, in this order; every one of
+   steps 4 to 6 needs Marco's hands, voice, or both.
 0b. **The review findings were never filed as issues** — neither the original eight nor the second
    round. Every fix commit references only the phase spec `#43`. The drafted set and its blocking
    edges are in `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
-1. **Read `git log e42c063..HEAD`.** Phase 4's diff and Phase 5's. It is the entry condition that was
-   waived, it is four phases of code that will land on one image, and it is the cheapest point at
-   which any of it can be sent back.
-2. *(done — GUID and Table Storage rate, both read live. "Needs Marco" item 1.)*
+1. **Read `git log e42c063..HEAD`.** The waived entry condition, four phases landing on one image,
+   and the cheapest point to send any of it back. **Reading order:
+   `docs/phase5/commit-review-digest.md`** — tiered by risk, naming what it read versus summarised.
+   A reading order, not a substitute: the never-auto-accept rule wants a human on the diff.
+2. *(done — GUID and Table Storage rate, read live 2026-09-12.)*
 3. **Review the two Bicep modules** (`infra/modules/`). Intent, not syntax. Both headers changed
    2026-09-12 to record what was verified; a diff touching either is never auto-accepted.
 4. **Then #57**: provision the Storage account and the second Container App, grant the data role and
