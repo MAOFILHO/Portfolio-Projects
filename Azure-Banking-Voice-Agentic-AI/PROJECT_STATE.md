@@ -56,14 +56,15 @@ OK` -> `authenticated` -> `handoff: triage -> banking` -> `list_accounts`, `list
 `get_balance` all `200 OK` -> clean disconnect, minutes written and read back. First real proof this
 system can authenticate and serve a banking intent end to end.
 
-**A third call, after tuning `silence_duration_ms` 200 -> 600 (open item 9, `0ed61e0`), found a
-different real defect: the model told Marco his correct PIN was NOT confirmed**, right after the
-backend authenticated it correctly. No security issue -- every digit he re-keyed afterward is
-logged `ignored`, never re-checked, so auth state was never actually in doubt. Fixed as far as
-prompting can: an explicit confirmed-case instruction (`3dd5605`) and a sharper sentence pair,
-"successful" / "not successful" (`1b494b6`, Marco's own suggestion). **Neither is a guarantee** —
-model output isn't deterministic — so this needs one more real call to actually confirm, not to be
-assumed fixed from the diff.
+**Five more calls (post-VAD-tuning `0ed61e0`) all authenticated correctly on the backend and all
+mis-spoke it differently** — inverted once, "no access to the confirmation" three times, silent
+twice. Never a security issue: every re-key after the first success is logged `ignored`, never
+re-checked. Fixed as far as prompting can, with `3dd5605` (explicit confirmed-case instruction) and
+`1b494b6` (sharper "successful"/"not successful" pair, Marco's suggestion) — **and confirmed live**:
+the next call on the rebuilt image (`p5d`, `--0000006`) said it plainly, then completed
+`list_accounts` and a real `transfer`, both `200 OK`, then ended clean. First transfer this system
+has ever executed on a real call. One clean call after four inconsistent ones is encouraging, not
+conclusive — see "The four wire-format questions" below.
 
 **Three rounds of `/code-review` are actioned and closed.** Record: `docs/phase5/review-fixes.md`.
 
@@ -100,19 +101,20 @@ without reading it:
 1. **`/research` still owes open items 15, 16 and 19** — the `RequestResponse` category, whether the
    FastAPI instrumentation captures request bodies, and the azure-core SDK timeout option names.
 2. *(done — Bicep header diffs reviewed and committed 2026-09-12.)*
-3. **A phone.** One more call to confirm the two PIN-outcome fixes, then #58 and #59, and **the
-   call must press `*` and `#`** — digits-only closes nothing while looking like it did.
+3. **A phone.** #58 and #59, and **the call must press `*` and `#`** — digits-only closes nothing
+   while looking like it did.
 
-### The four wire-format questions — one closed, one downgraded
+### The four wire-format questions — one closed, one holding steady after a scare
 
-1. **Accepted, yes — spoken faithfully, not guaranteed.** Two calls now inject the same fixed
-   sentence at `authenticated`; call two's model paraphrased it into its opposite, telling Marco his
-   correct PIN was **not** confirmed, after three correct calls back-to-back. Auth state was never
-   wrong — every ignored digit after it proves that — this is the model contradicting its own
-   system message, not a state or gate defect. Mitigated (not solved) by an explicit instruction for
-   the confirmed case and a sharper sentence pair (`3dd5605`, `1b494b6`); neither makes phrasing
-   deterministic. **A third real call, after both fixes, is what actually answers this.**
-2. **Still open** — the smoke calls keyed digits only, never `*` or `#`. Ticket #58's script must.
+1. **Backend never wrong across nine calls; spoken fidelity was the real question, and it holds so
+   far.** Four more calls on the *old* image (rebuilt image not yet deployed at the time) each
+   mis-spoke the same "confirmed" outcome differently — inverted once, "I don't have access to the
+   confirmation" three times, silent twice — while authentication itself succeeded every single
+   time underneath. **After `3dd5605` + `1b494b6` actually deployed** (image `p5d`, revision
+   `--0000006`), the next call said it plainly, then went on to `list_accounts` and a real
+   `transfer`, both `200 OK`, then a clean end. One clean call is one clean call, not a guarantee —
+   the four failures were exactly this consistent-looking right up until they weren't.
+2. **Still open** — no call has keyed `*` or `#`. Ticket #58's script must.
 3. **Still open**, `timestamp` still unread.
 4. **Closed, yes.** A full 4-digit PIN (`1234`) drove the authenticator from `accumulating` through
    a real credential check to `authenticated`, live, on two separate calls now.
@@ -180,8 +182,7 @@ because they are genuinely unresolved, not because any of them is currently bloc
    Not yet proven fixed; no call since has been long enough to judge it either way.)*
 10. *(closed, `docs/phase5/review-fixes.md`; number held so 11-21 keep their references)*
 11. *(closed 2026-09-12 — see "The four wire-format questions" above.)*
-12. *(open again, downgraded 2026-09-12 — see question 1 above. Accepted and spoken is not the same
-    as spoken faithfully; a third real call is what actually settles it.)*
+12. *(reopened then re-closed 2026-09-12 — see question 1 above.)*
 13. **The DTMF tone vocabulary is unverified, and no documentation can verify it.** The frame has
     no schema in Azure's specs; primary examples show a bare digit, the only enumerated vocabulary
     spells tones as words and belongs to a different delivery path, and `*` and `#` — the two keys
