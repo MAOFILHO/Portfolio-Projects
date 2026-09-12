@@ -124,6 +124,44 @@ What the caller hears when the gate declines a tool call. Deliberately uninforma
 explanation of what *would* have been permitted is a probing oracle.
 _Avoid_: denial, rejection (means a declined transfer, below), error
 
+### Observability
+
+**Telemetry**:
+What the relay records about itself: what happened during a call, in what order, and how long each
+part took. **Evidence, never a control** — every named constraint holds with telemetry entirely
+absent, and nothing is ever refused, permitted or capped because of something telemetry said.
+_Avoid_: monitoring, logging, metrics (one kind of telemetry, not the whole), instrumentation
+
+**Trace**:
+Everything recorded about one **call**, keyed by the correlation id the media stream carries. One per
+call, opening when the socket opens and closing when it closes. A call and a trace are the same span
+of time seen from two sides.
+_Avoid_: log, audit trail (both mean the call-record store, above), session, request
+
+**Span**:
+One timed step inside a trace — the call itself, a turn, a tool call, one reach for the system of
+record. Spans nest the way the domain does: a call contains turns, a turn contains tool calls.
+_Avoid_: event, segment, operation
+
+**Attribute**:
+One named fact on a span. Drawn only from the **allowlist** — an attribute is not somewhere to put
+what happened, it is one of a fixed set of things a span is allowed to say.
+_Avoid_: tag, field, property, label
+
+**Allowlist**:
+The fixed set of attribute names a span may carry, and the only thing permitted on one. Everything
+not on it is dropped, so adding a fact means editing the list first. **Deny by default**: the list is
+the boundary, not a suggestion.
+_Avoid_: whitelist, schema, filter list
+
+**Redaction filter**:
+The runtime half of the allowlist, dropping any attribute whose name is not on it. **A net, not the
+control** — the control is that nothing forbidden is ever put on a span in the first place, exactly
+as the **auth gate** is the only thing that decides and everything else is defence in depth. Works on
+names alone and never inspects a value, because a filter that matched patterns would have to be right
+about every attribute every future library invents.
+_Avoid_: scrubber, sanitizer, PII filter, masking
+
 ### Banking
 
 **Core banking**:

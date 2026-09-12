@@ -63,10 +63,8 @@ nothing redeployed, no call made.** What a caller dialling the number reaches to
 Both red-team numbers are always quoted together: a case count with no idea count behind it is the
 same empty claim as a percentile with no N.
 
-**What the phase added**: `list_transactions`, a Cards agent and `block_card` with a relay-generated
-idempotency key, `escalate_to_human` with the call-record store behind it, B4's daily cap and the
-closed path, minutes charged on every path out, and the greeting. The exit check carries the detail;
-three things a later session needs without reading it:
+**What the phase added is in `docs/phase5/exit-check.md`.** Three things a later session needs
+without reading it:
 
 - **The red-team idea count is 18 against a target of 20-30**, reported rather than padded, and the
   gap is still a gap. Widening a matrix is not an idea — the two new tools roughly doubled the case
@@ -80,11 +78,10 @@ three things a later session needs without reading it:
 
 ### Needs Marco
 
-0. **Review `git log e42c063..HEAD`** — Phase 4's diff *and* Phase 5's, oldest first. Phase 5's one
-   unmet entry condition, **waived rather than satisfied** on 2026-09-11. Read the range from
-   `git log`, never a count written here; a count written here has been wrong twice, because the
-   commit updating it is uncounted as it is written. **Most of these commits touch `dispatch/`, the
-   DTMF/PIN path, or both**, so the never-auto-accept rule binds them.
+0. **Review `git log e42c063..HEAD`** — see next action 1. Read the range from `git log`, never a
+   count written here: a count here has been wrong twice, because the commit updating it is
+   uncounted as it is written. **Most of those commits touch `dispatch/`, the DTMF/PIN path, or
+   both**, so the never-auto-accept rule binds them.
 1. **`/research`, before anything is applied.** Two facts are written from documentation rather than
    from a live source, and the module says so in its own header: the **role definition GUID** in
    `infra/modules/call-records-store.bicep`, where being wrong produces a role assignment that
@@ -107,9 +104,8 @@ on the acceptance call or not at all:
 
 ### Still open from Phase 3
 
-1. **Known-partial:** "Bicep module reviewed" is still **unvalidated by any tool**. `infra/` now holds
-   two modules rather than one, so "consistent with the existing modules' shape" finally has a
-   sibling — but nothing has been compiled, linted or what-if'd.
+1. **Known-partial:** "Bicep module reviewed" is **unvalidated by any tool**. `infra/` holds two
+   modules; none has been compiled, linted or what-if'd.
 
 ## Live Azure state
 
@@ -146,7 +142,11 @@ because they are genuinely unresolved, not because any of them is currently bloc
 1. **No durable ACS-side call-diagnostics path.** App-side container logs deliver correctly
    (`docs/handoffs/2026-08-27-phase1-logpath-resolved.md`); ACS-side call diagnostics were never
    configured, and per item 3 below, won't be for the R-03 question specifically. Matters more now
-   that a gate's failures need auditing — Phase 6 (Observability) is its real fix.
+   that a gate's failures need auditing. **Corrected 2026-09-11: Phase 6 is NOT its fix.** Phase 6
+   produces app-side traces, ingested via the OTel Distro's own endpoint — independent of
+   `Microsoft.Insights/diagnosticSettings`, which is what failed in Phase 0. ACS-side diagnostics are
+   different data from a different producer over that same failed mechanism. Out of Phase 6's scope
+   (`docs/phase6/exit-criteria.md` D6); needs its own decision and a table queried for rows.
 2. **`02-test-calls.sh` must not be re-run carelessly.** Stages 1-3 have no skip-if-already-confirmed
    guard — unconditionally prompts for 3 fresh billable calls before Stage 4's free, read-only
    evidence extraction can run. Candidate fix: an `--extract-only` flag.
@@ -170,18 +170,16 @@ because they are genuinely unresolved, not because any of them is currently bloc
    both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
    exit table** (`docs/PLAN.md`'s own words). Scoped as `server_vad` config tuning, not new code,
    once/if it reproduces again.
-10. **CLOSED by Phase 5 (#51)** — the dead-air gap before the agent's first words. Moved to
-    `docs/phase5/review-fixes.md`; nothing past-tense stays here (decision 18).
+10. *(closed, `docs/phase5/review-fixes.md`; number held so 11-21 keep their references)*
 11. **No real DTMF tone has ever been consumed by this system.** Phase 0 proved tones *arrive*
     during active bidirectional streaming; every line that acts on one is Phase 4's and is exercised
     only against fakes, because Phase 4 deployed nothing. Closes at Phase 5's real-call exit.
 12. **The injected conversation item's *acceptance* is unverified — its shape no longer is.**
-    Confirmed against the generated specification 2026-09-10: `system` + `input_text` is not just
-    legal, it is the only content type that role permits, and the spec names this exact use. What no
-    source documents is whether Azure's GA endpoint and `gpt-realtime-mini` `2025-10-06` accept it,
-    per model version, which is the case B3 exists for. One live frame settles it. The item now
-    carries a client `event_id`, so the probe can tell "my item was refused" from "an error
-    happened". `docs/phase4/findings.md` §2, `docs/phase4/research-carried-findings.md` §1.
+    Confirmed against the generated specification 2026-09-10: `system` + `input_text` is the only
+    content type that role permits, and the spec names this exact use. Unverified is whether Azure's
+    GA endpoint and `gpt-realtime-mini` `2025-10-06` accept it, which is the case B3 exists for. One
+    live frame settles it; the item carries a client `event_id` so the probe can tell a refusal from
+    an unrelated error. `docs/phase4/findings.md` §2, `docs/phase4/research-carried-findings.md` §1.
 13. **The DTMF tone vocabulary is unverified, and no documentation can verify it.** The frame has
     no schema in Azure's specs; primary examples show a bare digit, the only enumerated vocabulary
     spells tones as words and belongs to a different delivery path, and `*` and `#` — the two keys
@@ -201,11 +199,15 @@ because they are genuinely unresolved, not because any of them is currently bloc
     bodies by default.** Not verified against those packages' source, so it is not asserted either
     way. It matters because the relay's own FastAPI app receives the ACS webhook and, at Phase 5,
     the media WebSocket — a body-capturing default there would put DTMF frames into telemetry.
-    Cheap to settle by reading source, and it must be settled **before Phase 6 enables anything**.
+    **Promoted 2026-09-11 to a hard blocker on one Phase 6 ticket** (`docs/phase6/exit-criteria.md`
+    D8, criterion 3): the webhook body carries the caller's phone number, which Phase 6's design
+    forbids in telemetry, and the relay never reads it — so a body-capturing default would put it
+    there with no code in this project having touched it. FastAPI instrumentation is not enabled
+    until this is answered from the packages' source.
 17. **`transport/acs.py`'s audio branch is not total, unlike its DTMF branch.** A malformed
-    `AudioData` frame raises `KeyError` on the inbound relay task, which ends the call; the DTMF
-    branch is deliberately defensive for exactly that reason and the audio branch never was. Pinned
-    by `tests/test_acs.py::test_a_malformed_audio_frame_still_raises`, so it is known rather than
+    `AudioData` frame raises `KeyError` on the inbound relay task, ending the call; the DTMF branch
+    is deliberately defensive and the audio branch never was. Pinned by
+    `tests/test_acs.py::test_a_malformed_audio_frame_still_raises`, so it is known rather than
     folklore. **Not changed**: relay behaviour nobody asked to alter, on a never-auto-accept path.
 18. **The relay imposes no deadline on the injected PIN-outcome frames.** The research is explicit
     that telling a rejection from silence needs the error type, a correlated id, **and the relay's
@@ -213,39 +215,40 @@ because they are genuinely unresolved, not because any of them is currently bloc
     never answered still looks like an accepted one. Deliberately not built here: the authenticator
     carries "no timer of any kind" as a design decision, and putting one on the relay's PIN path is
     a Phase 5 design question rather than a fix.
-19. **The call-record store sets no SDK-level timeout, deliberately.** The deadline that makes
-    criterion 11's "times out" branch real is at the seam (`session.LEDGER_DEADLINE_SECONDS`),
-    tested, and holds for the fake and the real client alike. A transport timeout would be better —
-    it closes the socket rather than merely stopping the wait — but azure-core clients ignore
-    unknown keyword arguments, so a misremembered option name reads as configured and does nothing:
-    the role-definition GUID's failure shape. `/research` owes the option names with the rest.
+19. **The call-record store sets no SDK-level timeout, deliberately.** The deadline is at the seam
+    (`session.LEDGER_DEADLINE_SECONDS`), tested, and holds for fake and real client alike. A
+    transport timeout would be better, but azure-core clients ignore unknown keyword arguments, so a
+    misremembered option name reads as configured and does nothing: the role-definition GUID's
+    failure shape. `/research` owes the option names with the rest.
 20. **Criterion 12's "every path out" is true inside the relays, not before them.** `budget_or_closed`
-    and `connect_realtime` both run before `started`, so a failure in either records nothing.
-    Pre-existing and arguably right — no model session existed, so there are no model minutes — but
-    the criterion says "including the paths that raise", so it is named rather than assumed settled.
-21. **The daily ledger's lock is in-process only.** It covers today's race, two calls ending
-    together in one process. A second replica holds a second lock and loses updates again. ETag
-    optimistic concurrency is the fix and is a deliberate not-yet (Marco, 2026-09-11): one replica
-    runs, and the ETag path cannot be exercised until the Storage account exists.
+    and `connect_realtime` run before `started`, so a failure in either records nothing. Arguably
+    right, since no model session existed, but named rather than assumed settled.
+21. **The daily ledger's lock is in-process only.** It covers two calls ending together in one
+    process; a second replica holds a second lock and loses updates again. ETag optimistic
+    concurrency is the fix and a deliberate not-yet (Marco, 2026-09-11): one replica runs, and the
+    ETag path cannot be exercised until the Storage account exists.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
 **R-01, R-02, R-03 (partial, see item 3), R-04, R-05, R-06 resolved.** **R-04 reconfirmed
 2026-09-01 for Phase 1's stateful agent loop** (IDLE, reconfirmed 2026-09-08). **R-08 recomputed 2026-09-11 against a two-Container-App fixed cost and PASSES**
 (`COSTS.md`, "R-08, recomputed"): fixed $14.60/mo, **45–67 demo runs/month against a gate of 5**.
-The second container is $7.88 rather than $5.72 because the free grant is per subscription and the
-first app consumes all of it. **One input is unpriced** — Table Storage's rate, which `/research`
-owes before provisioning — and a sensitivity table shows the gate still clears by four times even
-at an implausible $5/mo for it. The Phase 0 figure (79.2) is superseded and kept: it measured a
-one-container system. **R-09** (number irreplaceability) is a standing hard rule, not something
+**One input is unpriced** — Table Storage's rate, which `/research` owes before provisioning — and a
+sensitivity table shows the gate still clears by four times even at an implausible $5/mo for it.
+**R-08 is recomputed again before Phase 6 provisions anything**, because App Insights shares the
+container logs' 5 GB free grant rather than adding one (`docs/phase6/exit-criteria.md` D4).
+**R-09** (number irreplaceability) is a standing hard rule, not something
 to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to resolve.
 
 ## Next actions (in order)
 
-0. **Phase 6 does not begin here.** Marco asked for it 2026-09-11; the answer is that Phase 5's exit
-   is not met — four tickets open, nothing provisioned, no call made, B5 not frozen — and no phase
-   begins without written exit criteria from the prior one. The path to Phase 6 runs through the
-   items below, in this order, and every one of steps 4 to 6 needs Marco's hands, voice, or both.
+0. **Phase 6 does not begin here.** Marco asked for it twice, 2026-09-11; the answer both times is
+   that Phase 5's exit is not met — tickets open, nothing provisioned, no call made, B5 not frozen —
+   and no phase begins without written exit criteria from the prior one. **Phase 6 is now designed
+   and its exit criteria written** (`docs/phase6/exit-criteria.md`, 19 decisions settled by Marco in
+   a grilling session, none of them an approval to start). **7 of its 8 entry conditions are unmet**,
+   and two proposed named-constraint changes to B2 are unsigned. The path runs through the items
+   below, in this order; every one of steps 4 to 6 needs Marco's hands, voice, or both.
 0b. **The review findings were never filed as issues** — neither the original eight nor the second
    round. Every fix commit references only the phase spec `#43`. The drafted set and its blocking
    edges are in `docs/handoffs/2026-09-11-phase5-review-fixes.md`.
