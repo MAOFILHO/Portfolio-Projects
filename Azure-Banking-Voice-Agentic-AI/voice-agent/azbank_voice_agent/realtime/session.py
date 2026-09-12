@@ -31,17 +31,24 @@ from ..transport import acs
 log = logging.getLogger("bridge")
 
 # Set explicitly, not left to defaults: this is a paid call, not the earlier text-modality probe
-# that confirmed these defaults. Values match that confirmed-live default exactly (session.created
-# echo, 2026-08-29). Shared by every agent's session.update -- only instructions and tools change
-# on a handoff (issue #20), never the audio wire shape.
+# that confirmed these defaults. Shared by every agent's session.update -- only instructions and
+# tools change on a handoff (issue #20), never the audio wire shape.
 _AUDIO_CONFIG = {
     "input": {
         "format": {"type": "audio/pcm", "rate": 24000},
+        # `silence_duration_ms` raised 200 -> 600, 2026-09-12 (Marco, live on Phase 5's second real
+        # call). Open item 9's interrupt-the-caller defect reproduced a third time here, described
+        # as talking over the caller "out of control" rather than the earlier one-off -- a stronger
+        # signal than the two prior calls gave. 200ms reads an ordinary mid-sentence pause as the
+        # caller finishing; 600ms is long enough to survive a breath without making the agent feel
+        # sluggish. This is the change open item 9 already named as its fix: turn-detection tuning,
+        # not new code, deliberately isolated from everything else so a regression stays
+        # attributable to this line and not to Phase 5's intents or greeting.
         "turn_detection": {
             "type": "server_vad",
             "threshold": 0.5,
             "prefix_padding_ms": 300,
-            "silence_duration_ms": 200,
+            "silence_duration_ms": 600,
             "create_response": True,
             "interrupt_response": True,
         },

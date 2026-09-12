@@ -1809,12 +1809,16 @@ class TheAgentGreetsWithoutWaiting(unittest.TestCase):
         asyncio.run(run_closed_call(transport, realtime, self.call_records))
         self.assertEqual(realtime.sent_types.count("response.create"), 1)
 
-    def test_turn_detection_is_untouched_by_this_change(self):
-        """`server_vad` is not this ticket's business, deliberately.
+    def test_turn_detection_matches_the_2026_09_12_tuning(self):
+        """`server_vad` moved exactly once, deliberately, and everything else about it stayed put.
 
-        The intermittent interrupt-the-caller defect is scoped as turn-detection tuning. Changing
-        when the agent first speaks *and* how it detects turns in one phase would make a regression
-        on the real call unattributable to either.
+        This pinned `silence_duration_ms: 200` until the interrupt-the-caller defect (open item 9)
+        reproduced a third time on Phase 5's second real call, described as talking over the caller
+        rather than the earlier one-off. Raised to 600 (Marco, 2026-09-12) -- isolated to this one
+        field so a regression on a later real call is attributable to this line, not to whatever
+        else that phase touches. The greeting (issue #51) is the same discipline applied earlier:
+        changing when the agent first speaks *and* how it detects turns in one phase would make a
+        regression unattributable to either.
         """
         self.assertEqual(
             session_module._AUDIO_CONFIG["input"]["turn_detection"],
@@ -1822,7 +1826,7 @@ class TheAgentGreetsWithoutWaiting(unittest.TestCase):
                 "type": "server_vad",
                 "threshold": 0.5,
                 "prefix_padding_ms": 300,
-                "silence_duration_ms": 200,
+                "silence_duration_ms": 600,
                 "create_response": True,
                 "interrupt_response": True,
             },
