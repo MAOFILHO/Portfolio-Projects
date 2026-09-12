@@ -35,10 +35,10 @@
 //     83 shell, Python, Bicep and Makefile files is either a read-only `phonenumber list`, an
 //     unrelated identifier, or a comment restating the rule. `04-teardown-and-r08.sh` says in its
 //     own words that it never calls a release, and it does not.
-//   * **Still not validated by any tool.** There is no `bicep` CLI here and still no `main.bicep`,
-//     so this has never been compiled, linted or what-if'd, and "consistent with the existing
-//     modules" now has exactly one sibling to be consistent with. Human review is the only check
-//     that exists, which is why this list is written down rather than done silently.
+//   * **Validated by a tool, 2026-09-12.** `az bicep build` exits 0 with no lint output, on Bicep
+//     CLI v0.47.16, installed that day. The line that said no `bicep` CLI exists here is superseded.
+//     There is still no `main.bicep`, so this compiles in isolation and has never been what-if'd
+//     against the real resource group, and human review remains the only check on its intent.
 
 @description('Azure region. Canada Central, no fallback -- docs/PLAN.md decision 12.')
 param location string = 'canadacentral'

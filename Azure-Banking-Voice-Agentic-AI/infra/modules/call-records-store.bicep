@@ -10,29 +10,35 @@
 //   1. R-08 is recomputed against a **two**-Container-App fixed cost. DONE 2026-09-11 -- it passes
 //      with headroom (COSTS.md, "R-08, recomputed"), and this account is the one input that recompute
 //      could not price. See the UNVERIFIED block below.
-//   2. `/research` settles Table Storage's actual rate and confirms the role name below. Neither is
-//      written here from a live source, and CLAUDE.md forbids answering a pricing or API question
-//      from memory -- this project has been burned once already by an unverified assumption.
+//   2. Table Storage's rate and the role GUID below are read from live sources rather than from
+//      memory. BOTH DONE 2026-09-12 -- see the VERIFIED block below.
 //   3. Marco types `APPROVED: Phase 5` for the provisioning step. GIVEN 2026-09-11.
 //
 // A diff touching this file is never auto-accepted: it provisions a billable resource.
 //
 // ---
 //
-// UNVERIFIED, AND NAMED RATHER THAN ASSUMED:
+// VERIFIED 2026-09-12, each against a live source rather than documentation:
 //
-//   * **The role definition GUID below.** It is written as the well-known id for Storage Table Data
-//     Contributor, from documentation rather than from a live `az role definition list` in this
-//     session. It is the single most likely thing in this file to be wrong, and getting it wrong
-//     produces a role assignment that returns 200 OK and grants nothing.
+//   * **The role definition GUID below.** Read back from `az role definition list --name "Storage
+//     Table Data Contributor"` on subscription 960936b9-ecde-465b-be8d-776ca077dcd0. It matches
+//     character for character and the role is a BuiltInRole. This was the single most likely thing
+//     in this file to be wrong, and getting it wrong produces a role assignment that returns 200 OK
+//     and grants nothing.
+//   * **Table Storage's price.** Read from the Retail Prices API for `canadacentral` / `Standard
+//     LRS`: $0.00036 per 10,000 operations, $0.05 per GB-month. This workload costs under a cent a
+//     month. COSTS.md, "The last unpriced input, priced".
+//   * **This file compiles.** `az bicep build` exits 0 with no lint output, on Bicep CLI v0.47.16,
+//     installed 2026-09-12. The header line that said no `bicep` CLI exists here is superseded.
+//
+// STILL UNVERIFIED, AND NAMED RATHER THAN ASSUMED:
+//
 //   * **That a role assignment returning ARM 200 OK proves access.** It does not. CLAUDE.md is
-//     explicit that creation is not delivery. The exit criteria require a write that is then read
-//     back before anything here is described as working.
-//   * **Table Storage's price.** COSTS.md shows the gate clears even at an implausible $5.00/mo for
-//     it, so the recompute is not sensitive to this -- but the real number is still owed.
-//
-// There is no `bicep` CLI in this environment and still no `main.bicep`, so nothing here has been
-// compiled, linted, or what-if'd. Human review is the only check that exists.
+//     explicit that creation is not delivery. A correct GUID removes one way for the grant to be
+//     empty; it does not prove the grant works. The exit criteria still require a write that is then
+//     read back before anything here is described as working.
+//   * **There is still no `main.bicep`**, so this module compiles in isolation and has never been
+//     what-if'd against the real resource group. Human review remains the only check on its intent.
 
 @description('Azure region. Canada Central, no fallback -- docs/PLAN.md decision 12.')
 param location string = 'canadacentral'
@@ -52,7 +58,8 @@ param tableName string = 'callrecords'
 // notably NOT a control-plane role, so this identity cannot change the account's own configuration,
 // read its keys, or reach blobs or queues.
 //
-// VERIFY THIS GUID AGAINST A LIVE `az role definition list` BEFORE APPLYING. See the header.
+// VERIFIED 2026-09-12 against a live `az role definition list` on this subscription: exact match,
+// BuiltInRole. See the header.
 var storageTableDataContributor = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
 resource account 'Microsoft.Storage/storageAccounts@2023-05-01' = {
