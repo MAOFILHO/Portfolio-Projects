@@ -58,15 +58,22 @@ POUND = "#"
 #: whoever found the phone. The caller is told it was wrong and nothing more.
 #: **No sentence uses a term CONTEXT.md proscribes for the auth state either.** The success line
 #: read "you're verified" until /code-review flagged it on 2026-09-10; the glossary lists *verified*
-#: and *logged in* under Auth state's Avoid, and caller prose is not carved out of that. The rule
-#: costs nothing here -- "that's confirmed" is the more natural sentence anyway -- and a glossary
-#: with an unwritten exemption for the strings a caller actually hears is a glossary describing a
-#: different product from the one on the phone.
+#: and *logged in* under Auth state's Avoid, and caller prose is not carved out of that. "successful"
+#: is not on that list.
+#: **AUTHENTICATED and REJECTED read as a deliberate pair, not two sentences composed separately.**
+#: "Thank you, that's confirmed" was the line until a real call on 2026-09-12 had the model, having
+#: just been told exactly that, tell the caller their PIN was *not* confirmed -- a paraphrase that
+#: inverted the meaning it was supposed to relay. `agents/specs.py`'s instructions now say what to
+#: do with each outcome explicitly; this pairing is the other half of the same fix: giving the model
+#: a positive and negative sentence that share a word (`successful`) and differ by exactly one more
+#: (`not`), so far apart in shape that a paraphrase landing on the wrong one is a coarser error to
+#: make. Neither change makes the model's phrasing deterministic; both make a slip land further from
+#: sounding plausible.
 SENTENCES = {
-    outcomes.AUTHENTICATED: "Thank you, that's confirmed.",
-    outcomes.REJECTED: "That PIN wasn't right. Please key it again.",
+    outcomes.AUTHENTICATED: "Your PIN was successful.",
+    outcomes.REJECTED: "Your PIN was not successful. Please key it again.",
     outcomes.EXHAUSTED: (
-        "That PIN wasn't right. For your security I'm ending the call here."
+        "Your PIN was not successful. For your security I'm ending the call here."
     ),
     outcomes.UNAVAILABLE: (
         "I can't check your PIN just now. Please key it again in a moment."
