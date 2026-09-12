@@ -19,12 +19,18 @@ mechanisms that look independent and are not.
 signature -- in this module, in the repo, or in any environment variable this phase adds. That is
 consistent with Phase 7's no-keys direction and with how B3's boot guard already reads ARM.
 
-VERIFY BEFORE THE FIRST DEPLOY (issue #56, and `/research` is the skill for it): the exact
-`azure-data-tables` async API surface against the installed version, and the exact name of the
-built-in role that grants table data access to a managed identity. Both are written here from the
-shape the SDK documents rather than from a live call, and this project has been burned once by an
-unverified assumption (`docs/PLAN.md`, decision 12). **A role assignment returning ARM 200 OK proves
-creation, not access** -- criterion 21 of the exit criteria requires a write that is then read back.
+**The role GUID was confirmed live 2026-09-12** against `az role definition list` -- exact match,
+BuiltInRole. See `infra/modules/call-records-store.bicep`'s header for the record.
+
+**The async API surface failed on the first real deploy, 2026-09-12, and is fixed.**
+`TableServiceClient`'s async pipeline builds an `AioHttpTransport` at construction time regardless
+of credential type, importing `aiohttp` to do it -- not a lazy or optional path. The image had never
+declared that dependency, so `from_account_url` raised `ModuleNotFoundError` inside `lifespan()` on
+every boot, crash-looping the revision before it served a request. Single-revision mode kept the
+prior revision serving throughout; no call was ever dropped. Fixed by declaring `aiohttp==3.14.3` in
+`voice-agent/pyproject.toml`. **A role assignment returning ARM 200 OK proves creation, not access**
+-- criterion 21 of the exit criteria still requires a write that is then read back, which this
+failure is what delayed.
 """
 import asyncio
 import logging

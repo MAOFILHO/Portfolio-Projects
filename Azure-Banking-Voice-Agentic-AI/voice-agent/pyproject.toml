@@ -26,6 +26,14 @@ dependencies = [
     # package imports it directly -- and imported lazily inside the one constructor that needs it,
     # so importing the package anywhere it is not installed still works.
     "azure-data-tables==12.7.0",
+    # Required by azure-data-tables' async client, not merely by convention: TableServiceClient's
+    # async pipeline builds an AioHttpTransport at *construction* time regardless of credential
+    # type, and imports aiohttp to do it -- a plain ModuleNotFoundError, not a lazy or optional
+    # path. Found live 2026-09-12 on the first Phase 5 redeploy: the container crash-looped on
+    # every boot, `TableStorageCallRecordStore.from_account_url` raising this import inside
+    # `lifespan()`, before the app ever served a request. Single-revision mode kept the prior
+    # revision serving throughout, so no call was ever dropped by it.
+    "aiohttp==3.14.3",
     "httpx>=0.27",
 ]
 
