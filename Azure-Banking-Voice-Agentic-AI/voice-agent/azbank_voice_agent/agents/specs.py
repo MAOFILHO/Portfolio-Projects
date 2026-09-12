@@ -102,9 +102,21 @@ _TRIAGE_ESCALATION_CLAUSE = (
 #: since the tool call it would have refused was never made).
 _ROUTING_IS_INVISIBLE_CLAUSE = (
     " The caller cannot see how this call is organised behind the scenes. Never say the words "
-    "'transfer', 'transferring', 'hand off' or 'handoff', and never say you are a different agent "
-    "from the one who was just speaking -- to the caller, this is one continuous conversation with "
-    "one assistant, whatever is happening on this side of the line."
+    "'hand off' or 'handoff', and never say you are a different agent from the one who was just "
+    "speaking -- to the caller, this is one continuous conversation with one assistant, whatever "
+    "is happening on this side of the line."
+)
+
+#: Triage and cards only. On those two agents, "transfer" only ever means moving the *call* --
+#: exactly the routing this clause exists to hide. Banking does not get it: its own `transfer`
+#: tool moves the caller's own money, and its result text says "transferred $X" plainly
+#: (dispatch/tools.py) -- CONTEXT.md's Transfer entry names that word the caller-facing term for
+#: a money move, distinct from Handoff. Split out during /code-review, 2026-09-12: the original,
+#: shared clause banned 'transfer'/'transferring' on all three agents, which would have had
+#: banking refuse to ever confirm a transfer it had just completed.
+_CALL_TRANSFER_IS_INVISIBLE_CLAUSE = (
+    " Never say the words 'transfer' or 'transferring' either -- on this line those describe "
+    "moving the call, not moving money, and the caller must never hear about that."
 )
 
 TRIAGE = AgentSpec(
@@ -134,6 +146,7 @@ TRIAGE = AgentSpec(
         "themselves once you do. This applies even before the PIN is confirmed -- hand the call "
         "off, do not escalate, and let the specialist tell them what needs to wait. "
         + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE + _ROUTING_IS_INVISIBLE_CLAUSE
+        + _CALL_TRANSFER_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({"escalate_to_human"}),
     handoff_to=frozenset({gate.BANKING_AGENT, gate.CARDS_AGENT}),
@@ -185,6 +198,7 @@ CARDS = AgentSpec(
         "If you are told it was already blocked, say so plainly rather than saying you have just "
         "blocked it. "
         + _ESCALATION_INSTRUCTION + _ROUTING_IS_INVISIBLE_CLAUSE
+        + _CALL_TRANSFER_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({"block_card", "escalate_to_human"}),
     handoff_to=frozenset(),

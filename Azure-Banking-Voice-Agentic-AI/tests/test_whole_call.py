@@ -705,6 +705,24 @@ class TriageAsksForTheKeyedPin(unittest.TestCase):
         self.assertNotIn("pin", specs.BANKING.instructions.lower())
 
 
+class RoutingIsInvisibleButMoneyTransfersAreNot(unittest.TestCase):
+    """/code-review, 2026-09-12: the routing-narration fix banned the word 'transfer' on all three
+    agents, including banking -- whose own `transfer` tool moves money and whose result text says
+    "transferred $X" (dispatch/tools.py). That would have banking refuse to ever confirm a
+    transfer it had just completed. Pinned here so it can't regress silently a second time."""
+
+    def test_banking_is_not_told_to_avoid_the_word_transfer(self):
+        instructions = specs.BANKING.instructions.lower()
+        self.assertNotIn("never say the words 'transfer'", instructions)
+
+    def test_triage_and_cards_are_still_told_to_avoid_the_word_transfer(self):
+        # Unlike banking, these two never move money -- "transfer" on their lines only ever means
+        # routing the call, which the caller must never hear about.
+        for spec in (specs.TRIAGE, specs.CARDS):
+            with self.subTest(agent=spec.identity):
+                self.assertIn("'transfer' or 'transferring'", spec.instructions.lower())
+
+
 class WholeCallWithTheGateClosed(unittest.TestCase):
     """B1 at the whole-call seam: a refused tool must not run, and the caller must be told rather
     than left in silence."""
