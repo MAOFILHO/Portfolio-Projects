@@ -82,13 +82,12 @@ without reading it:
    count written here: a count here has been wrong twice, because the commit updating it is
    uncounted as it is written. **Most of those commits touch `dispatch/`, the DTMF/PIN path, or
    both**, so the never-auto-accept rule binds them.
-1. **`/research`, before anything is applied.** Two facts are written from documentation rather than
-   from a live source, and the module says so in its own header: the **role definition GUID** in
-   `infra/modules/call-records-store.bicep`, where being wrong produces a role assignment that
-   returns 200 OK and grants nothing; and **Table Storage's rate**, which is R-08's one unpriced
-   input. Named, not invoked.
-2. **A human review of both Bicep modules.** No `bicep` CLI exists here and there is still no
-   `main.bicep`, so human review is the only check there is.
+1. **`/research` still owes open items 15, 16 and 19** — the `RequestResponse` category, whether the
+   FastAPI instrumentation captures request bodies, and the azure-core SDK timeout option names.
+   *(The role GUID and Table Storage's rate were read live 2026-09-12 and are no longer owed:
+   `COSTS.md`, and the module header. Skill named, not invoked.)*
+2. **A human review of both Bicep modules** — of their intent, not their syntax. Bicep CLI v0.47.16
+   compiles both clean as of 2026-09-12. No `main.bicep` exists, so neither has been what-if'd.
 3. **A phone.** Tickets #58 and #59 need Marco dialling, and **the call must press `*` and `#`** — a
    digits-only call closes nothing while looking like it did.
 
@@ -104,8 +103,8 @@ on the acceptance call or not at all:
 
 ### Still open from Phase 3
 
-1. **Known-partial:** "Bicep module reviewed" is **unvalidated by any tool**. `infra/` holds two
-   modules; none has been compiled, linted or what-if'd.
+1. **Known-partial, half closed.** Both modules compile and lint clean; neither has been what-if'd
+   against the real resource group, which needs a `main.bicep` that does not exist.
 
 ## Live Azure state
 
@@ -233,8 +232,8 @@ because they are genuinely unresolved, not because any of them is currently bloc
 **R-01, R-02, R-03 (partial, see item 3), R-04, R-05, R-06 resolved.** **R-04 reconfirmed
 2026-09-01 for Phase 1's stateful agent loop** (IDLE, reconfirmed 2026-09-08). **R-08 recomputed 2026-09-11 against a two-Container-App fixed cost and PASSES**
 (`COSTS.md`, "R-08, recomputed"): fixed $14.60/mo, **45–67 demo runs/month against a gate of 5**.
-**One input is unpriced** — Table Storage's rate, which `/research` owes before provisioning — and a
-sensitivity table shows the gate still clears by four times even at an implausible $5/mo for it.
+**No input is unpriced any more**: Table Storage was read live from the Retail Prices API 2026-09-12
+and costs under a cent a month, so the recompute's top row is the actual case, not a best case.
 **R-08 is recomputed again before Phase 6 provisions anything**, because App Insights shares the
 container logs' 5 GB free grant rather than adding one (`docs/phase6/exit-criteria.md` D4).
 **R-09** (number irreplaceability) is a standing hard rule, not something
@@ -242,12 +241,13 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 
 ## Next actions (in order)
 
-0. **Phase 6 does not begin here.** Marco asked for it twice, 2026-09-11; the answer both times is
-   that Phase 5's exit is not met — tickets open, nothing provisioned, no call made, B5 not frozen —
-   and no phase begins without written exit criteria from the prior one. **Phase 6 is now designed
-   and its exit criteria written** (`docs/phase6/exit-criteria.md`, 19 decisions settled by Marco in
-   a grilling session, none of them an approval to start). **7 of its 8 entry conditions are unmet**,
-   and two proposed named-constraint changes to B2 are unsigned. The path runs through the items
+0. **`APPROVED: Phase 6` was typed 2026-09-12, and Phase 6 still does not begin here — by Marco's own
+   decision the same day.** Presented with the choice, he chose **finish Phase 5 first**. The approval
+   is banked and valid; it satisfies **one** of Phase 6's eight entry conditions — "Marco's approval
+   to begin Phase 6" — plus the separate `APPROVED: Phase 6` billable-resource gate, and nothing else.
+   **Six entry conditions stay unmet**: Phase 5's exit, Phase 5's sign-off, open item 15, open item 16,
+   the unsigned B2 widening, and the 25 unreviewed commits. Design and exit criteria:
+   `docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11. The path runs through the items
    below, in this order; every one of steps 4 to 6 needs Marco's hands, voice, or both.
 0b. **The review findings were never filed as issues** — neither the original eight nor the second
    round. Every fix commit references only the phase spec `#43`. The drafted set and its blocking
@@ -255,10 +255,9 @@ to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
 1. **Read `git log e42c063..HEAD`.** Phase 4's diff and Phase 5's. It is the entry condition that was
    waived, it is four phases of code that will land on one image, and it is the cheapest point at
    which any of it can be sent back.
-2. **`/research`: the role definition GUID and Table Storage's rate.** Both are written from
-   documentation, both are named as unverified in the module that uses them, and the first one
-   failing produces a role assignment that returns 200 OK and grants nothing. Named, not invoked.
-3. **Review the two Bicep modules** (`infra/modules/`). Human review is the only check that exists.
+2. *(done — GUID and Table Storage rate, both read live. "Needs Marco" item 1.)*
+3. **Review the two Bicep modules** (`infra/modules/`). Intent, not syntax. Both headers changed
+   2026-09-12 to record what was verified; a diff touching either is never auto-accepted.
 4. **Then #57**: provision the Storage account and the second Container App, grant the data role and
    **prove it with a write that is read back** — an ARM 200 OK proves creation, not access — build and
    push an image carrying Phases 3 to 5, redeploy, and make a **smoke call nobody is grading** before

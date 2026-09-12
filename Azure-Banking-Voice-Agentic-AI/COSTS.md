@@ -230,7 +230,7 @@ demo runs/month**, recorded 2026-09-01 — assumed **one** always-on container. 
 | Phone number lease | **$1.00/mo** | Measured on the live owned-numbers record, 2026-08-20 |
 | Realistic per-minute, call connected | **$0.031/min** | PSTN inbound + ACS streaming + model tokens, Phase 0 |
 | Per-run ceiling | **5 minutes** | B4's per-call cap, which `docs/PLAN.md` step 10 names as the ceiling on one demo run |
-| Table Storage | **UNPRICED — see below** | — |
+| Table Storage | **$0.00/mo at this scale — see below** | Retail Prices API, `canadacentral`, `Standard LRS`, read live 2026-09-12 |
 
 ### The second container is not another $5.72, and the reason is arithmetic rather than judgement
 
@@ -273,25 +273,42 @@ precision this has not got.
 **The gate is 5** (`docs/PLAN.md`, Phase 0 exit: "if it comes in under 5, Phase 0 stops here"). The
 recompute clears it by roughly nine times on the conservative basis.
 
-### The unpriced input, and why it does not block the gate
+### The last unpriced input, priced — 2026-09-12
 
-**Azure Table Storage is not priced here.** Its rate has not been read from the Retail Prices API or
-from Microsoft's pricing page in this session, and `CLAUDE.md` forbids answering a pricing question
-from memory — this project has already been burned once by an unverified assumption
-(`docs/PLAN.md`, decision 12). **`/research` is the skill, and it is named rather than invoked.**
+**Read live from the Azure Retail Prices API**, not from memory and not from a pricing page:
+`serviceName eq 'Storage' and armRegionName eq 'canadacentral' and productName eq 'Tables' and
+skuName eq 'Standard LRS'`. `Standard LRS` is the right row because
+`infra/modules/call-records-store.bicep` sets `Standard_LRS` on a `StorageV2` account with
+Microsoft-managed keys; the far pricier `Account Encrypted` rows in the same response are a different
+encryption tier this account does not use.
 
-What can be said without it is how much it would have to cost to matter:
+| meter | rate (USD) |
+|---|---|
+| Write, Read, List, Scan, Delete, Batch Write operations | **$0.00036 per 10,000** |
+| LRS Data Stored | **$0.05 per GB-month** |
+
+The workload is the daily ledger and the escalation records — one row per day, a read-then-write per
+call, a handful of rows per escalation:
+
+```
+operations   67 runs/mo × 10 ops/run = 670 ops   →  670/10,000 × $0.00036  = $0.000024/mo
+stored       ~1,000 entities × ~1 KB = ~0.001 GB →  0.001 × $0.05          = $0.00005/mo
+```
+
+**Under one cent a month, which rounds to $0.00.** The top row of the sensitivity table below is not
+a best case, it is the actual case. The table is kept because it is what made the recompute safe to
+publish before the rate was known:
 
 | Table Storage allowance | Fixed | Headroom | Runs (formula) | Runs (comparable) | Gate |
 |---|---|---|---|---|---|
-| $0.00/mo | $14.60 | $10.40 | 67.1 | 45.1 | **PASSES** |
+| **$0.00/mo — measured** | **$14.60** | **$10.40** | **67.1** | **45.1** | **PASSES** |
 | $1.00/mo | $15.60 | $9.40 | 60.7 | 40.7 | **PASSES** |
 | $5.00/mo | $19.60 | $5.40 | 34.8 | 23.4 | **PASSES** |
 
-At **$5.00/mo** — which for a table holding one row per day and a handful of rows per escalation
-would be a startling figure — the gate still clears by more than four times. **The recompute is
-therefore not sensitive to the input it is missing**, and the missing input is recorded as owed
-before provisioning rather than as a reason to stop.
+**R-08's recompute stands unchanged at 45-67 demo runs/month against a gate of 5**, and it now has no
+unpriced input. Two caveats stay attached. Operation counts per call are estimated from the code, not
+measured against a real call, and a real call is what closes that. And rates are read on one date from
+one API; the figure carries 2026-09-12 for the same reason a percentile carries its N.
 
 ### What this changes
 
@@ -302,6 +319,6 @@ before provisioning rather than as a reason to stop.
 - **The two-container shape is what the arithmetic assumes**: 0.25 vCPU / 0.5 GiB, min-replicas 1,
   **max-replicas 1**. The max matters twice — it is what keeps this figure true, and it is what makes
   the ledger's read-then-write correct (`call_records/store.py`). Changing either invalidates both.
-- **Still owed before anything is applied**: Table Storage's real rate, and the actual cost of both
-  new resources checked against what this predicts once they exist. An ARM 200 OK proves creation,
-  not cost.
+- **Table Storage's real rate is no longer owed** — read live 2026-09-12, above.
+- **Still owed before anything is applied**: the actual cost of both new resources checked against
+  what this predicts once they exist. An ARM 200 OK proves creation, not cost.
