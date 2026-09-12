@@ -73,6 +73,26 @@ _TRIAGE_ESCALATION_CLAUSE = (
     " If they can't get through the PIN check at all, that is one of the reasons to use it."
 )
 
+#: Said to every agent, in the same words, for the same reason `_ESCALATION_INSTRUCTION` is shared:
+#: this is prose the model acts on, and drifted prose across three copies is a defect here.
+#:
+#: **Found live, 2026-09-12, on ticket #58's acceptance call.** A caller asked for a balance before
+#: keying a PIN. Triage correctly handed off to banking -- but banking, now on an anonymous call,
+#: never called `get_balance` at all: no tool call is logged, so `gate.REFUSAL` was never produced.
+#: The model improvised its own refusal instead, and what it said included "I'm transferring you to
+#: a banking agent" -- after it had *already become* the banking agent, narrating the handoff
+#: mechanism it had just been the target of. Then it said nothing else and the call went silent
+#: until Marco hung up. Two failures in one utterance: a tool call skipped in favour of a guess, and
+#: internal routing spoken out loud. This clause is the second half of the fix (`agents/specs.py`'s
+#: instruction, not `dispatch/gate.py` -- the gate itself never had an opinion to be wrong about,
+#: since the tool call it would have refused was never made).
+_ROUTING_IS_INVISIBLE_CLAUSE = (
+    " The caller cannot see how this call is organised behind the scenes. Never say the words "
+    "'transfer', 'transferring', 'hand off' or 'handoff', and never say you are a different agent "
+    "from the one who was just speaking -- to the caller, this is one continuous conversation with "
+    "one assistant, whatever is happening on this side of the line."
+)
+
 TRIAGE = AgentSpec(
     identity=gate.TRIAGE_AGENT,
     instructions=(
@@ -98,7 +118,7 @@ TRIAGE = AgentSpec(
         "lost or stolen, or they want it stopped, hand the call to the cards agent right away. "
         "Either way, do it rather than trying to help directly, and don't make the caller repeat "
         "themselves once you do. "
-        + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE
+        + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE + _ROUTING_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({"escalate_to_human"}),
     handoff_to=frozenset({gate.BANKING_AGENT, gate.CARDS_AGENT}),
@@ -116,9 +136,11 @@ BANKING = AgentSpec(
         "a real phone call. "
         "Always use the tools to check a balance, list recent activity or make a transfer -- "
         "never state a balance, describe activity or confirm a transfer without calling the "
-        "matching tool first. If a transfer can't go through, say why and state the actual "
-        "available amount. "
-        + _ESCALATION_INSTRUCTION
+        "matching tool first. Call the tool even if you expect it to be refused -- you do not "
+        "decide what this caller may see, the tool does, and guessing the answer yourself is never "
+        "correct even when the guess would have been right. If a transfer can't go through, say "
+        "why and state the actual available amount. "
+        + _ESCALATION_INSTRUCTION + _ROUTING_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({
         "get_balance", "transfer", "list_accounts", "list_transactions", "escalate_to_human",
@@ -147,7 +169,7 @@ CARDS = AgentSpec(
         "again -- it is safe to repeat and will tell you if the card was already blocked. "
         "If you are told it was already blocked, say so plainly rather than saying you have just "
         "blocked it. "
-        + _ESCALATION_INSTRUCTION
+        + _ESCALATION_INSTRUCTION + _ROUTING_IS_INVISIBLE_CLAUSE
     ),
     tool_names=frozenset({"block_card", "escalate_to_human"}),
     handoff_to=frozenset(),
