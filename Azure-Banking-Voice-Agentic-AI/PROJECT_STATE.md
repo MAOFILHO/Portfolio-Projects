@@ -41,13 +41,21 @@ live bearing on the current moment:
 **Phase 5 (intents + cost controls).** Spec **#43**, tickets **#44-60**, exit criteria written and
 approved 2026-09-11. Criterion-by-criterion evidence: `docs/phase5/exit-check.md`.
 
-**Provisioned and redeployed 2026-09-12 (#57), no call made yet.** The Storage account and
-mock-core-banking are live; `ca-azbank-echo-p0` runs the Phase 3-5 image. **The first redeploy
-crash-looped** — `azure-data-tables`' async client needs `aiohttp`, undeclared until now; the prior
-revision kept serving throughout, so no caller was ever affected. Fixed, redeployed again, and the
-Storage write-then-read is **proven live** through the real managed identity: `0.01 -> 0.02` on a
-`record_minutes` / `minutes_used` round trip, exec'd into the running container. What remains of #57
-is the smoke call; ticket #58's acceptance call is separate and still needs it too.
+**Provisioned, redeployed, and smoke-called 2026-09-12 (#57).** Storage account and
+mock-core-banking are live; `ca-azbank-echo-p0` runs the Phase 3-5 image, revision `--0000004`.
+Storage write-then-read **proven live** through the real managed identity (`0.01 -> 0.02`,
+`record_minutes` / `minutes_used`, exec'd into the running container).
+
+**Two real defects found by the smoke call itself, not by review, both fixed and verified live:**
+a missing `aiohttp` dependency crash-looped the first redeploy (`voice-agent/pyproject.toml`; the
+prior revision kept serving throughout, no caller affected); and Container Apps' ingress redirects
+plain HTTP to HTTPS by default even internally, so every credential check got a 301 and no PIN could
+ever succeed (`allowInsecure: true` on `infra/modules/mock-core-banking.bicep`, redeployed, confirmed
+`HTTP 200` from inside the voice agent's own container against the real endpoint). **B1's fail-closed
+path handled the 301 correctly** — no attempt consumed, caller told the service was unavailable.
+**Not yet done: a real call carrying a full PIN through to `authenticated`.** The first smoke call's
+DTMF reached the fourth digit before hitting the (now-fixed) redirect; nothing has yet confirmed
+success past that point. Ticket #58's acceptance call is separate either way.
 
 **Three rounds of `/code-review` are actioned and closed.** Record: `docs/phase5/review-fixes.md`.
 
@@ -87,15 +95,17 @@ without reading it:
 3. **A phone.** The #57 smoke call, then #58 and #59 need Marco dialling, and **the call must press
    `*` and `#`** — a digits-only call closes nothing while looking like it did.
 
-### The four wire-format questions — all still open
+### The four wire-format questions — one now partly answered
 
-No real DTMF tone has ever been consumed by this system. Nothing below is answered, and each closes
-on the acceptance call or not at all:
+The smoke call (2026-09-12) is the first real DTMF this system has ever consumed: three digits
+logged as `accumulating`, the fourth blocked by the (now-fixed) 301, never reaching a verdict.
 
-1. Does this deployment and model version **accept the injected system message**?
-2. How are **`*` and `#` spelled** on the media-streaming path?
-3. Did **DTMF and audio frames arrive in produced order**? The payload's `timestamp` is still unread.
-4. Does a **real keyed tone drive the authenticator** at all?
+1. Does this deployment and model version **accept the injected system message**? Still open.
+2. How are **`*` and `#` spelled** on the media-streaming path? Still open — the smoke call didn't
+   key either deliberately.
+3. Did **DTMF and audio frames arrive in produced order**? Still open, `timestamp` still unread.
+4. Does a **real keyed tone drive the authenticator**? **Partly yes** — three tones each drove one
+   `accumulating` transition. Whether a full four digits reaches `authenticated` is still unproven.
 
 ### Still open from Phase 3
 
@@ -150,25 +160,19 @@ because they are genuinely unresolved, not because any of them is currently bloc
 4. **Docker Hub vs ACR — still on Docker Hub.** Was due a deliberate decision at Phase 1 kickoff;
    didn't happen. ACR with managed-identity pull matches Phase 7's "no keys" direction but costs a
    real ~$5/mo.
-5. **Rate-limit meaning unconfirmed** — the Models API's per-deployment `rateLimits` field doesn't
-   reconcile against the documented subscription-level Quota Tier table. Cheap Foundry-portal check
-   (~30s), still not done.
+5. **Rate-limit meaning unconfirmed** — per-deployment `rateLimits` doesn't reconcile against the
+   Quota Tier table. Cheap Foundry-portal check, still not done.
 6. **`gpt-realtime-1.5` successor boot untested** against a real successor — the rehearsal
    (`T-B3-SUCCESSOR-BOOT`) exists and is skipped by design.
 7. **Stale `az` CLI `defaults.location=eastus`** (this machine only, `~/.azure/config`). Fix
    identified (`--location ""`), shown as a diff, not yet applied — pending sign-off.
-8. **Log Analytics workspace auto-provision choice** (`az containerapp env create`'s default, no
-   `--logs-destination` passed) — tied to item 1, and needs a deliberate choice regardless of cost
-   because the auto-provisioned path doesn't deliver logs at all.
-9. **Intermittent interrupt-the-caller defect.** Agent talks over the caller, cutting in before a
-   sentence finishes. Reproduced on the first real call, not the second, same image and VAD config
-   both times — nothing explains the absence on the second call. **Explicitly not gating Phase 1's
-   exit table** (`docs/PLAN.md`'s own words). Scoped as `server_vad` config tuning, not new code,
-   once/if it reproduces again.
+8. **Log Analytics auto-provision choice** (no `--logs-destination` passed) — tied to item 1, needs a
+   deliberate choice since the auto-provisioned path doesn't deliver logs at all.
+9. **Intermittent interrupt-the-caller defect.** Reproduced once, not on a repeat call, same config
+   both times. Not gating (`docs/PLAN.md`). Scoped as `server_vad` tuning if it reproduces again.
 10. *(closed, `docs/phase5/review-fixes.md`; number held so 11-21 keep their references)*
-11. **No real DTMF tone has ever been consumed by this system.** Phase 0 proved tones *arrive*
-    during active bidirectional streaming; every line that acts on one is Phase 4's and is exercised
-    only against fakes, because Phase 4 deployed nothing. Closes at Phase 5's real-call exit.
+11. *(partly closed 2026-09-12 by the smoke call — see "The four wire-format questions" above. Three
+    real tones drove three real `accumulating` transitions; a full four-digit PIN is still unproven.)*
 12. **The injected conversation item's *acceptance* is unverified — its shape no longer is.**
     Confirmed against the generated specification 2026-09-10: `system` + `input_text` is the only
     content type that role permits, and the spec names this exact use. Unverified is whether Azure's
