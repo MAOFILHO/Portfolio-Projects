@@ -36,7 +36,7 @@ live bearing on the current moment:
    every live call in Phase 5, including the ones that failed to complete their script — 0 breaches.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 6 (Observability), not started
+## Current phase — Phase 6 (Observability), started 2026-09-12
 
 **Phase 5 closed 2026-09-12.** Exit met; two criteria met with a stated limit (B5 frozen on the
 real-call pool only; the acceptance call's evidence is scattered across the day rather than one
@@ -49,28 +49,30 @@ partly met. From that file's own table, re-checked 2026-09-12:
 |---|---|
 | Phase 5's exit criteria written | ✅ Satisfied |
 | Phase 5's exit criteria met | ✅ **Now satisfied** — closed today, see above |
-| Marco's sign-off on Phase 5 | **Still owed** — ask before treating Phase 5 as fully closed |
-| Marco's approval to begin Phase 6 | **Still owed** — `APPROVED: Phase 6` covers the billable-resource gate only, not this |
-| Open item 16 settled (`/research`) | **NOT settled** — hard blocker on one Phase 6 ticket (D8) |
-| Open item 15 settled (`/research`) | **NOT settled** |
+| Marco's sign-off on Phase 5 | ✅ **Given 2026-09-12** |
+| Marco's approval to begin Phase 6 | ✅ **Given 2026-09-12** — explicit choice to start now, research items 15/16 in parallel |
+| Open item 16 settled (`/research`) | ✅ **Settled 2026-09-13** — no default/opt-in body capture in any of the three instrumentations; D8's blocker lifted |
+| Open item 15 settled (`/research`) | ✅ **Settled as "undocumented" 2026-09-13** — resolves via criterion 4's own fallback (`RequestResponse` stays disabled) |
 | B2 widening signed off | **NOT given** |
 | Phases 4+5 reviewed (`git log e42c063..HEAD`) | **Still NOT done** — today's `/code-review` covered only `a7e06d1..HEAD` (17 of the 42 commits since `e42c063`); the other 25 remain unreviewed |
 
-**Four of eight conditions are still unmet.** Do not start Phase 6 work on the strength of Marco
-asking to "move to Phase 6" alone — get the explicit sign-off and approval rows above first, same as
-Phase 5 required.
+**Six of eight conditions are now met.** Only the B2 widening sign-off and the 25-commit review
+remain, and neither blocks the code already in flight below.
+
+**Phase 6 specced and split into two tickets** (`/to-spec`, 2026-09-12/13):
+- **#61** — the code: spans, metrics, D15 allowlist, fail-open exporter, ADR, and (as of the
+  2026-09-13 research) FastAPI/httpx instrumentation. Ships and passes CI against an in-memory
+  exporter only; touches no live Azure resource.
+- **#62** — provisioning Application Insights and wiring the real exporter, blocked by #61 (Marco's
+  call, 2026-09-13: keep provisioning separate, land after the code).
+Both carry `ready-for-agent`. `RequestResponse` and the widened B2 wording stay off by decision, not
+by open blocker — see the entry-conditions table above.
 
 ### Needs Marco
 
-1. **Sign off Phase 5** and **approve starting Phase 6**, explicitly — two separate things (table
-   above), neither implied by the other.
-2. **`/research` still owes open items 15 and 16** — the `RequestResponse` category, and whether the
-   FastAPI/httpx/requests instrumentations capture request bodies. Item 16 hard-blocks Phase 6 ticket
-   D8 (criterion 3): a body-capturing default would put the ACS webhook's caller phone number into
-   telemetry.
-3. **The B2 widening** (`docs/phase6/exit-criteria.md`, "B2, proposed new wording") needs sign-off
+1. **The B2 widening** (`docs/phase6/exit-criteria.md`, "B2, proposed new wording") needs sign-off
    before Phase 6 can touch it — a named constraint does not move without one.
-4. **`git log e42c063..HEAD` (25 commits) is still owed a human read** — waived once already at
+2. **`git log e42c063..HEAD` (25 commits) is still owed a human read** — waived once already at
    Phase 5 entry, not resolved by today's narrower review.
 
 ## Live Azure state
@@ -133,11 +135,17 @@ because they are genuinely unresolved, not because any of them is currently bloc
 12. **Nothing guarantees DTMF and audio frames arrive in order on the media socket.** The payload's
     `timestamp` is still unread; not instrumented in Phase 5. Still open.
 13. **`RequestResponse` is an Azure OpenAI diagnostic-log category with no documented content
-    coverage.** Not enabled, must not be until its destination table is queried and read.
-14. **Unknown whether FastAPI, httpx and requests instrumentations capture request/response bodies by
-    default.** Hard blocker on Phase 6 ticket D8 (criterion 3) — the ACS webhook carries the caller's
-    phone number and a body-capturing default would put it into telemetry with no code here having
-    touched it.
+    coverage** (`/research` confirmed 2026-09-13, `docs/phase6/research-content-capture.md` — no
+    Microsoft primary source describes it, for Azure OpenAI or the realtime API). Not enabled, must
+    not be until its destination table is queried and read; whether it even fires for a realtime
+    deployment is unanswered and doesn't need to be, since staying disabled already satisfies Phase
+    6's criterion 4.
+14. *(closed 2026-09-13, `docs/phase6/research-content-capture.md`: none of the FastAPI/httpx/requests
+    instrumentations capture bodies by default or via any opt-in flag at the pinned release. D8/issue
+    #61 unblocked. One residual note carried into #61: the ASGI layer's `http.url` attribute includes
+    the full query string by default, redacted only for four cloud-signature params — not a live gap
+    on this project's query-string-free webhook route, but worth a guard if a future route changes
+    that.)*
 15. **`transport/acs.py`'s audio branch is not total, unlike its DTMF branch.** Pinned by
     `tests/test_acs.py::test_a_malformed_audio_frame_still_raises`. Not changed — a never-auto-accept
     path nobody asked to alter.
@@ -160,13 +168,11 @@ logs' free grant rather than adding one (`docs/phase6/exit-criteria.md` D4).
 
 ## Next actions (in order)
 
-1. **Get Marco's sign-off on Phase 5 and explicit approval to begin Phase 6** — the two rows in
-   "Current phase" above that nothing else here can substitute for.
-2. **`/research`: open items 15 and 16.**
-3. **B2 widening sign-off**, then the code changes it authorizes.
-4. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
-5. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
+1. **B2 widening sign-off**, then the code changes it authorizes.
+2. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
+3. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
    B1's restatement necessary, plus Phase 5's `escalate_to_human`-while-anonymous corollary.
+4. **Pick up issue #61** (Phase 6 code) — unblocked, `ready-for-agent`, no open item stands in its way.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
