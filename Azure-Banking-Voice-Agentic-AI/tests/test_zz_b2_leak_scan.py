@@ -51,12 +51,20 @@ import unittest
 
 from azbank_voice_agent.call_records import REASONS, EscalationRecord
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
-from azbank_voice_agent.core_banking.fake import DEFAULT_PIN
+from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
+from azbank_voice_agent.observability import telemetry
+from azbank_voice_agent.realtime.fake import FakeRealtimeServer, function_call, response_done
+from azbank_voice_agent.realtime.session import run_call
+from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 try:
+    # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
     from keyed_values import SECRETS
+    from telemetry_harness import run_traced_call
 except ImportError:  # running one file as `python -m unittest tests.test_zz_b2_leak_scan`
     from tests.keyed_values import SECRETS
+    from tests.telemetry_harness import run_traced_call
 
 #: Every record every logger emitted, in order. Held as records rather than strings so both the
 #: rendered message and the raw arguments can be checked.
@@ -111,6 +119,30 @@ def offending_records(records=None, secrets=SECRETS):
             elif secret in arguments:
                 found.append((record.name, "raw arguments", arguments))
     return found
+
+
+#: A synthetic caller phone number, E.164-shaped, for B2's span-attribute scan (issue #61). No real
+#: caller phone number exists anywhere in this project -- D8's whole design is that the number is
+#: protected by never being read off the `IncomingCall` event in the first place -- so this is not
+#: a secret the code holds, it is a value the scanner needs to look for, the same standing
+#: `DEFAULT_PIN` already has in `core_banking/fake.py`. Kept here rather than in
+#: `tests/keyed_values.py`: that file is specifically credentials the suite keys through the DTMF
+#: path (its own docstring), and a phone number is neither a credential nor ever keyed.
+FAKE_CALLER_PHONE_NUMBER = "+15550001234"
+
+
+def offending_span_attributes(spans, secrets=(*SECRETS, FAKE_CALLER_PHONE_NUMBER)):
+    """Every span attribute value carrying a secret, whole. B2's fourth surface (issue #61) --
+    span attributes are never filtered by value (`AllowlistSpanProcessor` drops by key only), so
+    this is the net that has to hold given that."""
+    return [
+        (span.name, key, rendered)
+        for span in spans
+        for key, value in span.attributes.items()
+        for rendered in [str(value)]
+        for secret in secrets
+        if secret in rendered
+    ]
 
 
 class TheDetectorItselfWorks(unittest.TestCase):
@@ -347,19 +379,47 @@ class NoPinReachedAPersistedRecordAnywhereInThisRun(unittest.TestCase):
         self.addCleanup(FakeCallRecordStore.WRITTEN.remove, planted)
         self.assertTrue(offending_records_in_the_call_record_stores())
 
-    def test_span_attributes_are_reported_as_uncovered_rather_than_counted(self):
-        """The one B2 surface with nothing behind it, asserted so it cannot be quietly claimed.
+    def test_span_attributes_are_now_scanned_rather_than_reported_uncovered(self):
+        """B2's fourth surface, covered rather than reported uncovered (issue #61, Phase 6).
 
-        Nothing in this project emits a span. If something starts to, this test turns red and
-        whoever added it has to decide deliberately whether the scan now covers it -- which is
-        better than the surface silently becoming real and unscanned.
+        This test used to assert that nothing in the tree emitted a span at all, which was this
+        surface's only honest standing before this phase. That import now exists
+        (`observability/telemetry.py`), so the surface is real and this is its scan: every span
+        attribute value, from a real fake call, checked against the two literals B2 names -- the
+        PIN and the caller's phone number (`docs/phase6/exit-criteria.md` D7). **One channel**: span
+        attributes, the one this phase's own code can actually put something on. The four-channel,
+        two-value wording in `docs/phase6/exit-criteria.md`'s proposed B2 text is out of scope by
+        decision (issue #61's own "Out of Scope") -- this is the existing, one-channel B2 test,
+        extended to the surface this phase adds, not a bid to enforce the wider wording.
         """
-        import azbank_voice_agent
-        package = pathlib.Path(azbank_voice_agent.__file__).parent
-        emitters = [
-            path for path in package.rglob("*.py")
-            if "opentelemetry" in path.read_text() or "start_as_current_span" in path.read_text()
-        ]
-        self.assertEqual(
-            emitters, [], "something now emits spans; B2's fourth surface has to join the scan"
+        transport = FakeTransport(
+            frames=[*(dtmf_frame(digit) for digit in DEFAULT_PIN), audio_frame("balance-please")],
+            hang=True,
         )
+        realtime = FakeRealtimeServer(
+            events=[function_call("get_balance", '{"account": "chequing"}'), response_done()],
+            respond_after_appends=1,
+        )
+        spans = run_traced_call(
+            run_call(transport, realtime, FakeCoreBankingClient(), FakeCallRecordStore())
+        )
+        self.assertTrue(spans, "the call produced no spans at all -- nothing was actually exercised")
+        self.assertEqual(offending_span_attributes(spans), [])
+
+    def test_the_span_scan_would_catch_a_planted_pin_or_phone_number(self):
+        """The deliberate leak, following `TheDetectorItselfWorks` above -- now for spans.
+
+        Built directly on a span rather than through a call, exactly as the persisted-record
+        rehearsal above is: no call path can produce either planted value (verify_pin/D8), so this
+        is what proves the scanner is genuinely checking rather than vacuously passing. Values are
+        never filtered by `AllowlistSpanProcessor` (its own docstring: "keys, never values"), so an
+        allowed key is all a planted leak needs.
+        """
+        for planted in (f"leaked-{DEFAULT_PIN}", FAKE_CALLER_PHONE_NUMBER):
+            with self.subTest(planted=planted):
+                exporter = InMemorySpanExporter()
+                provider = telemetry.build_tracer_provider(exporter)
+                with provider.get_tracer("test").start_as_current_span(telemetry.CALL) as span:
+                    span.set_attribute("correlation_id", planted)
+                provider.force_flush()
+                self.assertTrue(offending_span_attributes(exporter.get_finished_spans()))

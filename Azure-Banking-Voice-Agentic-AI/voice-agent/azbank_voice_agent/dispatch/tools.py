@@ -35,6 +35,7 @@ from ..core_banking import (
     CoreBankingUnavailable,
     UnknownAccountError,
 )
+from ..observability import telemetry
 from . import gate
 
 log = logging.getLogger("dispatch")
@@ -261,6 +262,11 @@ async def _transfer(scope, args):
     amount = args["amount"]
     result = await scope.core_banking.transfer(from_account, to_account, amount)
     if result.outcome == "declined":
+        # The tool-call span is already open around this whole dispatch (dispatch_tool_call); this
+        # is the one outcome that function cannot see for itself, because it never raises -- a
+        # decline is a normal result, composed into a sentence right here, and by the time it
+        # returns there is no exception type left for the span to classify it by.
+        telemetry.mark_outcome_class(telemetry.OUTCOME_DECLINED)
         return f"I can't do that -- you have ${result.available:.2f} available in {from_account}."
     # `result.moved`, not `amount`: dollars become whole cents on the way to the service, and at
     # the half cent the requested figure and the moved one differ ($2.675 asked for moves $2.68,
@@ -400,63 +406,79 @@ async def dispatch_tool_call(
     `session.py` passes both explicitly, so it was latent, never live. Found by /code-review and
     pinned by `TheDefaultsAreTheLeastPrivilegedOnes`, which drives the forgotten-agent case
     through the real gate rather than a patched-open one.
+
+    **Issue #61: the whole body runs inside one "tool call" span, wrapping the gate decision.**
+    D15's four attributes -- tool name, calling agent, gate decision, outcome class -- are set here
+    and, for the one outcome this function cannot see for itself (a declined transfer, which never
+    raises), from inside the handler itself via `telemetry.mark_outcome_class` against the same
+    span, reached for through the ambient current-span context rather than threaded down as a
+    parameter.
     """
-    if not gate.is_allowed(agent, auth_state, name):
-        # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
-        # The tool name is safe to log; the arguments are not logged as a blob, because Phase 4
-        # puts PIN-adjacent data on this path and a blob would carry it (B2).
-        #
-        # Not a claim that an account name never reaches a log: `client._send` logs the request
-        # path, and for a balance read that path contains the account name. That is deliberate --
-        # it is the one field that makes a failed request diagnosable -- and an account name is not
-        # B2 data, which is the PIN and only the PIN. Said explicitly because the two modules
-        # otherwise read as asserting opposite rules about the same value (/code-review,
-        # 2026-09-09, standards axis).
-        log.warning("gate refused tool %r for (agent=%s, auth_state=%s)", name, agent, auth_state)
-        return json.dumps({"error": gate.REFUSAL})
-    try:
-        args = json.loads(arguments_json) if arguments_json else {}
-        result = await _DISPATCH[name](scope, args)
-    except UnknownAccountError as e:
-        # Caught before KeyError below: UnknownAccountError is a LookupError, and so is KeyError.
-        # Order matters here -- an unknown account is a real answer to give the caller, not the
-        # same thing as a malformed tool call.
-        #
-        # The name comes from the service, which is the only thing that knows which account was
-        # unknown, and it can be absent. Absent means a sentence that names no account -- never a
-        # fallback to whatever else happens to be on the exception, which is how the first version
-        # of this ended up speaking the service's internal URL to a caller (/code-review,
-        # 2026-09-08).
-        account = e.args[0] if e.args else None
-        return json.dumps({"error": (
-            f"There's no {account} account on this profile." if account
-            else "I can't find that account on this profile."
-        )})
-    except CoreBankingRequestError as e:
-        # The exception's own message is diagnostic and internal -- log it, never speak it.
-        log.warning("core banking rejected tool %r as malformed: %s", name, e)
-        return json.dumps({"error": MALFORMED})
-    except CoreBankingUnavailable:
-        # Deliberately no figure of any kind in this branch. Never a cached balance, never a
-        # default, never a "last known" number.
-        #
-        # A write and a read get different sentences because they are different facts: an
-        # unavailable read simply did not happen, while an unavailable transfer has an outcome
-        # nobody knows. See TRANSFER_UNCONFIRMED.
-        log.warning("core banking unavailable for tool %r", name)
-        unknown_outcome = name == "transfer"
-        return json.dumps({"error": TRANSFER_UNCONFIRMED if unknown_outcome else UNAVAILABLE})
-    except (KeyError, TypeError, ValueError) as e:
-        # Everything else that can go wrong with a tool call: an unknown tool name, a missing
-        # argument, an arguments payload that is not JSON. The diagnosis goes to the log and the
-        # caller hears a composed sentence -- `str(e)` used to be spoken, which put the JSON
-        # parser's own message ("Expecting value: line 1 column 1 (char 0)") and internal field
-        # names in front of a caller (probe, 2026-09-09). Same defect as /code-review's finding 3,
-        # reached through the generic branch instead of the 422 one.
-        #
-        # TypeError is caught as well as raised-from-nowhere insurance: this function's docstring
-        # promises it never raises, and a raise here does not merely spoil one answer -- run_call
-        # re-raises it and the call drops mid-sentence.
-        log.warning("tool %r could not be run: %s: %s", name, type(e).__name__, e)
-        return json.dumps({"error": MALFORMED})
-    return json.dumps({"result": result})
+    with telemetry.tracer().start_as_current_span(
+        telemetry.TOOL_CALL, attributes={"tool_name": name, "calling_agent": agent},
+    ) as span:
+        if not gate.is_allowed(agent, auth_state, name):
+            # Logged at warning: a refusal is either an attack or a bug, and both are worth seeing.
+            # The tool name is safe to log; the arguments are not logged as a blob, because Phase 4
+            # puts PIN-adjacent data on this path and a blob would carry it (B2).
+            #
+            # Not a claim that an account name never reaches a log: `client._send` logs the request
+            # path, and for a balance read that path contains the account name. That is deliberate --
+            # it is the one field that makes a failed request diagnosable -- and an account name is not
+            # B2 data, which is the PIN and only the PIN. Said explicitly because the two modules
+            # otherwise read as asserting opposite rules about the same value (/code-review,
+            # 2026-09-09, standards axis).
+            log.warning("gate refused tool %r for (agent=%s, auth_state=%s)", name, agent, auth_state)
+            span.set_attribute("gate_decision", "denied")
+            return json.dumps({"error": gate.REFUSAL})
+        span.set_attribute("gate_decision", "allowed")
+        try:
+            args = json.loads(arguments_json) if arguments_json else {}
+            result = await _DISPATCH[name](scope, args)
+        except UnknownAccountError as e:
+            # Caught before KeyError below: UnknownAccountError is a LookupError, and so is KeyError.
+            # Order matters here -- an unknown account is a real answer to give the caller, not the
+            # same thing as a malformed tool call.
+            #
+            # The name comes from the service, which is the only thing that knows which account was
+            # unknown, and it can be absent. Absent means a sentence that names no account -- never a
+            # fallback to whatever else happens to be on the exception, which is how the first version
+            # of this ended up speaking the service's internal URL to a caller (/code-review,
+            # 2026-09-08).
+            span.set_attribute("outcome_class", telemetry.OUTCOME_UNKNOWN_ACCOUNT)
+            account = e.args[0] if e.args else None
+            return json.dumps({"error": (
+                f"There's no {account} account on this profile." if account
+                else "I can't find that account on this profile."
+            )})
+        except CoreBankingRequestError as e:
+            # The exception's own message is diagnostic and internal -- log it, never speak it.
+            log.warning("core banking rejected tool %r as malformed: %s", name, e)
+            span.set_attribute("outcome_class", telemetry.OUTCOME_MALFORMED)
+            return json.dumps({"error": MALFORMED})
+        except CoreBankingUnavailable:
+            # Deliberately no figure of any kind in this branch. Never a cached balance, never a
+            # default, never a "last known" number.
+            #
+            # A write and a read get different sentences because they are different facts: an
+            # unavailable read simply did not happen, while an unavailable transfer has an outcome
+            # nobody knows. See TRANSFER_UNCONFIRMED.
+            log.warning("core banking unavailable for tool %r", name)
+            span.set_attribute("outcome_class", telemetry.OUTCOME_UNAVAILABLE)
+            unknown_outcome = name == "transfer"
+            return json.dumps({"error": TRANSFER_UNCONFIRMED if unknown_outcome else UNAVAILABLE})
+        except (KeyError, TypeError, ValueError) as e:
+            # Everything else that can go wrong with a tool call: an unknown tool name, a missing
+            # argument, an arguments payload that is not JSON. The diagnosis goes to the log and the
+            # caller hears a composed sentence -- `str(e)` used to be spoken, which put the JSON
+            # parser's own message ("Expecting value: line 1 column 1 (char 0)") and internal field
+            # names in front of a caller (probe, 2026-09-09). Same defect as /code-review's finding 3,
+            # reached through the generic branch instead of the 422 one.
+            #
+            # TypeError is caught as well as raised-from-nowhere insurance: this function's docstring
+            # promises it never raises, and a raise here does not merely spoil one answer -- run_call
+            # re-raises it and the call drops mid-sentence.
+            log.warning("tool %r could not be run: %s: %s", name, type(e).__name__, e)
+            span.set_attribute("outcome_class", telemetry.OUTCOME_MALFORMED)
+            return json.dumps({"error": MALFORMED})
+        return json.dumps({"result": result})

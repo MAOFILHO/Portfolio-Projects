@@ -49,6 +49,8 @@ from urllib.parse import quote
 
 import httpx
 
+from ..observability import telemetry
+
 log = logging.getLogger("core_banking")
 
 #: What a block attempt did, as the service reports it. Spelled here as well as in the service
@@ -379,6 +381,13 @@ class HttpCoreBankingClient:
             transport=transport,
         )
         self._breaker = _CircuitBreaker(clock)
+        # Issue #61: httpx's own spans for this client's requests, wired to whatever this process's
+        # TracerProvider currently is (the no-op one, absent telemetry.configure()). Per-instance,
+        # not the global instrument() -- see telemetry.instrument_httpx_client's own docstring for
+        # why. Every attribute either instrumentation produces is stripped to nothing by the
+        # allowlist filter regardless (its span name is not "core_banking"); the manual "Core
+        # banking" span below is what actually carries D15's four attributes.
+        telemetry.instrument_httpx_client(self._http)
 
     async def aclose(self):
         await self._http.aclose()
@@ -396,7 +405,12 @@ class HttpCoreBankingClient:
         # another route entirely, and "a#b" truncated the path and asked about account "a" -- whose
         # answer the caller was then given by name (probe, 2026-09-09).
         return await self._get(
-            f"/accounts/{quote(account, safe='')}", lambda p: to_dollars(p["balance_cents"])
+            f"/accounts/{quote(account, safe='')}", lambda p: to_dollars(p["balance_cents"]),
+            # The template, not the rendered path -- D15's "Core banking" span carries a route
+            # template so an account name (model-supplied text) never rides the span attribute the
+            # way it legitimately can ride a log line (dispatch/tools.py's own docstring on that
+            # asymmetry). The two are deliberately different values on the same request.
+            route="/accounts/{account}",
         )
 
     async def list_transactions(self, account):
@@ -406,6 +420,7 @@ class HttpCoreBankingClient:
         return await self._get(
             f"/accounts/{quote(account, safe='')}/transactions",
             lambda p: [_transaction(t) for t in p["transactions"]],
+            route="/accounts/{account}/transactions",
         )
 
     async def transfer(self, from_account, to_account, amount):
@@ -483,15 +498,17 @@ class HttpCoreBankingClient:
 
     # --- transport ------------------------------------------------------------------------------
 
-    async def _get(self, path, build):
-        return await self._send("GET", path, json=None, attempts=READ_RETRIES + 1, build=build)
+    async def _get(self, path, build, route=None):
+        return await self._send(
+            "GET", path, json=None, attempts=READ_RETRIES + 1, build=build, route=route
+        )
 
-    async def _post(self, path, body, build):
+    async def _post(self, path, body, build, route=None):
         # attempts=1, always. See the module docstring: retrying a non-idempotent write that may
         # already have committed is a double-spend.
-        return await self._send("POST", path, json=body, attempts=1, build=build)
+        return await self._send("POST", path, json=body, attempts=1, build=build, route=route)
 
-    async def _send(self, method, path, json, attempts, build):
+    async def _send(self, method, path, json, attempts, build, route=None):
         """One operation: attempts, classification, and the breaker's whole view of it.
 
         `build` turns the decoded body into the caller's result **inside** this method rather than
@@ -500,64 +517,95 @@ class HttpCoreBankingClient:
         afterwards meant a service answering redirects, HTML, or a payload missing its fields was
         reported unavailable on every single call while the breaker stayed closed forever -- 20 of
         20 operations reached it, against 10 of 20 for a 5xx (probe, 2026-09-09).
-        """
-        probing = self._breaker.before_request()
-        if probing:
-            # The half-open probe is one request, never one-plus-a-retry (#27 AC6). Retrying a
-            # probe would double the load on a backend already believed to be sick, and would make
-            # "one probe" a claim the code did not actually keep.
-            attempts = 1
-        last_error = None
-        try:
-            for attempt in range(attempts):
-                try:
-                    response = await self._http.request(method, path, json=json)
-                except httpx.HTTPError as e:
-                    # Transport-level: timeout, connection refused, DNS. Retryable if this is a read.
-                    last_error = e
-                    log.warning("core banking %s %s failed (attempt %s): %s", method, path, attempt + 1, e)
-                    continue
-                if response.status_code >= 500:
-                    last_error = CoreBankingUnavailable(f"core banking returned {response.status_code}")
-                    log.warning("core banking %s %s returned %s", method, path, response.status_code)
-                    continue
-                try:
-                    result = _read(self._decode(response), build)
-                except CoreBankingUnavailable as e:
-                    # The service answered, but not with a result: a redirect, a body that is not
-                    # JSON, a payload missing its fields. Exactly the standing of a 5xx -- retried
-                    # on a read, and one failed operation if every attempt ends here.
-                    last_error = e
-                    log.warning(
-                        "core banking %s %s answered unreadably (attempt %s): %s",
-                        method, path, attempt + 1, e,
-                    )
-                    continue
-                except (UnknownAccountError, CoreBankingRequestError):
-                    # A working system saying "no such account" or "that request is malformed". It
-                    # answered, and coherently, so it is healthy: this must not count against the
-                    # breaker, and it must reset a run of failures like any other success.
-                    self._breaker.record_success()
-                    raise
-                self._breaker.record_success()
-                return result
 
-            # Every attempt failed at the transport, with a 5xx, or with a response that was not a
-            # result: one failed operation, not one per attempt (see BREAKER_FAILURE_THRESHOLD).
-            self._breaker.record_failure()
-            raise CoreBankingUnavailable(
-                f"core banking {method} {path} did not answer: {last_error}"
-            ) from last_error
-        finally:
-            if self._breaker.probe_in_flight:
-                # A probe that never reported back. `asyncio.CancelledError` when the caller hangs
-                # up mid-probe is the realistic one, and it is not an httpx.HTTPError, so nothing
-                # above catches it. The client is process-wide, so leaving the probe marked in
-                # flight refused every later call with "circuit is probing" for the life of the
-                # process -- a breaker that can never close is worse than no breaker (#27 AC6,
-                # user story 20). Counted as a failed probe: the outcome is unknown, and the open
-                # window expires on its own.
-                self._breaker.record_failure()
+        **One "Core banking" span covers the whole operation, retries included** (issue #61, D15) --
+        not one span per attempt. Its four attributes are the template (`route`, never `path`
+        itself: the two differ exactly when `path` carries a model-supplied account name, which
+        must not ride a span attribute), the method, the *last* status code an attempt actually
+        received (unset if every attempt failed at the transport), and the operation's total wall
+        clock. Nothing here inspects `json` or the decoded body -- the PIN this method also carries
+        for `verify_pin` never reaches an attribute, exactly as it never reaches a log line.
+        """
+        started = monotonic()
+        status_code = None
+        with telemetry.tracer().start_as_current_span(telemetry.CORE_BANKING) as span:
+            try:
+                probing = self._breaker.before_request()
+                if probing:
+                    # The half-open probe is one request, never one-plus-a-retry (#27 AC6).
+                    # Retrying a probe would double the load on a backend already believed to be
+                    # sick, and would make "one probe" a claim the code did not actually keep.
+                    attempts = 1
+                last_error = None
+                try:
+                    for attempt in range(attempts):
+                        try:
+                            response = await self._http.request(method, path, json=json)
+                        except httpx.HTTPError as e:
+                            # Transport-level: timeout, connection refused, DNS. Retryable if this
+                            # is a read.
+                            last_error = e
+                            log.warning(
+                                "core banking %s %s failed (attempt %s): %s",
+                                method, path, attempt + 1, e,
+                            )
+                            continue
+                        status_code = response.status_code
+                        if response.status_code >= 500:
+                            last_error = CoreBankingUnavailable(
+                                f"core banking returned {response.status_code}"
+                            )
+                            log.warning(
+                                "core banking %s %s returned %s", method, path, response.status_code
+                            )
+                            continue
+                        try:
+                            result = _read(self._decode(response), build)
+                        except CoreBankingUnavailable as e:
+                            # The service answered, but not with a result: a redirect, a body that
+                            # is not JSON, a payload missing its fields. Exactly the standing of a
+                            # 5xx -- retried on a read, and one failed operation if every attempt
+                            # ends here.
+                            last_error = e
+                            log.warning(
+                                "core banking %s %s answered unreadably (attempt %s): %s",
+                                method, path, attempt + 1, e,
+                            )
+                            continue
+                        except (UnknownAccountError, CoreBankingRequestError):
+                            # A working system saying "no such account" or "that request is
+                            # malformed". It answered, and coherently, so it is healthy: this must
+                            # not count against the breaker, and it must reset a run of failures
+                            # like any other success.
+                            self._breaker.record_success()
+                            raise
+                        self._breaker.record_success()
+                        return result
+
+                    # Every attempt failed at the transport, with a 5xx, or with a response that
+                    # was not a result: one failed operation, not one per attempt (see
+                    # BREAKER_FAILURE_THRESHOLD).
+                    self._breaker.record_failure()
+                    raise CoreBankingUnavailable(
+                        f"core banking {method} {path} did not answer: {last_error}"
+                    ) from last_error
+                finally:
+                    if self._breaker.probe_in_flight:
+                        # A probe that never reported back. `asyncio.CancelledError` when the
+                        # caller hangs up mid-probe is the realistic one, and it is not an
+                        # httpx.HTTPError, so nothing above catches it. The client is process-wide,
+                        # so leaving the probe marked in flight refused every later call with
+                        # "circuit is probing" for the life of the process -- a breaker that can
+                        # never close is worse than no breaker (#27 AC6, user story 20). Counted as
+                        # a failed probe: the outcome is unknown, and the open window expires on
+                        # its own.
+                        self._breaker.record_failure()
+            finally:
+                span.set_attribute("http_method", method)
+                span.set_attribute("route_template", route or path)
+                if status_code is not None:
+                    span.set_attribute("status_code", status_code)
+                span.set_attribute("duration_ms", telemetry.round_duration_ms(monotonic() - started))
 
     def _decode(self, response):
         if response.status_code == 404:

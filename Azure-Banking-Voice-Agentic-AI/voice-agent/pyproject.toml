@@ -35,6 +35,27 @@ dependencies = [
     # revision serving throughout, so no call was ever dropped by it.
     "aiohttp==3.14.3",
     "httpx>=0.27",
+    # Phase 6 (issue #61): the OTel seam -- one TracerProvider/MeterProvider boundary, wired once at
+    # boot (observability/telemetry.py). api+sdk pinned to the exact versions
+    # azure-monitor-opentelemetry-exporter below requires (`~=1.44.0` on both, verified against its
+    # published metadata 2026-09-13) rather than to whatever the contrib packages would tolerate on
+    # their own -- one mutually-compatible set, not the loosest one.
+    "opentelemetry-api==1.44.0",
+    "opentelemetry-sdk==1.44.0",
+    # FastAPI/httpx instrumentation, cleared to enable by docs/phase6/research-content-capture.md
+    # (2026-09-13): neither captures a request or response body by default or via any opt-in flag
+    # at this pinned release. Instrumentation packages release in lockstep from one monorepo
+    # (open-telemetry/opentelemetry-python-contrib); `0.65b0` is that research note's verified pin.
+    "opentelemetry-instrumentation-fastapi==0.65b0",
+    "opentelemetry-instrumentation-httpx==0.65b0",
+    # D10's real exporter, for the identity-vs-connection-string seam observability/telemetry.py
+    # builds. Declared because that module imports it directly -- and, like azure-data-tables above,
+    # imported lazily inside the one function that needs it (`span_exporter_from_env`), so importing
+    # this package anywhere it is not installed still works. **Never constructed anywhere in this
+    # ticket's own tests or boot path**: the environment variables that function reads are not set
+    # by anything this project deploys yet -- provisioning Application Insights and setting them is
+    # issue #62's job, filed and blocked on this one.
+    "azure-monitor-opentelemetry-exporter==1.0.0b57",
 ]
 
 [project.optional-dependencies]

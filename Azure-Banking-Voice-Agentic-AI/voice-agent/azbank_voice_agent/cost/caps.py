@@ -51,11 +51,32 @@ MAX_CLOSED_CALL_TURNS = 1
 class DailyBudgetSpent(Exception):
     """The day's minutes are gone, or the ledger could not be read. Both take the closed path.
 
-    **The two are deliberately one exception.** B4's fail-closed rule is that an unknown budget
-    never serves a call, and a caller who could tell "we are closed" from "we could not check"
-    would have been handed a probing oracle for exactly the condition that costs money. One type,
-    one branch, one sentence.
+    **The two are deliberately one exception, and the caller hears one sentence either way** --
+    B4's fail-closed rule is that an unknown budget never serves a call, and a caller who could
+    tell "we are closed" from "we could not check" would have been handed a probing oracle for
+    exactly the condition that costs money. One type, one branch, one sentence.
+
+    **`cause` is the one place the two are told apart, and it never reaches the caller** (issue
+    #61, D13). Telemetry is not the caller: a brake working as designed and a store that could not
+    answer are opposites from the project owner's side even though they are identical from the
+    phone. `realtime/session.py`'s `budget_or_closed` is the only place this is raised, and it
+    names the cause at every one of its three raise sites -- required, not defaulted, so a fourth
+    site added later cannot forget it.
     """
+
+    def __init__(self, message, cause):
+        super().__init__(message)
+        #: One of CLOSED_PATH_BUDGET_SPENT / CLOSED_PATH_LEDGER_UNREADABLE below. Read by
+        #: `app.py`'s `media_stream` to set the "call" span's caller-invisible `closed_path_cause`
+        #: attribute -- and nowhere else; nothing in the spoken closed-path sentence depends on it.
+        self.cause = cause
+
+
+#: D13's two closed-path causes, spelled once here rather than in observability/telemetry.py:
+#: `caps.py` is where the exception that carries one is defined, and `telemetry.py` would otherwise
+#: need to import this module just to re-export its own vocabulary back at it.
+CLOSED_PATH_BUDGET_SPENT = "budget_spent"
+CLOSED_PATH_LEDGER_UNREADABLE = "ledger_unreadable"
 
 
 class CallLimitExceeded(Exception):

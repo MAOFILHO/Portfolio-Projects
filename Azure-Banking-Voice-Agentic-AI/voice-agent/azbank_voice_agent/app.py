@@ -32,6 +32,7 @@ from .boot import app_base_url, assert_boot_safety, call_records_account_url, co
 from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
+from .observability import telemetry
 from .realtime.client import connect_realtime
 from .realtime.session import budget_or_closed, run_call, run_closed_call
 
@@ -137,6 +138,13 @@ async def lifespan(_app):
     # *used* here; this one is only used per-request, so without this line a missing value would
     # not be discovered until a caller dialled (/code-review, 2026-09-11).
     app_base_url()
+    # Telemetry's own boot step (issue #61), deliberately not a guard: unlike assert_boot_safety()
+    # above, this never refuses to start -- D11 says telemetry fails open, and a boot that crashed
+    # because an exporter could not be built would be telemetry taking down the very call path it
+    # exists to observe. No environment this project deploys sets the variables this reads yet
+    # (issue #62's job), so this resolves to the no-op providers today.
+    telemetry.configure_from_boot()
+    telemetry.instrument_fastapi_app(app)
     # The ACS client, built here for the reason the other two are: startup is where a side effect
     # belongs. Parsing a connection string makes no network call, so this is cheap -- what it buys
     # is that importing this module needs no ACS configuration at all.
@@ -250,22 +258,35 @@ async def media_stream(websocket: WebSocket):
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)
-    # **B4's daily cap, before anything expensive starts** (issue #49). An exhausted day and an
-    # unreadable ledger take the same branch and the caller hears the same sentence -- an unknown
-    # budget is not permission. `budget_or_closed`'s own docstring records why this is read here
-    # rather than in the incoming-call webhook, which is where the exit criteria placed it.
-    try:
-        await budget_or_closed(call_records())
-    except caps.DailyBudgetSpent:
+    # Issue #61 (D5): the root "call" span -- opens with the media socket (right here, once it is
+    # accepted) and closes when this handler returns, which is also "when it closes" for the
+    # socket in every case this handler covers. `run_call`/`run_closed_call` set the rest of D15's
+    # Call attributes on this same span, reached for through the ambient current-span context
+    # rather than passed down as a parameter -- see their own docstrings.
+    with telemetry.tracer().start_as_current_span(telemetry.CALL) as span:
+        if correlation_id is not None:
+            span.set_attribute("correlation_id", correlation_id)
+        if connection_id is not None:
+            span.set_attribute("connection_id", connection_id)
+        # **B4's daily cap, before anything expensive starts** (issue #49). An exhausted day and an
+        # unreadable ledger take the same branch and the caller hears the same sentence -- an
+        # unknown budget is not permission. `budget_or_closed`'s own docstring records why this is
+        # read here rather than in the incoming-call webhook, which is where the exit criteria
+        # placed it.
+        try:
+            await budget_or_closed(call_records())
+        except caps.DailyBudgetSpent as e:
+            async with connect_realtime() as realtime:
+                await run_closed_call(
+                    websocket, realtime, call_records(), correlation_id, closed_path_cause=e.cause,
+                )
+            log.info("WS closed (service closed) correlationId=%s", correlation_id)
+            return
         async with connect_realtime() as realtime:
-            await run_closed_call(websocket, realtime, call_records(), correlation_id)
-        log.info("WS closed (service closed) correlationId=%s", correlation_id)
-        return
-    async with connect_realtime() as realtime:
-        # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
-        # escalation record has to carry it, and a relay that reached back through the transport for
-        # a header would be a relay that knew what kind of transport it had.
-        await run_call(websocket, realtime, core_banking(), call_records(), correlation_id)
+            # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
+            # escalation record has to carry it, and a relay that reached back through the
+            # transport for a header would be a relay that knew what kind of transport it had.
+            await run_call(websocket, realtime, core_banking(), call_records(), correlation_id)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 

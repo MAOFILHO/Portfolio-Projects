@@ -18,6 +18,7 @@ import time
 import uuid
 
 from fastapi import WebSocketDisconnect
+from opentelemetry import trace
 
 from .. import auth
 from ..agents import specs
@@ -26,6 +27,7 @@ from ..call_records.store import day_key
 from ..cost import caps
 from ..dispatch import gate
 from ..dispatch.tools import CallScope, dispatch_tool_call
+from ..observability import telemetry
 from ..transport import acs
 
 log = logging.getLogger("bridge")
@@ -250,19 +252,28 @@ async def budget_or_closed(call_records, now=None):
         # did not answer in time did not answer, and B4's rule is that an unknown budget is not
         # permission.
         log.warning("B4: the day's ledger did not answer in time, taking the closed path")
-        raise caps.DailyBudgetSpent("the day's ledger did not answer in time") from e
+        raise caps.DailyBudgetSpent(
+            "the day's ledger did not answer in time", cause=caps.CLOSED_PATH_LEDGER_UNREADABLE,
+        ) from e
     except CallRecordStoreUnavailable as e:
         log.warning("B4: the day's ledger could not be read, taking the closed path: %r", e)
-        raise caps.DailyBudgetSpent("the day's ledger could not be read") from e
+        raise caps.DailyBudgetSpent(
+            "the day's ledger could not be read", cause=caps.CLOSED_PATH_LEDGER_UNREADABLE,
+        ) from e
     if used >= caps.MAX_DAILY_MINUTES:
         log.warning(
             "B4: daily cap reached (%.1f of %.1f minutes for %s), taking the closed path",
             used, caps.MAX_DAILY_MINUTES, day,
         )
-        raise caps.DailyBudgetSpent(f"the day's {caps.MAX_DAILY_MINUTES} minutes are spent")
+        raise caps.DailyBudgetSpent(
+            f"the day's {caps.MAX_DAILY_MINUTES} minutes are spent",
+            cause=caps.CLOSED_PATH_BUDGET_SPENT,
+        )
 
 
-async def run_closed_call(transport, realtime, call_records, correlation_id=None, now=None):
+async def run_closed_call(
+    transport, realtime, call_records, correlation_id=None, now=None, closed_path_cause=None,
+):
     """Answer, say the service is closed, hang up. **Hard-bounded, by the relay.**
 
     One turn and a short wall clock, neither of them the model choosing to be brief (issue #49). A
@@ -275,8 +286,20 @@ async def run_closed_call(transport, realtime, call_records, correlation_id=None
 
     **Its own minutes count too.** Recorded on the way out like any other call, because a brake
     whose usage was invisible in the one place it matters would not be a brake anybody could audit.
+
+    `closed_path_cause` is D13's two-way classification (`caps.CLOSED_PATH_BUDGET_SPENT` /
+    `caps.CLOSED_PATH_LEDGER_UNREADABLE`) -- `app.py`'s `media_stream` reads it off the
+    `caps.DailyBudgetSpent` it caught and hands it in, because that is where the exception (and
+    therefore the classification) actually exists; `budget_or_closed` itself has already returned
+    control by the time this runs. Set on the "call" span opened by whichever caller opened it
+    (production: `app.py`'s `media_stream`; tests: whatever wraps this call directly), never spoken
+    to the caller -- the glossary's probing-oracle reasoning for the sentence itself is untouched.
     """
     started = time.monotonic()
+    span = trace.get_current_span()
+    span.set_attribute("closed_path_taken", True)
+    if closed_path_cause is not None:
+        span.set_attribute("closed_path_cause", closed_path_cause)
 
     async def speak_once():
         """Relay the closed sentence's audio, and stop after `MAX_CLOSED_CALL_TURNS` responses.
@@ -333,6 +356,9 @@ async def run_closed_call(transport, realtime, call_records, correlation_id=None
         log.warning("closed path ended without a complete response")
     finally:
         await _record_minutes(call_records, started, now)
+        span.set_attribute("end_reason", "closed")
+        span.set_attribute("auth_state", gate.ANONYMOUS)
+        span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
     log.info("closed call ended, correlationId=%s", correlation_id)
 
 
@@ -346,8 +372,14 @@ async def _record_minutes(call_records, started, now=None):
     A store that cannot be written is logged loudly and swallowed. The call is already over, so
     there is nothing left to refuse -- and raising here would turn a bookkeeping failure into a
     relay failure on a call that had otherwise finished normally.
+
+    **B4's metric is recorded here too, regardless of whether the write below succeeds** (issue
+    #61, D14). The minutes were genuinely used either way -- the metric is an observable fact about
+    the call, not a mirror of the ledger's own write, which is what stays fail-closed on its own
+    terms above and below this function.
     """
     minutes = (time.monotonic() - started) / 60
+    telemetry.record_daily_minutes(minutes)
     try:
         # **Bounded, for a reason the read's bound does not cover.** This runs in a `finally`, so a
         # store that accepts the write and never acknowledges it would hang the relay *after* the
@@ -524,16 +556,29 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         # Call 1's real logs had tool-call and handoff events but no timestamp pair to compute
         # turn latency from at all.
         audio_started = False
+        # Issue #61: the same pairing, now also recorded as B5's histogram rather than only
+        # readable from the order of two log lines. `speech_stopped_at` is cleared once the paired
+        # audio delta arrives -- and left alone across a tool-call-only response.done exactly as
+        # `audio_started` is, for the reason the comment above already gives.
+        speech_stopped_at = None
+        # Issue #61 (D5): one "turn" span per response cycle. `turn_started` marks where the
+        # current one began -- the call's own start for the first turn, the previous
+        # response.done for every one after.
+        turn_started = time.monotonic()
         async for event in realtime:
             if event.type == "response.output_audio.delta":
                 if not audio_started:
                     audio_started = True
                     log.info("agent audio started")
+                    if speech_stopped_at is not None:
+                        telemetry.record_turn_latency(time.monotonic() - speech_stopped_at)
+                        speech_stopped_at = None
                 await transport.send_text(acs.outbound_audio_frame(event.delta))
             elif event.type == "input_audio_buffer.speech_stopped":
                 # Server VAD's turn-ended signal -- confirmed live 2026-09-08, see
                 # realtime/fake.py's speech_stopped().
                 log.info("caller turn ended")
+                speech_stopped_at = time.monotonic()
             elif event.type == "response.function_call_arguments.done":
                 # `agent` (not just event.name) matters here: handoff_target() checks the edge
                 # against the *calling* agent's own declared handoff_to, so a target that exists
@@ -606,8 +651,21 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 log.info("agent transcript delta received (%d chars)", len(event.delta))
             elif event.type == "response.done":
                 # One full model response cycle = one turn (B4).
-                audio_started = False  # B5: next audio delta is a new response cycle's first.
                 turn_count += 1
+                # Issue #61 (D5): the "turn" span, created and closed here rather than opened at
+                # the top of the loop and held open -- a turn is only known to be over at this
+                # event, so it is recorded retroactively (`start_span` + `end()`, not
+                # `start_as_current_span`) with its real elapsed time as the `duration_ms`
+                # attribute. `turn_started` rolls forward to this moment for the next one.
+                turn_span = telemetry.tracer().start_span(telemetry.TURN)
+                turn_span.set_attribute("turn_index", turn_count)
+                turn_span.set_attribute(
+                    "duration_ms", telemetry.round_duration_ms(time.monotonic() - turn_started)
+                )
+                turn_span.set_attribute("agent_spoke", audio_started)
+                turn_span.end()
+                turn_started = time.monotonic()
+                audio_started = False  # B5: next audio delta is a new response cycle's first.
                 if turn_count >= caps.MAX_CALL_TURNS:
                     log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", caps.MAX_CALL_TURNS)
                     raise caps.CallLimitExceeded(f"turn cap ({caps.MAX_CALL_TURNS}) reached")
@@ -632,6 +690,11 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 else:
                     log.error("AOAI error event received")
 
+    # Issue #61: the "call" span's `end_reason` default -- overwritten by the classification below
+    # once the tasks actually finish. Stays "error" only if something raises before that
+    # classification ever runs (e.g. the greeting frame itself), which is an accurate label for
+    # that case too.
+    end_reason = "error"
     try:
         # **Inside the `try`, so the `finally` below covers these two frames.** They used to sit
         # above it: `started` was taken, three frames went out, and only then did the block whose
@@ -670,6 +733,7 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         if not done:
             # Timeout fired -- neither side disconnected and no turn cap tripped first (B4).
             log.warning("call hit MAX_CALL_SECONDS=%ds, ending call (B4)", caps.MAX_CALL_SECONDS)
+            end_reason = "timeout"
         for task in done:
             exc = task.exception()
             # Expected ways a call ends, not relay failures: the caller hung up, a B4 cap tripped,
@@ -685,7 +749,22 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 auth.AttemptsExhausted,
                 EscalationRequested,
             )
+            # Issue #61: the "call" span's `end_reason`, classified alongside the control flow
+            # above rather than re-derived from it later -- a for-loop over `done` can visit more
+            # than one task, so the last one it processes before any `raise` is what this reports,
+            # exactly mirroring which exception (if any) actually decides the call's fate here.
+            if exc is None:
+                end_reason = "model_ended"
+            elif isinstance(exc, WebSocketDisconnect):
+                end_reason = "caller_hangup"
+            elif isinstance(exc, caps.CallLimitExceeded):
+                end_reason = "cost_cap"
+            elif isinstance(exc, auth.AttemptsExhausted):
+                end_reason = "attempts_exhausted"
+            elif isinstance(exc, EscalationRequested):
+                end_reason = "escalated"
             if exc is not None and not isinstance(exc, expected):
+                end_reason = "error"
                 raise exc
     finally:
         # The third point the buffer is zeroed at, after submit and clear -- on call end, whatever
@@ -696,4 +775,13 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         # badly still counts against the day, because minutes the cap cannot see are minutes it
         # fails open on.
         await _record_minutes(call_records, started, now)
+        # Issue #61 (D5): the "call" span's own attributes, set on whatever span is currently open
+        # (production: app.py's media_stream; tests: whatever wraps run_call directly) -- on every
+        # path out, including the ones above that raise, which is why this is in the same finally.
+        span = trace.get_current_span()
+        span.set_attribute("auth_state", auth_state)
+        span.set_attribute("end_reason", end_reason)
+        span.set_attribute("turn_count", turn_count)
+        span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
+        span.set_attribute("closed_path_taken", False)
     log.info("call ended")

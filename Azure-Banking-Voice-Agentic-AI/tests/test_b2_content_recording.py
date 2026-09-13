@@ -30,6 +30,20 @@ very opt-in (§3e). The failure mode is real and has already happened once in sh
 import pathlib
 import unittest
 
+from azbank_voice_agent.call_records.fake import FakeCallRecordStore
+from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
+from azbank_voice_agent.realtime.fake import FakeRealtimeServer, audio_delta, response_done
+from azbank_voice_agent.realtime.session import run_call
+from azbank_voice_agent.transport.fake import FakeTransport, audio_frame
+
+try:
+    # `make test` runs `unittest discover -s tests`, which puts this directory on sys.path.
+    from telemetry_harness import run_traced_call
+except ImportError:
+    # `python -m unittest tests.test_b2_content_recording` does not. Same fallback
+    # tests/test_redteam.py uses for tests/redteam_harness.py.
+    from tests.telemetry_harness import run_traced_call
+
 #: The two environment variables that turn GenAI content capture on. Names and defaults confirmed
 #: against primary sources 2026-09-10 (`docs/phase4/research-carried-findings.md` §3d): the
 #: OpenTelemetry one is read with a hard-coded `"false"` default in the Python implementation, and
@@ -165,29 +179,45 @@ class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
             )
 
 
-class NoSpansAreEmittedYet(unittest.TestCase):
-    """The reason criterion 10 reports this surface as uncovered rather than met.
+class NoGenAIAttributeEverSurvivesTheAllowlist(unittest.TestCase):
+    """What "nothing imports OpenTelemetry" becomes now that something does (issue #61,
+    Phase 6). This class used to assert the opposite of its own name -- that no file in the tree
+    imported `opentelemetry` at all, so the GenAI attribute surface named above was necessarily
+    empty. That import now exists (`observability/telemetry.py`, and every module it wires spans
+    into), so the guarantee has to be re-derived from what actually happens at runtime instead of
+    from an absent import.
 
-    Kept as a test rather than a sentence in a document so that the day it stops being true is the
-    day something goes red, rather than the day somebody notices the document is stale. When Phase 6
-    makes this fail, that is the signal to build the scanner the constraint actually needs -- by
-    `gen_ai.*` prefix and by value, never by a fixed list of attribute names, because the older
-    `gen_ai.prompt` and `gen_ai.completion` names are already gone from the spec.
+    **Built exactly the way this class's own prior docstring predicted**: "by `gen_ai.*` prefix and
+    by value, never by a fixed list of attribute names" -- because the OTel GenAI semantic
+    conventions have already renamed this surface once (`gen_ai.prompt`/`gen_ai.completion` are
+    gone; `gen_ai.event.content` and `gen_ai.prompt.variable.<name>` exist now), so a fixed list of
+    names would go stale the next time they rename it again.
+
+    This project's own code never sets a `gen_ai.*` attribute, and the auto-instrumentation it
+    enables (FastAPI, httpx) does not either -- the OpenTelemetry OpenAI instrumentation this
+    project has never added is the one that would, and it targets chat completions, embeddings and
+    the Responses API, none of which is the realtime session this project speaks (`docs/phase4/
+    research-carried-findings.md` §3). But **D9's allowlist filter is what makes that fact durable
+    rather than accidental**: any attribute outside D15's four named spans is dropped regardless of
+    its own name, `gen_ai.*` included, so a future instrumentation that started emitting one would
+    still not survive without an explicit, reviewable edit to `telemetry.ALLOWLIST`. That is the
+    property this test actually exercises, on a real fake call, rather than assuming it from the
+    absence of an import.
     """
 
-    def test_nothing_in_the_deployables_imports_opentelemetry(self):
-        importers = []
-        for path in _configuring_files():
-            if path.suffix != ".py":
-                continue
-            body = path.read_text(errors="replace")
-            if "import opentelemetry" in body or "from opentelemetry" in body:
-                importers.append(str(path.relative_to(PROJECT)))
-        self.assertEqual(
-            importers, [],
-            "this project now emits spans, so B2's fourth surface is real: it needs a scanner over "
-            "the gen_ai.* namespace, and this test needs replacing rather than deleting.",
+    def test_no_span_from_a_whole_call_carries_a_gen_ai_attribute(self):
+        transport = FakeTransport(frames=[audio_frame("hello")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("agent-says-hi"), response_done()], respond_after_appends=1,
         )
+        spans = run_traced_call(
+            run_call(transport, realtime, FakeCoreBankingClient(), FakeCallRecordStore())
+        )
+        self.assertTrue(spans, "the call produced no spans at all -- nothing was actually exercised")
+        offending = [
+            (span.name, key) for span in spans for key in span.attributes if key.startswith("gen_ai.")
+        ]
+        self.assertEqual(offending, [])
 
 
 if __name__ == "__main__":
