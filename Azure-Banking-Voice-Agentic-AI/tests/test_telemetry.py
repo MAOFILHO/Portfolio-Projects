@@ -19,7 +19,9 @@ import asyncio
 import json
 import socket
 import unittest
+from unittest.mock import patch
 
+from azbank_voice_agent.call_records import REASONS
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking import CoreBankingUnavailable
 from azbank_voice_agent.core_banking import client as core_banking_client
@@ -423,6 +425,60 @@ class ClosedPathCauseIsDistinguished(unittest.TestCase):
         spoken = self._spoken_notes(budget_realtime)
         self.assertEqual(spoken, self._spoken_notes(unreadable_realtime))
         self.assertEqual(spoken, [session_module.CLOSED])
+
+
+class EscalationEndReasonIsDistinguished(unittest.TestCase):
+    """/code-review, 2026-09-14: two gaps in how an escalated call's `end_reason` gets classified,
+    found the same day as the closing-remark fix itself (issue #48's own escalation-silence bug).
+    In both cases here the caller has already heard the apology (or the record was already
+    written); what was wrong is which exception type the call ended through, and #48 asks that a
+    routing event stay distinguishable in every log that reads them."""
+
+    def test_a_turn_cap_hit_on_the_closing_remark_still_reports_as_escalated(self):
+        # The closing remark's own response.done can be the same one that trips MAX_CALL_TURNS.
+        # Checking the cap first (the pre-fix order) reported this as `end_reason="cost_cap"` even
+        # though the caller had already heard the apology and the record was already written.
+        transport = FakeTransport(frames=[audio_frame("get-me-a-person")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(
+                    "escalate_to_human", json.dumps({"reason": REASONS[0]}), call_id="call-escalate"
+                ),
+                response_done(),  # turn 1: the escalation's own response, no audio
+                audio_delta("connecting you now"),
+                response_done(),  # turn 2: the closing remark -- also trips the cap below
+            ],
+            respond_after_appends=1,
+        )
+        with patch.object(caps, "MAX_CALL_TURNS", 2):
+            spans = run_traced_call(
+                run_call(transport, realtime, FakeCoreBankingClient(), FakeCallRecordStore())
+            )
+        call_span = next(s for s in spans if s.name == telemetry.CALL)
+        self.assertEqual(call_span.attributes["end_reason"], "escalated")
+
+    def test_the_connection_ending_before_the_closing_remark_still_reports_as_escalated(self):
+        # If the event stream ends -- the connection drops, or (as scripted here) the fake simply
+        # runs out of events -- while the escalation's closing remark is still pending, the call
+        # must still be reported as an escalation. Before the fix, this fell all the way through to
+        # `end_reason="model_ended"`, hiding that the call was ever escalated at all.
+        transport = FakeTransport(frames=[audio_frame("get-me-a-person")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(
+                    "escalate_to_human", json.dumps({"reason": REASONS[0]}), call_id="call-escalate"
+                ),
+                response_done(),  # the escalation's own response, no audio -- then the fake stops
+            ],
+            respond_after_appends=1,
+        )
+        call_records = FakeCallRecordStore()
+        spans = run_traced_call(
+            run_call(transport, realtime, FakeCoreBankingClient(), call_records)
+        )
+        call_span = next(s for s in spans if s.name == telemetry.CALL)
+        self.assertEqual(call_span.attributes["end_reason"], "escalated")
+        self.assertEqual(len(call_records.escalations), 1)
 
 
 class MetricsRecordB4AndB5(unittest.TestCase):

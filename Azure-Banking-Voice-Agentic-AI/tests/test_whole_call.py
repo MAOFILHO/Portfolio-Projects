@@ -1208,9 +1208,22 @@ class WholeCallEscalation(unittest.TestCase):
                 function_call(
                     "escalate_to_human", json.dumps({"reason": reason}), call_id="call-escalate"
                 ),
-                # Never reached: the relay raises after the escalation's own output is sent. Scripted
-                # anyway, so "the call ended" is a fact about the relay rather than about the fake
-                # running out of events.
+                # The response that CALLED escalate_to_human gets its own response.done first, no
+                # audio -- same as any tool-call-only response (confirmed live 2026-09-14: every
+                # tool-call turn's `agent_spoke` is False). Scripted explicitly rather than left out:
+                # an earlier version of this fix consumed `pending_escalation` here, one response
+                # too early, and this is the event that fixture must produce to catch that again.
+                response_done(),
+                # The response the code asks for alongside the tool's output (issue #48) -- the
+                # model's own closing remark, which must actually be relayed before the call ends.
+                # Scripted here rather than left out, so a regression that stops relaying it (the
+                # 2026-09-14 bug: raising right after response.create, before this delta and its
+                # response.done could ever arrive) fails a test instead of only a live call.
+                audio_delta("connecting you now"),
+                response_done(),
+                # Never reached: the relay raises once the response.done above fires. Scripted
+                # anyway, so "the call ended there" is a fact about the relay rather than about the
+                # fake running out of events.
                 function_call("get_balance", '{"account": "chequing"}', call_id="call-after"),
                 response_done(),
             ],
@@ -1242,15 +1255,45 @@ class WholeCallEscalation(unittest.TestCase):
         self.assertEqual(self.call_records.calls[0], "record_escalation")
 
     def test_the_caller_is_told_before_the_call_ends(self):
-        # The ordering the whole design turns on: output, then a response request, and only then the
-        # raise. A relay that raised as soon as the tool returned would end the call on the same
-        # silence a dropped line produces.
-        _, realtime = self._run()
+        # The ordering the whole design turns on: output, then a response request, and -- the part
+        # a live call found missing on 2026-09-14 -- the raise only after that response's audio has
+        # actually reached the caller, not merely after the request for it was sent.
+        transport, realtime = self._run()
         self.assertEqual(
             json.loads(dict(realtime.tool_outputs)["call-escalate"]),
             {"result": tools_module.ESCALATED},
         )
         self.assertEqual(realtime.sent_types[-2:], ["conversation.item.create", "response.create"])
+        # The actual regression: sending the request proves nothing by itself (a relay that raised
+        # immediately after would still pass the assertion above) -- what must be true is that the
+        # closing remark's own audio was relayed to the caller before the call ended.
+        self.assertEqual(transport.sent_audio_payloads, ["connecting you now"])
+
+    def test_a_tool_call_before_the_closing_remark_does_not_end_the_call_early(self):
+        # The gap a 2026-09-14 code review found in the first version of this fix: watching only
+        # "the next response.done" ends the call in silence anyway if the model's closing turn
+        # opens with another tool call before it actually speaks -- the response that call belongs
+        # to gets its own response.done first, with no audio, exactly like the escalation's own
+        # response did. `response_had_a_tool_call` is what this test pins.
+        transport = FakeTransport(frames=[audio_frame("get-me-a-person")], hang=True)
+        realtime = FakeRealtimeServer(
+            events=[
+                function_call(
+                    "escalate_to_human", json.dumps({"reason": REASONS[0]}), call_id="call-escalate"
+                ),
+                response_done(),  # the escalation's own response -- no audio
+                function_call("get_balance", '{"account": "chequing"}', call_id="call-nested"),
+                response_done(),  # the nested tool call's response -- also no audio
+                audio_delta("connecting you now"),
+                response_done(),  # only now does the model actually speak
+            ],
+            respond_after_appends=1,
+        )
+        asyncio.run(
+            run_call(transport, realtime, self.core_banking, self.call_records, "corr-nested")
+        )
+        self.assertEqual(transport.sent_audio_payloads, ["connecting you now"])
+        self.assertEqual(len(self.call_records.escalations), 1)
 
     def test_the_call_ends_and_nothing_after_it_runs(self):
         _, realtime = self._run()

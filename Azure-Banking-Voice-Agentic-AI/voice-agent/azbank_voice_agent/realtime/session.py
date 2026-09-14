@@ -565,6 +565,24 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         # current one began -- the call's own start for the first turn, the previous
         # response.done for every one after.
         turn_started = time.monotonic()
+        # Set when escalate_to_human succeeds; consumed at a later response.done, not necessarily
+        # the next one. Fixes a bug live 2026-09-14: raising EscalationRequested immediately after
+        # response.create stopped this coroutine from ever reaching the response.output_audio.delta
+        # events for the model's closing remark, so escalated calls ended in silence -- the exact
+        # failure issue #48's own comment (below) says this ordering was meant to prevent.
+        #
+        # **Why "a later" and not "the next" response.done, and why `response_had_a_tool_call`
+        # exists**: the response that calls escalate_to_human gets its own response.done -- no
+        # audio, same as any tool-call-only response (`audio_started`'s comment above; confirmed
+        # live 2026-09-14, every tool-call turn's `agent_spoke` attribute is False) -- *before* the
+        # new response requested by `response.create` (the one that might actually speak) is even
+        # created. A flag consumed on that first response.done, as an earlier version of this fix
+        # did, fires one response too early -- silence, again, just one event later. So: skip any
+        # response.done whose response itself contained a tool call (this response cycle's own),
+        # and only raise on the first one that didn't -- which generalises correctly however many
+        # further tool calls the model makes before it actually speaks.
+        pending_escalation = False
+        response_had_a_tool_call = False
         async for event in realtime:
             if event.type == "response.output_audio.delta":
                 if not audio_started:
@@ -580,6 +598,11 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 log.info("caller turn ended")
                 speech_stopped_at = time.monotonic()
             elif event.type == "response.function_call_arguments.done":
+                # Every tool call, handoff included, marks its own response as tool-call-only --
+                # see `response_had_a_tool_call`'s comment above. Set unconditionally, before the
+                # handoff/dispatch split below, so a pending escalation is never consumed by this
+                # response's own response.done regardless of which branch actually runs.
+                response_had_a_tool_call = True
                 # `agent` (not just event.name) matters here: handoff_target() checks the edge
                 # against the *calling* agent's own declared handoff_to, so a target that exists
                 # but isn't an edge this agent declares comes back None and falls through to the
@@ -631,16 +654,16 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 await realtime.send({"type": "response.create"})
                 # **After the output is sent and a response is asked for, never before** (issue
                 # #48). The caller hears an apology because the model is given something to say and
-                # asked to say it; raising as soon as the tool returned would end the call on the
-                # same silence a dropped line produces.
+                # asked to say it -- which requires actually waiting for that response's audio
+                # (see `pending_escalation` above), not just requesting it and ending the call.
                 #
                 # Read off the output rather than off the tool name alone: an escalation the gate
                 # refused, or one whose reason code the model invented, comes back as an error and
                 # must not end the call -- the caller is told to say it again, which is what every
                 # other malformed tool call already does.
                 if event.name == "escalate_to_human" and "error" not in json.loads(output):
-                    log.info("escalation requested, ending call")
-                    raise EscalationRequested("the caller was escalated to a person")
+                    log.info("escalation requested, call ends after this response is spoken")
+                    pending_escalation = True
             elif event.type == "response.output_audio_transcript.delta":
                 # The only transcript available without provisioning a separate transcription
                 # deployment (see the input_audio_transcription comment above) -- what the agent
@@ -666,9 +689,30 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 turn_span.end()
                 turn_started = time.monotonic()
                 audio_started = False  # B5: next audio delta is a new response cycle's first.
+                # Checked before the turn cap below (/code-review, 2026-09-14): the closing
+                # remark's own response.done can be the same one that trips MAX_CALL_TURNS -- the
+                # audio was already relayed above either way, so the only question left is which
+                # exception type reports it. Checking the cap first would raise CallLimitExceeded
+                # and log this as a cost event, even though the caller was actually escalated and
+                # #48 asks that a routing event and a cost event stay distinguishable in every log
+                # that reads them. Escalation wins the race: its own condition already means "the
+                # apology has been spoken, end the call," and that is true regardless of what the
+                # turn count also happens to be on this same event.
+                if pending_escalation and not response_had_a_tool_call:
+                    # This response.done's own response called no further tool -- it is the
+                    # escalation's actual closing remark (or the model chose to say nothing, which
+                    # is equally a real, spoken-or-not response rather than the tool-call response
+                    # itself), and every response.output_audio.delta it had was already relayed
+                    # above, in event order, before this response.done could fire. Ending the call
+                    # here is the actual fix (see `pending_escalation`'s own comment) -- a version
+                    # of this fix that skipped `response_had_a_tool_call` fired here one response
+                    # too early, on the tool-call response itself, before this one even started.
+                    log.info("escalation response delivered, ending call")
+                    raise EscalationRequested("the caller was escalated to a person")
                 if turn_count >= caps.MAX_CALL_TURNS:
                     log.warning("call hit MAX_CALL_TURNS=%d, ending call (B4)", caps.MAX_CALL_TURNS)
                     raise caps.CallLimitExceeded(f"turn cap ({caps.MAX_CALL_TURNS}) reached")
+                response_had_a_tool_call = False
             elif event.type == "error":
                 # Arrival only, never event content (B2): this project has never observed a real
                 # error event live (docs/phase1/research-aoai-realtime-wire-format.md -- "zero
@@ -689,6 +733,17 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                     log.error("AOAI rejected a frame of the injected PIN-outcome")
                 else:
                     log.error("AOAI error event received")
+        # /code-review, 2026-09-14: the gap on the other side of the same fix. If the event stream
+        # ends -- the connection drops, or (in tests) the fake simply runs out of scripted events --
+        # while `pending_escalation` is still True, the loop above exits normally and this coroutine
+        # would otherwise just return. The record was already written before this flag was ever set
+        # (`dispatch_tool_call`, above), so the call *is* an escalation regardless of whether its
+        # closing remark's response.done ever arrived -- letting it fall through here would report
+        # it as `end_reason="model_ended"`, exactly the misclassification #48 asks this exception
+        # type exists to prevent.
+        if pending_escalation:
+            log.info("escalation pending when the connection ended, ending call")
+            raise EscalationRequested("the caller was escalated to a person")
 
     # Issue #61: the "call" span's `end_reason` default -- overwritten by the classification below
     # once the tasks actually finish. Stays "error" only if something raises before that
