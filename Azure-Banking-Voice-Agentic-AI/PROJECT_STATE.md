@@ -175,6 +175,14 @@ because they are genuinely unresolved, not because any of them is currently bloc
     (`session.LEDGER_DEADLINE_SECONDS`), tested. `/research` owes the azure-core option names.
 18. **The daily ledger's lock is in-process only.** Fine for one replica; ETag optimistic concurrency
     is the fix, deliberately not-yet (Marco, 2026-09-11).
+19. **A genuine dropped connection during a pending escalation can still misreport `end_reason`.**
+    Fixed 2026-09-14 (`fe1bb82`): the escalation's closing-remark audio now always reaches the caller,
+    and the two known races against classification (B4's turn cap; a clean end-of-stream) are closed
+    and tested. Left open (Marco's call, same day, round 2 of that fix's own `/code-review`): a real
+    abnormal socket close (caller hangs up mid-apology, or the connection errors rather than closing
+    cleanly) can still bypass both fixes and log as `"caller_hangup"` or a bare `"error"` instead of
+    `"escalated"`. `FakeRealtimeServer` has no fixture for an abnormal close, so this isn't testable
+    as the fake stands today — needs one before it can be fixed.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
