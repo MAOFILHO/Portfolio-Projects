@@ -322,3 +322,72 @@ one API; the figure carries 2026-09-12 for the same reason a percentile carries 
 - **Table Storage's real rate is no longer owed** — read live 2026-09-12, above.
 - **Still owed before anything is applied**: the actual cost of both new resources checked against
   what this predicts once they exist. An ARM 200 OK proves creation, not cost.
+
+---
+
+## R-08, recomputed for Application Insights sharing the shared 5 GB grant — issue #62, 2026-09-13
+
+**Not yet applied — this prices the diff issue #62 prepares (`infra/modules/app-insights.bicep`,
+`infra/provision-app-insights.sh`), not a resource that exists yet.** Per `docs/phase6/exit-
+criteria.md` D4, workspace-based Application Insights bills through the *same* Log Analytics
+ingestion meter container logs already use — it is not a second grant, it is the same 5 GB/month
+free allowance, shared. Rates below are restated from where they were already read live, not
+re-derived here: `docs/phase6/exit-criteria.md` D4 and `docs/PLAN.md` "Observability tooling," both
+sourced from the Azure Retail Prices API (2026-08-21 / 2026-09-11).
+
+| meter | rate |
+|---|---|
+| Log Analytics ingestion, first 5 GB/month per billing account | **$0/GB** — permanent, not a trial |
+| Log Analytics ingestion, beyond 5 GB/month | **$2.76/GB**, `canadacentral` |
+| Application Insights data retention | 90 days included (vs. 31 for a generic workspace) |
+
+### What Phase 6 actually adds to that shared meter
+
+D5's shape bounds the worst case rather than requiring a live measurement: one call produces one
+`call` span, up to 20 `turn` children (B4's own per-call turn cap), and per-turn `tool_call`/
+`core_banking` children. Taking the most pessimistic count that shape allows — 20 turns, each with
+one `tool_call` and one `core_banking` child — is 1 + 20 + 20 + 20 = **61 spans/call, worst case**.
+A serialized Application Insights telemetry item (envelope + tags + D15's allowlisted attributes,
+which are all short strings, ints or booleans — no transcript text, by construction) runs on the
+order of 1–2 KB; taking the higher end, **2 KB/span, worst case**:
+
+```
+61 spans/call x 2 KB/span              =  122 KB/call, worst case
+67 demo runs/month (R-08's own gate)   x 122 KB       =  8.2 MB/month, worst case
+```
+
+The two metrics this phase adds (`b4.daily_minutes_used`, `b5.turn_latency_seconds`) carry no
+attributes (D14/`telemetry.py`) and add a few hundred bytes/call more — rounds to nothing against
+the above.
+
+**8.2 MB/month is ~0.16% of the 5 GB/month free grant**, before container logs (already measured at
+"rounds to $0 in practice" for this project's volume — `docs/phase0/findings.md`, "Stage 12 —
+auto-created Log Analytics workspace, cost verified") are added back in. Doubling the worst-case span
+estimate, or assuming container logs alone now use ten times their historically measured volume,
+both still land two orders of magnitude under the grant.
+
+### The recomputed figure
+
+**$0.00/mo added.** The fixed monthly total from the prior recompute above ("R-08, recomputed
+against a two-Container-App fixed cost") is unchanged: **$14.60/mo fixed, 45–67 demo runs/month
+against a gate of 5.** Application Insights does not move either number, because it shares a grant
+with room to spare rather than adding a new billable meter at this project's volume.
+
+**`PROJECT_STATE.md` open item 8 (the Log Analytics auto-provision choice) is settled in this same
+pass**: `infra/modules/app-insights.bicep` binds the new resource to the existing
+`workspace-rgazurebankingvoiceagenticai1D` explicitly — via `WorkspaceResourceId`, and an `@allowed`
+Bicep constraint that accepts no other workspace name — rather than letting a fourth workspace get
+auto-provisioned by omission the way the first three were (`docs/phase0/findings.md`, same section).
+
+### What this does not price
+
+- **The actual measured volume**, once real spans exist. This is a worst-case bound derived from the
+  code's own shape (D15's table, B4's turn cap), not a measurement — `docs/PLAN.md`'s 200-OK rule
+  applies here exactly as it does to delivery: a queried row after the D16 smoke call
+  (`docs/phase6/smoke-call-runbook.md`) is what turns this bound into a measurement.
+- **Any resource-level charge for Application Insights itself beyond the ingestion meter** — there
+  isn't one; workspace-based Application Insights carries no separate per-resource fee, per the same
+  Microsoft pricing page `docs/PLAN.md`'s "Observability tooling" section already quotes.
+- **The Entra-authenticated ingestion path's own cost, if any** — D10's role question is still open
+  (`/research`); this recompute assumes the same ingestion meter applies regardless of which
+  authentication path is used, since auth method doesn't change billed data volume.

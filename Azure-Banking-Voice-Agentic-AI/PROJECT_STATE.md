@@ -13,8 +13,8 @@ account of what happened:
 | 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
 | 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
 
-Phase 6 is designed (`docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11) but **has not
-begun** — see "Current phase" below.
+Phase 6 is in progress (`docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11) — issue #61's
+code is committed, #62's provisioning is prepared but not applied — see "Current phase" below.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -27,8 +27,9 @@ live bearing on the current moment:
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
 2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
-   (used) and `APPROVED: Phase 6` (typed 2026-09-12, **not yet used** — Phase 6 has not begun) are
-   both on record.
+   (used) and `APPROVED: Phase 6` (typed 2026-09-12) are both on record. Phase 6's gate covers issue
+   #62's Application Insights, prepared (`infra/provision-app-insights.sh`) but **not yet run** — that
+   script still needs your own look before it applies, per the next rule down.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -101,6 +102,14 @@ and goes stale between sessions.
 - **Logs: query `workspace-rgazurebankingvoiceagenticai1D`** (`bf520f2c-e2bc-4488-8965-9317a7922c74`),
   never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
   exist, not two.
+- **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
+  `provisioningState: Succeeded`, created and wired 2026-09-14 (Marco, `infra/provision-app-
+  insights.sh`). `ca-azbank-echo-p0` revision `--obs20260914111702` is Active/Healthy/100% traffic,
+  carrying `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref `appinsights-conn`) and
+  `AZURE_MONITOR_AUTH=connection_string` — the named fallback, not the identity path (D10's IAM role
+  is still an open `/research` question). **Delivery not yet confirmed**: the D16 smoke call and a
+  queried row in `...1D` are still owed (`docs/phase6/smoke-call-runbook.md`) — an ARM 200 OK and a
+  `Healthy` revision prove wiring, not that a span actually arrived.
 
 ## Open items
 
@@ -122,7 +131,10 @@ because they are genuinely unresolved, not because any of them is currently bloc
    (`T-B3-SUCCESSOR-BOOT`) exists and is skipped by design.
 7. **Stale `az` CLI `defaults.location=eastus`** (this machine). Fix identified (`--location ""`),
    pending sign-off.
-8. **Log Analytics auto-provision choice** (no `--logs-destination` passed) — tied to item 1.
+8. *(closed 2026-09-13, applied 2026-09-14: `COSTS.md` "R-08, recomputed for Application Insights
+   sharing the shared 5 GB grant"; `infra/modules/app-insights.bicep`)* — the Log Analytics
+   auto-provision choice is settled as "bind explicitly to the existing `...1D` workspace," not
+   "let a fourth workspace auto-provision." Applied live, see "Live Azure state" above.
 9. **`silence_duration_ms` 200→600 (`0ed61e0`) has now been exercised by real calls and did not
    recur as mid-PIN interruption.** A different, unrelated silence mode surfaced instead (post-refusal
    silence, `docs/phase5/exit-criteria.md` known-partial 9) — recorded there, not chased further.
@@ -163,8 +175,10 @@ because they are genuinely unresolved, not because any of them is currently bloc
 **R-01–R-06 resolved** (R-03 partial, see item 3). **R-08 recomputed 2026-09-11, passes**: fixed
 $14.60/mo, 45–67 demo runs/month against a gate of 5 (`COSTS.md`). No input is unpriced. **R-09**
 (number irreplaceability) and **R-07** (`spendingLimit: Off`) are standing facts, not open items.
-**R-08 is recomputed again before Phase 6 provisions anything** — App Insights shares the container
-logs' free grant rather than adding one (`docs/phase6/exit-criteria.md` D4).
+**R-08 recomputed again for Phase 6, 2026-09-13** (`COSTS.md`) — Application Insights shares the
+container logs' free grant rather than adding one; worst-case bound **$0.00/mo added**, fixed total
+unchanged at $14.60/mo. Priced before provisioning, per `docs/phase6/exit-criteria.md` D4; the
+resource itself does not exist yet.
 
 ## Next actions (in order)
 
@@ -172,7 +186,12 @@ logs' free grant rather than adding one (`docs/phase6/exit-criteria.md` D4).
 2. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
 3. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
    B1's restatement necessary, plus Phase 5's `escalate_to_human`-while-anonymous corollary.
-4. **Pick up issue #61** (Phase 6 code) — unblocked, `ready-for-agent`, no open item stands in its way.
+4. **Issue #62**: Application Insights is live and wired (2026-09-14) — make the D16 smoke call
+   (`docs/phase6/smoke-call-runbook.md`) and query `...1D` for its rows to confirm delivery, the one
+   step left before the ticket's criteria are actually met rather than just deployed.
+5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
+   identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
+   connection-string fallback instead (Phase 7 debt).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
