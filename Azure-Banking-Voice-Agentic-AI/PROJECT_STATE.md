@@ -103,13 +103,19 @@ and goes stale between sessions.
   never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
-  `provisioningState: Succeeded`, created and wired 2026-09-14 (Marco, `infra/provision-app-
-  insights.sh`). `ca-azbank-echo-p0` revision `--obs20260914111702` is Active/Healthy/100% traffic,
-  carrying `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref `appinsights-conn`) and
-  `AZURE_MONITOR_AUTH=connection_string` — the named fallback, not the identity path (D10's IAM role
-  is still an open `/research` question). **Delivery not yet confirmed**: the D16 smoke call and a
-  queried row in `...1D` are still owed (`docs/phase6/smoke-call-runbook.md`) — an ARM 200 OK and a
-  `Healthy` revision prove wiring, not that a span actually arrived.
+  `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
+- **`ca-azbank-echo-p0` is now running issue #61's code**, image `docker.io/maofilho/azbank-echo-p0:
+  p6a`, revision `--p6a20260914114410`, Active/Healthy/100% traffic. **The first D16 smoke call
+  (2026-09-14, correlation id `393815d8`) ran against the OLD image (`p5i`, pre-#61) and produced no
+  spans** — not an ingestion-delay issue as first assumed, corrected the same session: `#62`'s
+  provisioning script wired env vars onto the existing Container App but never rebuilt the image, so
+  the deployed code had no telemetry in it at all. Image rebuilt (`docker buildx build --platform
+  linux/amd64 --provenance=false --sbom=false`, verified `linux/amd64` structurally) and redeployed;
+  new revision confirmed Healthy, no boot-time telemetry exception logged. Carries
+  `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the
+  named fallback, not identity — D10's IAM role is still an open `/research` question). **The smoke
+  call must be redone against this revision** — delivery is still unconfirmed; nothing before this
+  point queried a row.
 
 ## Open items
 
