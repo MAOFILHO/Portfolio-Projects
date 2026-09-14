@@ -1,0 +1,510 @@
+"""The system of record's own rules: seeding, balances, and what a transfer is allowed to do.
+
+Money is stored in **integer cents** throughout (issue #26). A service that persists money does
+not inherit the demo-grade float the in-memory Phase 1 module used -- these tests assert the type,
+not just the value, because the whole point is that no float ever reaches storage.
+"""
+import contextlib
+import hashlib
+import sqlite3
+import threading
+import unittest
+import unittest.mock
+
+from azbank_core_banking import db
+
+
+def _fresh(test=None):
+    """An initialised in-memory database. Seeded, since it starts empty.
+
+    `test` registers a close on teardown -- an unclosed sqlite3 connection is a ResourceWarning,
+    and this suite runs with warnings treated as errors.
+    """
+    conn = sqlite3.connect(":memory:")
+    db.initialise(conn)
+    if test is not None:
+        test.addCleanup(conn.close)
+    return conn
+
+
+class Seeding(unittest.TestCase):
+    def test_empty_database_is_seeded(self):
+        conn = _fresh(self)
+        self.assertEqual(db.list_accounts(conn), {"chequing": 240000, "savings": 50000})
+
+    def test_existing_rows_are_left_alone(self):
+        # A restart must not reset balances that are already there. Seeding is "if empty", never
+        # "on every boot" -- otherwise a redeploy would silently undo real activity.
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 10000)
+        db.initialise(conn)
+        self.assertEqual(db.get_balance(conn, "chequing"), 230000)
+
+    def test_seed_values_are_integer_cents_at_the_source(self):
+        """Issue #26 criterion 3, asserted where it can actually fail.
+
+        On SEED_ACCOUNTS itself, never on a value read back out of SQLite. Two earlier versions of
+        this test did the round trip and neither could fail (/code-review, 2026-09-08 and again on
+        8163e83): an INTEGER-affinity column converts a whole float on insert, so a seed of
+        240000.0 stores and reads back as int 240000, and `typeof()` reports "integer" for it too.
+        Affinity erases the distinction downstream, so the source is the only place it survives --
+        and an isinstance check here catches both 2400.00 dollars-as-float and a fractional cent,
+        which is everything the round-trip assertions were reaching for.
+        """
+        for balance in db.SEED_ACCOUNTS.values():
+            self.assertIsInstance(balance, int)
+
+
+class Credentials(unittest.TestCase):
+    """The one credential this profile holds, and the rules for checking it (issue #34).
+
+    The stored value is a digest, never the PIN. That is what lets B2's artifact scan cover the
+    database file with no carve-out -- a scan that had to skip a column would be a scan that could
+    be made to pass by moving the leak into it.
+    """
+
+    def test_the_credential_is_seeded(self):
+        self.assertEqual(db.credential_digest(_fresh(self)), db.SEED_CREDENTIAL_DIGEST)
+
+    def test_the_seeded_value_is_a_digest_and_not_the_pin(self):
+        # On SEED_CREDENTIAL_DIGEST itself, for the same reason the seed balances are asserted at
+        # the source: this is the one place the distinction between the PIN and its digest can
+        # still fail, because everything downstream only ever sees whatever was seeded here.
+        self.assertNotIn(db.DEMO_PIN, db.SEED_CREDENTIAL_DIGEST)
+        self.assertEqual(
+            db.SEED_CREDENTIAL_DIGEST, hashlib.sha256(db.DEMO_PIN.encode()).hexdigest()
+        )
+
+    def test_no_plaintext_pin_reaches_persistence(self):
+        # The whole database, dumped as SQL -- schema, values and all. The demo balances contain no
+        # "1234" of their own, so a hit here means the PIN itself was written.
+        conn = _fresh(self)
+        dump = "\n".join(conn.iterdump())
+        self.assertNotIn(db.DEMO_PIN, dump)
+
+    def test_an_existing_credential_is_left_alone(self):
+        # Same "only if empty" rule the accounts use: a restart must not silently reset a
+        # credential that is already there.
+        conn = _fresh(self)
+        conn.execute("UPDATE credentials SET pin_digest = ?", ("not-the-seeded-digest",))
+        conn.commit()
+        db.initialise(conn)
+        self.assertEqual(db.credential_digest(conn), "not-the-seeded-digest")
+
+    def test_the_right_pin_is_accepted(self):
+        self.assertIs(db.verify_pin(_fresh(self), db.DEMO_PIN), True)
+
+    def test_a_wrong_pin_is_refused(self):
+        self.assertIs(db.verify_pin(_fresh(self), "9999"), False)
+
+    def test_a_malformed_pin_is_refused_and_never_raises(self):
+        """Refused, not raised -- deliberately, and this is the B2 reason rather than a style one.
+
+        An exception carrying a rejected value is an exception whose message is the leak, and the
+        `transfer` precedent of raising ValueError on a malformed input formats the offending value
+        into the message. There is no such thing as a PIN that is malformed enough to be worth
+        repeating back, so this path refuses everything it cannot match and says nothing about what
+        it was given. It fails closed for free: whatever cannot be compared cannot be accepted.
+        """
+        conn = _fresh(self)
+        # Labelled by index, not by value: a subTest label is printed on failure, and a loop that
+        # prints the value it was given is the same leak this suite exists to prevent.
+        malformed = ("", "123", "12345", "abcd", "12 4", None, 1234, b"1234", ["1", "2", "3", "4"])
+        for index, pin in enumerate(malformed):
+            with self.subTest(case=index):
+                self.assertIs(db.verify_pin(conn, pin), False)
+
+
+class GetBalance(unittest.TestCase):
+    def test_known_account(self):
+        self.assertEqual(db.get_balance(_fresh(self), "chequing"), 240000)
+
+    def test_unknown_account_raises(self):
+        # T-UNKNOWN-ACCT at the system of record. Never a default, never a zero, never another
+        # account's balance -- the defect CLAUDE.md's hard exclusions name by example.
+        with self.assertRaises(db.UnknownAccount):
+            db.get_balance(_fresh(self), "bitcoin")
+
+
+class Transfer(unittest.TestCase):
+    def test_completed_transfer_moves_money(self):
+        conn = _fresh(self)
+        result = db.transfer(conn, "chequing", "savings", 15000)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(db.get_balance(conn, "chequing"), 225000)
+        self.assertEqual(db.get_balance(conn, "savings"), 65000)
+
+    def test_completed_transfer_reports_the_resulting_balances(self):
+        result = db.transfer(_fresh(self), "chequing", "savings", 15000)
+        self.assertEqual(result.from_balance_cents, 225000)
+        self.assertEqual(result.to_balance_cents, 65000)
+
+    def test_overdrawing_transfer_is_declined_not_raised(self):
+        # A declined transfer is a normal outcome of a working system, not an error condition.
+        conn = _fresh(self)
+        result = db.transfer(conn, "chequing", "savings", 300000)
+        self.assertEqual(result.outcome, "declined")
+        self.assertEqual(result.reason, "insufficient_funds")
+        self.assertEqual(result.available_cents, 240000)
+
+    def test_declined_transfer_mutates_nothing(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 300000)
+        self.assertEqual(db.list_accounts(conn), {"chequing": 240000, "savings": 50000})
+
+    def test_unknown_source_account_raises(self):
+        with self.assertRaises(db.UnknownAccount):
+            db.transfer(_fresh(self), "bitcoin", "savings", 100)
+
+    def test_unknown_destination_account_raises(self):
+        with self.assertRaises(db.UnknownAccount):
+            db.transfer(_fresh(self), "chequing", "bitcoin", 100)
+
+    def test_non_positive_amount_raises(self):
+        for amount in (0, -1):
+            with self.assertRaises(ValueError):
+                db.transfer(_fresh(self), "chequing", "savings", amount)
+
+    def test_a_fractional_amount_raises(self):
+        # Cents are whole or they are not cents. The HTTP route is protected by `amount_cents: int`
+        # on TransferRequest, but issue #26 criterion 2 requires this suite to stand on its own
+        # without the voice agent, so the rule has to hold at the function too.
+        with self.assertRaises(ValueError):
+            db.transfer(_fresh(self), "chequing", "savings", 15000.5)
+
+    def test_a_fractional_amount_puts_no_float_in_persistence(self):
+        """Issue #26 criterion 3 on the **write** path: "no float appears in persistence".
+
+        The input is the point. An earlier version of this test transferred a whole 15000 and
+        asserted `typeof()`, which no arithmetic on INTEGER columns could ever have made REAL, so
+        it could not fail; it was then deleted as redundant rather than given an input that bites
+        (/code-review, 2026-09-08, twice). 15000.5 is that input: before the guard above, it wrote
+        224999.5 and SQLite stored it REAL, because affinity only converts what it can convert
+        losslessly.
+        """
+        conn = _fresh(self)
+        with contextlib.suppress(ValueError):
+            db.transfer(conn, "chequing", "savings", 15000.5)
+        stored = conn.execute("SELECT typeof(balance_cents) FROM accounts").fetchall()
+        self.assertEqual([storage_class for (storage_class,) in stored], ["integer", "integer"])
+
+    def test_a_completed_transfer_reports_what_storage_holds(self):
+        """The reported balances are read back out of the table, never computed from the amount.
+
+        A self-transfer is the input that tells the two apart, which is why it is the one used
+        here: both UPDATEs land on the same row and cancel, so storage still holds 240000 while
+        `available - amount_cents` would say 225000. Reporting the arithmetic is how this service
+        came to read a caller a balance it had never held (/code-review, 2026-09-08). A transfer
+        between two different accounts cannot catch that -- the two agree for every such input.
+        """
+        conn = _fresh(self)
+        result = db.transfer(conn, "chequing", "chequing", 15000)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(result.from_balance_cents, 240000)
+        self.assertEqual(result.to_balance_cents, 240000)
+        self.assertEqual(db.get_balance(conn, "chequing"), 240000)
+
+    def test_transfer_of_the_entire_balance_is_allowed(self):
+        # The boundary: exactly the available amount is not overdrawing.
+        conn = _fresh(self)
+        result = db.transfer(conn, "chequing", "savings", 240000)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(db.get_balance(conn, "chequing"), 0)
+
+
+class ConcurrentRequests(unittest.TestCase):
+    """One connection serves every request, so concurrency is this module's problem, not FastAPI's.
+
+    `build_app` opens a single connection and closes over it, and FastAPI runs `def` routes on a
+    threadpool -- so two in-flight transfers really do meet inside these functions. Before the lock
+    in db.py they met badly: `with conn:` is per-*connection*, so two requests shared one implicit
+    transaction and SQLite answered "cannot start a transaction within a transaction", a SELECT for
+    an account that exists came back empty (raising UnknownAccount for "chequing"), and two
+    transfers could both pass the sufficiency check and overdraw the account.
+
+    Threads make a test non-deterministic in the red direction only: once serialised the outcome is
+    fixed, and before the fix a single round caught the race about a third of the time. ROUNDS is
+    sized so that a regression is caught with probability better than 1 - 1e-3 while the whole case
+    still runs in well under a second.
+    """
+
+    ROUNDS = 20
+    THREADS = 4
+
+    def _race_one_round(self):
+        """Every thread tries to move the entire balance at once. Returns the outcome labels."""
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        self.addCleanup(conn.close)
+        db.initialise(conn)
+        ready = threading.Barrier(self.THREADS)
+        outcomes, guard = [], threading.Lock()
+
+        def attempt():
+            ready.wait()
+            try:
+                result = db.transfer(conn, "chequing", "savings", 240000)
+                label = result.outcome
+            except Exception as e:  # noqa: BLE001 - the failure being pinned is "any error at all"
+                label = type(e).__name__
+            with guard:
+                outcomes.append(label)
+
+        workers = [threading.Thread(target=attempt) for _ in range(self.THREADS)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        return outcomes, db.get_balance(conn, "chequing")
+
+    def test_concurrent_transfers_cannot_overdraw_or_corrupt(self):
+        for _ in range(self.ROUNDS):
+            outcomes, remaining = self._race_one_round()
+            self.assertEqual(
+                sorted(outcomes), ["completed"] + ["declined"] * (self.THREADS - 1),
+                "exactly one transfer of the whole balance may succeed, and the rest are "
+                f"ordinary declines -- got {outcomes}",
+            )
+            self.assertEqual(remaining, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class Transactions(unittest.TestCase):
+    """The account history (issue #44): what it holds, when it is written, and what bounds it.
+
+    The rules that matter are all about *not* disagreeing with the balances: history is written
+    inside the transfer's own transaction, a decline writes nothing, and a rollback takes the
+    history with it.
+    """
+
+    def test_a_fresh_database_has_a_seeded_history(self):
+        # So a demo call has something to read on the first run. An empty list is a correct answer
+        # and a terrible demo.
+        conn = _fresh(self)
+        self.assertTrue(db.list_transactions(conn, "chequing"))
+        self.assertTrue(db.list_transactions(conn, "savings"))
+
+    def test_an_existing_history_is_left_alone(self):
+        # Same "if empty" rule the balances and the credential already have: a restart must not
+        # append the demo history a second time.
+        conn = _fresh(self)
+        before = len(db.list_transactions(conn, "chequing", limit=100))
+        db.initialise(conn)
+        self.assertEqual(len(db.list_transactions(conn, "chequing", limit=100)), before)
+
+    def test_a_completed_transfer_writes_both_sides(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        debit = db.list_transactions(conn, "chequing")[0]
+        credit = db.list_transactions(conn, "savings")[0]
+        self.assertEqual(debit.amount_cents, -15000)
+        self.assertEqual(debit.counterparty, "savings")
+        self.assertEqual(credit.amount_cents, 15000)
+        self.assertEqual(credit.counterparty, "chequing")
+        self.assertEqual(debit.occurred_at, credit.occurred_at)
+        self.assertEqual(debit.kind, db.TRANSFER)
+
+    def test_the_sign_is_from_the_accounts_own_point_of_view(self):
+        """Money leaving an account is negative *in that account's history*.
+
+        Asserted on its own rather than folded into the test above, because this is the fact the
+        voice agent's sentence turns on: which of "to savings" and "from chequing" the caller hears
+        comes from the sign and from nothing else.
+        """
+        conn = _fresh(self)
+        db.transfer(conn, "savings", "chequing", 2500, now="2026-09-11T10:00:00Z")
+        self.assertLess(db.list_transactions(conn, "savings")[0].amount_cents, 0)
+        self.assertGreater(db.list_transactions(conn, "chequing")[0].amount_cents, 0)
+
+    def test_a_declined_transfer_writes_no_history(self):
+        # A decline is a working system saying no. Nothing happened, so there is nothing to record.
+        conn = _fresh(self)
+        before = db.list_transactions(conn, "chequing", limit=100)
+        result = db.transfer(conn, "chequing", "savings", 900000, now="2026-09-11T10:00:00Z")
+        self.assertEqual(result.outcome, "declined")
+        self.assertEqual(db.list_transactions(conn, "chequing", limit=100), before)
+
+    def test_a_raising_transfer_writes_no_history(self):
+        conn = _fresh(self)
+        before = db.list_transactions(conn, "chequing", limit=100)
+        with self.assertRaises(db.UnknownAccount):
+            db.transfer(conn, "chequing", "bitcoin", 100, now="2026-09-11T10:00:00Z")
+        self.assertEqual(db.list_transactions(conn, "chequing", limit=100), before)
+
+    def test_history_and_balances_commit_together(self):
+        """The history is written inside the transfer's own transaction.
+
+        Driven by making the *balance* write fail after the history write would have happened: if
+        the two were in separate transactions, the history would survive and the service would tell
+        a caller about money that never moved. The failure is injected by dropping the accounts
+        table mid-transaction, which is the cheapest way to make the second UPDATE raise without
+        reaching into `transfer`'s internals.
+        """
+        conn = _fresh(self)
+        before = len(db.list_transactions(conn, "chequing", limit=100))
+        original = db.get_balance(conn, "chequing")
+        real_record = db._record_transfer
+
+        def record_then_break(*args, **kwargs):
+            real_record(*args, **kwargs)
+            raise sqlite3.OperationalError("injected failure after the history was written")
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(unittest.mock.patch.object(db, "_record_transfer", record_then_break))
+            with self.assertRaises(sqlite3.OperationalError):
+                db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+
+        self.assertEqual(db.get_balance(conn, "chequing"), original)
+        self.assertEqual(len(db.list_transactions(conn, "chequing", limit=100)), before)
+
+    def test_the_list_is_bounded_by_the_service(self):
+        conn = _fresh(self)
+        for i in range(db.TRANSACTION_LIST_LIMIT + 4):
+            db.transfer(conn, "chequing", "savings", 100, now=f"2026-09-11T10:00:{i:02d}Z")
+        self.assertEqual(
+            len(db.list_transactions(conn, "chequing")), db.TRANSACTION_LIST_LIMIT
+        )
+
+    def test_the_list_is_newest_first(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 100, now="2026-09-11T10:00:00Z")
+        db.transfer(conn, "chequing", "savings", 200, now="2026-09-11T11:00:00Z")
+        recent = db.list_transactions(conn, "chequing")
+        self.assertEqual(recent[0].occurred_at, "2026-09-11T11:00:00Z")
+        self.assertEqual(recent[0].amount_cents, -200)
+
+    def test_two_rows_sharing_one_instant_order_stably(self):
+        # Every transfer writes two rows at the same instant, and so does the seeded history. An
+        # order that stopped at the timestamp would be whatever SQLite felt like returning.
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 100, now="2026-09-11T10:00:00Z")
+        db.transfer(conn, "chequing", "savings", 200, now="2026-09-11T10:00:00Z")
+        first = [t.amount_cents for t in db.list_transactions(conn, "chequing")]
+        second = [t.amount_cents for t in db.list_transactions(conn, "chequing")]
+        self.assertEqual(first, second)
+        self.assertEqual(first[0], -200)
+
+    def test_an_account_with_no_history_is_an_empty_list_not_an_error(self):
+        conn = _fresh(self)
+        conn.execute("INSERT INTO accounts (name, balance_cents) VALUES ('tfsa', 0)")
+        conn.commit()
+        self.assertEqual(db.list_transactions(conn, "tfsa"), [])
+
+    def test_an_unknown_account_raises(self):
+        conn = _fresh(self)
+        with self.assertRaises(db.UnknownAccount):
+            db.list_transactions(conn, "bitcoin")
+
+    def test_amounts_in_history_are_integer_cents(self):
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        for transaction in db.list_transactions(conn, "chequing", limit=100):
+            self.assertIsInstance(transaction.amount_cents, int)
+
+    def test_a_transaction_carries_no_prose(self):
+        """Tokens and figures only -- the sentence is the voice agent's to compose.
+
+        The same rule `NoCallerFacingProse` enforces over the HTTP bodies, asserted one layer down
+        so a prose column could not be added here and then merely hidden by a route that happened
+        not to return it.
+        """
+        conn = _fresh(self)
+        db.transfer(conn, "chequing", "savings", 15000, now="2026-09-11T10:00:00Z")
+        for transaction in db.list_transactions(conn, "chequing", limit=100):
+            for value in (transaction.kind, transaction.counterparty):
+                if value is not None:
+                    self.assertNotIn(" ", value)
+
+
+class CardBlocks(unittest.TestCase):
+    """Blocking the profile's one card, and the idempotency record that makes a retry safe (#45).
+
+    The two behaviours this keeps apart are easy to conflate and give the same answer today: a
+    *replayed key* is answered from the record without touching the card, and a *fresh key against
+    an already-blocked card* is a genuinely new request arriving at a stopped card. They are tested
+    separately, and the replay test asserts the record was consulted rather than the status.
+    """
+
+    def test_the_card_is_seeded_active(self):
+        self.assertEqual(db.card_status(_fresh(self)), db.CARD_ACTIVE)
+
+    def test_a_first_block_blocks(self):
+        conn = _fresh(self)
+        self.assertEqual(db.block_card(conn, "key_aaaaaaaa"), db.BLOCKED)
+        self.assertEqual(db.card_status(conn), db.CARD_BLOCKED)
+
+    def test_a_replayed_key_returns_the_recorded_outcome(self):
+        conn = _fresh(self)
+        first = db.block_card(conn, "key_aaaaaaaa")
+        second = db.block_card(conn, "key_aaaaaaaa")
+        self.assertEqual(first, db.BLOCKED)
+        self.assertEqual(second, db.BLOCKED)
+
+    def test_a_replay_is_answered_from_the_record_not_from_the_card(self):
+        """The replay branch must not reach the card at all.
+
+        Driven by recording an outcome the card's own status could never produce: if the replay
+        branch fell through to the status check, it would answer `already_blocked` instead. This is
+        why the key is stored for both outcomes rather than only for the successful block.
+        """
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        conn.execute("UPDATE idempotency SET outcome = 'sentinel' WHERE key = 'key_aaaaaaaa'")
+        conn.commit()
+        self.assertEqual(db.block_card(conn, "key_aaaaaaaa"), "sentinel")
+
+    def test_a_fresh_key_against_a_blocked_card_is_already_blocked(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        self.assertEqual(db.block_card(conn, "key_bbbbbbbb"), db.ALREADY_BLOCKED)
+
+    def test_both_outcomes_are_recorded_against_their_keys(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        db.block_card(conn, "key_bbbbbbbb")
+        self.assertEqual(db.recorded_outcome(conn, "key_aaaaaaaa"), db.BLOCKED)
+        self.assertEqual(db.recorded_outcome(conn, "key_bbbbbbbb"), db.ALREADY_BLOCKED)
+
+    def test_an_unseen_key_has_no_recorded_outcome(self):
+        self.assertIsNone(db.recorded_outcome(_fresh(self), "key_never_used"))
+
+    def test_the_card_is_blocked_exactly_once_however_many_attempts_arrive(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa", now="2026-09-11T10:00:00Z")
+        first_blocked_at = conn.execute("SELECT blocked_at FROM cards WHERE id = 1").fetchone()[0]
+        db.block_card(conn, "key_bbbbbbbb", now="2026-09-11T11:00:00Z")
+        db.block_card(conn, "key_aaaaaaaa", now="2026-09-11T12:00:00Z")
+        after = conn.execute("SELECT blocked_at FROM cards WHERE id = 1").fetchone()[0]
+        self.assertEqual(first_blocked_at, after)
+
+    def test_an_empty_or_non_string_key_raises(self):
+        conn = _fresh(self)
+        for key in ("", "   ", None, 1234, b"key_aaaaaaaa"):
+            with self.subTest(key=key):
+                with self.assertRaises(ValueError):
+                    db.block_card(conn, key)
+        self.assertEqual(db.card_status(conn), db.CARD_ACTIVE)
+
+    def test_there_is_no_unblock(self):
+        # Stated as a prototype edge (issue #45): no route, no tool, no state transition back.
+        # Asserted on the module rather than trusted to a comment, because "we just did not write
+        # one" and "there must not be one" look identical in a diff.
+        self.assertFalse([name for name in dir(db) if "unblock" in name.lower()])
+
+    def test_a_second_card_cannot_be_inserted(self):
+        conn = _fresh(self)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO cards (id, status) VALUES (2, 'active')")
+
+    def test_a_status_outside_the_two_cannot_be_stored(self):
+        conn = _fresh(self)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("UPDATE cards SET status = 'melted' WHERE id = 1")
+
+    def test_an_existing_card_is_left_alone_by_re_initialising(self):
+        conn = _fresh(self)
+        db.block_card(conn, "key_aaaaaaaa")
+        db.initialise(conn)
+        self.assertEqual(db.card_status(conn), db.CARD_BLOCKED)

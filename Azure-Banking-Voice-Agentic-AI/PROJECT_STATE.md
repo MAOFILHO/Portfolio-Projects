@@ -1,153 +1,212 @@
 # PROJECT_STATE.md — Azure-Banking-Voice-Agentic-AI
 
-Current-state only (decision 18, `CLAUDE.md`). Historical narrative lives in `docs/phase0/` and
-`docs/handoffs/`, never here. Check this file's size before every edit — ceiling is ≤400 lines/~20KB;
-move the oldest closed material out to `docs/phase0/` first if an addition would exceed it.
+Current-state only (decision 18, `CLAUDE.md`): what is true now, what is open, what happens next.
+**Nothing past-tense belongs here.** Closed phases are archived per phase and the archives are the
+account of what happened:
 
-## Current phase
+| phase | closed record |
+|---|---|
+| 0 | `docs/phase0/findings.md`, `docs/phase0/EXIT-AND-PHASE1-ENTRY.md` |
+| 1 | `docs/phase1/archive.md`, `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` |
+| 2 | `docs/phase2/archive.md` |
+| 3 | `docs/phase3/archive.md` (exit criteria: `docs/phase3/exit-criteria.md`) |
+| 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
+| 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
 
-**Phase 0 — Provisioning & Meter Spike.** All 12 stages of `01-provision.sh` complete. Container App
-`ca-azbank-echo-p0` is deployed, healthy, and **first real answered phone call happened
-2026-08-21** — all 3 test calls to `+17059100383` connected, echoed correctly, DTMF registered on 2
-of 3. Full session narrative: `docs/handoffs/2026-08-21-phase0-first-successful-call.md`,
-`docs/phase0/findings.md` (everything from Stage 7 onward, including all bugs found/fixed this
-session, is there — not duplicated here).
+Phase 6 is in progress (`docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11) — issue #61's
+code is committed, #62's provisioning is prepared but not applied — see "Current phase" below.
 
-**R-04's 72h idle-billing window is still open** (wall-clock), anchored to
-`PROVISION_TIME=2026-08-21T22:49:35Z` (closes ~2026-08-24T22:49:35Z) — but **R-04 and R-08 are both
-already ANSWERED ahead of that close**, measured directly from Azure Monitor telemetry and the Retail
-Prices API on 2026-08-22, not left for Monday's script 04 run to discover. That run is now
-**confirmation + teardown, not discovery**. Full method and numbers: `docs/phase0/findings.md`, "R-04
-— Container Apps compute cost..." and "R-08 — demo runs/month, recomputed...".
+Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
+material into the archive above if an addition would exceed it.
 
-- **R-04: IDLE** (Replicas metric shows zero scale-to-zero gaps; RxBytes/TxBytes stay under PLAN.md's
-  own 1,000 B/s active threshold for every interval except the prior test call's expected tail). The
-  bigger finding: Container Apps' standing free compute grant (180,000 vCPU-s/360,000 GiB-s per
-  month) covers only ~8.3 days (~27.6%) of this app's continuous runtime each month — it is *not*
-  "compute is free," since `min-replicas=1` runs all month for real telephony. Net-of-grant monthly
-  cost at the IDLE rate: **$5.72/mo** (Canada Central Retail Prices API rates, confirmed 2026-08-22).
-- **R-08: ~79–114 demo runs/month, gate PASSES.** Recomputed on the corrected R-04 basis (fixed
-  $6.72/mo [Container Apps + number] + $6/mo eval ceiling, $12.28/mo left for calls).
-- **PLAN.md's Budget section is now confirmed stale** (not just estimated vs. measured): its
-  $4.29/mo–$14.31/mo Container Apps figures reproduce exactly against **US East** retail rates, not
-  Canada Central where every resource in this project actually lives (ADR-001/decision 12) — a
-  region mismatch present since the 2026-08-19 scoping commit, not a rate change since. Correcting
-  PLAN.md itself is a future approved edit (out of scope this session) — see open item 4 below.
+## Stop conditions in force
 
-Resources live: resource group `rg-azure-banking-voice-agentic-ai`; AOAI
-`aoai-azure-banking-voice-cc` (`gpt-realtime-mini` 2025-10-06 GlobalStandard, NoAutoUpgrade); ACS
-`acs-azure-banking-voice`; phone number `+17059100383` (owned, $1.00/mo, R-09 — never released);
-Container Apps environment `cae-azure-banking-voice-p0`; Container App `ca-azbank-echo-p0`
-(min-replicas=1, **billing now, this is the R-04 measurement subject**); two Log Analytics
-workspaces (`...aiCS` is the real one, linked; `...aixC` is an orphan, left in place).
+`CLAUDE.md`'s stop-conditions list is canonical and is not restated here. These are the ones with a
+live bearing on the current moment:
 
-**Next action**: `04-teardown-and-r08.sh`, ~72h after provisioning (~2026-08-24 afternoon) — R-04/R-08
-confirmation, teardown of compute (keeping the number, R-09), dedup + one-time commit of both
-evidence files. `03-cost-check-24h.sh` already ran 2026-08-22: `FREETIER_CLEAN=yes` (Container Apps
-confirmed structurally absent from the subscription's free-services table, not just zero usage —
-open item 4 below, closed), `COST_SANITY_CHECK=pass` (answered by the assistant this session, not
-Marco — flagged in `docs/phase0/findings.md`).
+1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
+   reason (R-09). Irreplaceable, not merely billable.
+2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
+   (used) and `APPROVED: Phase 6` (typed 2026-09-12) are both on record. Phase 6's gate covers issue
+   #62's Application Insights, prepared (`infra/provision-app-insights.sh`) but **not yet run** — that
+   script still needs your own look before it applies, per the next rule down.
+3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
+4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
+   transactions, card block — reaches the core-banking client while the call is unauthenticated. The
+   set reachable while anonymous is **exactly the PIN check and asking for a person**. Held across
+   every live call in Phase 5, including the ones that failed to complete their script — 0 breaches.
+5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-**Three latent bugs found and fixed this session, all in the wizard scripts, none yet exercised
-live**: `03-cost-check-24h.sh`'s `FREETIER_CLEAN` was read before ever being assigned as a real shell
-variable (crash under `set -u`, same shape as the earlier `DATAZONE_OK` bug); both `03-` and
-`04-teardown-and-r08.sh` called `az costmanagement query`, which doesn't exist in the installable
-`costmanagement` CLI extension (fixed via `az rest` against the Cost Management Query REST API
-directly); `04-teardown-and-r08.sh` called `ask()` three times without ever defining it (guaranteed
-crash the moment Stage 1 ran, caught before Monday's one live run, not during it).
+## Current phase — Phase 6 (Observability), started 2026-09-12
+
+**Phase 5 closed 2026-09-12.** Exit met; two criteria met with a stated limit (B5 frozen on the
+real-call pool only; the acceptance call's evidence is scattered across the day rather than one
+continuous call, Marco's explicit choice). Full account: `docs/phase5/exit-check.md`.
+
+**Phase 6's design is done** (`docs/phase6/exit-criteria.md`) but its entry conditions are only
+partly met. From that file's own table, re-checked 2026-09-12:
+
+| condition | state |
+|---|---|
+| Phase 5's exit criteria written | ✅ Satisfied |
+| Phase 5's exit criteria met | ✅ **Now satisfied** — closed today, see above |
+| Marco's sign-off on Phase 5 | ✅ **Given 2026-09-12** |
+| Marco's approval to begin Phase 6 | ✅ **Given 2026-09-12** — explicit choice to start now, research items 15/16 in parallel |
+| Open item 16 settled (`/research`) | ✅ **Settled 2026-09-13** — no default/opt-in body capture in any of the three instrumentations; D8's blocker lifted |
+| Open item 15 settled (`/research`) | ✅ **Settled as "undocumented" 2026-09-13** — resolves via criterion 4's own fallback (`RequestResponse` stays disabled) |
+| B2 widening signed off | **NOT given** |
+| Phases 4+5 reviewed (`git log e42c063..HEAD`) | **Still NOT done** — today's `/code-review` covered only `a7e06d1..HEAD` (17 of the 42 commits since `e42c063`); the other 25 remain unreviewed |
+
+**Six of eight conditions are now met.** Only the B2 widening sign-off and the 25-commit review
+remain, and neither blocks the code already in flight below.
+
+**Phase 6 specced and split into two tickets** (`/to-spec`, 2026-09-12/13):
+- **#61** — the code: spans, metrics, D15 allowlist, fail-open exporter, ADR, and (as of the
+  2026-09-13 research) FastAPI/httpx instrumentation. Ships and passes CI against an in-memory
+  exporter only; touches no live Azure resource.
+- **#62** — provisioning Application Insights and wiring the real exporter, blocked by #61 (Marco's
+  call, 2026-09-13: keep provisioning separate, land after the code).
+Both carry `ready-for-agent`. `RequestResponse` and the widened B2 wording stay off by decision, not
+by open blocker — see the entry-conditions table above.
+
+### Needs Marco
+
+1. **The B2 widening** (`docs/phase6/exit-criteria.md`, "B2, proposed new wording") needs sign-off
+   before Phase 6 can touch it — a named constraint does not move without one.
+2. **`git log e42c063..HEAD` (25 commits) is still owed a human read** — waived once already at
+   Phase 5 entry, not resolved by today's narrower review.
+
+## Live Azure state
+
+Verify this against the API before acting on it (`CLAUDE.md`, Resume discipline) — it is a snapshot
+and goes stale between sessions.
+
+- Resource group `rg-azure-banking-voice-agentic-ai`.
+- AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
+  Re-verified live 2026-09-11: pin retires **2027-04-06**, ~6.8 months out, no stop-and-ask.
+  Successor `gpt-realtime-1.5` still GA (retires 2027-08-24).
+- ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
+- Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
+  image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-
+  platform-pin`, an arm64 image cost real debugging time to diagnose on 2026-09-12).
+- Storage account `stazbankcallrecords`, table `callrecords`. Write-then-read proven live through the
+  voice agent's managed identity.
+- Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
+  Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
+- **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
+  `docker.io/maofilho/azbank-echo-p0:p5i`, revision `--0000011`, `Healthy`, 100% traffic, 0 restarts —
+  the routing/transfer-word fix, confirmed live 2026-09-12. Its system-assigned identity
+  (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI resource and `Storage Table Data
+  Contributor` scoped to `stazbankcallrecords`.
+- **Data-plane auth to AOAI is still the `AOAI_KEY` secret**; Storage auth is managed identity only.
+- **Logs: query `workspace-rgazurebankingvoiceagenticai1D`** (`bf520f2c-e2bc-4488-8965-9317a7922c74`),
+  never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
+  exist, not two.
+- **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
+  `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
+- **`ca-azbank-echo-p0` is now running issue #61's code**, image `docker.io/maofilho/azbank-echo-p0:
+  p6a`, revision `--p6a20260914114410`, Active/Healthy/100% traffic. **The first D16 smoke call
+  (2026-09-14, correlation id `393815d8`) ran against the OLD image (`p5i`, pre-#61) and produced no
+  spans** — not an ingestion-delay issue as first assumed, corrected the same session: `#62`'s
+  provisioning script wired env vars onto the existing Container App but never rebuilt the image, so
+  the deployed code had no telemetry in it at all. Image rebuilt (`docker buildx build --platform
+  linux/amd64 --provenance=false --sbom=false`, verified `linux/amd64` structurally) and redeployed;
+  new revision confirmed Healthy, no boot-time telemetry exception logged. Carries
+  `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the
+  named fallback, not identity — D10's IAM role is still an open `/research` question). **The smoke
+  call must be redone against this revision** — delivery is still unconfirmed; nothing before this
+  point queried a row.
 
 ## Open items
 
-1. **Log Analytics delivers zero rows — confirmed platform gap, needs real diagnosis before Phase
-   1.** Both the native `appLogsConfiguration` path and an explicit `az monitor diagnostic-settings`
-   resource are correctly configured (verified: right workspace, right categories enabled) and
-   neither has delivered a single row, even after a full real-call lifecycle. `--follow`-based
-   capture was tried and found **not durable** — known unresolved upstream bug
-   ([Azure/azure-cli#28267](https://github.com/Azure/azure-cli/issues/28267)), empirically dies
-   after ~5-6min idle every time. **The durable log path now** is a `launchd` LaunchAgent
-   (`~/Library/LaunchAgents/com.azbank.phase0.logsnapshot.plist`) pulling a plain `--tail 300`
-   every 15min into `docs/phase0/evidence/containerapp-logs-snapshot-2026-08-21.jsonl`. **Periodic
-   firing confirmed empirically 2026-08-21T22:33:30 local** (mtime advanced exactly at T0+900s with
-   no manual action — `docs/phase0/findings.md`, "LaunchAgent — StartInterval scare..."). **Do not
-   use `launchctl list <label>`'s output to check this** — it never echoes `StartInterval`/
-   `RunAtLoad` for any job, scheduled correctly or not (verified against an unrelated known-scheduled
-   agent), and `LastExitStatus 0` can't distinguish "ran once, dead" from "firing every 15min." The
-   only reliable check: does the evidence file's mtime advance across an interval boundary.
-   **Confirmed 2026-08-22 to survive a real sleep/wake cycle** — fired ~10 times over an overnight
-   ~8h25m stretch, roughly every 50min rather than every 15 (`launchd` coalesces `StartInterval`
-   jobs across sleep; expected, not a defect). Idle-rate margin still holds at that spacing; a wide
-   gap between consecutive snapshot timestamps is coalescing, not an outage. Contains duplicate
-   lines across overlapping pulls by design; dedup instructions in `docs/phase0/evidence/README.md`.
-   **The committed 3-test-calls capture and the snapshot file are not interchangeable** — call 1's
-   `CallConnected` scrolled out of the snapshot's `--tail 300` buffer before the LaunchAgent's first
-   pull and is only in the committed capture; teardown needs both files (`docs/phase0/evidence/
-   README.md`, `docs/phase0/findings.md` "Overnight idle window...").
-   **Do not commit either evidence file periodically** — commit once, at teardown, after the dedup
-   pass. A production voice agent cannot run on Phase 1 with no durable logging; this needs a real
-   fix, not a workaround, before then.
-2. **`02-test-calls.sh` must not be re-run this window.** Its Stages 1-3 have no
-   skip-if-already-confirmed guard, so it unconditionally prompts for 3 fresh billable calls before
-   Stage 4's (free, read-only) evidence extraction can run — a design gap (cheap operation welded to
-   an expensive one) logged in `docs/phase0/findings.md`, not fixed. Candidate fix for later: an
-   `--extract-only` flag, or per-call `_existing` guards matching `01-provision.sh`'s shape.
-3. **R-03 has one open, unexplained gap.** Calls 2 and 3 both registered 6/6 DTMF tones cleanly.
-   Call 1 registered zero despite Marco pressing keys during it too — nothing in the logs (duration,
-   frame count, event ordering) explains the miss. Recorded as genuinely unresolved in
-   `docs/phase0/findings.md`, not reasoned away (an earlier draft incorrectly did so; corrected).
-4. **PLAN.md's Budget section is stale — needs an approved edit.** The Container Apps
-   $4.29/mo–$14.31/mo figures (and everything chained from them: COSTS.md's hourly-equivalents, the
-   "honest result including evals" table's $11.29/$21.31/$13.71/$3.69) were computed against US East
-   retail rates, not Canada Central where this project's resources actually live. Confirmed
-   2026-08-22 by reproducing PLAN.md's own grant-netting method against both regions' live Retail
-   Prices API rates — US East reproduces $4.29/$14.31 to the cent, Canada Central gives $5.72/$20.03.
-   Not done here (`docs/PLAN.md` stayed out of scope this session); full derivation in
-   `docs/phase0/findings.md`, "R-04 — Container Apps compute cost...".
-5. **Docker Hub vs ACR — decided for Phase 0 only.** Private repo, free tier, avoids `az containerapp
-   up`'s auto-provisioned ~$5/mo ACR. **Still due at Phase 1 kickoff**: decide deliberately whether
-   the real `voice-agent` image stays on Docker Hub or moves to ACR with managed-identity pull (the
-   latter matches Phase 7's "no keys" direction, `docs/PLAN.md` Phase 7, but costs a real ~$5/mo).
-6. **Rate-limit meaning unresolved** — the Models API's per-deployment `rateLimits` field (`10
-   requests/60s`) doesn't reconcile against Microsoft's documented subscription-level Quota Tier
-   table. Strong circumstantial evidence points to "request = new session" (`docs/phase0/
-   findings.md`, "Rate-limit interpretation"), not confirmed by an exact doc quote. Check the Foundry
-   portal's Quota page directly — cheap, ~30s, still not done.
-7. **`gpt-realtime-1.5` successor path is untested** — named in B3 (`docs/PLAN.md` decision 14) but
-   never actually booted against anything. `T-B3-SUCCESSOR-BOOT` is a Phase 2 deliverable, depends on
-   `FakeRealtimeServer`, which Phase 2 itself builds.
-8. **`az` CLI stale `defaults.location=eastus`** (this machine only, `~/.azure/config`) silently
-   empties `az resource list -g <rg>` for this project's resources in `on_error`'s "what's billing"
-   table in both wizard scripts — the actual delete-offer safety check beneath it is unaffected. Fix
-   (`--location ""`) identified, shown as a diff, **not yet applied** — pending sign-off.
-9. **Phase 1 decision**: `az containerapp env create` always auto-provisions a Log Analytics
-   workspace with no `--logs-destination`/`--logs-workspace-id` flag passed — $0 in practice at this
-   project's volume, but see open item 1: the auto-provisioned path doesn't even deliver logs, so
-   Phase 1 needs a deliberate choice here regardless of cost.
-10. **R-03 residual promoted to a Phase 1 entry criterion (2026-08-24).** Call 1's zero DTMF tones
-    remains unresolved (open item 3); the cold-start/scale-from-zero hypothesis was tested against
-    existing evidence and ruled out (single cold start, 80s before Call 1's `IncomingCall`, single
-    revision/replica ID throughout — `docs/phase0/findings.md`, "R-03 residual — cold-start/
-    scale-from-zero hypothesis ruled out"). The two candidates that remain — DTMF not sent vs. sent
-    but unrecognized upstream by ACS — can only be distinguished by ACS-side call diagnostics, which
-    depend on open item 1's Log Analytics zero-rows gap being fixed first. **Blocked on open item 1;
-    no further diagnostic calls should be placed until that path works** — app-side logs are
-    downstream of ACS's decode fork and cannot separate the two candidates. Full disposition:
-    `docs/phase0/findings.md`, "R-03 residual — promoted to a Phase 1 entry criterion".
+Full triage of which of these block what: `docs/phase1/EXIT-AND-PHASE2-ENTRY.md` Part 1. Listed here
+because they are genuinely unresolved, not because any of them is currently blocking.
+
+1. **No durable ACS-side call-diagnostics path.** App-side container logs deliver correctly. ACS-side
+   call diagnostics were never configured. **Phase 6 is NOT its fix** (corrected 2026-09-11) — Phase 6
+   produces app-side traces via the OTel Distro's own endpoint, independent of the failed
+   `Microsoft.Insights/diagnosticSettings` mechanism. Needs its own decision and a queried table.
+2. **`02-test-calls.sh` must not be re-run carelessly.** No skip-if-already-confirmed guard on
+   Stages 1-3 — prompts for 3 fresh billable calls before Stage 4's free evidence extraction runs.
+3. **R-03's Call-1 zero-DTMF anomaly is permanently unresolved** — dropped as an entry criterion
+   2026-08-28, evidence no longer exists.
+4. **Docker Hub vs ACR — still on Docker Hub.** Due a decision at Phase 1 kickoff, didn't happen.
+5. **Rate-limit meaning unconfirmed** — per-deployment `rateLimits` doesn't reconcile against the
+   Quota Tier table. Cheap Foundry-portal check, still not done.
+6. **`gpt-realtime-1.5` successor boot untested** against a real successor — the rehearsal
+   (`T-B3-SUCCESSOR-BOOT`) exists and is skipped by design.
+7. **Stale `az` CLI `defaults.location=eastus`** (this machine). Fix identified (`--location ""`),
+   pending sign-off.
+8. *(closed 2026-09-13, applied 2026-09-14: `COSTS.md` "R-08, recomputed for Application Insights
+   sharing the shared 5 GB grant"; `infra/modules/app-insights.bicep`)* — the Log Analytics
+   auto-provision choice is settled as "bind explicitly to the existing `...1D` workspace," not
+   "let a fourth workspace auto-provision." Applied live, see "Live Azure state" above.
+9. **`silence_duration_ms` 200→600 (`0ed61e0`) has now been exercised by real calls and did not
+   recur as mid-PIN interruption.** A different, unrelated silence mode surfaced instead (post-refusal
+   silence, `docs/phase5/exit-criteria.md` known-partial 9) — recorded there, not chased further.
+10. *(closed, `docs/phase5/review-fixes.md`; number held so 11+ keep their references)*
+11. **The DTMF tone vocabulary: `*` confirmed, `#` still unconfirmed.** `*` produces its own log
+    outcome (`cleared`) and was observed four times live 2026-09-12. `#` is classified under the same
+    catch-all `ignored` outcome as any post-authentication digit, so its exact media-path spelling
+    remains unconfirmed — accepted as a known gap (Marco, 2026-09-12). `docs/phase4/research-carried-
+    findings.md` §2b.
+12. **Nothing guarantees DTMF and audio frames arrive in order on the media socket.** The payload's
+    `timestamp` is still unread; not instrumented in Phase 5. Still open.
+13. **`RequestResponse` is an Azure OpenAI diagnostic-log category with no documented content
+    coverage** (`/research` confirmed 2026-09-13, `docs/phase6/research-content-capture.md` — no
+    Microsoft primary source describes it, for Azure OpenAI or the realtime API). Not enabled, must
+    not be until its destination table is queried and read; whether it even fires for a realtime
+    deployment is unanswered and doesn't need to be, since staying disabled already satisfies Phase
+    6's criterion 4.
+14. *(closed 2026-09-13, `docs/phase6/research-content-capture.md`: none of the FastAPI/httpx/requests
+    instrumentations capture bodies by default or via any opt-in flag at the pinned release. D8/issue
+    #61 unblocked. One residual note carried into #61: the ASGI layer's `http.url` attribute includes
+    the full query string by default, redacted only for four cloud-signature params — not a live gap
+    on this project's query-string-free webhook route, but worth a guard if a future route changes
+    that.)*
+15. **`transport/acs.py`'s audio branch is not total, unlike its DTMF branch.** Pinned by
+    `tests/test_acs.py::test_a_malformed_audio_frame_still_raises`. Not changed — a never-auto-accept
+    path nobody asked to alter.
+16. **The relay imposes no deadline on the injected PIN-outcome frames.** Deliberately sequenced
+    behind live evidence: the injected system message was confirmed accepted 2026-09-12
+    (`docs/phase5/exit-check.md`, wire-format question 1), so this deadline is now insurance against a
+    case never observed, not urgent.
+17. **The call-record store sets no SDK-level timeout, deliberately** — the deadline is at the seam
+    (`session.LEDGER_DEADLINE_SECONDS`), tested. `/research` owes the azure-core option names.
+18. **The daily ledger's lock is in-process only.** Fine for one replica; ETag optimistic concurrency
+    is the fix, deliberately not-yet (Marco, 2026-09-11).
+19. **A genuine dropped connection during a pending escalation can still misreport `end_reason`.**
+    Fixed 2026-09-14 (`fe1bb82`): the escalation's closing-remark audio now always reaches the caller,
+    and the two known races against classification (B4's turn cap; a clean end-of-stream) are closed
+    and tested. Left open (Marco's call, same day, round 2 of that fix's own `/code-review`): a real
+    abnormal socket close (caller hangs up mid-apology, or the connection errors rather than closing
+    cleanly) can still bypass both fixes and log as `"caller_hangup"` or a bare `"error"` instead of
+    `"escalated"`. `FakeRealtimeServer` has no fixture for an abnormal close, so this isn't testable
+    as the fake stands today — needs one before it can be fixed.
 
 ## Active risks (full detail: `docs/PLAN.md` "Tracked risks")
 
-**R-02 and R-03 confirmed** 2026-08-21 (real calls, real echo, DTMF on 2/3 — see open item 3 for the
-one gap). **R-04 ANSWERED 2026-08-22 (IDLE), ahead of the 72h window's wall-clock close** — measured
-from telemetry, not Cost Analysis dollars; see Current phase above. **R-08 ANSWERED 2026-08-22:
-~79–114 demo runs/month, gate PASSES** — recomputed from measured meters, not the naive estimate.
-**R-01, R-05, R-06 resolved** (2026-08-20). **R-09** (number irreplaceability) is a standing hard
-rule, not something to resolve. **R-07** is a standing fact (`spendingLimit: Off`), not something to
-resolve.
+**R-01–R-06 resolved** (R-03 partial, see item 3). **R-08 recomputed 2026-09-11, passes**: fixed
+$14.60/mo, 45–67 demo runs/month against a gate of 5 (`COSTS.md`). No input is unpriced. **R-09**
+(number irreplaceability) and **R-07** (`spendingLimit: Off`) are standing facts, not open items.
+**R-08 recomputed again for Phase 6, 2026-09-13** (`COSTS.md`) — Application Insights shares the
+container logs' free grant rather than adding one; worst-case bound **$0.00/mo added**, fixed total
+unchanged at $14.60/mo. Priced before provisioning, per `docs/phase6/exit-criteria.md` D4; the
+resource itself does not exist yet.
 
 ## Next actions (in order)
 
-1. `04-teardown-and-r08.sh`, ~72h after `PROVISION_TIME` (2026-08-21T22:49:35Z, i.e. ~2026-08-24
-   afternoon): confirmation of the R-04/R-08 answers already measured above (not discovery), teardown
-   of compute (keep the number — R-09, never released), dedup + one-time commit of both evidence
-   files (per open item 1).
-2. A future approved session: correct `docs/PLAN.md`'s Budget section per open item 4 (US East →
-   Canada Central).
+1. **B2 widening sign-off**, then the code changes it authorizes.
+2. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
+3. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
+   B1's restatement necessary, plus Phase 5's `escalate_to_human`-while-anonymous corollary.
+4. **Issue #62**: Application Insights is live and wired (2026-09-14) — make the D16 smoke call
+   (`docs/phase6/smoke-call-runbook.md`) and query `...1D` for its rows to confirm delivery, the one
+   step left before the ticket's criteria are actually met rather than just deployed.
+5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
+   identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
+   connection-string fallback instead (Phase 7 debt).
+
+**Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
+It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
+glossary) is written and committed.

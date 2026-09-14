@@ -356,6 +356,15 @@ Matches `docs/PLAN.md` decision 14 exactly: model `gpt-realtime-mini`, version `
 ("control ships here" per the phase plan), consistent with Phase 0 being provisioning-only. This is
 not a Phase 0 gap; it's the plan working as sequenced.
 
+> **Correction added 2026-09-11, text below left as written.** This paragraph's `"gpt-realtime-1-5"`
+> is a *deployment*-name spelling, and saying so was correct **of the guard as it was documented at
+> Phase 0** — a name comparison. Phase 2 then built the guard to compare `properties.model.name`, a
+> *model* name, and the hyphen was carried across into the allowlist unchanged. The live catalog
+> spells that model `gpt-realtime-1.5`, so the successor entry could not have matched anything Azure
+> would report until it was fixed. See `docs/phase5/review-fixes.md`. Kept rather than rewritten:
+> this is a closed phase record, and the sentence that seeded a later defect is worth being able to
+> find.
+
 **Honest gap worth naming for Phase 2's implementation, found by reading the documented guard
 literally**: `ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})`
 is a set of **deployment-name strings** (`"gpt-realtime-mini"`, `"gpt-realtime-1-5"`), and the guard
@@ -1121,7 +1130,7 @@ pattern. Of the ~20 call sites across all four scripts:
 destructive, but still a re-run hazard):**
 - `03-cost-check-24h.sh` Stage 1 (`>> "$COSTS_FILE"`, the Free Services portal check section)
   — no guard against re-appending an identical section on a re-run.
-- `04-teardown-and-r08.sh`'s final "Measured, not estimated" section (`>> "$COSTS_FILE"`) — the
+- `04-teardown-and-r08.sh`'s final "Modeled from telemetry" section (`>> "$COSTS_FILE"`) — the
   file-creation preamble above it *is* guarded (`if [[ ! -f "$COSTS_FILE" ]]`), but the actual
   R-04/R-08 results block that follows is not; a re-run would duplicate-append rather than
   overwrite the earlier measurement.
@@ -1153,6 +1162,15 @@ from a browser and Event Grid delivering `Microsoft.Communication.IncomingCall` 
 showed the actual failure: `answer_call()` raised `HttpResponseError: (400) Invalid request —
 The field CallbackUri is invalid`, on two separate `IncomingCall` deliveries, both producing a
 `500` back to Event Grid.
+
+**Corrected 2026-08-28**, from the Log Analytics export
+(`docs/phase0/evidence/loganalytics-export/console.jsonl`): this was **three distinct
+correlationIds**, not two — `977a7c0f-e073-4eb0-82a2-87620d53ec13`,
+`e46be7d4-adad-4857-9e22-1230125353e9`, and `05bb7729-1792-4271-aa2d-b622b6787eb8` — across 23 total
+delivery attempts (11 + 6 + 6, Event Grid's standard exponential-backoff retry schedule against each,
+verified against Microsoft's own delivery-and-retry docs). All three hit the identical `CallbackUri
+is invalid` / `500` failure, confined to revision `vm6ylxz` (the Container App's first incarnation).
+The root cause and fix below are unaffected by this correction — only the call count was wrong.
 
 Root cause, confirmed by direct inspection, not assumed: Stage 12 created the Container App with
 `app-base-url` secret literally set to the string `"placeholder"` (the real FQDN doesn't exist
@@ -2145,8 +2163,8 @@ ContainerAppConsoleLogs | count  →  0 rows
 ContainerAppSystemLogs  | count  →  0 rows
 ```
 
-Confirmed this is not a configuration mistake on this project's end — both the native path and the
-explicit fallback are correctly wired:
+**As understood 2026-08-21:** this looked like it was not a configuration mistake on this project's
+end — both the native path and the explicit fallback appeared correctly wired:
 
 - `az containerapp env show ... --query properties.appLogsConfiguration` → `destination:
   "log-analytics"`, `customerId` matching the correct (non-orphaned) workspace.
@@ -2154,10 +2172,19 @@ explicit fallback are correctly wired:
   present, `ContainerAppConsoleLogs` and `ContainerAppSystemLogs` both `enabled: true`, pointed at
   the same correct workspace.
 
-Both delivery paths are configured exactly as documented and neither has delivered a single row,
-over an hour after real, confirmed activity (not an idle container — three actual answered calls).
-This is now a confirmed platform-level gap, not a "give it more time" situation — genuinely
-undiagnosed, not explained by anything found so far.
+Both delivery paths appeared configured exactly as documented, and neither had delivered a single
+row, over an hour after real, confirmed activity (not an idle container — three actual answered
+calls). At the time this read as a confirmed platform-level gap, genuinely undiagnosed, not
+explained by anything found so far.
+
+**Corrected 2026-08-27**: "correctly wired" / "configured exactly as documented" is disproven, not
+just unverified — `azbank-p0-console-logs` was created without `--export-to-resource-specific`, so
+it defaulted to the `AzureDiagnostics` table instead of the resource-specific tables named above —
+and `AzureDiagnostics` itself was never materialized in the workspace (a bare `count` against it
+returns `PathNotFoundError`), so the setting delivered nothing anywhere, not merely to a different
+table than expected. The "neither has delivered a single row" observation itself was and remains
+correct. Full evidence: `docs/handoffs/2026-08-27-phase1-logpath-resolved.md`, "RESOLVED —
+diagnostic-setting delivery".
 
 **Practical consequence for R-04's remaining ~72h**: Log Analytics cannot be relied on for any
 evidence during this window. `az containerapp logs show --tail 300` (the CLI's live streaming
@@ -2767,10 +2794,11 @@ grant-corrected dollar figure. Recomputed here rather than left for Monday:
 
 **R-08: ~79–114 demo runs/month. Gate PASSES** (comfortably above the 5-run floor) — computed, verified
 against the extracted computation in `04-teardown-and-r08.sh` itself (both the grant-cost and R-08
-arithmetic blocks were pulled out of the script and run against this session's real measured data
-before being trusted here).
+arithmetic blocks were pulled out of the script and re-run against this session's actual inputs — R-04's
+telemetry-measured grant-cost figure ($5.72/mo, genuinely measured) and PLAN.md's own floor/realistic
+per-minute rates ($0.0215/$0.031, its estimate, not a billing read) — before being trusted here).
 
-**This is not the dramatic reframing it might sound like.** The free grant is real and matters (it's
+The free grant is real and matters (it's
 the difference between $5.72/mo and the $7.78/mo pre-grant idle figure this section's rates would
 otherwise imply for a full month) — but because this app must run continuously all month for real
 telephony service, the grant only ever offsets ~27.6% of a month's compute, not all of it. The
@@ -2808,11 +2836,573 @@ the free grant above and does not by itself confirm or contradict the verdict):
 
 ```
 
-## R-08 — demo runs/month, computed from measured meters
+## R-08 — demo runs/month, computed from telemetry + hand-entered inputs
 
-- Measured $/minute: $0.031
-- Measured fixed monthly (extrapolated): $6.72
+- Modeled $/minute: $0.031
+- Modeled fixed monthly (extrapolated): $6.72
 - Eval-budget ceiling reserved: $6.00 (docs/PLAN.md hard ceiling)
 - Left for manual/demo calls: $12.28/mo
 - At B4's 5-min cap per run: **79.2 demo runs/month**
+
+**Provenance note**: none of the figures above come from an Azure Cost Management billing query.
+`$6.72` (Fixed monthly) = `R04_MONTHLY_NET_OF_GRANT` (`$5.72`, computed from Container Apps
+replica/network telemetry against Canada Central Retail Prices API rates, net of the free compute
+grant) + a hardcoded `$1.00` phone-number constant — and matches `04-teardown-and-r08.sh`'s own
+unmodified suggested default for that prompt exactly (`04:284`). `$0.031/min` (Per-minute floor) was
+free-text keyboard entry at that script's `ask` prompt, matching the upper end of the fallback range
+the prompt itself suggests typing (`04:290`) — not read from any per-minute billing meter. `79.2`
+(Demo runs/month) is arithmetic performed on those two inputs (`04:294-309`). This run's three Cost
+Management dollar-total queries (`COST_JSON`, `IDLE_COST_JSON`, `FULL_COST_JSON`) feed none of the
+figures above.
+
+**Open question, not resolved**: unlike `03-cost-check-24h.sh` Stage 3's sanity confirm (explicitly
+attributed above — "answered by the assistant during this session, not by Marco"), no equivalent
+disclosure exists anywhere in this file for who answered `04-teardown-and-r08.sh`'s two prompts
+(`04:290-291`, `MEASURED_PER_MIN_COST` / `MEASURED_FIXED_MONTHLY_INPUT`) that produced `$0.031` and
+`$6.72`. Who answered them is unknown from any tracked record.
+
+## Stage 9 gap — PHONE_NUMBER skip check trusted a gitignored, machine-local file, 2026-08-31
+
+Found by testing the guard's failure modes against a clean tree, not by reading the code and
+assuming it was safe — same discipline as the ACS inventory volatility finding above.
+
+**What was wrong**: Stage 9's skip check gated the entire search+purchase flow on `_existing
+"PHONE_NUMBER"` — a read from `docs/phase0/wizard/.env.phase0`. That file is gitignored (`.env.*`,
+confirmed via `git check-ignore -v`) and untracked (`git ls-files` returns nothing for it) — it
+exists only on whichever machine ran the wizard, never travels with the repo. Stages 5, 6, 7, and 8
+all gate their own idempotency on live Azure state instead (`az cognitiveservices account show`, a
+`## R-06` marker in this file, `az cognitiveservices account deployment show`, `az communication
+list`) — Stage 9 was the one stage in the sequence whose only guard against re-provisioning pointed
+at a file, not at Azure.
+
+**Why it mattered**: R-09 (`docs/PLAN.md`, `CLAUDE.md`) makes a second phone-number purchase
+permanent and irreversible — no teardown path may ever release either number. A fresh clone, a
+different machine, or a deleted/corrupted `.env.phase0` would silently defeat the only check
+standing between a re-run and a second, permanent purchase, while the ACS resource genuinely still
+owned the first number the whole time. Confirmed live on this machine, 2026-08-31: `.env.phase0`
+currently does have `PHONE_NUMBER=+17059100383` set, so the gap wasn't live-exploitable here today —
+but that safety net is exactly the file the gap depended on being present, which is the dependency
+the fix below removes.
+
+**Fix**: `b438cd5`, "Phase 1: Stage 9 checks Azure for owned numbers, not local env file." Stage 9
+now queries `az communication phonenumber list --connection-string ...` (Azure CLI `communication`
+extension; verified live against this project's own ACS resource before writing the fix — returns a
+flat JSON array, each entry carrying a `phoneNumber` field) unconditionally on every run, and treats
+that as the sole authority: if Azure reports an owned number, the stage skips regardless of what the
+local file says, and self-heals `.env.phase0` to match Azure rather than trusting it. If Azure
+reports none *and* the local file claims one, that's now a real discrepancy (`on_error 1`, stop and
+investigate) rather than silently proceeding. The local file can no longer gate the purchase path in
+either direction.
+
+## Stage 9 gap — the fix's own JSON parse swallowed errors, 2026-08-31
+
+Also found by testing, not reading: the first version of the fix above closed the local-file gap but
+introduced a narrower one of its own in the process, caught only by feeding it deliberately
+malformed input before treating it as safe.
+
+**What was wrong**: `az communication phonenumber list`'s own exit-code failure was handled
+correctly (`on_error 1`). But the two `python3 -c` calls parsing its JSON output used `2>/dev/null ||
+echo 0` / `2>/dev/null || true` — any parse failure was silently coerced into "zero numbers owned"
+rather than surfaced. Tested against four shapes locally (no Azure calls):
+
+| stdin | `OWNED_COUNT` | `OWNED_NUMBER` |
+|---|---|---|
+| flat array, 1 entry (the real, verified shape) | `1` | `+17059100383` |
+| `[]` (genuinely empty) | `0` | `''` |
+| garbage / non-JSON | `0` | `''` |
+| `{"value": [{"phoneNumber": "+17059100383"}]}` — object-wrapped | `1` *(coincidence — counts dict keys, not numbers)* | `''` |
+
+The last case is the real finding: valid JSON, no exception reaches the `az`-call exit-code guard
+(that guard only checks whether the command itself succeeded, not the shape of what it printed), yet
+the number lookup silently swallows a `KeyError` and comes back empty — indistinguishable from
+"Azure genuinely owns nothing." Not hypothetical: `az communication phonenumber list` is still
+flagged preview by Azure itself (`WARNING: This command group is in preview and under development`,
+printed on every invocation), and object-wrapped results (`"value": [...]`, `"phoneNumbers": [...]`)
+are already the norm for the ACS REST endpoints this same script calls elsewhere (search, purchase,
+list-owned-post-purchase). Combined with an absent local file — the exact scenario the fix above
+exists to handle — this would have silently fallen through to the purchase flow with Azure already
+owning a number.
+
+**Fix**: folded into the same commit (`b438cd5`, amended before it was ever pushed or reviewed as
+final — no separate commit for the intermediate, narrower-buggy version exists in history). The two
+separate parses were replaced with one `python3` call that explicitly asserts the top-level JSON is
+a list (exits nonzero with a message if not) before indexing into it; a nonzero exit is now treated
+exactly like the `az` command's own failure — `on_error 1`, not a default. Re-tested against the
+same four shapes: the two genuine shapes (flat array, empty array) parse identically to before; both
+bad shapes (garbage, object-wrapped) now stop the script with a clear diagnostic instead of reading
+as "zero owned."
+
+## R-01 — Models API deprecation-date check
+
+Queried 2026-09-01T19:09:24Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Airdrie","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"White Rock","administrativeDivision":{"localizedName":"BC","abbreviatedName":"BC"}},{"localizedName":"Ottawa","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Alma","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Granby","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Quebec City","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Saskatoon","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Whitehorse","administrativeDivision":{"localizedName":"YT","abbreviatedName":"YT"}}],"nextLink":null}
+```
+
+## R-01 — Models API deprecation-date check
+
+Queried 2026-09-01T19:17:48Z against location=canadacentral.
+```json
+[
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  },
+  {
+    "version": "2025-10-06",
+    "deprecationDate": {
+      "inference": "2027-04-06T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2027-04-06T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": false,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2027-04-06T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 10,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 5000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-10-06T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-10-06T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-10-06"
+    }
+  },
+  {
+    "version": "2025-12-15",
+    "deprecationDate": {
+      "inference": "2026-12-15T00:00:00Z"
+    },
+    "raw": {
+      "capabilities": {
+        "assistants": "false",
+        "chatCompletion": "false",
+        "completion": "false",
+        "realtime": "true"
+      },
+      "deprecation": {
+        "inference": "2026-12-15T00:00:00Z"
+      },
+      "format": "OpenAI",
+      "isDefaultVersion": true,
+      "lifecycleStatus": "GenerallyAvailable",
+      "maxCapacity": 3,
+      "name": "gpt-realtime-mini",
+      "skus": [
+        {
+          "capacity": {
+            "default": 100,
+            "maximum": 30000
+          },
+          "deprecationDate": "2026-12-15T00:00:00Z",
+          "name": "GlobalStandard",
+          "rateLimits": [
+            {
+              "count": 3,
+              "key": "request",
+              "renewalPeriod": 60
+            },
+            {
+              "count": 10000,
+              "key": "token",
+              "renewalPeriod": 60
+            }
+          ],
+          "usageName": "OpenAI.GlobalStandard.gpt-realtime-mini"
+        }
+      ],
+      "systemData": {
+        "createdAt": "2025-12-11T00:00:00Z",
+        "createdBy": "Microsoft",
+        "createdByType": "Application",
+        "lastModifiedAt": "2025-12-11T00:00:00Z",
+        "lastModifiedBy": "Microsoft",
+        "lastModifiedByType": "Application"
+      },
+      "version": "2025-12-15"
+    }
+  }
+]
+```
+
+## R-05 — live Toronto-area area-code inventory
+
+Query: locality=Toronto, administrativeDivision=ON, phoneNumberType=geographic,
+assignmentType=application, api-version=2025-06-01
+```json
+{"error":{"code":"NotFound","message":"No area codes were found for the given parameters"}}
+```
+
+All Canada-wide geographic localities in ACS's inventory (unfiltered, maxPageSize=100):
+```json
+{"phoneNumberLocalities":[{"localizedName":"Airdrie","administrativeDivision":{"localizedName":"AB","abbreviatedName":"AB"}},{"localizedName":"White Rock","administrativeDivision":{"localizedName":"BC","abbreviatedName":"BC"}},{"localizedName":"Ottawa","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Thunder Bay","administrativeDivision":{"localizedName":"ON","abbreviatedName":"ON"}},{"localizedName":"Alma","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Chicoutimi","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Granby","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Quebec City","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Thetford Mines","administrativeDivision":{"localizedName":"QC","abbreviatedName":"QC"}},{"localizedName":"Lanigan","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Saskatoon","administrativeDivision":{"localizedName":"SK","abbreviatedName":"SK"}},{"localizedName":"Whitehorse","administrativeDivision":{"localizedName":"YT","abbreviatedName":"YT"}}],"nextLink":null}
+```
 

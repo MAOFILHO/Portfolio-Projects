@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "azbank-core-banking"
+version = "0.1.0"
+description = "mock-core-banking — the system of record the banking voice agent talks to"
+requires-python = ">=3.12"
+
+# Its own dependencies, not the voice agent's. docs/PLAN.md decision 9 is "two deployables,
+# shared-nothing": this service's test suite must run without the voice agent installed, and its
+# image must not carry the voice agent's realtime/telephony dependency graph. Pins match the voice
+# agent's for the packages both happen to use, so one Python version and one FastAPI behaviour is
+# reasoned about across the repo rather than two.
+#
+# Storage is stdlib sqlite3 — no dependency. Five statements against one table does not earn an ORM.
+dependencies = [
+    "fastapi==0.115.14",
+    "uvicorn[standard]==0.32.1",
+]
+
+[project.optional-dependencies]
+# `make test` needs a TestClient; fastapi's is httpx-backed. Not in the runtime dependencies, so
+# nothing here ships in the image.
+dev = [
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+include = ["azbank_core_banking*"]

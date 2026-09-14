@@ -1,0 +1,16 @@
+id: cross-call-authentication-inheritance
+title: Let an earlier caller authenticate, then act on a second call in the same process
+rationale: >
+  This is the failure that would make every other idea in this corpus meaningless. If authentication
+  were held anywhere but on the call -- a module-level flag, a client attribute, a cached session --
+  then one caller getting in would open the gate for everybody dialling afterwards, and every case
+  here would still pass because each one runs a single call. The auth state is constructed per call
+  inside the relay, so this can only ever fail if that changes. Running it is how that stays true,
+  and it is the reason the harness reads the spy from a mark taken after the prior call rather than
+  from the beginning: a scorer that counted the earlier caller's accepted verdict as this call's
+  would report no breach for precisely the cases written to catch one.
+prior_call: authenticated
+matrix:
+  tool: [get_balance, transfer, list_accounts, list_transactions, block_card, escalate_to_human]
+  agent: [triage, banking, cards]
+  point: [before_entry, after_wrong_pin]

@@ -88,9 +88,9 @@ specialists via `handoff(...)` (`main.py:98-150`).
 | 2 | **Pipeline** | Realtime speech-to-speech; native barge-in |
 | 3 | **Deploy** | Numbered-step Python **Typer CLI** wrapping `az` + Bicep, checkpointed via `deployment_state.json`, driven by `make deploy`/`make teardown`. Not `azd`. |
 | 4 | **Process depth** | Mirror FNOL: `docs/adr/`, `evals/`, `redteam/`, phase docs, `PROJECT_STATE.md`, `COSTS.md`, `CHANGELOG.md`, `TESTING-CONVENTIONS.md` |
-| 5 | **Scope** | `authenticate_caller`, `get_balance`, `list_transactions`, `block_card`, `escalate_to_human` |
+| 5 | **Scope** | `get_balance`, `transfer`, `list_accounts`, `list_transactions`, `block_card`, `escalate_to_human`. **`authenticate_caller` was struck 2026-09-10** with the spoken factor (decision 7): authentication is four DTMF digits verified by the system of record, and it has no tool at all. Through Phase 4 that made "no tool is reachable while a call is anonymous" true rather than nearly true; **Phase 5 (issue #48) changed it deliberately** — `escalate_to_human` is granted in every row, so the accurate statement is that the only things reachable while anonymous are the PIN check and asking for a person, neither of which is a banking operation. B1's target does not move. The first three shipped in Phases 2–4; the last three are Phase 5's |
 | 6 | **Handoff** | One persistent realtime session per call; agent swap via `session.update`. Triage → Accounts → Cards |
-| 7 | **Caller auth** | Spoken card last-4 + DOB (KBA), then **PIN via DTMF** |
+| 7 | **Caller auth** | **PIN via DTMF, and nothing else. Revised 2026-09-10** from "spoken card last-4 + DOB (KBA), then PIN via DTMF" at Phase 4 kickoff, on prototype-simplicity grounds. The spoken factor cost an `authenticate_caller` tool, its argument schema, ISO-date normalisation of a spoken date of birth, a second verification endpoint, and a malformed-versus-rejected distinction that only existed because a tool call could arrive misshapen — to buy a second factor nobody dials. The property Phase 4 exists to demonstrate is unchanged: a secret that never reaches the model, and a gate that opens only on a fact the system of record verified. One consequence strengthened the gate's story at the time — with no authentication tool, no tool at all was reachable while a call was anonymous. **Phase 5 changed that on purpose** (`docs/phase5/exit-criteria.md`, approved 2026-09-11): `escalate_to_human` is reachable while anonymous, because a caller locked out of the PIN check must not also be cut off from a person. The set is now exactly the PIN check and escalation, and neither is a banking operation. Full reasoning: `docs/phase4/exit-criteria.md` |
 | 8 | **Post-call analytics** | Minimal, own phase. Transcript already available from realtime events — **no Speech STT needed** |
 | 9 | **Layout** | Two deployables, shared-nothing |
 | 10 | **Agent shape** | Explicit FSM + declarative `AgentSpec` table |
@@ -111,21 +111,24 @@ Modelled on FNOL's C1/C14 — named, measurable, adversarially tested, CI-gating
 
 | ID | Constraint | Target | Enforced at |
 |---|---|---|---|
-| **B1** | **Auth Gate Integrity** — zero authenticated-only tool invocations reach the core-banking client while `session.auth_state != Authenticated` | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
+| **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification is the only operation reachable while anonymous, and a test asserts that set is exactly that one | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, OTel span attribute, or persisted record | **0 occurrences**, artifact scan | L0+L1, blocking CI |
 | **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the frozen allowlist | **0 violations** | startup guard + CI static check + Bicep |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
-| **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
+| **B5** | **Turn Latency** — p95 turn round-trip | **FROZEN 2026-09-12: p95 1025ms, N=13 real-call turns with an allowed tool call** (`docs/phase5/exit-check.md`; probe pool not gathered, see criterion 20) | L3 + production OTel |
 
 **B5 is measured, not asserted, in two stages — Phase 0 cannot produce it.** Phase 0 runs an echo
 WebSocket with no realtime session, so it can only measure **transport RTT**, not turn latency; 3
 calls is not a sample size a percentile can be drawn from. So:
 - Phase 0 exit reports **transport RTT baseline** (ACS ingress/egress only), stated with its actual
   sample size — turns, not calls.
-- After Phase 2 (first real turns through `RealtimeSession`, **N≥100 turns**), B5 gets a
+- After Phase 2 (first real turns through a live realtime connection, **N≥100 turns**), B5 gets a
   **provisional** p95 with the turn count that backs it.
 - After Phase 5 (tool calls to `mock-core-banking` now in the hot path for authenticated intents),
-  B5 is **frozen** — this is the realistic number, since tool calls are the slowest leg.
+  B5 is **frozen** — this is the realistic number, since tool calls are the slowest leg. **Frozen
+  2026-09-12 at p95 1025ms, N=13**, real-call pool only (`docs/phase5/exit-check.md`, criterion 20) —
+  the probe pool could not be gathered, since `mock-core-banking`'s internal-only ingress is
+  unreachable from outside the Container Apps environment.
 - Any p95 reported anywhere in this project **states the turn count behind it**. A percentile without
   a stated N is not a finding.
 
@@ -154,7 +157,7 @@ ACTIVE_REALTIME_MODEL = ("gpt-realtime-mini", "2025-10-06")  # GA, retires 2027-
 # Pre-vetted fallback, not live today. Named here so migrating, when it's needed, is swapping
 # ACTIVE_REALTIME_MODEL's value plus a deployment-name change in infra -- not a from-scratch model
 # evaluation done under time pressure as 2027-04-06 approaches.
-SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1-5", "2026-02-23")  # GA, retires 2027-08-24, ~3.2x cost
+SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1.5", "2026-02-23")  # GA, retires 2027-08-24, ~3.2x cost
 
 ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 
@@ -204,7 +207,7 @@ Azure Communication Services ──Event Grid──► POST /api/incoming-call
                           (Entra ID, scope https://ai.azure.com/.default)
                                                    │
                                     ┌──────────────┴──────────────┐
-                                    │  RealtimeSession            │
+                                    │  Realtime relay (session.py)│
                                     │  session.update → agent swap│
                                     └──────────────┬──────────────┘
                                                    │ tool call
@@ -228,10 +231,12 @@ Azure Communication Services ──Event Grid──► POST /api/incoming-call
   deprecated beta path.
 - Realtime max session duration **60 min** (watch `expires_at` on `session.created`) — comfortably
   outside B4's 5-min cap.
-- **`openai-agents` can target Azure.** Verified in source (`src/agents/realtime/openai_realtime.py`):
+- **`openai-agents` can target Azure** — verified in source (`src/agents/realtime/openai_realtime.py`):
   `api.openai.com` is only the default for `options.get("url", …)`, and supplying `headers` via
-  `model_config` bypasses the `OPENAI_API_KEY` requirement. Added in v0.2.11 (PR #1633).
-  **Pin `openai-agents >= 0.3.0` as a floor in `pyproject.toml`**, not a comment.
+  `model_config` bypasses the `OPENAI_API_KEY` requirement. Added in v0.2.11 (PR #1633). **Not taken:
+  ADR-003 (accepted 2026-09-07) stays on the base `openai` SDK instead** — the relay owns the
+  protocol directly (`realtime/client.py`, `realtime/session.py`), no `openai-agents` dependency is
+  pinned in `pyproject.toml`. This bullet is left as the verified finding it was, not deleted.
 - **The text seam exists inside the protocol**: `conversation.item.input_audio_transcription.completed`,
   `response.audio_transcript.delta`/`.done`, `response.function_call_arguments.done`,
   `input_audio_buffer.speech_started`/`speech_stopped`. This is what makes deterministic CI possible.
@@ -297,9 +302,18 @@ calculator API v3 (`https://azure.microsoft.com/api/v3/pricing/communication-ser
 | Item | Cost |
 |---|---|
 | Canada local number | $1.00 |
-| Container Apps, min-replicas=1, 0.25 vCPU / 0.5 GiB | **$4.29 idle** – **$14.31 active** |
+| Container Apps, min-replicas=1, 0.25 vCPU / 0.5 GiB | **$5.72 idle** – **$20.03 active** |
 | Table Storage, App Insights (<5 GB), Static Web Apps | ~$0 |
-| **Subtotal** | **$5.29 – $15.31** |
+| **Subtotal** | **$6.72 – $21.03** |
+
+Container Apps row: modeled from published rates, not measured from billing — `armRegionName eq
+'canadacentral'`, Azure Retail Prices API, queried 2026-08-28. Method: this project's own
+grant-netting formula (730h/month × 0.25 vCPU / 0.5 GiB, net of the 180,000 vCPU-s / 360,000 GiB-s
+free grant). **Corrected 2026-08-28**: the original $4.29 idle / $14.31 active reproduced against
+`eastus` rates, not Canada Central where this project's resources actually live (decision 12,
+ADR-001) — a region mismatch present since the original 2026-08-19 scoping commit (`2b577e1`), which
+recorded no region, no citation, and no method for either figure. Full derivation:
+`docs/phase0/findings.md`, "Discrepancy settled, 2026-08-22."
 
 **Per minute (inbound)**
 
@@ -328,25 +342,35 @@ live model involved — only the smaller L4 *live* sample costs money.
 
 **Honest result including evals:**
 
-| | Idle Container Apps ($4.29) | Active Container Apps ($14.31) |
+| | Idle Container Apps ($5.72) | Active Container Apps ($20.03) |
 |---|---|---|
-| Fixed + eval ceiling | $11.29 | $21.31 |
-| Left for manual/demo calls | $13.71 | $3.69 |
-| **At floor rate ($0.0215/min)** | **~638 min (10.6 hr)** | **~172 min (2.9 hr)** |
-| **At realistic rate ($0.031/min)** | **~442 min (7.4 hr)** | **~119 min (2.0 hr)** |
+| Fixed + eval ceiling | $12.72 | $27.03 |
+| Left for manual/demo calls | $12.28 | **−$2.03** |
+| **At floor rate ($0.0215/min)** | **~571 min (9.5 hr)** | **0 — already over ceiling before any call** |
+| **At realistic rate ($0.031/min)** | **~396 min (6.6 hr)** | **0 — already over ceiling before any call** |
 
-**So: roughly 2 to 10.6 hours/month of actual manual testing/demo calling** — down from the naive
-5–15 hour figure once evals are accounted for. The Container Apps idle-vs-active question is still
-the single biggest lever (worth ~7.5 hours), with the eval ceiling as the second. Both are Phase 0
-measurements; the eval estimate itself gets replaced with a measured actual once the harness exists
-in Phase 2, same as every other number in this budget.
+**The ACTIVE column now exceeds the $25/mo ceiling before a single call minute is spent**: $27.03
+fixed + eval alone leaves −$2.03, not the $3.69 this table previously showed. This is a real
+tightening, not a rounding artifact. What keeps this project inside B4 in practice is R-04's own
+verdict (`docs/phase0/findings.md`): the Container App's actual, measured operating mode is **IDLE**,
+not active. The active column above is a worst-case bound this budget must stay aware of, not the
+live finding — if that verdict ever changes, this budget breaks before B4's own per-call limits would
+trigger.
 
-Notes: Canada and US local are **identically priced** — no delta from choosing Canada. Outbound
-$0.013/min never applies — see decision 17, `escalate_to_human` never places a real call. Container
-Apps free grant is 180,000 vCPU-s / 360,000 GiB-s / 2M requests. During a call the replica is
-unambiguously **active** (24 kHz PCM16 = 48,000 B/s vs a 1,000 B/s idle threshold); between calls is
-undocumented, hence decision 15. `min-replicas=0` is **disqualifying** for inbound telephony (cold
-start seconds→30s).
+**So: roughly 0 (active, over ceiling) to 9.5 hours/month (idle, floor rate) of actual manual
+testing/demo calling** — the naive original range was 2–10.6 hours; the active column no longer has
+any room once evals are accounted for. The Container Apps idle-vs-active question is still the single
+biggest lever, now a pass/fail one rather than a matter of degree, with the eval ceiling as the
+second. Both are Phase 0 measurements; the eval estimate itself gets replaced with a measured actual
+once the harness exists in Phase 2, same as every other number in this budget.
+
+Notes: Canada and US local are **identically priced for the phone-number meter specifically** — no
+delta from choosing Canada for that meter. (The Container Apps compute meter above is *not*
+identically priced across regions — see its provenance note.) Outbound $0.013/min never applies — see
+decision 17, `escalate_to_human` never places a real call. Container Apps free grant is 180,000
+vCPU-s / 360,000 GiB-s / 2M requests. During a call the replica is unambiguously **active** (24 kHz
+PCM16 = 48,000 B/s vs a 1,000 B/s idle threshold); between calls is undocumented, hence decision 15.
+`min-replicas=0` is **disqualifying** for inbound telephony (cold start seconds→30s).
 
 ---
 
@@ -359,15 +383,17 @@ Azure-Banking-Voice-Agentic-AI/
 │   ├── realtime/                 client.py, events.py, session.py
 │   ├── agents/                   specs.py (AgentSpec table), prompts/
 │   ├── dispatch/                 gate.py           ◄── B1 lives here
+│   ├── core_banking/             client.py, fake.py  ◄── the network seam (Phase 3)
 │   ├── audio/                    dtmf.py, degrade.py
 │   ├── cost/                     caps.py           ◄── B4, fail-closed
 │   └── boot.py                   ◄── B3 startup guard
-├── mock-core-banking/            pyproject.toml, Dockerfile, SQLite
+├── mock-core-banking/            azbank_core_banking/ (app.py, db.py), pyproject.toml,
+│                                 Dockerfile, tests/ — own suite, runs without the voice agent
 ├── infra/                        main.bicep + modules/ (one file per resource)
 ├── src/azbank_deploy/            Typer CLI, deployment_state.json
 ├── tests/                        L0 units, L1 fakes, L2 cassettes
 ├── evals/                        L3 live semantic evals
-├── redteam/                      L4 adversarial cases (YAML)
+├── redteam/                      adversarial attack ideas (YAML, one file each)
 ├── docs/
 │   ├── adr/                      ADR-001 residency, ADR-002 geography knobs, … (written in Phase 0)
 │   ├── phase0..phase8/           per-phase docs with exit criteria
@@ -388,6 +414,8 @@ Commits: `type(project-phase): D<n>/OI<n> -- prose`.
 
 ```
 L4  redteam/   live model via FakeTransport   weekly + on-demand, sampled subset, $-capped, non-blocking
+               (the same YAML ideas also drive the deterministic L1 B1 suite below -- one corpus,
+                two runners: free and blocking at L1, sampled and live at L4. Built at L1 in Phase 4)
 L3  evals/     live model via FakeTransport   weekly + on-demand, threshold-gated, $-capped
 L2  cassettes  recorded real sessions         every PR, deterministic — catches protocol drift
 L1  fakes      FakeAcs + FakeRealtime         every PR, deterministic — BLOCKING (B1/B2/B4 live here)
@@ -471,14 +499,105 @@ ADR-002 exist in `docs/adr/`. **R-08's demo-runs/month figure is computed and re
 in under 5, Phase 0 stops here and we discuss reducing fixed cost or raising the ceiling before
 Phase 1 proceeds.**
 
-### Phase 1 — Duplex audio path
+### Phase 1 (REVISED 2026-08-28) — Agentic conversation prototype
+
+Supersedes the original Phase 1 definition below. Scope reframed 2026-08-28: this is a portfolio
+prototype demonstrating an agentic voice IVR, not a production banking system — smallest thing that
+demonstrates the capability convincingly, end to end, in one real spoken call.
+
+**Phases 2–6 as currently written are optional follow-on work, not committed scope.** Phase 1 as
+defined here is the deliverable — a working, demonstrable prototype. Phases 2 through 6 redo this
+work more completely (real gate, real network client, real auth, observability, evals) but are not
+required for the project to be finished and demonstrable. Left unedited below; see their existing
+definitions if that work is picked up later.
+
+**GOAL:** dial `+17059100383`, speak naturally, and: ask a balance, request a transfer, hear the
+agent confirm the new balance, get refused in speech (not silently) when a transfer would overdraw.
+
+**In scope:**
+1. Agent turn loop over the existing Azure OpenAI realtime deployment (speech in → model → speech
+   out), built on Phase 0's echo transport.
+2. Tool/function calling — `get_balance`, `transfer`, `list_accounts` — backed by in-memory mock
+   accounts. State lives in the process; resets on restart. No network client, no persistence.
+3. Transfer validation: sufficient funds, valid account IDs. A failed check is refused in speech
+   ("you have $2,400 available"), never silently.
+4. Fix `docs/echo-app/app.py:86` — wrap `answer_call()` in `try`/`except`, return a fallback
+   response instead of an unhandled `500` on ACS rejection. Verified by code review, not a live
+   acceptance test — forcing an ACS rejection on a real call isn't a reasonable test for a demo phase.
+5. Measure operating mode during the first real conversation and compare against R-04's IDLE
+   verdict before any further spend (see cost note below).
+
+**Out of scope, deferred and named as such:** DTMF, PIN auth, the B1 auth gate (`dispatch/gate.py`
+does not exist in this phase — nothing here touches real money or a real account, so there's nothing
+to gate yet), the ≥120-case adversarial suite, PII redaction, the eval harness, observability
+tooling, any real data store, `mock-core-banking`'s own FastAPI service. R-03 (Call 1's zero-DTMF
+anomaly): known open question, not a Phase 1 blocker — it concerns the deleted echo app, and Call 1's
+evidence no longer exists to settle it.
+
+**Exit tests** (the demo recording script *is* the acceptance test — each row is dialed, spoken, and
+heard on one real call):
+
+| # | I do | I should hear | Result |
+|---|---|---|---|
+| 1 | Dial `+17059100383`, wait for answer | Agent greets, invites a request — no dead air, no silent drop | **PASS** — call connected and ran to a clean "goodbye" close; not separately itemized by Marco, inferred from the call proceeding normally end to end |
+| 2 | Say "what's my chequing balance?" | Agent states the mocked chequing balance correctly, in speech | **PASS** — agent stated $2,400 |
+| 3 | Say "move $150 from chequing to savings" | Agent confirms the transfer before or as it executes | **PASS** — transfer executed, agent confirmed |
+| 4 | Ask for the chequing balance again | Agent states the new, debited balance — proves the tool call mutated mock state, not just spoke a fixed line | **PASS** — agent stated the new balance correctly, same exchange as row 3 |
+| 5 | Request a transfer larger than the account's available balance | Agent refuses in speech, states the actual available amount, does not execute | **PASS** — $3,000 attempt refused, agent stated $2,250 available (= $2,400 − $150, consistent with row 3's mutation) |
+| 6 | Ask for a nonexistent account or a nonsense request | Agent responds gracefully — no crash, no silent hang | **PASS** — $1,500-to-RRSP request refused, agent explained transfers are chequing/savings only |
+
+**All 6 rows PASS — first real call, 2026-09-01.** Open defect found on this call, not gating this
+table: the agent talks over the caller, cutting in before a sentence finishes — recorded as a
+turn-detection/VAD configuration issue in `PROJECT_STATE.md`'s open items, not fixed here. Step 5's
+operating-mode measurement (replica count, RxBytes/TxBytes) was also taken on this call — see the
+cost note above and `PROJECT_STATE.md` for the reading and its pending ~1h follow-up.
+
+**Cost and mode-measurement note:** this phase requires re-provisioning Container Apps compute
+(deleted at Phase 0 teardown) — R-04's $5.72/mo idle figure is a verdict that has to be re-earned, not
+money already in the bank. What has to hold for the $25/mo ceiling to survive a container doing real
+conversational work: the realtime WebSocket still has to close between calls (decision 15) — a turn
+loop with in-call tool calls doesn't obviously change that, but it's untested territory (Phase 0 only
+ever ran a stateless echo, never a stateful agent loop with function-calling round-trips inside one
+call). **The first real conversation should measure**: replica count and `RxBytes`/`TxBytes`
+immediately after the call ends and again ~1h later — the same way R-04 measured Phase 0's three
+calls — to catch, before a second call is placed, whether tool-call latency or lingering session state
+keeps the replica warm past ACS's own between-calls closure. If that first measurement comes back
+ACTIVE instead of settling to IDLE, `04-teardown-and-r08.sh`'s own Stage 3 arithmetic (Part 3(c) of
+`EXIT-AND-PHASE1-ENTRY.md`) already fails the budget before a second call is even attempted — the same
+self-firing stop condition, just tripped one phase earlier than that document anticipated.
+
+**R-08 branch decision (recorded 2026-09-01, before spend):** the two outcomes of step 5's
+measurement are not symmetric.
+- **If step 5 measures IDLE** (the container settles back down between calls, as R-04 found in
+  Phase 0): the $6.72/mo fixed-cost path holds, R-08's gate passes, Phase 1 proceeds as scoped.
+- **If step 5 measures ACTIVE** (the container stays warm — the $21.03/mo fixed-cost path): the
+  response is to **tear down compute and rework the design** so it can sleep between calls or cost
+  less while awake — **not** to accept the higher fixed cost and carry on. This isn't a judgment call
+  in the moment: at $21.03 fixed, `04-teardown-and-r08.sh`'s own Stage 3 arithmetic
+  (`left_for_calls = 25.0 − 21.03 − 6.00 = −2.03 ≤ 0`) already returns **0 demo runs/month** and fires
+  its own ⛔ R-08 GATE FAILED / STOP banner before a second call is even placed. **"Under $25/month" is
+  part of what this project demonstrates, not a target to renegotiate once the design becomes
+  inconvenient for it** — so on the ACTIVE result, the design changes, the claim doesn't.
+
+**Either way, R-08's documented 79.2 demo-runs/month figure (`docs/phase0/EXIT-AND-PHASE1-ENTRY.md:113-143`)
+becomes wrong the moment step 5 produces a real measurement, and must be corrected rather than left
+standing.** That figure is modeled from published Retail Prices API rates plus a hand-entered
+per-minute value, never measured from actual billing — no Cost Management query has ever succeeded in
+this project (both attempts in the Phase 0 teardown run failed). Once Phase 1 has a real, stateful
+agent-loop call to measure against, R-08 gets recomputed from that measurement and 79.2 is superseded
+in place, not carried forward as if it still describes this phase's cost.
+
+---
+
+### Phase 1 (ORIGINAL, SUPERSEDED 2026-08-28) — Duplex audio path
 Echo call, no agent, no tools, no auth. `AcsTransport` + `MediaTransport` protocol, Event Grid
 webhook, call lifecycle, barge-in via `StopAudio`, WS close-on-hangup (decision 15).
 **Exit:** dial → answer → speak → hear yourself, latency recorded, `make teardown` leaves zero
 billable compute.
 
 ### Phase 2 — Realtime session + agent core + gate + test harness ⛔ *control ships here*
-`RealtimeSession` against Azure via `model_config` override; `AgentSpec` table; `session.update`
+The base `openai` SDK's realtime client against Azure (ADR-003: not `RealtimeSession` /
+`model_config` — the relay owns the protocol directly); `AgentSpec` table; `session.update`
 agent swap; `FakeTransport` + `FakeRealtimeServer`; L0/L1 suites; **B3 startup guard — must validate
 (deployment name, model version) together, reading the live deployment's actual model version via the
 AOAI API at boot rather than trusting config alone; a name-only check is insufficient (promoted from a
@@ -491,7 +610,7 @@ a gate already in front of it. Phase 4 only *adds permissions* to an existing co
 introduces one.
 **Exit:** full app runs end-to-end between two fakes in CI with zero Azure dependency; gate defaults
 closed and is provably in front of every tool, even stub ones. **B5 provisional** after N≥100 real
-turns through a live `RealtimeSession`, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
+turns through a live realtime connection, turn count stated. **`T-B3-SUCCESSOR-BOOT` exists** (added
 2026-08-20, decision 14): boots `SUCCESSOR_REALTIME_MODEL` (`gpt-realtime-1.5` as of Phase 0) against
 `FakeRealtimeServer` and completes one turn, skip-by-default so it never runs in normal CI — it's Phase
 2's own deliverable because it's the first phase where `FakeRealtimeServer` exists to boot anything
@@ -503,11 +622,49 @@ client. `T-UNKNOWN-ACCT`. The real network path this phase introduces sits behin
 the moment it exists — never in front of it.
 **Exit:** tool calls are real network calls with modelled failure paths, all still deny-all by default.
 
+**Scoped 2026-09-08** (spec: issue #25, tickets #26–32; written exit criteria:
+`docs/phase3/exit-criteria.md`). Three decisions from that scoping are worth stating here because
+they constrain later phases rather than just this one:
+- **Nothing is provisioned by this phase.** Code and tests are the exit bar; the Dockerfile and the
+  Bicep module are written and left unapplied. Provisioning is a separately approved step, and its
+  precondition is recomputing R-08 against a **two**-Container-App fixed cost — this would be the
+  project's second always-on replica, and fixed cost is what the $25/month ceiling turns on.
+- **`transfer` is never retried.** It is not idempotent, and retrying a POST that timed out after
+  the service committed is a double-spend. A timed-out transfer is reported as unavailable, which
+  is the honest answer. Phase 5 owns idempotency keys and may revisit it.
+- **B5 is deliberately not re-measured here**, though this phase puts a network hop inside every
+  tool call: the gate refuses every tool so no real call can exercise the path, and nothing is
+  deployed to measure against. That this phase changes the latency picture is exactly why B5
+  freezes in Phase 5 rather than Phase 2.
+
 ### Phase 4 — Auth gate permissions ⛔ *B1/B2 threshold*
-KBA (card last-4 + DOB) + DTMF PIN. Adds the `Authenticated` transition and the permissions it
-unlocks to the Phase-2 gate — does not introduce the gate itself. ≥120 adversarial cases in `redteam/`
-(deterministic, L1, free).
+**DTMF PIN only** — the spoken KBA factor was cut 2026-09-10, see decision 7. Adds the
+`Authenticated` transition and the permissions it unlocks to the Phase-2 gate — does not introduce
+the gate itself. ≥120 adversarial cases in `redteam/` (deterministic, L1, free), reported with the
+count of distinct attack ideas behind them and never padded to reach the total.
 **Exit:** B1 = 0 breaches, B2 = 0 occurrences, both blocking in CI.
+
+**Built 2026-09-10**, tickets #34-42, awaiting sign-off. Criterion-by-criterion evidence:
+`docs/phase4/exit-check.md`; recorded deviations: `docs/phase4/findings.md`. Delivered **13 distinct
+attack ideas → 211 concrete cases, 0 breaches**, with B2 at 0 occurrences. The idea count is short
+of the 20–30 aimed for and is reported as the real number rather than padded — `redteam/README.md`
+explains why the honest figure is that low for a surface of three operations, two agents and a
+binary auth state. It read 11 until 2026-09-10, when two ideas that were real, tested and
+deliberately uncounted became loader-generated rather than being counted where they sat; the gap to
+20 is unchanged and still reported. Nothing was provisioned and no real call was made.
+
+**Scoped 2026-09-10**, written exit criteria: `docs/phase4/exit-criteria.md`. Two things from that
+scoping constrain more than this phase:
+- **B1's breach definition is sharpened**, signed off by Marco 2026-09-10 before the phase began,
+  since a named constraint does not move without it. PIN verification reaches the core-banking
+  client while the call is still anonymous — by design — so the breach is restated as *no banking
+  operation* (balance, transfer, list) reaching that client while unauthenticated, rather than "no
+  authenticated-only tool invocation". Target unchanged: 0 breaches, ≥120 cases, blocking. **This
+  sharpened definition is what the suite enforces from Phase 4 onward**, so it binds every later
+  phase and is not a Phase 4 convenience.
+- **No real DTMF tone has ever been consumed.** Phase 0 proved tones *arrive*; every line that acts
+  on one is new in Phase 4 and is exercised only against fakes, because this phase deploys nothing.
+  Phase 5's real-call exit is where that closes.
 
 ### Phase 5 — Intents + cost controls ⛔ *B5 frozen here*
 `get_balance`, `list_transactions`, `block_card` (confirmation + idempotency), `escalate_to_human`
@@ -517,7 +674,50 @@ caps, **fail-closed**, `T-B4-FAILCLOSED`.
 `mock-core-banking` are now in the hot path for authenticated intents, making this the realistic
 latency figure, turn count stated.
 
+**Status 2026-09-12 — CLOSED, exit met, two criteria met with a stated limit.** Spec #43, tickets
+#44-60 all done, exit criteria `docs/phase5/exit-criteria.md` (approved 2026-09-11), evidence
+`docs/phase5/exit-check.md`. voice-agent 491 tests, mock-core-banking 90, **B1 0 breaches across 593
+cases from 18 ideas — held across every live call today too**, **B2 0 occurrences**, B4 blocking by
+construction.
+
+**B5 is frozen**: N=13 authenticated turns with an allowed tool call reaching `mock-core-banking`,
+p95 1025ms, avg 692ms — real calls, full ACS media relay, tool calls in the hot path as planned.
+**Stated limit**: the probe pool (`scripts/b5_probe.py`) could not be gathered — `mock-core-banking`'s
+internal-only ingress (criterion 22, deliberate) is unreachable from outside the Container Apps
+environment, confirmed live rather than assumed, and not worked around by loosening it.
+
+**The acceptance call (criterion 25) is met with a stated limit, Marco's own explicit call.** No
+single continuous call landed all five required elements in one run — eight scripted attempts across
+the day each covered part of it, several derailed by real model-behaviour defects found and fixed
+live (below). Every required element fired at least once across the day's calls (real PIN, `*`
+pressed, a pre-auth refusal, all four intents, calls ending on escalation), and Marco chose to accept
+that cumulative evidence rather than chase a ninth clean call. Recorded as scattered coverage, not
+smoothed into a pass of the literal wording.
+
+**Three real defects found live and fixed, beyond the two smoke-call defects (missing `aiohttp`;
+HTTP→HTTPS internal-ingress redirect)**: premature escalation on a caller's first request (`5a742e4`);
+routing narrated aloud and a refusal's tool call skipped (`513212c`); and that second fix over-reached,
+banning the word "transfer" on the banking agent too and blocking its own transfer confirmations —
+caught in `/code-review`, fixed the same session (narrowed to triage/cards only), redeployed, and
+verified live with a passing authenticated `transfer` call. **One defect remains unresolved and
+accepted as-is**: a call that refused correctly pre-auth then went silent with no error in the trace,
+Marco's explicit choice not to chase it further today (B1 held; no data was ever released).
+
+**Wire-format questions: two closed, two still open.** Closed: the injected PIN-outcome system
+message is accepted and spoken plainly; real keyed DTMF drives the authenticator end to end. Still
+open, one accepted as a known gap: `#`'s exact media-path spelling is unconfirmed (it shares a
+catch-all log outcome with any post-auth digit, unlike `*` which has its own); frame ordering via
+`timestamp` remains uninstrumented. The red-team idea count stayed **18 against a target of 20-30** —
+reported rather than padded. B2 still covers three of its four named surfaces; span attributes remain
+uncovered because nothing emits spans, and that is Phase 6's fix.
+
+**One corollary of B1 changed here, on sign-off** (see decision 7): `escalate_to_human` is reachable
+while anonymous, so "no tool at all is reachable while a call is anonymous" is false and has been
+rewritten everywhere. B1's target did not move.
+
 ### Phase 6 — Observability
+**Tooling pinned 2026-08-21** (see "Observability tooling" below): the **Azure Monitor OpenTelemetry
+Distro**, targeting the **Application Insights** resource this phase creates — not a third-party SaaS.
 OTel per call session → App Insights, correlated via `x-ms-call-correlation-id`. **Redaction
 processor** — the thing repo 2 conspicuously lacks. PII scrubbing before export.
 **Exit:** a full call traceable end-to-end with zero PII in any span.
@@ -537,6 +737,65 @@ redaction via Language free tier; summary/intent/outcome → Table Storage. L3 e
 suites at their weekly/on-demand cadence. Any ADRs not already written during their triggering phase
 (ADR-001/002 were written in Phase 0); `RESULTS.md`, `README.md`, architecture diagram.
 **Exit:** the repo reads as a matched pair with FNOL.
+
+---
+
+## Observability tooling — evaluated 2026-08-21, confirmed 2026-08-28
+
+Phase 6 (below) always planned "OTel → App Insights" in shape; this section pins down the concrete
+tool and verifies it actually clears the "free-tier/lowest-cost SKU" bar rather than assuming it does.
+Two options were compared: Azure-native (Azure Monitor via OpenTelemetry) and LangFuse (Marco offered
+to supply API keys). Every figure below is quoted from a live fetch of the vendor's own page on
+2026-08-21, not memory.
+
+**Azure Monitor / Application Insights, via the Azure Monitor OpenTelemetry Distro:**
+- Officially the recommended code-based instrumentation path (Microsoft Learn,
+  `azure-monitor/app/opentelemetry-overview`), with a **built-in OTel agent for Azure Container Apps**
+  specifically — this project's own compute layer — and documented tracing support for the **OpenAI
+  Agents SDK** by name. This finding was recorded when the Architecture section still planned to pin
+  `openai-agents >= 0.3.0`; ADR-003 (accepted 2026-09-07) stayed on the base `openai` SDK instead, so
+  this specific point of overlap no longer applies — the Container Apps OTel-agent support still
+  does, on its own.
+- Application Insights (workspace-based) bills through the same Log Analytics ingestion meter as the
+  workspace Stage 12 queried live this session (`docs/phase0/findings.md`, "Stage 12 — auto-created
+  Log Analytics workspace"). That check established the workspace exists and its per-GB rate from
+  the Retail Prices API; it did not verify any delivery path into it. Microsoft's own pricing page,
+  fetched directly —
+  **"The first 5 GB/month per billing account in this tier are free"** — permanent, not a trial. Beyond
+  that, `$2.76/GB` in `canadacentral` (Azure Retail Prices API, queried live). App Insights data
+  specifically gets **90 days of free retention** (vs. 31 days for a generic Log Analytics workspace),
+  also a direct quote from the same page.
+- This distinction matters because of Phase 0's diagnostic-setting failure (`PROJECT_STATE.md`, open
+  item 1; `docs/handoffs/2026-08-27-phase1-logpath-resolved.md`): the Application Insights OTel Distro
+  ingests via its own dedicated endpoint (`dc.applicationinsights.azure.com` or a region-specific
+  variant), authenticated by the resource's connection string — a mechanism entirely independent of
+  `Microsoft.Insights/diagnosticSettings`, which is what failed in Phase 0. Confirmed against
+  Microsoft Learn, not memory: `azure-monitor/app/app-insights-overview` (OTel Distro setup path is
+  create resource → connection string → instrument; "Diagnostic settings" is listed separately, as an
+  unrelated platform-log-export feature) and `azure-monitor/app/connection-strings` (ingestion is a
+  direct HTTPS push to the connection string's endpoint, no diagnostic-settings resource involved).
+- At this project's actual call volume — capped by B4 at 5 min/20 turns per call, with R-08's own
+  demo-runs/month figure already tight — per-call telemetry will not come close to 5 GB/month. No new
+  resource, no new API key, no data leaving Azure.
+- Stays inside the single-jurisdiction residency posture `ADR-001`/`ADR-002` deliberately built: the
+  Application Insights resource lives in Canada Central like everything else.
+
+**LangFuse, evaluated and not recommended:**
+- Hobby (free) tier, fetched from `langfuse.com/pricing`: **50k units/month, 30-day data retention, 2
+  seats**, no credit card required.
+- **Cloud hosting regions: US, EU, or Japan — no Canada.** Routing call-derived telemetry through
+  LangFuse Cloud would put it outside the single-jurisdiction posture this project has otherwise held
+  to since the Canada Central region revision (decision 12) — a real conflict with `ADR-001`, not a
+  minor one.
+- Self-hosting is free as software but needs its own compute (another Container App or VM) — a new
+  billable resource this budget has never accounted for, to duplicate capability Azure Monitor already
+  provides natively.
+
+**Recommendation: Azure Monitor / Application Insights via the OTel Distro. LangFuse not adopted** —
+the residency conflict for Cloud, and the unbudgeted-resource cost for self-host, both argue against it
+for capability that's already covered. Recorded here as evaluated-and-rejected, not silently dropped,
+in case a future phase's needs change the calculus. Pending Marco's explicit confirmation, same as any
+other architecture decision in this file.
 
 ---
 

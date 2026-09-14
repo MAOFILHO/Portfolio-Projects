@@ -256,6 +256,28 @@ on_error() {
 }
 trap 'on_error $?' ERR
 
+# Verifies each path is git-tracked AND matches HEAD exactly (no unstaged or staged edits) --
+# `git ls-files --error-unmatch` alone only proves a file is tracked, not that the working tree
+# still matches what's committed. An uncommitted edit to a tracked bridge.py would pass a
+# tracked-only check and still get baked into the pushed image -- unreviewed code shipping under
+# a "verified" banner, the exact failure this guard exists to prevent.
+assert_tracked_and_clean() {
+  local dir="$1"; shift
+  if ! git -C "$dir" ls-files --error-unmatch "$@" >/dev/null 2>&1; then
+    err "$dir/{$*} exist but aren't all git-tracked --"
+    err "refusing to build from an unreviewed file. This check exists because an unreviewed, B2-shaped"
+    err "image nearly shipped once before, for docs/echo-app/ specifically (docs/phase0/findings.md,"
+    err "'Stage 12 -- ECHO_DIR misdirection') -- the same protection now applies wherever this check runs."
+    return 1
+  fi
+  if ! git -C "$dir" diff --quiet -- "$@" || ! git -C "$dir" diff --cached --quiet -- "$@"; then
+    err "$dir has uncommitted changes to: $* --"
+    err "this is expected during active development, not a bug: commit or discard the change, then"
+    err "re-run 01-provision.sh from the top. It will not build from a tracked-but-modified file."
+    return 1
+  fi
+}
+
 banner "Azure-Banking-Voice-Agentic-AI — Phase 0, script 1/4: Provisioning"
 
 # ── Stage 1: pre-flight (free, read-only) ──────────────────────────────────
@@ -598,15 +620,100 @@ pause "Review the area codes above — you'll pick one in the next stage. Press 
 stage "Purchase a Canada local geographic number"
 
 # R-09 in practice: a second purchase is permanent (this rule forbids ever releasing either number),
-# so this stage must never re-run its search/purchase logic once PHONE_NUMBER is set -- not "usually
-# skip", structurally cannot reach the purchase call at all when it's already set. Read directly from
-# ENV_FILE via _existing (same mechanism ask()/ask_secret() use), not trusted from a shell variable
-# that might not be populated on a fresh invocation of this script.
-if [[ -n "$(_existing "PHONE_NUMBER" || true)" ]]; then
-  ok "already purchased, skipping: $(_existing "PHONE_NUMBER") (PHONE_NUMBER set in $ENV_FILE)"
-  note "R-09: this number is never released by any script, so a re-run never re-purchases while"
-  note "PHONE_NUMBER is set. Delete it from .env.phase0 yourself if you genuinely need a new search --"
-  note "never as an accidental side effect of re-running this script."
+# so this stage must never re-run its search/purchase logic once ACS already owns a number -- not
+# "usually skip", structurally cannot reach the purchase call at all when one exists. Azure is now
+# the authority, not the local .env.phase0 file: PHONE_NUMBER there is gitignored and machine-local
+# (confirmed 2026-08-31 -- untracked, `.env.*` in .gitignore), so a fresh clone, a different machine,
+# or a deleted env file would silently defeat a local-file-only check while ACS still owns the first
+# number -- exactly the gap Stages 5-8 don't have, because they all check live Azure state directly
+# (`az cognitiveservices account show`, `az communication list`, etc.) rather than trusting a local
+# cache. `az communication phonenumber list --connection-string` (communication extension; verified
+# live 2026-08-31 against this project's own ACS resource -- returns a flat JSON array, each entry
+# carrying a `phoneNumber` field, e.g. `+17059100383`) is queried every run for the same reason.
+# Still flagged preview by Azure itself (`WARNING: This command group is in preview and under
+# development` on every invocation) as of this writing -- if this stage starts hard-failing after a
+# future CLI/extension update, that's the first thing to check, not this stage's own logic.
+ACS_CONNECTION_STRING=$(az communication list-key --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query primaryConnectionString -o tsv)
+# `2>&1` here was wrong: the preview WARNING noted above prints to stderr, not stdout -- verified live
+# 2026-09-01 by redirecting each stream separately against this project's own connection string
+# (stdout carried only the JSON array; stderr carried only the WARNING line, plus an ERROR line on a
+# genuine failure). Merging the two put the warning on line 1 of what OWNED_NUMBERS_JSON then fed to
+# json.load below, which cannot parse a leading non-JSON line -- so the parse failed on every run,
+# since Azure prints that warning unconditionally on every invocation of this command group. stderr is
+# captured to a temp file instead (same pattern as 02-test-calls.sh Stage 4's LOGS_STDERR_FILE) so
+# stdout stays pure JSON on success, with the warning/error text still available, separately, for
+# diagnostics. Still wrapped in `if !`, not a plain assignment, so a genuine `az` failure fails loud
+# here rather than being caught later as an unparseable-JSON symptom -- or, without the `if !` guard,
+# aborting via `set -e` before the diagnostic below ever prints.
+OWNED_NUMBERS_STDERR_FILE=$(mktemp)
+if ! OWNED_NUMBERS_JSON=$(az communication phonenumber list --connection-string "$ACS_CONNECTION_STRING" -o json 2>"$OWNED_NUMBERS_STDERR_FILE"); then
+  err "az communication phonenumber list failed -- can't confirm whether ACS already owns a number,"
+  err "so this must not proceed to a purchase attempt. Raw stderr:"
+  sed 's/^/    /' "$OWNED_NUMBERS_STDERR_FILE"
+  rm -f "$OWNED_NUMBERS_STDERR_FILE"
+  err "If this is '... is not recognized', the 'communication' CLI extension isn't installed --"
+  err "run: az extension add --name communication -- then re-run this stage."
+  on_error 1
+fi
+rm -f "$OWNED_NUMBERS_STDERR_FILE"
+# python3 is already a Stage 1 prerequisite (checked alongside az/curl/docker), so parsing the JSON
+# with it here is not a new undeclared dependency -- kept instead of --query/JMESPath because a real
+# JSON parse reads more plainly here than a JMESPath expression. One call, not two: a parse failure
+# must be exactly as loud as the `az` call itself failing above, not silently coerced into "0 owned" --
+# this still-preview command's response shape (flagged above) could change, and something as
+# plausible as `{"value": [...]}` (the norm for the ACS REST endpoints this same script calls
+# elsewhere) would parse as valid JSON yet crash on the field lookup below if not caught explicitly.
+# Confirmed empirically 2026-08-31: with the old two-call `2>/dev/null || echo 0`/`|| true` pattern,
+# that exact wrapped shape produced OWNED_COUNT=1 (an accidental, wrong-reason match on dict-key
+# count) and OWNED_NUMBER='' -- indistinguishable from "genuinely zero numbers owned" to the
+# branches below, and the one case this stage exists to prevent falling through on.
+if ! OWNED_PARSED=$(printf '%s' "$OWNED_NUMBERS_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if not isinstance(d, list):
+    sys.exit(f"expected a JSON array, got {type(d).__name__}")
+print(len(d))
+print(d[0]["phoneNumber"] if d else "")
+' 2>&1); then
+  err "couldn't parse az communication phonenumber list's output as the expected flat array --"
+  err "$OWNED_PARSED"
+  err "Raw output:"
+  printf '%s\n' "$OWNED_NUMBERS_JSON" | sed 's/^/    /'
+  err "Do not proceed to a purchase attempt without knowing whether ACS already owns a number."
+  on_error 1
+fi
+OWNED_COUNT=$(printf '%s\n' "$OWNED_PARSED" | sed -n '1p')
+if [[ "$OWNED_COUNT" -gt 1 ]]; then
+  warn "$OWNED_COUNT numbers are owned by $ACS_NAME, not 1 -- unexpected under R-09 (only one purchase"
+  warn "was ever supposed to happen). Using the first returned; investigate the extra number(s) in the"
+  warn "Azure portal -- this script never releases any number automatically."
+fi
+OWNED_NUMBER=$(printf '%s\n' "$OWNED_PARSED" | sed -n '2p')
+LOCAL_PHONE_NUMBER=$(_existing "PHONE_NUMBER" || true)
+
+if [[ -n "$OWNED_NUMBER" ]]; then
+  ok "ACS already owns a number: $OWNED_NUMBER (confirmed live via az communication phonenumber list)"
+  if [[ "$LOCAL_PHONE_NUMBER" != "$OWNED_NUMBER" ]]; then
+    if [[ -n "$LOCAL_PHONE_NUMBER" ]]; then
+      warn "local $ENV_FILE had PHONE_NUMBER=$LOCAL_PHONE_NUMBER, which doesn't match the live value --"
+      warn "Azure wins; correcting the local file."
+    else
+      note "PHONE_NUMBER wasn't set in $ENV_FILE (fresh clone/machine, or the file was lost) -- writing"
+      note "the live value now instead of re-purchasing."
+    fi
+    write_env "PHONE_NUMBER" "$OWNED_NUMBER"
+  fi
+  note "R-09: this number is never released by any script, so a re-run never re-purchases while ACS"
+  note "already owns one -- checked against Azure directly, not trusted from the local file alone."
+elif [[ -n "$LOCAL_PHONE_NUMBER" ]]; then
+  # Azure is authoritative, so a local file claiming a number Azure doesn't confirm is a real
+  # discrepancy to stop and investigate -- never silently papered over by proceeding to a second
+  # purchase, and never trusted over what Azure just reported.
+  err "local $ENV_FILE says PHONE_NUMBER=$LOCAL_PHONE_NUMBER, but az communication phonenumber list"
+  err "returned no owned numbers for $ACS_NAME. Do not proceed -- this could mean the number was"
+  err "released outside this project (forbidden by R-09) or the ACS resource was recreated."
+  err "Investigate in the Azure portal before re-running this stage."
+  on_error 1
 else
 
 # Hard precondition: phone number purchase is a Microsoft.Communication data-plane operation and
@@ -897,12 +1004,16 @@ note "Both ADRs use the R-06 result and the R-05 inventory finding measured earl
 note "before committing — the DataZone error block and the purchased number are templated from this"
 note "run's actual results, not assumed."
 
-# ── Stage 11: verify the echo WebSocket app is present and reviewed ──────────
-stage "Verify the echo WebSocket app (docs/echo-app/) is present and git-tracked"
-say "This stage no longer generates the echo app from a frozen template. The real, human-reviewed"
-say "app lives in docs/echo-app/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK"
-say "version (1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
-say "build-time pip-freeze assertion. This stage only verifies that file is where it should be."
+# ── Stage 11: verify the voice-agent app is present and reviewed ─────────────
+stage "Verify the voice-agent app (voice-agent/) is present and git-tracked"
+say "This stage no longer generates the app from a frozen template. The real, human-reviewed app"
+say "lives in voice-agent/ -- fixed and signed off 2026-08-21 (commit 1004d54): correct SDK version"
+say "(1.4.0, not the broken 1.2.* this script used to template), B2 DTMF-value gating, and a"
+say "build-time pip-freeze assertion. This stage only verifies those files are where they should be."
+say ""
+say "Paths updated by the Phase 2.1 restructure (issue #17): the app moved out of docs/echo-app/ and"
+say "voice-agent/ became one installable package, so this stage now checks a single directory and"
+say "Stage 12 builds from a single context -- no --build-context bridging."
 
 # Anchored to the git repo root via `git rev-parse`, not a relative "$SCRIPT_DIR/../..." chain --
 # that class of path is exactly what caused the ECHO_DIR misdirection this project already shipped
@@ -915,25 +1026,43 @@ REPO_TOPLEVEL="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" || {
   err "could not resolve the git repo root from $SCRIPT_DIR -- refusing to guess where the echo app lives"
   on_error 1
 }
-ECHO_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/docs/echo-app"
+APP_DIR="$REPO_TOPLEVEL/Azure-Banking-Voice-Agentic-AI/voice-agent"
 
-# Hard assertion, not a soft check: ECHO_DIR must exist AND be git-tracked, or the script stops here.
-# This is the guard that would have caught the ECHO_DIR misdirection the moment it happened, instead
-# of silently building whatever sat at the wrong path. There is deliberately no "generate it if
-# missing" fallback left in this script -- a wrong path must stop the script, never regenerate from a
-# template.
-if [[ ! -f "$ECHO_DIR/app.py" ]]; then
-  err "ECHO_DIR=$ECHO_DIR has no app.py. Either this path is wrong or the file was moved/deleted --"
-  err "either way, refusing to proceed without it. Fix docs/echo-app/ directly, never via this script."
+# Hard assertion, not a soft check: APP_DIR must exist AND be git-tracked AND clean, or the script
+# stops here. This is the guard that would have caught the ECHO_DIR misdirection the moment it
+# happened, instead of silently building whatever sat at the wrong path. There is deliberately no
+# "generate it if missing" fallback left in this script -- a wrong path must stop the script, never
+# regenerate from a template.
+#
+# One directory now covers what used to need two guards: the Phase 2.1 restructure (issue #17)
+# folded the app, the relay, and their dependency declaration into one installable package, so a
+# single tracked-and-clean assertion covers everything that reaches the image. An uncommitted edit
+# to any module still cannot pass silently into a pushed image -- the list below is app.py's own
+# import graph (transitively, via realtime/session.py and dispatch/tools.py), not a hand-picked
+# subset: dispatch/gate.py (B1) and boot.py (B3) were missing here until /code-review of Phase 2
+# caught it (2026-09-07) -- exactly the two files CLAUDE.md says a diff must never auto-accept,
+# left outside the one guard whose whole job is catching an unreviewed edit before it ships.
+# transport/protocol.py is deliberately absent: nothing in app.py's import graph actually imports
+# it (grep confirms only docstring references), so it never reaches the image either way.
+if [[ ! -f "$APP_DIR/azbank_voice_agent/app.py" ]]; then
+  err "APP_DIR=$APP_DIR has no azbank_voice_agent/app.py. Either this path is wrong or the file was"
+  err "moved/deleted -- refusing to proceed without it. Fix voice-agent/ directly, never via this script."
   on_error 1
 fi
-if ! git -C "$ECHO_DIR" ls-files --error-unmatch app.py requirements.txt Dockerfile >/dev/null 2>&1; then
-  err "ECHO_DIR=$ECHO_DIR/{app.py,requirements.txt,Dockerfile} exist but aren't all git-tracked --"
-  err "refusing to build from an unreviewed file. This is exactly the failure mode that nearly shipped"
-  err "an unreviewed, B2-shaped image before (docs/phase0/findings.md, 'Stage 12 -- ECHO_DIR misdirection')."
-  on_error 1
-fi
-ok "$ECHO_DIR verified: app.py/requirements.txt/Dockerfile present and git-tracked"
+assert_tracked_and_clean "$APP_DIR" \
+  pyproject.toml \
+  Dockerfile \
+  azbank_voice_agent/app.py \
+  azbank_voice_agent/boot.py \
+  azbank_voice_agent/accounts.py \
+  azbank_voice_agent/agents/specs.py \
+  azbank_voice_agent/cost/caps.py \
+  azbank_voice_agent/dispatch/gate.py \
+  azbank_voice_agent/dispatch/tools.py \
+  azbank_voice_agent/realtime/client.py \
+  azbank_voice_agent/realtime/session.py \
+  azbank_voice_agent/transport/acs.py || on_error 1
+ok "$APP_DIR verified: pyproject.toml/Dockerfile and every azbank_voice_agent module present, git-tracked, and clean"
 
 # ── Stage 12: build, push (Docker Hub, not ACR), and deploy ──────────────────
 stage "Build, push, and deploy the echo app to Container Apps"
@@ -969,7 +1098,8 @@ ok "logged in to docker.io as $DOCKERHUB_USERNAME"
 # the one time it walked an index at all, it failed. Eliminating the variable is free; testing whether
 # Azure tolerates it costs a billable `containerapp create`. Verified manually 2026-08-21: with these
 # flags, `docker buildx imagetools inspect` shows a single linux/amd64 manifest, no second entry.
-docker buildx build --platform linux/amd64 --provenance=false --sbom=false -t "$IMAGE" --push "$ECHO_DIR"
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  -t "$IMAGE" --push "$APP_DIR"
 ok "built for linux/amd64 and pushed $IMAGE"
 
 # Fail loudly here, before any Azure spend, if the pushed image isn't actually linux/amd64 --
@@ -1005,6 +1135,7 @@ confirm "Confirmed the repo is set to Private?" \
   || warn "left as whatever Docker Hub defaulted to — not a credential leak (see above), but there's no reason to publish this project's internal call-handling code by accident."
 
 ACS_CONNECTION_STRING=$(az communication list-key --name "$ACS_NAME" --resource-group "$RESOURCE_GROUP" --query primaryConnectionString -o tsv)
+AOAI_KEY=$(az cognitiveservices account keys list --name "$AOAI_NAME" --resource-group "$RESOURCE_GROUP" --query key1 -o tsv)
 
 if az containerapp env show --name "$CAE_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
   ok "Container Apps environment $CAE_NAME already exists"
@@ -1040,12 +1171,13 @@ if az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_
   say "updating existing container app: refreshing secrets, then forcing a new revision"
   az containerapp secret set \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" "aoai-key=$AOAI_KEY" \
     --output none
   az containerapp update \
     --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
     --image "$IMAGE" \
     --revision-suffix "p0$(date -u +%Y%m%d%H%M%S)" \
+    --set-env-vars "AOAI_ENDPOINT=$AOAI_ENDPOINT" "AOAI_DEPLOYMENT=$DEPLOYMENT_NAME" "AOAI_KEY=secretref:aoai-key" \
     --output none
   ok "container app $CONTAINERAPP_NAME updated: secrets refreshed, new revision forced"
 else
@@ -1062,7 +1194,8 @@ else
     --min-replicas 1 --max-replicas 1 \
     --cpu 0.25 --memory 0.5Gi \
     --env-vars "ACS_CONNECTION_STRING=secretref:acs-conn" "APP_BASE_URL=secretref:app-base-url" \
-    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" \
+      "AOAI_ENDPOINT=$AOAI_ENDPOINT" "AOAI_DEPLOYMENT=$DEPLOYMENT_NAME" "AOAI_KEY=secretref:aoai-key" \
+    --secrets "acs-conn=$ACS_CONNECTION_STRING" "app-base-url=$APP_BASE_URL" "aoai-key=$AOAI_KEY" \
     --output none
   ok "container app $CONTAINERAPP_NAME created (min-replicas=1, 0.25 vCPU / 0.5 GiB per docs/PLAN.md)"
 fi

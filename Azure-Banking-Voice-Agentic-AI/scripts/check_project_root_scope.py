@@ -13,8 +13,8 @@ WHAT IT CHECKS
 
     Every staged path (`git diff --cached --name-only`) must start with `PROJECT_ROOT` (this project's
     own directory, relative to the git repo root) -- with an exception only for a path named in
-    `ALLOWLIST`, each with its own recorded, absolute-path approval. `ALLOWLIST` starts empty: no
-    exception has been asked for or granted yet. Do not add one in advance of an actual approval.
+    `ALLOWLIST`, each with its own recorded, absolute-path approval cited inline next to the entry
+    that licenses it. Do not add an entry in advance of an actual approval.
 
 RUNS AS
 
@@ -45,8 +45,15 @@ PROJECT_ROOT = "Azure-Banking-Voice-Agentic-AI/"
 
 #: Paths outside `PROJECT_ROOT` that are allowed to be staged, because a specific, recorded,
 #: absolute-path approval exists for each one. Add an entry only alongside the approval that licenses it
-#: -- never in advance of one. Starts empty: no exception has been requested yet.
-ALLOWLIST: frozenset[str] = frozenset()
+#: -- never in advance of one.
+ALLOWLIST: frozenset[str] = frozenset({
+    # Marco approved this exact absolute path in chat, 2026-09-07, during /code-review Phase 2
+    # follow-up ("yes, approved"), after being shown the workflow content and asked explicitly.
+    # This project's CI must live at the monorepo's shared .github/workflows/ -- every sibling
+    # project's CI does (e.g. azure-microsoftfoundry-agentic-finetuning-platform-ci.yml) -- so a
+    # per-project PROJECT_ROOT can never contain it.
+    ".github/workflows/azure-banking-voice-agentic-ai-ci.yml",
+})
 
 
 def scope_violations(

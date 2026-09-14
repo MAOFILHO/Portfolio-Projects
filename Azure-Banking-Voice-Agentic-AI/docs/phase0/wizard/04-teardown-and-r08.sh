@@ -351,17 +351,26 @@ if [[ ! -f "$COSTS_FILE" ]]; then
   } > "$COSTS_FILE"
 fi
 {
-  echo "## Measured, not estimated (generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by docs/phase0/wizard/04-teardown-and-r08.sh)"
+  echo "## Modeled from telemetry (generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by docs/phase0/wizard/04-teardown-and-r08.sh)"
   echo ""
-  echo "| Item | Plan estimate | Measured |"
+  echo "| Item | Plan estimate | Modeled |"
   echo "|---|---|---|"
   echo "| Fixed monthly (extrapolated) | \$5.29–\$15.31 | \$${MEASURED_FIXED_MONTHLY} |"
   echo "| Per-minute floor | \$0.0215/min | \$${MEASURED_PER_MIN_COST}/min |"
   echo "| Container Apps idle-vs-active (R-04) | undocumented, decision 15 assumed idle | **${R04_VERDICT}** |"
   echo "| Demo runs/month (R-08) | ~30-160 (naive, pre-eval-budget estimate) | **${R08_RUNS}** (gate: ${R08_GATE}) |"
   echo ""
+  echo "**Provenance note**: none of the figures in this table come from an Azure Cost Management billing"
+  echo "query. \$${MEASURED_FIXED_MONTHLY} (Fixed monthly) = R04_MONTHLY_NET_OF_GRANT (\$${R04_MONTHLY_NET_OF_GRANT:-0},"
+  echo "computed from Container Apps replica/network telemetry against Canada Central Retail Prices API"
+  echo "rates, net of the free compute grant) + a hardcoded \$1.00 phone-number constant. \$${MEASURED_PER_MIN_COST}/min"
+  echo "(Per-minute floor) is whatever was typed at this script's per-minute prompt — free-text keyboard"
+  echo "entry, not read from any per-minute billing meter. \$${R08_RUNS} (Demo runs/month) is arithmetic"
+  echo "performed on those two inputs. This run's Cost Management dollar-total queries feed none of the"
+  echo "figures above."
+  echo ""
   echo "If the free-tier promotion section above (or added by 03-cost-check-24h.sh) flagged any of these"
-  echo "meters as free-tier-covered, treat the \"Measured\" column with that caveat — see that section's"
+  echo "meters as free-tier-covered, treat the \"Modeled\" column with that caveat — see that section's"
   echo "fallback (measured quantity × PLAN.md's list rate) before trusting these dollar figures."
   echo ""
   echo "### Transport RTT baseline"
@@ -372,8 +381,10 @@ fi
   echo ""
   echo "### Full detail"
   echo ""
-  echo "docs/phase0/findings.md has every raw query result this wizard captured (R-01, R-02, R-03, R-04,"
-  echo "R-05, R-06, R-08) with timestamps."
+  echo "docs/phase0/findings.md has the raw query results this wizard persists, with timestamps (R-01"
+  echo "through R-06, R-08). Two are not persisted: Stage 2's full Cost Management roundup"
+  echo "(FULL_COST_JSON) is terminal output only, and Stage 1's raw Replicas/RxBytes/TxBytes metrics"
+  echo "survive as derived counts, not raw results."
   echo ""
 } >> "$COSTS_FILE"
 ok "wrote $COSTS_FILE"
@@ -520,6 +531,15 @@ else
   fi
 fi
 
+# ── Known, unfixed defects in this script (documentation only — not fixed here) ──────────────
+# 1. The "TEARDOWN INCOMPLETE" banner immediately below can be a false negative: a slow Container
+#    Apps environment delete can time out this check without the delete having actually failed.
+#    Confirmed false-negative 2026-08-24 — Container App, Event Grid subscription, and CAE all
+#    independently verified deleted despite this banner firing that run. Not yet fixed.
+# 2. Stage 2's FULL_COST_JSON (`:267`, the full Cost Management meter roundup, PROVISION_TIME→now)
+#    is queried then discarded — printed to the terminal only (`:273`), never persisted to
+#    FINDINGS_FILE or COSTS_FILE. Fix: persist it to FINDINGS_FILE the same way Stage 1 persists
+#    IDLE_COST_JSON (`:226-254`).
 if [[ "$TEARDOWN_OK" != "1" ]]; then
   _clear
   printf '\n%s%s  ⚠ TEARDOWN INCOMPLETE — some compute may still be running and billing.%s\n\n' "$BOLD" "$RED" "$RESET"

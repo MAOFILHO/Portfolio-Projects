@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "azbank-voice-agent"
+version = "0.2.0"
+description = "Banking voice agent — ACS telephony bridged to an Azure OpenAI realtime deployment"
+requires-python = ">=3.12"
+
+# Consolidated from the two requirements.txt files this project carried through Phase 1
+# (voice-agent/ and docs/echo-app/), per issue #17. Same pins, one place. The container build
+# still records the fully resolved graph -- transitive included -- via pip freeze at image build
+# time; these top-level pins are not that record and never were.
+dependencies = [
+    "fastapi==0.115.14",
+    "uvicorn[standard]==0.32.1",
+    "openai==3.6.0",
+    "azure-communication-callautomation==1.4.0",
+    # B3's boot guard reads the live deployment's model version from ARM (issue #21). httpx is
+    # already present transitively via openai; declared explicitly because this package imports it
+    # directly rather than relying on someone else's dependency.
+    "azure-identity==1.19.0",
+    # The call-record store (issue #48): the day's consumed minutes and the escalation records, in
+    # Azure Table Storage, reached with the Container App's managed identity. Declared because this
+    # package imports it directly -- and imported lazily inside the one constructor that needs it,
+    # so importing the package anywhere it is not installed still works.
+    "azure-data-tables==12.7.0",
+    # Required by azure-data-tables' async client, not merely by convention: TableServiceClient's
+    # async pipeline builds an AioHttpTransport at *construction* time regardless of credential
+    # type, and imports aiohttp to do it -- a plain ModuleNotFoundError, not a lazy or optional
+    # path. Found live 2026-09-12 on the first Phase 5 redeploy: the container crash-looped on
+    # every boot, `TableStorageCallRecordStore.from_account_url` raising this import inside
+    # `lifespan()`, before the app ever served a request. Single-revision mode kept the prior
+    # revision serving throughout, so no call was ever dropped by it.
+    "aiohttp==3.14.3",
+    "httpx>=0.27",
+    # Phase 6 (issue #61): the OTel seam -- one TracerProvider/MeterProvider boundary, wired once at
+    # boot (observability/telemetry.py). api+sdk pinned to the exact versions
+    # azure-monitor-opentelemetry-exporter below requires (`~=1.44.0` on both, verified against its
+    # published metadata 2026-09-13) rather than to whatever the contrib packages would tolerate on
+    # their own -- one mutually-compatible set, not the loosest one.
+    "opentelemetry-api==1.44.0",
+    "opentelemetry-sdk==1.44.0",
+    # FastAPI/httpx instrumentation, cleared to enable by docs/phase6/research-content-capture.md
+    # (2026-09-13): neither captures a request or response body by default or via any opt-in flag
+    # at this pinned release. Instrumentation packages release in lockstep from one monorepo
+    # (open-telemetry/opentelemetry-python-contrib); `0.65b0` is that research note's verified pin.
+    "opentelemetry-instrumentation-fastapi==0.65b0",
+    "opentelemetry-instrumentation-httpx==0.65b0",
+    # D10's real exporter, for the identity-vs-connection-string seam observability/telemetry.py
+    # builds. Declared because that module imports it directly -- and, like azure-data-tables above,
+    # imported lazily inside the one function that needs it (`span_exporter_from_env`), so importing
+    # this package anywhere it is not installed still works. **Never constructed anywhere in this
+    # ticket's own tests or boot path**: the environment variables that function reads are not set
+    # by anything this project deploys yet -- provisioning Application Insights and setting them is
+    # issue #62's job, filed and blocked on this one.
+    "azure-monitor-opentelemetry-exporter==1.0.0b57",
+]
+
+[project.optional-dependencies]
+# `make lint` only. Kept out of the runtime dependencies so nothing here ships in the image.
+dev = [
+    "ruff==0.16.6",
+    "mypy==2.3.1",
+]
+
+# `make test` only, and for one thing: the red-team corpus is YAML, one file per attack idea
+# (issue #40), and the loader that expands it into concrete cases has to read them.
+#
+# Declared rather than assumed. PyYAML is already present in a working venv because
+# `uvicorn[standard]` pulls it in, and using it on that basis is exactly the mistake the httpx line
+# in the runtime dependencies above calls out: a package this project imports directly is one this
+# project declares, not one it borrows from somebody else's extra that could stop including it.
+#
+# Its own extra rather than `dev`, because `dev` means lint and this is not that. Nothing here
+# ships in the image either way.
+test = [
+    "pyyaml>=6",
+]
+
+[tool.setuptools.packages.find]
+include = ["azbank_voice_agent*"]
+
+[tool.ruff]
+# 120, not 100: the package source wraps at 100 by hand, but scripts/check_project_root_scope.py
+# (Phase 0, not written to a limit) sits in the 101-110 range throughout. A cap is a cap, not a
+# target -- picking one that reformats a working Phase 0 script would be churn, not lint.
+line-length = 120
+# Both deployables plus the tests and helper scripts, run from the project root.
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Deliberately more than the default: bugbear and blind-except catch real defects rather than
+# style, and E402 is enabled because a test in this project genuinely needs imports after
+# environment setup -- enabling it makes that file's `noqa` markers meaningful rather than dead.
+select = ["E", "F", "I", "UP", "B", "BLE", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+# Deliberately not strict. This codebase is largely untyped by choice (docs/PLAN.md's own layout
+# predates any typing decision), so strict mode would produce hundreds of findings that say
+# nothing about correctness. What is enabled here catches the errors that are real: calls that
+# cannot work, and attributes that do not exist.
+ignore_missing_imports = true
+warn_unreachable = true
+warn_redundant_casts = true
+no_implicit_optional = true
