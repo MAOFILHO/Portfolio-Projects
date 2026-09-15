@@ -16,7 +16,7 @@
 > | The 19 design decisions below | **Given 2026-09-11**, question by question |
 > | Begin Phase 6 | **NOT given** |
 > | `APPROVED: Phase 6` for billable resources | **NOT given** |
-> | **B2 widening** (a named-constraint change) | **NOT given** — see "Constraint changes" below |
+> | **B2 widening** (a named-constraint change) | **Given 2026-09-15**, implemented by issue #65 — see "Constraint changes" below |
 > | Phase 5 sign-off | **NOT given** — Phase 5's exit is not met |
 
 **Written before the work, not reconstructed after it.** No spec issue exists yet; `#43` is Phase 5's
@@ -34,7 +34,7 @@ and this is not a sub-issue of it.
 | **Marco's approval to begin Phase 6** | **Still owed** — `APPROVED: Phase 6` (typed 2026-09-12) covers only the billable-resource gate, not this |
 | **Open item 16 settled** (`/research`) | **NOT settled** — hard blocker on one ticket, see criterion 3 |
 | **Open item 15 settled** (`/research`) | **NOT settled** |
-| **B2 widening signed off** | **NOT given** — a named constraint does not move without it |
+| **B2 widening signed off** | **Given 2026-09-15**, issue #65 |
 | Phases 4 and 5 reviewed (`git log e42c063..HEAD`) | **Still NOT done** — the 2026-09-12 `/code-review` covered only `a7e06d1..HEAD` (17 of the 42 commits since `e42c063`); the other 25 remain unreviewed |
 
 **Four of eight entry conditions are unmet.** This is recorded as a list of blockers, not as a
@@ -226,12 +226,14 @@ constraints.
 
 ---
 
-## Constraint changes — NOT signed off
+## Constraint changes
 
 **A named constraint does not move without Marco's explicit sign-off**, the same way B1's sharpening
-got it before Phase 4 began. Two changes are proposed here and **neither is approved**.
+got it before Phase 4 began. Two changes were proposed here. B2's below was **approved 2026-09-15
+and implemented by issue #65** — `CLAUDE.md`'s B2 row carries this wording now. B5's (D12, below)
+remains **not approved**.
 
-### B2, proposed new wording
+### B2, approved wording (2026-09-15, issue #65)
 
 Current (`CLAUDE.md`): *"the DTMF PIN never appears in any transcript, log line, OTel span attribute,
 or persisted record."*
@@ -252,7 +254,13 @@ Two widenings, both from D3 and D7:
   `gen_ai.event.content` again.
 - **Values, 1 → 2.** The caller's phone number joins the PIN. Both are known literals.
 
-Target does not move: **0 occurrences, artifact scan, L0+L1, blocking CI.**
+Target does not move: **0 occurrences, artifact scan, L0+L1, blocking CI.** Met as of issue #65:
+channel 1 (span attributes) by `tests/test_zz_b2_leak_scan.py`'s existing scan (Phase 6), channel 2
+(span-event attributes) by that same file's new scan, channel 4 (the completion-hook upload path)
+by `tests/test_b2_content_recording.py`'s pre-existing negative assertion (built Phase 4, unchanged
+by issue #65), and channel 3 (the OTel logging pipeline) by that same file's new negative assertion
+(issue #65 — the pre-existing switches there gated *GenAI-instrumentation* content capture, a
+different question from whether a `LoggerProvider` exists at all, which nothing checked before).
 
 ### B2's fourth surface becomes met rather than uncovered
 
@@ -287,7 +295,7 @@ Phase 6 is approved.
 | 5 | Exporter authenticates via the system-assigned identity, or the fallback is recorded with its Phase 7 debt | Deployed config + a delivered span |
 | 6 | One trace per call, root spanning the media socket, children per D5 | The D16 smoke call, read out of `...1D` |
 | 7 | **Attribute keys across all spans are exactly the D15 table** | Blocking CI test, in-memory exporter |
-| 8 | **B2: 0 occurrences of the PIN or the phone number across all four channels** | Blocking CI test + artifact scan |
+| 8 | **B2: 0 occurrences of the PIN or the phone number across all four channels** | Blocking CI test + artifact scan — **met, issue #65** |
 | 9 | The relay runs correctly with the exporter unreachable | Blocking CI test |
 | 10 | No named constraint is enforced by telemetry | B1, B2, B4 suites pass with telemetry absent |
 | 11 | The closed path is traced and its two causes are distinguished | Blocking CI test |

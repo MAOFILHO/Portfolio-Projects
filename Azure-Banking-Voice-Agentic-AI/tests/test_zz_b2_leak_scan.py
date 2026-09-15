@@ -1,8 +1,11 @@
-"""B2 — the PIN appears in no log record produced anywhere in this run (issue #39).
+"""B2 — the PIN, and the caller's phone number, appear in no log record produced anywhere in this
+run (issue #39, widened by issue #65).
 
-B2 (CLAUDE.md): the DTMF PIN never appears in any transcript, log line, OTel span attribute, or
-persisted record. **Target: 0 occurrences, blocking.** For two phases this project enforced that
-discipline defensively with nothing sensitive to protect. This is the phase it was written for.
+B2 (CLAUDE.md, wording widened 2026-09-15): neither the DTMF PIN nor the caller's phone number
+appears in any transcript, log line, persisted record, or OpenTelemetry content channel -- span
+attribute, span-event attribute, log record, or completion-hook upload. **Target: 0 occurrences,
+blocking.** For two phases this project enforced that discipline defensively with nothing sensitive
+to protect. This is the phase it was written for.
 
 ---
 
@@ -139,6 +142,23 @@ def offending_span_attributes(spans, secrets=(*SECRETS, FAKE_CALLER_PHONE_NUMBER
         (span.name, key, rendered)
         for span in spans
         for key, value in span.attributes.items()
+        for rendered in [str(value)]
+        for secret in secrets
+        if secret in rendered
+    ]
+
+
+def offending_span_event_attributes(spans, secrets=(*SECRETS, FAKE_CALLER_PHONE_NUMBER)):
+    """Every span-event attribute value carrying a secret, whole. B2's widened wording's second
+    OpenTelemetry channel (issue #65) -- content recorded on a span *event* rather than the span
+    itself. `AllowlistSpanProcessor` does not reach this: D9's filter drops span attribute keys
+    only (its own docstring), and `offending_span_attributes` above does not see it either, because
+    `ReadableSpan.attributes` and `ReadableSpan.events[*].attributes` are two different mappings."""
+    return [
+        (span.name, event.name, key, rendered)
+        for span in spans
+        for event in span.events
+        for key, value in event.attributes.items()
         for rendered in [str(value)]
         for secret in secrets
         if secret in rendered
@@ -334,13 +354,14 @@ def _carries(value, secrets):
 class NoPinReachedAPersistedRecordAnywhereInThisRun(unittest.TestCase):
     """B2's fourth surface, over the records this phase introduced (issue #53).
 
-    B2 names four surfaces: transcripts, log lines, OTel span attributes, and persisted records.
-    Three are covered.
-
-    **Span attributes are not, and that is reported rather than quietly counted.** Nothing in this
-    project emits a span -- the observability path is Phase 6 -- so there is no surface to scan and
-    no honest way to call the constraint fully met. B2 is reported as covering three of its four
-    named surfaces, and the fourth is stated as unmet every time the result is quoted.
+    B2's original wording named four surfaces: transcripts, log lines, OTel span attributes, and
+    persisted records. All four are covered as of this file: transcripts and log lines by the
+    run-wide log capture above, persisted records by this class, and span attributes below. The
+    2026-09-15 widening (issue #65) added two values (the PIN, now also the caller's phone number)
+    and split "OTel span attribute" into four OpenTelemetry channels -- span attribute and
+    span-event attribute (both scanned below), plus the log pipeline and completion-hook upload,
+    covered by `tests/test_b2_content_recording.py` (the upload hook pre-existing since Phase 4;
+    the logging-pipeline check added alongside this file's own changes for issue #65).
     """
 
     def test_the_suite_really_wrote_some_records_to_scan(self):
@@ -423,3 +444,40 @@ class NoPinReachedAPersistedRecordAnywhereInThisRun(unittest.TestCase):
                     span.set_attribute("correlation_id", planted)
                 provider.force_flush()
                 self.assertTrue(offending_span_attributes(exporter.get_finished_spans()))
+
+    def test_no_span_event_carries_a_pin_or_phone_number(self):
+        """B2's widened second OpenTelemetry channel (issue #65), read from the same real call
+        `test_span_attributes_are_now_scanned_rather_than_reported_uncovered` above already
+        exercises. This project's own code creates no span events today -- confirmed against
+        `observability/telemetry.py` and every span-creation call site in `realtime/`/`dispatch/` --
+        so this passes vacuously; the next test is what proves the scanner would catch one if that
+        ever changes, following `TheDetectorItselfWorks`'s own pattern for why that pairing matters.
+        """
+        transport = FakeTransport(
+            frames=[*(dtmf_frame(digit) for digit in DEFAULT_PIN), audio_frame("balance-please")],
+            hang=True,
+        )
+        realtime = FakeRealtimeServer(
+            events=[function_call("get_balance", '{"account": "chequing"}'), response_done()],
+            respond_after_appends=1,
+        )
+        spans = run_traced_call(
+            run_call(transport, realtime, FakeCoreBankingClient(), FakeCallRecordStore())
+        )
+        self.assertTrue(spans, "the call produced no spans at all -- nothing was actually exercised")
+        self.assertEqual(offending_span_event_attributes(spans), [])
+
+    def test_the_span_event_scan_would_catch_a_planted_pin_or_phone_number(self):
+        """The deliberate leak, following `TheDetectorItselfWorks` above -- now for span events.
+        Built directly on a span rather than through a call, exactly as the persisted-record and
+        span-attribute rehearsals above are: no call path can produce either planted value
+        (verify_pin/D8), so this is what proves the scanner is genuinely checking rather than
+        vacuously passing."""
+        for planted in (f"leaked-{DEFAULT_PIN}", FAKE_CALLER_PHONE_NUMBER):
+            with self.subTest(planted=planted):
+                exporter = InMemorySpanExporter()
+                provider = telemetry.build_tracer_provider(exporter)
+                with provider.get_tracer("test").start_as_current_span(telemetry.CALL) as span:
+                    span.add_event("planted-event", {"detail": planted})
+                provider.force_flush()
+                self.assertTrue(offending_span_event_attributes(exporter.get_finished_spans()))

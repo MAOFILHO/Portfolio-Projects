@@ -28,6 +28,7 @@ shipped a fix for emitting transcripts and function-call arguments *unconditiona
 very opt-in (§3e). The failure mode is real and has already happened once in shipped Azure code.
 """
 import pathlib
+import tempfile
 import unittest
 
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
@@ -78,6 +79,23 @@ CONTENT_RECORDING_IDENTIFIERS = (
     "enable_content",
 )
 
+#: B2's widened third channel (issue #65): a log record on OpenTelemetry's own **logging** signal,
+#: which is a different pipeline from the two above. The switches above gate *GenAI instrumentation*
+#: emitting content onto whichever signal it's configured for (span, span event, or log record --
+#: `OTEL_SEMCONV_STABILITY_OPT_IN`'s `span_only`/`event_only`/`span_and_event` modes, `docs/phase4/
+#: research-carried-findings.md` §3d); this is the separate, structural question of whether an OTel
+#: `LoggerProvider` exists in this project *at all*. `observability/telemetry.py` wires a
+#: `TracerProvider` and a `MeterProvider` and nothing else -- no `opentelemetry.sdk._logs` import,
+#: no `LoggerProvider`, no `LoggingHandler` anywhere in the tree (confirmed by this scan). Matched
+#: case-insensitively for the same reason `CONTENT_RECORDING_IDENTIFIERS` is: catch the concept,
+#: not one spelling of it.
+LOGGING_PIPELINE_IDENTIFIERS = (
+    "loggerprovider",
+    "logginghandler",
+    "opentelemetry.sdk._logs",
+    "opentelemetry._logs",
+)
+
 PROJECT = pathlib.Path(__file__).resolve().parent.parent
 
 #: Where this project says what runs and with what environment. Deliberately **not** `docs/` or
@@ -110,7 +128,8 @@ def _configuring_files():
 
 
 class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
-    """Neither switch is set by anything that defines what this project deploys."""
+    """Neither content-capture switch, the upload hook, nor an OTel logging pipeline is set by
+    anything that defines what this project deploys (the third widened by issue #65)."""
 
     def test_the_files_this_reads_actually_exist(self):
         # A scan over an empty file list passes every assertion below and proves nothing -- the
@@ -121,7 +140,7 @@ class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
         self.assertIn("Dockerfile", names, "the container definitions were not scanned")
         self.assertIn("session.py", names, "the relay was not scanned")
 
-    def _switches_found(self, switches):
+    def _switches_found(self, switches, files=None, casefold=False):
         """Where any of `switches` appears, as (path, switch) pairs.
 
         **Membership is tested here rather than with `assertNotIn`** so that a failure names the
@@ -129,12 +148,19 @@ class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
         for a file scan means printing the whole file into the test output -- in a suite whose
         entire purpose is to keep specific strings out of specific places, a detector that dumps
         source on failure is the wrong shape of detector.
+
+        **`files`, overridable** (issue #65) -- defaults to the real `_configuring_files()` scan,
+        the same optional-override-for-testability shape `tests/test_zz_b2_leak_scan.py`'s
+        `offending_records`/`offending_span_attributes` already use, so the rehearsal below can
+        point this at a planted file instead of reimplementing the match logic to test it.
         """
         return [
-            (str(path.relative_to(PROJECT)), switch)
-            for path in _configuring_files()
+            (str(path.relative_to(PROJECT)) if path.is_relative_to(PROJECT) else str(path), switch)
+            for path in (_configuring_files() if files is None else files)
             for switch in switches
-            if switch in path.read_text(errors="replace")
+            for body in [path.read_text(errors="replace")]
+            for haystack in [body.casefold() if casefold else body]
+            if switch in haystack
         ]
 
     def test_no_content_recording_switch_is_set(self):
@@ -158,6 +184,27 @@ class NoContentRecordingIsConfiguredAnywhere(unittest.TestCase):
                 + "; ".join(f"{switch} in {path}" for path, switch in found)
             )
 
+    def test_no_otel_logging_pipeline_is_wired_anywhere(self):
+        """B2's widened third channel (issue #65) -- see `LOGGING_PIPELINE_IDENTIFIERS`'s own
+        docstring for why this is a different question from the two switches above."""
+        found = self._switches_found(LOGGING_PIPELINE_IDENTIFIERS, casefold=True)
+        if found:
+            self.fail(
+                "an OpenTelemetry logging pipeline may be configured, which is a third B2 channel "
+                "nothing here scans the content of: "
+                + "; ".join(f"{identifier} in {path}" for path, identifier in found)
+            )
+
+    def test_the_switch_scan_would_catch_a_planted_one(self):
+        """Follows `tests/test_zz_b2_leak_scan.py::TheDetectorItselfWorks`'s own pattern (issue
+        #65): a scanner that quietly stopped matching anything would pass every check above
+        forever. Proves `_switches_found` -- the one mechanism the three checks above all share --
+        actually finds a planted marker in a real file, not just an empty scan."""
+        with tempfile.TemporaryDirectory() as directory:
+            planted = pathlib.Path(directory) / "planted.py"
+            planted.write_text("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'true'\n")
+            found = self._switches_found(CONTENT_RECORDING_SWITCHES, files=[planted])
+        self.assertTrue(found, "the scan's own matching logic did not catch a planted switch")
 
     def test_no_code_enables_content_recording_programmatically(self):
         """The clause the environment rules above cannot reach.
