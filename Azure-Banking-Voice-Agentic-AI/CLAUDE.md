@@ -1,27 +1,20 @@
 # CLAUDE.md — Azure-Banking-Voice-Agentic-AI
 
-**Canonical project path**: as of 2026-08-20, active work happens in the git worktree at
-`/Users/marco/K21/Real-world-worktrees/azure-banking/Azure-Banking-Voice-Agentic-AI`, branch
-`azure-banking-work`, inside the `Portfolio-Projects` monorepo
-(`git@github.com:MAOFILHO/Portfolio-Projects.git`). The original checkout at
-`/Users/marco/K21/Real-world/Azure-Banking-Voice-Agentic-AI` (branch `azure-banking-voice-agentic-ai`)
-still exists and shares this repo's history, but is not where sessions should work — the worktree
-split (`docs/handoffs/2026-08-20-phase0-stage10-done-stage11-pending-review.md`, addendum) moved work
-here mid-Phase-0. Recorded here because a session started from an unrelated directory has no other way
-to find it — added 2026-08-20 after exactly that happened, corrected same day after the worktree
-switch.
-
-**A session working correctly in the path above never writes into the old checkout either**, even to
-fix something discovered here (e.g., syncing this file's own content there) — that write is outside
-this worktree, on a different branch, and needs Marco's explicit approval by that exact absolute path
-before it happens, not an assumption that "same project" implies in scope. Ask; don't reach over.
+**Canonical project path**: as of 2026-09-15, active work happens at
+`/Users/marco/K21/Real-world/Azure-Banking-Voice-Agentic-AI`, branch `main`, inside the
+`Portfolio-Projects` monorepo (`git@github.com:MAOFILHO/Portfolio-Projects.git`). The worktree split
+recorded below (2026-08-20 through 2026-09-14) is over: the `azure-banking-work` branch's work was
+merged to `main` (PRs #63, #64) and the worktree at
+`/Users/marco/K21/Real-world-worktrees/azure-banking` was removed on 2026-09-15. There is one
+checkout again. Work happens directly on `main` — no feature branch, no PR — a deliberate choice for
+a solo portfolio project at this stage.
 
 **A session that finds itself anywhere other than the path above stops and switches — it does not
-work there.** Don't trust this file's own text to have kept up (it's gone stale once already): run
+work there.** Don't trust this file's own text to have kept up (it's gone stale twice already): run
 `git branch --show-current` and `git worktree list` at session start. If the current branch isn't
-`azure-banking-work`, or the working directory isn't the worktree path above, stop before making any
-change — including a change to this file — and tell Marco where the session actually landed rather
-than silently continuing or silently relocating.
+`main`, or the working directory isn't the path above, stop before making any change — including a
+change to this file — and tell Marco where the session actually landed rather than silently
+continuing or silently relocating.
 
 ### STOP CONDITIONS — absolute, no exceptions
 
