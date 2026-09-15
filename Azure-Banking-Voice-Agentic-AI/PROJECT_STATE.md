@@ -12,9 +12,9 @@ account of what happened:
 | 3 | `docs/phase3/archive.md` (exit criteria: `docs/phase3/exit-criteria.md`) |
 | 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
 | 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
+| 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 
-Phase 6 is in progress (`docs/phase6/exit-criteria.md`, 19 decisions settled 2026-09-11) — issue #61's
-code is committed, #62's provisioning is prepared but not applied — see "Current phase" below.
+**No phase currently open.** Phase 7 not yet scoped — see "Current phase" below.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -27,9 +27,8 @@ live bearing on the current moment:
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
 2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
-   (used) and `APPROVED: Phase 6` (typed 2026-09-12) are both on record. Phase 6's gate covers issue
-   #62's Application Insights, prepared (`infra/provision-app-insights.sh`) but **not yet run** — that
-   script still needs your own look before it applies, per the next rule down.
+   and `APPROVED: Phase 6` are both on record and both spent — issue #62's Application Insights ran
+   (2026-09-14) and is live. No approval is currently pending; Phase 7 has not been scoped.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -37,41 +36,11 @@ live bearing on the current moment:
    every live call in Phase 5, including the ones that failed to complete their script — 0 breaches.
 5. **This file is updated before any session ends**, and never exceeds the ceiling above.
 
-## Current phase — Phase 6 (Observability), started 2026-09-12
+## Current phase
 
-**Phase 5 closed 2026-09-12.** Exit met; two criteria met with a stated limit (B5 frozen on the
-real-call pool only; the acceptance call's evidence is scattered across the day rather than one
-continuous call, Marco's explicit choice). Full account: `docs/phase5/exit-check.md`.
-
-**Phase 6's design is done** (`docs/phase6/exit-criteria.md`) but its entry conditions are only
-partly met. From that file's own table, re-checked 2026-09-12:
-
-| condition | state |
-|---|---|
-| Phase 5's exit criteria written | ✅ Satisfied |
-| Phase 5's exit criteria met | ✅ **Now satisfied** — closed today, see above |
-| Marco's sign-off on Phase 5 | ✅ **Given 2026-09-12** |
-| Marco's approval to begin Phase 6 | ✅ **Given 2026-09-12** — explicit choice to start now, research items 15/16 in parallel |
-| Open item 16 settled (`/research`) | ✅ **Settled 2026-09-13** — no default/opt-in body capture in any of the three instrumentations; D8's blocker lifted |
-| Open item 15 settled (`/research`) | ✅ **Settled as "undocumented" 2026-09-13** — resolves via criterion 4's own fallback (`RequestResponse` stays disabled) |
-| B2 widening signed off | ✅ **Given 2026-09-15** — issue #65, code landed `2458da3` |
-| Phases 4+5 reviewed (`git log e42c063..HEAD`) | ✅ **Done 2026-09-15** — `/code-review e42c063` covered all 58 commits (95 files, spanning the pre-move-to-subdirectory history); one drift found and fixed (`CLAUDE.md`'s B1 row had gone stale), no B1/B2 code-level violations |
-
-**All eight conditions are now met.** Phase 6's entry is fully clear.
-
-**Phase 6 specced and split into two tickets** (`/to-spec`, 2026-09-12/13):
-- **#61** — the code: spans, metrics, D15 allowlist, fail-open exporter, ADR, and (as of the
-  2026-09-13 research) FastAPI/httpx instrumentation. Ships and passes CI against an in-memory
-  exporter only; touches no live Azure resource.
-- **#62** — provisioning Application Insights and wiring the real exporter, blocked by #61 (Marco's
-  call, 2026-09-13: keep provisioning separate, land after the code).
-Both carry `ready-for-agent`. `RequestResponse` and the widened B2 wording stay off by decision, not
-by open blocker — see the entry-conditions table above.
-
-### Needs Marco
-
-*(closed 2026-09-15: both items below are resolved — B2 widening signed off and implemented
-(issue #65), and the full commit range reviewed. Nothing currently needs Marco to unblock entry.)*
+**No phase currently open.** Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria
+met, none with a stated limit. Full account: `docs/phase6/exit-check.md`. Phase 5 closed 2026-09-12
+with two criteria met at a stated limit (`docs/phase5/exit-check.md`). Phase 7 has not been scoped.
 
 ## Live Azure state
 
@@ -185,7 +154,8 @@ $14.60/mo, 45–67 demo runs/month against a gate of 5 (`COSTS.md`). No input is
 **R-08 recomputed again for Phase 6, 2026-09-13** (`COSTS.md`) — Application Insights shares the
 container logs' free grant rather than adding one; worst-case bound **$0.00/mo added**, fixed total
 unchanged at $14.60/mo. Priced before provisioning, per `docs/phase6/exit-criteria.md` D4; the
-resource itself does not exist yet.
+resource is now live (created 2026-09-14, see "Live Azure state" above), and no cost delta has
+been observed to contradict the pre-provisioning estimate.
 
 ## Next actions (in order)
 
