@@ -105,17 +105,13 @@ and goes stale between sessions.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
 - **`ca-azbank-echo-p0` is now running issue #61's code**, image `docker.io/maofilho/azbank-echo-p0:
-  p6a`, revision `--p6a20260914114410`, Active/Healthy/100% traffic. **The first D16 smoke call
-  (2026-09-14, correlation id `393815d8`) ran against the OLD image (`p5i`, pre-#61) and produced no
-  spans** — not an ingestion-delay issue as first assumed, corrected the same session: `#62`'s
-  provisioning script wired env vars onto the existing Container App but never rebuilt the image, so
-  the deployed code had no telemetry in it at all. Image rebuilt (`docker buildx build --platform
-  linux/amd64 --provenance=false --sbom=false`, verified `linux/amd64` structurally) and redeployed;
-  new revision confirmed Healthy, no boot-time telemetry exception logged. Carries
+  p6a`, revision `--p6a20260914114410`, Active/Healthy/100% traffic. Carries
   `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the
-  named fallback, not identity — D10's IAM role is still an open `/research` question). **The smoke
-  call must be redone against this revision** — delivery is still unconfirmed; nothing before this
-  point queried a row.
+  named fallback, not identity — D10's IAM role is still an open `/research` question).
+- **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
+  correlation id `aa509ec4`). 17 spans landed in `...1D`, `call` span attributes match D15 exactly, B2
+  scan zero matches, both cost/latency metrics landed. The first attempt (2026-09-14, `393815d8`) had
+  hit the pre-#61 image and produced no spans; not repeated.
 
 ## Open items
 
@@ -200,9 +196,8 @@ resource itself does not exist yet.
 2. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
 3. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
    B1's restatement necessary, plus Phase 5's `escalate_to_human`-while-anonymous corollary.
-4. **Issue #62**: Application Insights is live and wired (2026-09-14) — make the D16 smoke call
-   (`docs/phase6/smoke-call-runbook.md`) and query `...1D` for its rows to confirm delivery, the one
-   step left before the ticket's criteria are actually met rather than just deployed.
+4. *(closed 2026-09-15: D16 smoke call redone, delivery confirmed — `docs/phase6/d16-smoke-call-
+   result.md`. Issue #62's criteria are now met by live evidence.)*
 5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
    identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
    connection-string fallback instead (Phase 7 debt).
