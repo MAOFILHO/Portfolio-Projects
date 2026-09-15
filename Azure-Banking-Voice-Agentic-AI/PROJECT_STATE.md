@@ -54,11 +54,10 @@ partly met. From that file's own table, re-checked 2026-09-12:
 | Marco's approval to begin Phase 6 | ✅ **Given 2026-09-12** — explicit choice to start now, research items 15/16 in parallel |
 | Open item 16 settled (`/research`) | ✅ **Settled 2026-09-13** — no default/opt-in body capture in any of the three instrumentations; D8's blocker lifted |
 | Open item 15 settled (`/research`) | ✅ **Settled as "undocumented" 2026-09-13** — resolves via criterion 4's own fallback (`RequestResponse` stays disabled) |
-| B2 widening signed off | **NOT given** |
-| Phases 4+5 reviewed (`git log e42c063..HEAD`) | **Still NOT done** — today's `/code-review` covered only `a7e06d1..HEAD` (17 of the 42 commits since `e42c063`); the other 25 remain unreviewed |
+| B2 widening signed off | ✅ **Given 2026-09-15** — issue #65, code landed `2458da3` |
+| Phases 4+5 reviewed (`git log e42c063..HEAD`) | ✅ **Done 2026-09-15** — `/code-review e42c063` covered all 58 commits (95 files, spanning the pre-move-to-subdirectory history); one drift found and fixed (`CLAUDE.md`'s B1 row had gone stale), no B1/B2 code-level violations |
 
-**Six of eight conditions are now met.** Only the B2 widening sign-off and the 25-commit review
-remain, and neither blocks the code already in flight below.
+**All eight conditions are now met.** Phase 6's entry is fully clear.
 
 **Phase 6 specced and split into two tickets** (`/to-spec`, 2026-09-12/13):
 - **#61** — the code: spans, metrics, D15 allowlist, fail-open exporter, ADR, and (as of the
@@ -71,10 +70,8 @@ by open blocker — see the entry-conditions table above.
 
 ### Needs Marco
 
-1. **The B2 widening** (`docs/phase6/exit-criteria.md`, "B2, proposed new wording") needs sign-off
-   before Phase 6 can touch it — a named constraint does not move without one.
-2. **`git log e42c063..HEAD` (25 commits) is still owed a human read** — waived once already at
-   Phase 5 entry, not resolved by today's narrower review.
+*(closed 2026-09-15: both items below are resolved — B2 widening signed off and implemented
+(issue #65), and the full commit range reviewed. Nothing currently needs Marco to unblock entry.)*
 
 ## Live Azure state
 
@@ -192,15 +189,16 @@ resource itself does not exist yet.
 
 ## Next actions (in order)
 
-1. **B2 widening sign-off**, then the code changes it authorizes.
-2. **`git log e42c063..HEAD`, human-reviewed** (25 commits, still owed).
-3. **One ADR still offered and not written** (`docs/adr/`): the shared core-banking client that made
-   B1's restatement necessary, plus Phase 5's `escalate_to_human`-while-anonymous corollary.
+1. *(closed 2026-09-15: B2 widening signed off and implemented — issue #65, `2458da3`. CLAUDE.md's
+   B2 row and `docs/phase6/exit-criteria.md` both carry the approved wording and met status.)*
+2. *(closed 2026-09-15: `git log e42c063..HEAD` human-reviewed in full — 58 commits, `/code-review`.)*
+3. *(closed 2026-09-15: `ADR-005-shared-core-banking-client-and-anonymous-reach.md` written — the
+   shared client (issue #35) and the `escalate_to_human`-while-anonymous corollary of B1.)*
 4. *(closed 2026-09-15: D16 smoke call redone, delivery confirmed — `docs/phase6/d16-smoke-call-
    result.md`. Issue #62's criteria are now met by live evidence.)*
 5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
    identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
-   connection-string fallback instead (Phase 7 debt).
+   connection-string fallback instead (Phase 7 debt). **The one open next action.**
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
