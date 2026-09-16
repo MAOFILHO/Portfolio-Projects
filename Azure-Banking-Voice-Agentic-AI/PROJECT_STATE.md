@@ -14,7 +14,7 @@ account of what happened:
 | 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 
-**No phase currently open.** Phase 7 not yet scoped — see "Current phase" below.
+**Phase 7 is open** — see "Current phase" below.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -28,7 +28,10 @@ live bearing on the current moment:
    reason (R-09). Irreplaceable, not merely billable.
 2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
    and `APPROVED: Phase 6` are both on record and both spent — issue #62's Application Insights ran
-   (2026-09-14) and is live. No approval is currently pending; Phase 7 has not been scoped.
+   (2026-09-14) and is live. `APPROVED: Phase 7` is on record (2026-09-16, typed twice) but **not yet
+   spent** — every Phase 7 Bicep module written so far (`acs.bicep`, `aoai.bicep`,
+   `container-apps-env.bicep`, `voice-agent.bicep`) is WRITTEN, NOT APPLIED; no new resource has
+   actually been provisioned under this phase.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -38,9 +41,22 @@ live bearing on the current moment:
 
 ## Current phase
 
-**No phase currently open.** Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria
-met, none with a stated limit. Full account: `docs/phase6/exit-check.md`. Phase 5 closed 2026-09-12
-with two criteria met at a stated limit (`docs/phase5/exit-check.md`). Phase 7 has not been scoped.
+**Phase 7 (IaC completion & CI/CD) is open** — design doc approved and `APPROVED: Phase 7` given,
+both 2026-09-16 (`docs/phase7/exit-criteria.md`). Goal: every Azure resource this project owns gets a
+Bicep module, a CLI can stand the system up or tear it down to zero billable spend, and 3 GitHub
+Actions workflows (`ci`/`deploy`/`teardown`) run on OIDC with no long-lived Azure secret.
+
+Done so far: `infra/modules/acs.bicep`, `aoai.bicep`, `container-apps-env.bicep`, `voice-agent.bicep`
+— all 6 live Azure resources this project owns now have a Bicep module (the phone number needs none,
+verified — ACS manages it exclusively via data-plane REST, outside ARM). All WRITTEN, NOT APPLIED.
+D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails are real, blocking CI
+checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
+
+Not done: the deploy/teardown CLI, the `deploy`/`teardown` GitHub Actions workflows (this phase's 2
+main deliverables), and D2's actual app-code migration off `AOAI_KEY`. See "Next actions" below.
+
+Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
+Full account: `docs/phase6/exit-check.md`.
 
 ## Live Azure state
 
@@ -168,7 +184,20 @@ been observed to contradict the pre-provisioning estimate.
    result.md`. Issue #62's criteria are now met by live evidence.)*
 5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
    identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
-   connection-string fallback instead (Phase 7 debt). **The one open next action.**
+   connection-string fallback instead (Phase 7 debt).
+6. *(closed 2026-09-16: `infra/modules/container-apps-env.bicep` and `infra/modules/voice-agent.bicep`
+   written — `9eb300f`, `2d839e3`. All 6 live Azure resources this project owns now have a Bicep
+   module.)*
+7. **Phase 7's deploy/teardown CLI.** Not yet designed — no command shape settled. This and the
+   workflows below are the phase's 2 main deliverables.
+8. **Phase 7's `deploy`/`teardown` GitHub Actions workflows.** `workflow_dispatch` only (D3); OIDC
+   is already wired (D4, done 2026-09-16), so no new portal setup is needed. Depends on #7.
+9. **D2's app-code migration off `AOAI_KEY`.** The Bicep-side guard rail exists
+   (`check_aoai_key_migration_consistency.py`); the relay still reads `AOAI_KEY` live
+   (`voice-agent/azbank_voice_agent/realtime/client.py`). Needs the AOAI realtime API's exact
+   data-plane RBAC role — check via `/research` if not already known — then the code change, then a
+   live call proving the new auth path, before `disableLocalAuth: true` can ever be checked in.
+   **The next open action.**
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
