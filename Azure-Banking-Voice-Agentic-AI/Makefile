@@ -63,12 +63,23 @@ test: install
 #
 # check_no_phone_number_release.py is Phase 7 D5: no Bicep module or deploy tooling may create,
 # delete, or replace the ACS phone number, or use Complete-mode deployment, anywhere in the tree.
+#
+# Bicep compile check: `az bicep build` on every module, output discarded -- this only proves each
+# file is syntactically valid ARM JSON, same as az bicep build's own scope. It does not prove a
+# module deploys cleanly against the live resource group; that is what a real `deploy` run against a
+# throwaway resource group is for, not this target. GitHub-hosted runners ship `az` with Bicep
+# auto-installed on first use, same as this machine (2026-09-16: no standalone `bicep` binary, but
+# `az bicep build` worked immediately).
 lint: install
 	@$(VENV)/pip install -q -e "voice-agent[dev]"
 	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent mock-core-banking tests scripts
 	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking
 	@$(VENV)/python scripts/check_b3_allowlist.py
 	@$(VENV)/python scripts/check_no_phone_number_release.py
+	@for f in infra/modules/*.bicep; do \
+	  echo "bicep build: $$f"; \
+	  az bicep build --file "$$f" --stdout > /dev/null || exit 1; \
+	done
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to

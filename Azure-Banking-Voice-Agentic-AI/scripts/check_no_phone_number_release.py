@@ -12,9 +12,13 @@ tree, not memory, and fail closed on anything that looks like the forbidden shap
 Three forbidden shapes, independent of each other:
 
   1. **A Bicep resource block of type `Microsoft.Communication/communicationServices/phoneNumbers`
-     that is not `existing`.** Declaring the number as a *managed* resource -- rather than an
-     `existing` reference read for its value only -- puts it under this template's write path at
-     all, which is the shape this project's Bicep modules must never take for this one resource type.
+     that is not `existing`.** Verified live 2026-09-16 (`az provider show --namespace
+     Microsoft.Communication`, `infra/modules/acs.bicep`'s own header): this resource type is not
+     actually registered by the provider at all, so this pattern can never match anything real --
+     the phone number is managed exclusively through ACS's data-plane REST API, outside ARM/Bicep
+     entirely. Kept anyway, the same way B3's static check keeps scanning for model names it has
+     never seen: failing closed on a shape that currently cannot occur costs nothing and catches the
+     day a future API version changes that.
   2. **`az communication phonenumbers` (or `az resource delete` naming that resource type) with a
      purchase/release/cancel/delete verb**, anywhere in a shell script or deploy CLI source file.
   3. **`--mode Complete`, or `DeploymentMode.COMPLETE`/`"Complete"` passed as a deployment mode**,

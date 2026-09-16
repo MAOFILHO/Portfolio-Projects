@@ -47,7 +47,7 @@ token GitHub and Azure exchange directly, replacing a stored password).
 | Call-records table storage | `infra/modules/call-records-store.bicep` | none |
 | Mock core-banking Container App | `infra/modules/mock-core-banking.bicep` | none |
 | Azure OpenAI resource | **none** | needs a module |
-| ACS resource + the phone number | **none** | needs a module — **must reference the existing number, never create or delete one (R-09)** |
+| ACS resource + Event Grid wiring | **`infra/modules/acs.bicep`**, added 2026-09-16 | none. **The phone number itself needs no module and can have none** — verified live (`az provider show --namespace Microsoft.Communication`): ARM registers no `phoneNumbers`/`phoneNumberOrders` resource type for this provider at all. It is managed exclusively via ACS's data-plane REST API, outside Bicep's reach entirely. See the module's own header for the full finding. |
 | Container Apps environment | **none** | needs a module |
 | Voice-agent Container App | **none** | needs a module |
 | `ci` GitHub Actions workflow | **`.github/workflows/azure-banking-voice-agentic-ai-ci.yml`** (monorepo root, correctly `paths`-scoped) | none — corrected 2026-09-16; the earlier "`.github/workflows/` is empty" line above was wrong, checked only this project's own subfolder, not the monorepo root where GitHub Actions actually reads from |

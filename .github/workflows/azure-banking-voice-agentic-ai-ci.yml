@@ -1,10 +1,13 @@
 name: Azure-Banking-Voice-Agentic-AI CI
 
 # Runs on every push/PR touching this project's folder, scoped to main so it never fires on an
-# unrelated sibling project's changes. Zero Azure dependency: make test runs entirely against
-# FakeTransport/FakeRealtimeServer and make lint's checks are all static -- no credentials needed,
-# no spend possible (docs/PLAN.md "Verification": "make test runs L0+L1+L2 with zero Azure
-# dependency ... CI static check enforces B3's allowlist across the tree").
+# unrelated sibling project's changes. No Azure credentials and no spend possible: make test runs
+# entirely against FakeTransport/FakeRealtimeServer, and make lint's checks are all static --
+# including, as of Phase 7, a local `az bicep build` compile of every infra/modules/*.bicep file,
+# which needs no `az login` and touches no live resource (docs/PLAN.md "Verification": "make test
+# runs L0+L1+L2 with zero Azure dependency ... CI static check enforces B3's allowlist across the
+# tree"). GitHub's ubuntu-latest runners ship Azure CLI preinstalled; `az bicep build` auto-installs
+# the Bicep tooling on first use, same as verified locally 2026-09-16.
 on:
   push:
     branches: ["main"]
