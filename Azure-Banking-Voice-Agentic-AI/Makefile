@@ -64,6 +64,10 @@ test: install
 # check_no_phone_number_release.py is Phase 7 D5: no Bicep module or deploy tooling may create,
 # delete, or replace the ACS phone number, or use Complete-mode deployment, anywhere in the tree.
 #
+# check_aoai_key_migration_consistency.py is Phase 7 D2: infra/modules/aoai.bicep may only declare
+# disableLocalAuth: true once AOAI_KEY is gone from the voice agent's source. Added 2026-09-16
+# (code-review finding: D5 got a real blocking check, D2 only had a comment).
+#
 # Bicep compile check: `az bicep build` on every module, output discarded -- this only proves each
 # file is syntactically valid ARM JSON, same as az bicep build's own scope. It does not prove a
 # module deploys cleanly against the live resource group; that is what a real `deploy` run against a
@@ -76,6 +80,7 @@ lint: install
 	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking
 	@$(VENV)/python scripts/check_b3_allowlist.py
 	@$(VENV)/python scripts/check_no_phone_number_release.py
+	@$(VENV)/python scripts/check_aoai_key_migration_consistency.py
 	@for f in infra/modules/*.bicep; do \
 	  echo "bicep build: $$f"; \
 	  az bicep build --file "$$f" --stdout > /dev/null || exit 1; \

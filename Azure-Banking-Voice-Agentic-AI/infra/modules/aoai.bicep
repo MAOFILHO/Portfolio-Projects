@@ -12,8 +12,11 @@
 //     version, sku, capacity, and versionUpgradeOption -- read back from `az cognitiveservices
 //     account show` / `az cognitiveservices account deployment list` on the live resource.
 //   * **`disableLocalAuth` is currently `null`** (effectively "keys allowed") on the live resource.
-//     This module declares it `true` -- see the two-part gate below for why that is not yet safe to
-//     deploy.
+//     This module declares it `false` too, for now -- see the two-part gate below for why `true` is
+//     not yet safe to deploy, and `scripts/check_aoai_key_migration_consistency.py` for the real,
+//     blocking check that makes that gate mechanical rather than a comment someone could miss
+//     (added 2026-09-16, code-review Spec-axis finding: D5 got a real CI check, D2 initially did
+//     not).
 //   * **The RBAC role.** `az role definition list --name "Cognitive Services OpenAI User"`:
 //     BuiltInRole, GUID `5e0bd9bd-7b93-4f28-af87-19fc36ad61bd`, and its `dataActions` include
 //     `Microsoft.CognitiveServices/accounts/OpenAI/deployments/realtime/action` by name -- the exact
@@ -34,10 +37,10 @@
 //      "ARM 200 OK does not prove delivery" standard this project holds everywhere else (CLAUDE.md,
 //      Resume discipline; `docs/phase6/d16-smoke-call-result.md` is the pattern to repeat).
 //
-//   Only after both are true does deploying this module's `disableLocalAuth: true` actually retire
-//   `AOAI_KEY` rather than break the one thing currently reaching this account. Until then, this
-//   file describes the target end-state; the role assignment alone is safe to apply any time (it is
-//   additive), but the account-level property is not.
+//   Only after both are true should `disableLocalAuth` below flip to `true` -- doing so retires
+//   `AOAI_KEY` for real at that point; flipping it before then would break the one thing currently
+//   reaching this account. The role assignment is unrelated to this sequencing and safe to apply any
+//   time (it is additive, and Reader already coexists with it today).
 //
 // A diff touching this file is never auto-accepted: it can affect a billable, call-path-critical
 // resource, even though the role-assignment half is expected to be a no-op-if-already-granted add.
@@ -79,8 +82,11 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-09-01' = {
     // account only accepts key auth, making disableLocalAuth self-defeating. Matches the live value,
     // which already equals the account name.
     customSubDomainName: name
-    // Target end-state, not yet safe to apply -- see the two-part gate in the header.
-    disableLocalAuth: true
+    // Phase 7 debt, not the target end-state: matches the live value (effectively `false`) until
+    // the two-part gate in the header is satisfied. check_aoai_key_migration_consistency.py enforces
+    // that this can only ever be `true` once AOAI_KEY is gone from the app's source -- flip this
+    // value only after that check would already pass.
+    disableLocalAuth: false
     publicNetworkAccess: 'Enabled'
   }
 }

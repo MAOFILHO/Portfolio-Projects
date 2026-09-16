@@ -38,6 +38,9 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _scan_utils
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 THIS_FILE = pathlib.Path(__file__).resolve()
 
@@ -85,14 +88,6 @@ def scan_targets():
     return sorted(targets)
 
 
-def _lineno(text, offset):
-    return text.count("\n", 0, offset) + 1
-
-
-def _flatten(snippet):
-    return " ".join(snippet.split())
-
-
 def main():
     violations = []
 
@@ -107,21 +102,19 @@ def main():
             (COMPLETE_MODE_PATTERN, "deployment mode Complete"),
         ):
             for match in pattern.finditer(text):
-                violations.append((rel, _lineno(text, match.start()), reason, _flatten(match.group(0))))
+                violations.append(
+                    (rel, _scan_utils.lineno(text, match.start()), reason, _scan_utils.flatten(match.group(0)))
+                )
 
-    if violations:
-        print("D5 PHONE-NUMBER SAFETY CHECK FAILED -- forbidden shape found:\n")
-        for path, lineno, reason, line in violations:
-            print(f"  {path}:{lineno}: {reason}")
-            print(f"      {line}")
-        print(
-            "\nThe ACS phone number is never released, created, or placed under Complete-mode "
+    return _scan_utils.report(
+        violations,
+        title="D5 PHONE-NUMBER SAFETY CHECK FAILED -- forbidden shape found:",
+        footer=(
+            "The ACS phone number is never released, created, or placed under Complete-mode "
             "deployment, by any script, at any phase, for any reason (R-09, CLAUDE.md)."
-        )
-        return 1
-
-    print("D5 phone-number safety check: ok -- no forbidden create/delete/Complete-mode shape found")
-    return 0
+        ),
+        ok_message="D5 phone-number safety check: ok -- no forbidden create/delete/Complete-mode shape found",
+    )
 
 
 if __name__ == "__main__":

@@ -62,6 +62,9 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _scan_utils
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "voice-agent" / "azbank_voice_agent"
 
@@ -89,17 +92,6 @@ def scan_targets():
         REPO_ROOT / "voice-agent" / "Dockerfile",
         REPO_ROOT / "voice-agent" / "pyproject.toml",
     ])
-
-
-def _lineno(text, offset):
-    """1-indexed line number of a character offset -- so a match spanning multiple lines (a
-    literal pair wrapped across lines) still gets a sensible line to point at: where it starts."""
-    return text.count("\n", 0, offset) + 1
-
-
-def _flatten(snippet):
-    """Collapse whitespace/newlines in a matched snippet to one line, for display only."""
-    return " ".join(snippet.split())
 
 
 def allowed_names():
@@ -132,24 +124,26 @@ def main():
             name, version = match.group(1), match.group(2)
             if (name.lower(), version) not in pairs_ok:
                 reason = f"{name!r} paired with unapproved version {version!r}"
-                violations.append((rel, _lineno(text, match.start()), reason, _flatten(match.group(0))))
+                violations.append(
+                    (rel, _scan_utils.lineno(text, match.start()), reason, _scan_utils.flatten(match.group(0)))
+                )
 
         for match in MODEL_PATTERN.finditer(text):
             if match.group(0).lower() not in names_ok:
                 found = repr(match.group(0))
-                violations.append((rel, _lineno(text, match.start()), found, _flatten(match.group(0))))
+                violations.append(
+                    (rel, _scan_utils.lineno(text, match.start()), found, _scan_utils.flatten(match.group(0)))
+                )
 
-    if violations:
-        print("B3 STATIC CHECK FAILED -- realtime model named outside the allowlist:\n")
-        for path, lineno, found, line in violations:
-            print(f"  {path}:{lineno}: {found}")
-            print(f"      {line}")
-        print(f"\nAllowed (name, version) pairs: {sorted(pairs_ok)}")
-        print("Change the allowlist in azbank_voice_agent/boot.py deliberately, or fix the code path.")
-        return 1
-
-    print(f"B3 static check: ok -- every realtime model named in the tree is allowlisted {sorted(names_ok)}")
-    return 0
+    return _scan_utils.report(
+        violations,
+        title="B3 STATIC CHECK FAILED -- realtime model named outside the allowlist:",
+        footer=(
+            f"Allowed (name, version) pairs: {sorted(pairs_ok)}\n"
+            "Change the allowlist in azbank_voice_agent/boot.py deliberately, or fix the code path."
+        ),
+        ok_message=f"B3 static check: ok -- every realtime model named in the tree is allowlisted {sorted(names_ok)}",
+    )
 
 
 if __name__ == "__main__":

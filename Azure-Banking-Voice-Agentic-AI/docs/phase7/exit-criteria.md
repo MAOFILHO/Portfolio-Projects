@@ -1,18 +1,20 @@
 # Phase 7 — IaC completion & CI/CD: design and exit criteria
 
-> **NOT APPROVED. Phase 7 has not begun and does not begin on this document.**
+> **APPROVED. Phase 7 is open.**
 >
-> This is a first-pass draft, not the output of a design session with Marco (no `/grill-with-docs`
-> round has happened yet). It exists to surface the open questions below for Marco to answer, per
-> `CLAUDE.md`: "No phase begins without written exit criteria from the prior phase and Marco's
-> explicit approval."
+> This started as a first-pass draft, not the output of a design session with Marco (no
+> `/grill-with-docs` round happened). It surfaced 5 open questions; Marco answered all of them, then
+> approved the doc and the phase itself, both 2026-09-16 -- corrected here from this file's own
+> earlier "NOT APPROVED" banner, which a code-review Standards-axis pass (2026-09-16) flagged as
+> stale against real commits already landed under this phase's name.
 >
 > | approval | state |
 > |---|---|
 > | The 5 design questions below (Q1-Q5) | **Given 2026-09-16**, question by question |
 > | D4's manual OIDC setup (app registration, federated credential, RBAC, 3 GitHub secrets) | **Done 2026-09-16**, Marco, live in Azure AD + GitHub |
-> | Begin Phase 7 | **NOT given** |
-> | `APPROVED: Phase 7` for billable resources | **NOT given** |
+> | The design doc as a whole | **Approved 2026-09-16**, Marco |
+> | Begin Phase 7 | **Given 2026-09-16**, Marco |
+> | `APPROVED: Phase 7` for billable resources | **Given 2026-09-16**, Marco (typed verbatim, twice) |
 
 ---
 
@@ -46,7 +48,7 @@ token GitHub and Azure exchange directly, replacing a stored password).
 | Application Insights | `infra/modules/app-insights.bicep` | none |
 | Call-records table storage | `infra/modules/call-records-store.bicep` | none |
 | Mock core-banking Container App | `infra/modules/mock-core-banking.bicep` | none |
-| Azure OpenAI resource | **`infra/modules/aoai.bicep`**, added 2026-09-16 | Account + deployment match live; the `disableLocalAuth: true` / `AOAI_KEY` retirement (D2) is written but gated — not safe to deploy until the app's auth path is migrated and a real call verifies it. See the module's own header. |
+| Azure OpenAI resource | **`infra/modules/aoai.bicep`**, added 2026-09-16 | Account + deployment match live. `disableLocalAuth` is checked in as `false` (matches the live, safe value) — **`true` (D2's `AOAI_KEY` retirement) is now enforced by a real blocking check** (`scripts/check_aoai_key_migration_consistency.py`, added 2026-09-16 after a code-review finding that D2 had only a comment, unlike D5's real check), not just by header prose. Still not deployed. |
 | ACS resource + Event Grid wiring | **`infra/modules/acs.bicep`**, added 2026-09-16 | none. **The phone number itself needs no module and can have none** — verified live (`az provider show --namespace Microsoft.Communication`): ARM registers no `phoneNumbers`/`phoneNumberOrders` resource type for this provider at all. It is managed exclusively via ACS's data-plane REST API, outside Bicep's reach entirely. See the module's own header for the full finding. |
 | Container Apps environment | **none** | needs a module |
 | Voice-agent Container App | **none** | needs a module |
