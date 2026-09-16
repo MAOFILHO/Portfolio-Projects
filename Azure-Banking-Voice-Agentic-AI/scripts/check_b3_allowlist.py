@@ -41,8 +41,12 @@ found by that same follow-up review).
 
 Scope: the package source, the provisioning wizard scripts under `docs/*/wizard/*.sh` -- the one
 place outside the package that can actually name a model for `az ... deployment create` (found
-missing in /code-review of Phase 2, 2026-09-07) -- and `voice-agent/Dockerfile` /
-`voice-agent/pyproject.toml`, the two files that describe the built image. Narrative docs
+missing in /code-review of Phase 2, 2026-09-07) -- `voice-agent/Dockerfile` /
+`voice-agent/pyproject.toml`, the two files that describe the built image, and (added Phase 7,
+2026-09-16) every `infra/**/*.bicep` module: a Bicep `Microsoft.CognitiveServices/accounts/
+deployments` resource is exactly as capable of naming an unapproved model as the wizard scripts
+already covered, and had no scanner over it until `infra/modules/aoai.bicep` made it a real
+possibility rather than a hypothetical one. Narrative docs
 (`docs/**/*.md`) are deliberately excluded: `docs/phase0/findings.md` and
 `docs/phase1/research-*.md` legitimately discuss the whole model catalog as research record, not
 executable configuration, and scanning them would just be noise nobody could act on. Tests are
@@ -81,6 +85,7 @@ def scan_targets():
     return sorted([
         *PACKAGE_ROOT.rglob("*.py"),
         *REPO_ROOT.glob("docs/*/wizard/*.sh"),
+        *REPO_ROOT.glob("infra/**/*.bicep"),
         REPO_ROOT / "voice-agent" / "Dockerfile",
         REPO_ROOT / "voice-agent" / "pyproject.toml",
     ])

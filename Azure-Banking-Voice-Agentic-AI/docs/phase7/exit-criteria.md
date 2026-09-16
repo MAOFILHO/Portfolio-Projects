@@ -46,7 +46,7 @@ token GitHub and Azure exchange directly, replacing a stored password).
 | Application Insights | `infra/modules/app-insights.bicep` | none |
 | Call-records table storage | `infra/modules/call-records-store.bicep` | none |
 | Mock core-banking Container App | `infra/modules/mock-core-banking.bicep` | none |
-| Azure OpenAI resource | **none** | needs a module |
+| Azure OpenAI resource | **`infra/modules/aoai.bicep`**, added 2026-09-16 | Account + deployment match live; the `disableLocalAuth: true` / `AOAI_KEY` retirement (D2) is written but gated — not safe to deploy until the app's auth path is migrated and a real call verifies it. See the module's own header. |
 | ACS resource + Event Grid wiring | **`infra/modules/acs.bicep`**, added 2026-09-16 | none. **The phone number itself needs no module and can have none** — verified live (`az provider show --namespace Microsoft.Communication`): ARM registers no `phoneNumbers`/`phoneNumberOrders` resource type for this provider at all. It is managed exclusively via ACS's data-plane REST API, outside Bicep's reach entirely. See the module's own header for the full finding. |
 | Container Apps environment | **none** | needs a module |
 | Voice-agent Container App | **none** | needs a module |
