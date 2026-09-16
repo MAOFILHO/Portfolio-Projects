@@ -25,7 +25,7 @@
 | Phase 6's exit criteria written | Satisfied — `docs/phase6/exit-criteria.md` |
 | Phase 6's exit criteria met | Satisfied — all 14 criteria, `docs/phase6/exit-check.md`, 2026-09-15 |
 | Marco's sign-off on Phase 6 | **Not recorded as a separate step in this draft — flagged, not assumed** |
-| Marco's approval to begin Phase 7 | **Not given** |
+| Marco's approval to begin Phase 7 | **Given 2026-09-16** |
 
 ---
 
