@@ -7,8 +7,10 @@
 // live resource group is a no-op, not a second app standing up beside the first.
 //
 // A diff touching this file is never auto-accepted: it provisions a billable resource, and (unlike
-// container-apps-env.bicep) it also carries every secret the relay needs to run -- get a human look
-// even though the values themselves are `@secure()` params, never literals.
+// container-apps-env.bicep) it also carries every value the relay needs to run as a `@secure()`
+// param, never a literal. Four of the five (ACS connection string, AOAI key, App Insights connection
+// string, Docker Hub password) are genuinely confidential; the fifth, `appBaseUrl`, is not (see its
+// own param below for why it still carries the annotation).
 //
 // STILL OPEN, same as the rest of Phase 7's current-state table:
 //
@@ -36,7 +38,7 @@ param image string
 @secure()
 param acsConnectionString string
 
-@description('The relay\'s own public base URL, used to build the ACS Event Grid webhook callback it registers on startup.')
+@description('The relay\'s own public base URL, used to build the ACS Event Grid webhook callback it registers on startup. Not actually confidential -- it is the app\'s own public FQDN, the same value `output fqdn` below exposes. `@secure()` stays anyway: this value flows into the Container App\'s `secrets` array below (matching the live app\'s shape exactly, `az containerapp show` 2026-09-16), and Bicep\'s linter requires any value assigned there to come from a secure source -- not a statement that this particular value is sensitive.')
 @secure()
 param appBaseUrl string
 
@@ -107,6 +109,11 @@ resource voiceAgent 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: name
           image: image
+          // No `probes` block, unlike mock-core-banking.bicep's `/health` liveness probe -- the live
+          // app carries none either (`az containerapp show`, 2026-09-16). Matching live, not an
+          // omission: adding one here would be new behavior this module doesn't have Marco's sign-off
+          // to introduce, and mock-core-banking.bicep's probe checks no account state for a different
+          // reason (it touches nothing this app relies on) that doesn't automatically transfer here.
           resources: {
             // Same shape as mock-core-banking.bicep's container -- docs/PLAN.md's budget models the
             // fixed monthly cost on exactly this size for both apps.
