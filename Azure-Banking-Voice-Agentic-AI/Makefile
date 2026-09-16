@@ -60,11 +60,15 @@ test: install
 # The B3 static check is deliberately separate from the runtime boot guard: the guard proves what
 # is deployed is approved, this proves what is written in the source is approved. Neither covers
 # the other's gap.
+#
+# check_no_phone_number_release.py is Phase 7 D5: no Bicep module or deploy tooling may create,
+# delete, or replace the ACS phone number, or use Complete-mode deployment, anywhere in the tree.
 lint: install
 	@$(VENV)/pip install -q -e "voice-agent[dev]"
 	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent mock-core-banking tests scripts
 	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking
 	@$(VENV)/python scripts/check_b3_allowlist.py
+	@$(VENV)/python scripts/check_no_phone_number_release.py
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to
