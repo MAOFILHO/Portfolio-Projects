@@ -47,7 +47,7 @@ Bicep module, a CLI can stand the system up or tear it down to zero billable spe
 Actions workflows (`ci`/`deploy`/`teardown`) run on OIDC with no long-lived Azure secret.
 
 Done so far: `infra/modules/acs.bicep`, `aoai.bicep`, `container-apps-env.bicep`, `voice-agent.bicep`
-— all 6 live Azure resources this project owns now have a Bicep module (the phone number needs none,
+— all 7 live Azure resources this project owns now have a Bicep module (the phone number needs none,
 verified — ACS manages it exclusively via data-plane REST, outside ARM). All WRITTEN, NOT APPLIED.
 D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails are real, blocking CI
 checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
@@ -186,7 +186,7 @@ been observed to contradict the pre-provisioning estimate.
    identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
    connection-string fallback instead (Phase 7 debt).
 6. *(closed 2026-09-16: `infra/modules/container-apps-env.bicep` and `infra/modules/voice-agent.bicep`
-   written — `9eb300f`, `2d839e3`. All 6 live Azure resources this project owns now have a Bicep
+   written — `9eb300f`, `2d839e3`. All 7 live Azure resources this project owns now have a Bicep
    module.)*
 7. **Phase 7's deploy/teardown CLI.** Not yet designed — no command shape settled. This and the
    workflows below are the phase's 2 main deliverables.
