@@ -53,7 +53,8 @@ D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails a
 checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
 
 Not done: the deploy/teardown CLI, the `deploy`/`teardown` GitHub Actions workflows (this phase's 2
-main deliverables), and D2's actual app-code migration off `AOAI_KEY`. See "Next actions" below.
+main deliverables), and D2's live-call verification of the auth migration (code is written, not yet
+deployed or proven live). See "Next actions" below.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -192,12 +193,18 @@ been observed to contradict the pre-provisioning estimate.
    workflows below are the phase's 2 main deliverables.
 8. **Phase 7's `deploy`/`teardown` GitHub Actions workflows.** `workflow_dispatch` only (D3); OIDC
    is already wired (D4, done 2026-09-16), so no new portal setup is needed. Depends on #7.
-9. **D2's app-code migration off `AOAI_KEY`.** The Bicep-side guard rail exists
-   (`check_aoai_key_migration_consistency.py`); the relay still reads `AOAI_KEY` live
-   (`voice-agent/azbank_voice_agent/realtime/client.py`). Needs the AOAI realtime API's exact
-   data-plane RBAC role — check via `/research` if not already known — then the code change, then a
-   live call proving the new auth path, before `disableLocalAuth: true` can ever be checked in.
-   **The next open action.**
+9. *(mostly closed 2026-09-16: `/research` found the exact RBAC role — `Cognitive Services OpenAI
+   User` (already granted, `aoai.bicep`'s `dataAccess` role assignment) —
+   `docs/phase7/research-aoai-rbac-realtime.md`. `realtime/client.py` migrated to a
+   `DefaultAzureCredential` bearer token, source no longer references the static key at all.
+   **Still open**: two of the research's own findings are unverified against the live deployment —
+   the `cognitiveservices.azure.com` token scope, and `DefaultAzureCredential` resolving to the
+   system-assigned identity with no ambient dev credentials interfering. A real call proving the new
+   auth path (same standard as D16's smoke call) must pass before `disableLocalAuth: true` can be
+   checked into `aoai.bicep` — that live call is **the next open action**. The deployed image
+   (`ca-azbank-echo-p0`, still `p6a`) has not been rebuilt with this change yet, so the live app is
+   still on the key today; this line's "Data-plane auth to AOAI is still `AOAI_KEY`" note above
+   remains true until a new image ships.)*
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
