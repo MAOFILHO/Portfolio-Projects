@@ -145,6 +145,17 @@ TRIAGE = AgentSpec(
         "Either way, do it rather than trying to help directly, and don't make the caller repeat "
         "themselves once you do. This applies even before the PIN is confirmed -- hand the call "
         "off, do not escalate, and let the specialist tell them what needs to wait. "
+        # Found live, 2026-09-17 (D2 verification call): the caller asked for a balance before
+        # keying a PIN, and instead of following the line above, the model escalated -- narrating
+        # a handoff it never made ("transfer you to a Banking agent"), then immediately
+        # contradicting itself and ending the call ("no one to transfer... call will end"). A third
+        # instance of this file's recurring failure mode (see _ESCALATION_INSTRUCTION and
+        # _ROUTING_IS_INVISIBLE_CLAUSE's own found-live notes above): telling the model what NOT to
+        # do (don't escalate) without also telling it what TO SAY instead leaves it to improvise,
+        # and improvising is what keeps going wrong here. This clause gives the concrete line.
+        "If a caller asks for a balance or any banking action before their PIN is confirmed, do "
+        "not escalate and do not end the call over it -- say plainly that you need their PIN "
+        "first, then keep waiting for it. "
         + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE + _ROUTING_IS_INVISIBLE_CLAUSE
         + _CALL_TRANSFER_IS_INVISIBLE_CLAUSE
     ),

@@ -53,8 +53,11 @@ D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails a
 checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
 
 Not done: the deploy/teardown CLI, the `deploy`/`teardown` GitHub Actions workflows (this phase's 2
-main deliverables), and D2's live-call verification of the auth migration (code is written, not yet
-deployed or proven live). See "Next actions" below.
+main deliverables). **D2's live-call verification closed 2026-09-17** —
+`docs/phase7/d2-live-call-result.md`, correlation id `c30c38ee-5428-4724-853a-05134b51b261`: balance
+spoken after PIN, proving the identity-token auth path works with no `AOAI_KEY` fallback in code.
+`disableLocalAuth: true` can now be reviewed as its own diff (`infra/modules/aoai.bicep`'s two-part
+gate is satisfied). See "Next actions" below.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -81,7 +84,10 @@ and goes stale between sessions.
   the routing/transfer-word fix, confirmed live 2026-09-12. Its system-assigned identity
   (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI resource and `Storage Table Data
   Contributor` scoped to `stazbankcallrecords`.
-- **Data-plane auth to AOAI is still the `AOAI_KEY` secret**; Storage auth is managed identity only.
+- **Data-plane auth to AOAI is now the identity token** (`DefaultAzureCredential`, no key fallback in
+  code), proven live 2026-09-17 (`docs/phase7/d2-live-call-result.md`). The `AOAI_KEY` env var is
+  still present on the container app but unused by code — pending removal alongside the
+  `disableLocalAuth: true` flip. Storage auth is managed identity only, unchanged.
 - **Logs: query `workspace-rgazurebankingvoiceagenticai1D`** (`bf520f2c-e2bc-4488-8965-9317a7922c74`),
   never `...aiCS`, which has been stale since 2026-08-25. `...aixC` is an orphan. Three workspaces
   exist, not two.
@@ -193,18 +199,24 @@ been observed to contradict the pre-provisioning estimate.
    workflows below are the phase's 2 main deliverables.
 8. **Phase 7's `deploy`/`teardown` GitHub Actions workflows.** `workflow_dispatch` only (D3); OIDC
    is already wired (D4, done 2026-09-16), so no new portal setup is needed. Depends on #7.
-9. *(mostly closed 2026-09-16: `/research` found the exact RBAC role — `Cognitive Services OpenAI
-   User` (already granted, `aoai.bicep`'s `dataAccess` role assignment) —
+9. *(closed 2026-09-17: `/research` found the exact RBAC role — `Cognitive Services OpenAI User` —
    `docs/phase7/research-aoai-rbac-realtime.md`. `realtime/client.py` migrated to a
-   `DefaultAzureCredential` bearer token, source no longer references the static key at all.
-   **Still open**: two of the research's own findings are unverified against the live deployment —
-   the `cognitiveservices.azure.com` token scope, and `DefaultAzureCredential` resolving to the
-   system-assigned identity with no ambient dev credentials interfering. A real call proving the new
-   auth path (same standard as D16's smoke call) must pass before `disableLocalAuth: true` can be
-   checked into `aoai.bicep` — that live call is **the next open action**. The deployed image
-   (`ca-azbank-echo-p0`, still `p6a`) has not been rebuilt with this change yet, so the live app is
-   still on the key today; this line's "Data-plane auth to AOAI is still `AOAI_KEY`" note above
-   remains true until a new image ships.)*
+   `DefaultAzureCredential` bearer token (commit `fd1da9b`), source no longer references the static
+   key at all. Both research findings verified live via a real call — `docs/phase7/d2-live-call-
+   result.md`.)*
+10. *(closed 2026-09-17: the research's "already granted" claim for the RBAC role was wrong — Bicep
+    had it written, not applied, same as every other Phase 7 module. Live check
+    (`az role assignment list`) found it genuinely absent, meaning the already-deployed `p7a` image
+    — identity-auth-only, no key fallback — had **no working path to AOAI at all** until this was
+    caught. Fixed by granting the role directly, scoped to the additive half of `aoai.bicep`'s own
+    documented rule ("safe to apply any time"); confirmed readable back before the verification call.
+    Resume-discipline lesson: a commit message's "already granted" is not live state — check the API.)*
+11. **New from the D2 verification call, 2026-09-17**: pre-PIN refusal wording deviates from
+    `agents/specs.py`'s own instructions — narrated an escalate-to-human ("transfer you to a Banking
+    agent... no one to transfer... call will end") instead of a plain PIN prompt. Not a B1 breach (no
+    balance spoken, no tool call reached core-banking). Same class of finding as the two documented
+    2026-09-12 incidents in that file. Fix proposed, pending review — see `docs/phase7/d2-live-call-
+    result.md`'s closing section.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
