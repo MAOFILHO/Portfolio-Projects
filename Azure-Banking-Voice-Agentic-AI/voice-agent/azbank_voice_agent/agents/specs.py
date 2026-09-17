@@ -153,9 +153,22 @@ TRIAGE = AgentSpec(
         # _ROUTING_IS_INVISIBLE_CLAUSE's own found-live notes above): telling the model what NOT to
         # do (don't escalate) without also telling it what TO SAY instead leaves it to improvise,
         # and improvising is what keeps going wrong here. This clause gives the concrete line.
+        #
+        # **The boundary sentence below was missing on the first cut of this clause and caused its
+        # own regression, found live the very next call, 2026-09-17**: with no stated PIN-confirmed
+        # cutoff, the model reused this clause's "explain, don't act" pattern even after the PIN
+        # was confirmed -- it never handed off to banking at all that call (no tool_call span in
+        # the trace after authentication), leaving the caller stuck on an agent with no banking
+        # tools. Two adjacent instructions both keyed on "balance request" is exactly the kind of
+        # near-duplicate prose this module's docstring on drift warns about, just within one
+        # agent's copy instead of across three. The fix is a hard stop condition, not softer
+        # wording -- vague reassurance ("this is only for before the PIN") was already implied by
+        # word order and that was not enough.
         "If a caller asks for a balance or any banking action before their PIN is confirmed, do "
         "not escalate and do not end the call over it -- say plainly that you need their PIN "
-        "first, then keep waiting for it. "
+        "first, then keep waiting for it. This stops applying the instant the PIN is confirmed: "
+        "from then on, any banking request goes straight back to the rule above -- hand the call "
+        "to the banking agent right away, every time, and never mention the PIN again. "
         + _ESCALATION_INSTRUCTION + _TRIAGE_ESCALATION_CLAUSE + _ROUTING_IS_INVISIBLE_CLAUSE
         + _CALL_TRANSFER_IS_INVISIBLE_CLAUSE
     ),

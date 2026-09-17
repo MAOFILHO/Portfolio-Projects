@@ -37,11 +37,20 @@ live call proven). That flip is its own diff and is never auto-accepted; review 
 it lands. `AOAI_KEY` remains present as a container env var and should be removed from the Container
 App config in the same pass once `disableLocalAuth` flips.
 
-## Separate finding from this call -- not a D2 defect
+## Separate findings from this call and its follow-up -- not D2 defects
 
-The pre-PIN refusal wording deviated from `agents/specs.py`'s own instructions: the caller heard an
-escalate-to-human narration ("transfer you to a Banking agent... no one to transfer... the call will
-end") instead of a plain PIN prompt. This does not touch B1 (no balance was spoken, no banking
-operation reached the core-banking client) -- it is a conversational-quality regression of the same
-class already documented twice in `agents/specs.py` (2026-09-12, both incidents). See the proposed
-instruction fix under review as of this write-up.
+**Finding 1 (this call, `p7a`).** The pre-PIN refusal wording deviated from `agents/specs.py`'s own
+instructions: the caller heard an escalate-to-human narration ("transfer you to a Banking agent... no
+one to transfer... the call will end") instead of a plain PIN prompt. Did not touch B1 (no balance
+was spoken, no banking operation reached the core-banking client). Fixed in `agents/specs.py`,
+redeployed as `p7b`.
+
+**Finding 2 (the `p7b` verification call that followed, same day).** The fix for finding 1 caused its
+own regression: asked for a balance, PIN accepted, but the agent never handed off to banking at
+all -- confirmed via the trace (`OperationId 598dc5c49898059b37f077a201c57f24`), which has zero
+`tool_call` spans after authentication, against the working call's (`ef64afac44e99697d8c8f8ecd3cfce4d`)
+three. The new clause had no stated cutoff at PIN confirmation, so the model reused its "explain,
+don't act" pattern past the point where it should have handed off. Fixed with an explicit boundary
+sentence in the same clause; redeployed as the next image. Both findings and both fixes are one
+commit (`11ca61d` plus the follow-up), same file, same recurring class this file's own comments have
+tracked since 2026-09-12.
