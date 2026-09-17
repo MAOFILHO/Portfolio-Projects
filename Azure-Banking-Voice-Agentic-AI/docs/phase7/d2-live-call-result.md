@@ -51,6 +51,13 @@ all -- confirmed via the trace (`OperationId 598dc5c49898059b37f077a201c57f24`),
 `tool_call` spans after authentication, against the working call's (`ef64afac44e99697d8c8f8ecd3cfce4d`)
 three. The new clause had no stated cutoff at PIN confirmation, so the model reused its "explain,
 don't act" pattern past the point where it should have handed off. Fixed with an explicit boundary
-sentence in the same clause; redeployed as the next image. Both findings and both fixes are one
-commit (`11ca61d` plus the follow-up), same file, same recurring class this file's own comments have
-tracked since 2026-09-12.
+sentence in the same clause (commit `ce77da4`); redeployed as `p7c`.
+
+**Both findings closed 2026-09-17, `p7c` verification call.** Correlation id
+`b4ac7e65-a407-4912-b22c-d8f83ae4be49` (`OperationId 3892e4a564c74591ff3ae4b18da490c4`), turn_count 14
+-- a full multi-tool call: `list_accounts`, `transfer`, and `get_balance` all show
+`calling_agent: banking`, `gate_decision: allowed`, each with a matching successful `core_banking`
+HTTP call. B2 scan (`* has "1234"` across every table on this trace) returned zero matches. Marco's
+own account: needed two PIN attempts before it was accepted (ordinary caller mis-key, not a system
+defect -- `agents/specs.py`'s wrong-PIN clause covers this), then the pre-PIN refusal, the handoff,
+and the balance all worked as intended. No further instruction changes pending from this call.

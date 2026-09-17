@@ -93,8 +93,9 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` is now running issue #61's code**, image `docker.io/maofilho/azbank-echo-p0:
-  p6a`, revision `--p6a20260914114410`, Active/Healthy/100% traffic. Carries
+- **`ca-azbank-echo-p0` is now running `p7c`**, image `docker.io/maofilho/azbank-echo-p0:p7c`,
+  revision `--0000013`, Healthy/100% traffic — D2's identity-auth code plus both `agents/specs.py`
+  fixes from `docs/phase7/d2-live-call-result.md`, all three live-verified 2026-09-17. Carries
   `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the
   named fallback, not identity — D10's IAM role is still an open `/research` question).
 - **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
@@ -211,12 +212,10 @@ been observed to contradict the pre-provisioning estimate.
     caught. Fixed by granting the role directly, scoped to the additive half of `aoai.bicep`'s own
     documented rule ("safe to apply any time"); confirmed readable back before the verification call.
     Resume-discipline lesson: a commit message's "already granted" is not live state — check the API.)*
-11. **New from the D2 verification call, 2026-09-17**: pre-PIN refusal wording deviates from
-    `agents/specs.py`'s own instructions — narrated an escalate-to-human ("transfer you to a Banking
-    agent... no one to transfer... call will end") instead of a plain PIN prompt. Not a B1 breach (no
-    balance spoken, no tool call reached core-banking). Same class of finding as the two documented
-    2026-09-12 incidents in that file. Fix proposed, pending review — see `docs/phase7/d2-live-call-
-    result.md`'s closing section.
+11. *(closed 2026-09-17: `agents/specs.py`'s pre-PIN escalation wording, its own follow-on
+    handoff-skipping regression, and both fixes — full account in `docs/phase7/d2-live-call-
+    result.md`. Third live-verified fix to that file this week; a fourth would be worth pausing to
+    build a scripted conversation replay before iterating on more real calls.)*
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
