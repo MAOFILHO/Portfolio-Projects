@@ -13,8 +13,9 @@ account of what happened:
 | 4 | `docs/phase4/exit-check.md`, `docs/phase4/findings.md`, `docs/phase4/research-carried-findings.md` (exit criteria: `docs/phase4/exit-criteria.md`) |
 | 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
+| 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 7 is open** — see "Current phase" below.
+**Phase 8 is not yet started** — see "Current phase" below.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -26,12 +27,9 @@ live bearing on the current moment:
 
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
-2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`
-   and `APPROVED: Phase 6` are both on record and both spent — issue #62's Application Insights ran
-   (2026-09-14) and is live. `APPROVED: Phase 7` is on record (2026-09-16, typed twice) but **not yet
-   spent** — every Phase 7 Bicep module written so far (`acs.bicep`, `aoai.bicep`,
-   `container-apps-env.bicep`, `voice-agent.bicep`) is WRITTEN, NOT APPLIED; no new resource has
-   actually been provisioned under this phase.
+2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`,
+   `APPROVED: Phase 6`, and `APPROVED: Phase 7` are all on record and all spent. Phase 8 has not been
+   designed or approved yet — nothing may be provisioned under its name until it is.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -41,32 +39,16 @@ live bearing on the current moment:
 
 ## Current phase
 
-**Phase 7 (IaC completion & CI/CD) is open** — design doc approved and `APPROVED: Phase 7` given,
-both 2026-09-16 (`docs/phase7/exit-criteria.md`). Goal: every Azure resource this project owns gets a
-Bicep module, a CLI can stand the system up or tear it down to zero billable spend, and 3 GitHub
-Actions workflows (`ci`/`deploy`/`teardown`) run on OIDC with no long-lived Azure secret.
+**Phase 7 (IaC completion & CI/CD) closed 2026-09-18** — all 9 exit criteria met, 2 with a stated
+limit (both accepted by Marco, both tracked as Phase 7 debt). Full account: `docs/phase7/exit-
+check.md`. Real Azure findings from closing it out: a live RBAC gap (research claimed "already
+granted," wasn't), two `agents/specs.py` conversational bugs found on real calls, and a stale ACS
+webhook after a from-empty redeploy (Container Apps environments get a new random domain suffix on
+recreation; the CLI doesn't yet detect a dependency's *value* drifting under an already-deployed
+resource) — fixed live, not yet fixed in the CLI itself.
 
-Done so far: `infra/modules/acs.bicep`, `aoai.bicep`, `container-apps-env.bicep`, `voice-agent.bicep`
-— all 7 live Azure resources this project owns now have a Bicep module (the phone number needs none,
-verified — ACS manages it exclusively via data-plane REST, outside ARM). All WRITTEN, NOT APPLIED.
-D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails are real, blocking CI
-checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
-
-**Deploy/teardown CLI and workflows written 2026-09-18, not yet run against Azure** — `src/
-azbank_deploy/` (Typer, `make deploy`/`make teardown`), `.github/workflows/azure-banking-voice-
-agentic-ai-{deploy,teardown}.yml`. Full account, including a real bug the tests caught
-(`container_apps_env` could never tear down because `acs` depended on it and `acs` never goes
-absent) and the one documented Bicep workaround (Option B, Marco 2026-09-18): `docs/phase7/
-deploy-teardown-cli.md`. D5's static check now scans `src/azbank_deploy/` too. **Still needed before
-this phase can close**: `/code-review`, then a real `make deploy` run against the live resource
-group (already `APPROVED: Phase 7`, but genuinely untested code touching billable resources gets a
-look first) and a real `make teardown` run with Marco watching (exit-criteria's own rule).
-
-**D2's live-call verification closed 2026-09-17** —
-`docs/phase7/d2-live-call-result.md`, correlation id `c30c38ee-5428-4724-853a-05134b51b261`: balance
-spoken after PIN, proving the identity-token auth path works with no `AOAI_KEY` fallback in code.
-`disableLocalAuth: true` can now be reviewed as its own diff (`infra/modules/aoai.bicep`'s two-part
-gate is satisfied). See "Next actions" below.
+**Phase 8 is not yet started.** No design doc, no exit criteria, no `APPROVED: Phase 8` — per the stop
+conditions above, nothing is provisioned under its name until all three exist.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -84,15 +66,20 @@ and goes stale between sessions.
 - Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
   image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-
   platform-pin`, an arm64 image cost real debugging time to diagnose on 2026-09-12).
+- **Default domain suffix is `yellowmoss-81870d2d`** as of 2026-09-18's teardown/redeploy — this is
+  random per environment and changes on recreation. Confirm live (`az containerapp show`) before
+  trusting a webhook URL or FQDN recorded in any doc, this one included.
 - Storage account `stazbankcallrecords`, table `callrecords`. Write-then-read proven live through the
   voice agent's managed identity.
 - Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
   Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
 - **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p5i`, revision `--0000011`, `Healthy`, 100% traffic, 0 restarts —
-  the routing/transfer-word fix, confirmed live 2026-09-12. Its system-assigned identity
-  (`5e09fe34-8913-4aa2-80ac-618af308a88f`) holds `Reader` on the AOAI resource and `Storage Table Data
-  Contributor` scoped to `stazbankcallrecords`.
+  `docker.io/maofilho/azbank-echo-p0:p7c`, rebuilt from empty 2026-09-18 by the new deploy CLI. Its
+  system-assigned identity is **`bb712203-9e00-42a5-a0b5-0f38b376c79e`** — a fresh GUID, since
+  recreating the app regenerates the identity. Holds `Cognitive Services OpenAI User` on the AOAI
+  resource (granted automatically by the CLI's `aoai` deploy step, no manual `az role assignment
+  create` needed this time) and `Storage Table Data Contributor` scoped to `stazbankcallrecords`. Any
+  principal ID recorded before 2026-09-18 (including `5e09fe34...` below) is stale.
 - **Data-plane auth to AOAI is now the identity token** (`DefaultAzureCredential`, no key fallback in
   code), proven live 2026-09-17 (`docs/phase7/d2-live-call-result.md`). The `AOAI_KEY` env var is
   still present on the container app but unused by code — pending removal alongside the
@@ -102,11 +89,12 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` is now running `p7c`**, image `docker.io/maofilho/azbank-echo-p0:p7c`,
-  revision `--0000013`, Healthy/100% traffic — D2's identity-auth code plus both `agents/specs.py`
-  fixes from `docs/phase7/d2-live-call-result.md`, all three live-verified 2026-09-17. Carries
-  `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the
-  named fallback, not identity — D10's IAM role is still an open `/research` question).
+- **`ca-azbank-echo-p0` carries `p7c`** — D2's identity-auth code plus both `agents/specs.py` fixes
+  from `docs/phase7/d2-live-call-result.md`, live-verified 2026-09-17 and again 2026-09-18 after the
+  from-empty rebuild. Revision number is stale after that rebuild — re-check live, don't trust a
+  recorded number. Carries `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and
+  `AZURE_MONITOR_AUTH=connection_string` (the named fallback, not identity — D10's IAM role is still
+  an open `/research` question).
 - **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
   correlation id `aa509ec4`). 17 spans landed in `...1D`, `call` span attributes match D15 exactly, B2
   scan zero matches, both cost/latency metrics landed. The first attempt (2026-09-14, `393815d8`) had
@@ -202,50 +190,15 @@ been observed to contradict the pre-provisioning estimate.
 5. **`/research`**: the IAM role Application Insights ingestion needs for D10's Entra-authenticated
    identity path — undocumented anywhere in this repo. Until settled, #62's script wires the named
    connection-string fallback instead (Phase 7 debt).
-6. *(closed 2026-09-16: `infra/modules/container-apps-env.bicep` and `infra/modules/voice-agent.bicep`
-   written — `9eb300f`, `2d839e3`. All 7 live Azure resources this project owns now have a Bicep
-   module.)*
-7. *(written 2026-09-18: `src/azbank_deploy/` (Typer CLI) — design settled via `/prototype`
-   (`infra/PROTOTYPE-deploy-teardown-ordering.html`, throwaway branch), Marco confirmed
-   auto-computed legal order is correct. 14 unit tests, `make lint`/`make test` clean. **Not yet
-   run against Azure.**)*
-8. *(written 2026-09-18: `.github/workflows/azure-banking-voice-agentic-ai-{deploy,teardown}.yml`,
-   `workflow_dispatch` only (D3), OIDC via the 3 secrets from D4. `DOCKERHUB_PASSWORD` is a NEW
-   required secret this needs that D4's setup didn't create — not yet added by Marco.)*
-9. *(closed 2026-09-17: `/research` found the exact RBAC role — `Cognitive Services OpenAI User` —
-   `docs/phase7/research-aoai-rbac-realtime.md`. `realtime/client.py` migrated to a
-   `DefaultAzureCredential` bearer token (commit `fd1da9b`), source no longer references the static
-   key at all. Both research findings verified live via a real call — `docs/phase7/d2-live-call-
-   result.md`.)*
-10. *(closed 2026-09-17: the research's "already granted" claim for the RBAC role was wrong — Bicep
-    had it written, not applied, same as every other Phase 7 module. Live check
-    (`az role assignment list`) found it genuinely absent, meaning the already-deployed `p7a` image
-    — identity-auth-only, no key fallback — had **no working path to AOAI at all** until this was
-    caught. Fixed by granting the role directly, scoped to the additive half of `aoai.bicep`'s own
-    documented rule ("safe to apply any time"); confirmed readable back before the verification call.
-    Resume-discipline lesson: a commit message's "already granted" is not live state — check the API.)*
-11. *(closed 2026-09-17: `agents/specs.py`'s pre-PIN escalation wording, its own follow-on
-    handoff-skipping regression, and both fixes — full account in `docs/phase7/d2-live-call-
-    result.md`. Third live-verified fix to that file this week; a fourth would be worth pausing to
-    build a scripted conversation replay before iterating on more real calls.)*
-12. *(closed 2026-09-18: `/code-review` ran on `53f868b` (Standards + Spec axes) — 0 hard
-    violations, one real finding fixed (`d7c6b14`, dead `location` param on
-    `list_soft_deleted_cognitive_services_accounts`; `az cognitiveservices account list-deleted` has
-    no location filter, confirmed via its own `-h`). Marco then ran `make deploy` live (no-op, every
-    resource already matched) and `make teardown` live (all 7 teardown-eligible resources removed,
-    soft-deleted AOAI purged, ACS + phone number untouched, Marco watching throughout, per
-    exit-criteria's rule). **Live system is currently torn down — the phone line will not answer
-    until redeployed.**)*
-13. **Redeploy now** (same images, `p7c`/`p5`) to restore the live system and to be the real
-    from-empty test of exit criterion 4 (the first `make deploy` above was a no-op resume, not a
-    true bring-up). Then one smoke call to close criterion 4. `DOCKERHUB_PASSWORD` still needs
-    adding as a GitHub secret before the `deploy`/`teardown` *workflows* (not the local CLI) can run
-    (items 7/8).
-14. **Phase 7 debt, accepted 2026-09-18 (Option A):** `make teardown` doesn't remove 3
-    auto-created Log Analytics workspaces or 2 Application Insights alert artifacts — resources
-    Container Apps/App Insights create as side effects, outside this CLI's 8-node graph. Checked
-    live: `PerGB2018`, no active ingestion, 30-day retention within Azure's free window — $0 ongoing
-    cost. Accepted as out of scope rather than extending the CLI today.
+6. *(Phase 7 closed 2026-09-18 — all 9 exit criteria met, 2 with a stated limit. Full account,
+   including the RBAC-gap and `agents/specs.py` findings, the deploy/teardown CLI build, and the
+   live ACS-webhook-staleness bug found and fixed on the closing redeploy:
+   `docs/phase7/exit-check.md`.)*
+7. **`DOCKERHUB_PASSWORD` still needs adding as a GitHub repository secret** before the `deploy`/
+   `teardown` *workflows* can run (the local CLI already works without it being a GitHub secret —
+   Marco supplied it as a local env var for today's live runs).
+8. **Phase 8 not yet designed.** Needs a design doc + exit criteria + `APPROVED: Phase 8` before any
+   work starts, same as every prior phase.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
