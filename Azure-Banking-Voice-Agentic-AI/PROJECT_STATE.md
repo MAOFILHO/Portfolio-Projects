@@ -228,11 +228,24 @@ been observed to contradict the pre-provisioning estimate.
     handoff-skipping regression, and both fixes — full account in `docs/phase7/d2-live-call-
     result.md`. Third live-verified fix to that file this week; a fourth would be worth pausing to
     build a scripted conversation replay before iterating on more real calls.)*
-12. **`/code-review` on `src/azbank_deploy/`, then a real `make deploy` run** against the live
-    resource group, then **a real `make teardown` run with Marco watching** (exit-criteria's own
-    rule) — none of today's CLI/workflow work has touched live Azure yet; all of it so far is local
-    code, 14 unit tests, and static checks. `DOCKERHUB_PASSWORD` also needs adding as a GitHub
-    secret before the `deploy`/`teardown` workflows can run (items 7/8 above).
+12. *(closed 2026-09-18: `/code-review` ran on `53f868b` (Standards + Spec axes) — 0 hard
+    violations, one real finding fixed (`d7c6b14`, dead `location` param on
+    `list_soft_deleted_cognitive_services_accounts`; `az cognitiveservices account list-deleted` has
+    no location filter, confirmed via its own `-h`). Marco then ran `make deploy` live (no-op, every
+    resource already matched) and `make teardown` live (all 7 teardown-eligible resources removed,
+    soft-deleted AOAI purged, ACS + phone number untouched, Marco watching throughout, per
+    exit-criteria's rule). **Live system is currently torn down — the phone line will not answer
+    until redeployed.**)*
+13. **Redeploy now** (same images, `p7c`/`p5`) to restore the live system and to be the real
+    from-empty test of exit criterion 4 (the first `make deploy` above was a no-op resume, not a
+    true bring-up). Then one smoke call to close criterion 4. `DOCKERHUB_PASSWORD` still needs
+    adding as a GitHub secret before the `deploy`/`teardown` *workflows* (not the local CLI) can run
+    (items 7/8).
+14. **Phase 7 debt, accepted 2026-09-18 (Option A):** `make teardown` doesn't remove 3
+    auto-created Log Analytics workspaces or 2 Application Insights alert artifacts — resources
+    Container Apps/App Insights create as side effects, outside this CLI's 8-node graph. Checked
+    live: `PerGB2018`, no active ingestion, 30-day retention within Azure's free window — $0 ongoing
+    cost. Accepted as out of scope rather than extending the CLI today.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
