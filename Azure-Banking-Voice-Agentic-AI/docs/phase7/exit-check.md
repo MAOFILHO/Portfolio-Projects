@@ -5,6 +5,8 @@ the same day, both recorded as Phase 7 debt rather than silently absorbed. Nothi
 projection: the live-run criteria (4, 5) are read from real `make deploy`/`make teardown` runs against
 `rg-azure-banking-voice-agentic-ai` and a real phone call, not from code inspection alone.
 
+**Closure sign-off**: Marco, 2026-09-18, typed verbatim: "APPROVED: Phase 7. Let's close this out."
+
 | | |
 |---|---|
 | Commits closing this phase | `fd1da9b`, `11ca61d`, `ce77da4`, `e61f217`, `53f868b`, `d7c6b14`, `d89efbb` |
