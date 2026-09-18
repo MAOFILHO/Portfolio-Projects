@@ -201,8 +201,11 @@ been observed to contradict the pre-provisioning estimate.
    `teardown` *workflows* can run (the local CLI already works without it being a GitHub secret —
    Marco supplied it as a local env var for today's live runs).
 8. *(closed 2026-09-18: Phase 8 designed and approved — `docs/phase8/exit-criteria.md`, issue #66.)*
-9. **`/research`**: Azure AI Language Conversation PII detection's free-tier quota and Canada Central
-   availability (Phase 8, D2) — gates provisioning that one resource, not the rest of Phase 8's build.
+9. *(closed 2026-09-18: `/research` ran — `docs/phase8/research-language-pii-quota.md`. Finding: the
+   "free tier" the original Phase 8 sketch assumed does not exist for Conversation PII detection; it's
+   Standard-tier only, ~$0.07-$1.34/mo bounded at this project's call volume, `COSTS.md`.
+   `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
+   provision once Phase 8's build reaches it.)*
 10. **Phase 8 build**: post-call transcript/metadata pipeline, `evals/`, both ADRs' code (second model
     pin + B3 extension, redact-before-first-write), `RESULTS.md`, architecture diagram. Full criteria:
     `docs/phase8/exit-criteria.md`.

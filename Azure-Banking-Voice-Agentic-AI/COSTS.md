@@ -391,3 +391,31 @@ auto-provisioned by omission the way the first three were (`docs/phase0/findings
 - **The Entra-authenticated ingestion path's own cost, if any** — D10's role question is still open
   (`/research`); this recompute assumes the same ingestion meter applies regardless of which
   authentication path is used, since auth method doesn't change billed data volume.
+
+## Phase 8 — Azure AI Language Conversation PII detection is NOT free tier, corrected 2026-09-13 assumption — 2026-09-18
+
+`docs/PLAN.md`'s original Phase 8 sketch assumed "PII redaction via Language free tier." `/research`
+(`docs/phase8/research-language-pii-quota.md`, Microsoft's own pricing page, fetched 2026-09-18)
+found this wrong: no F0/free SKU exists for Conversation PII detection specifically — only plain Text
+PII detection gets the shared free allotment. Conversation PII redaction is Standard-tier only, billed
+from the first record: **$1.00/1,000 text records** (first 0.5M/month), **$0.75/1,000** (next
+0.5M-2.5M/month), confirmed priced in `canada-central` by name.
+
+### Cost bound at this project's volume
+
+The exact billing unit per call (one record per turn vs. one record per whole call transcript) is not
+settled by any source the research found — bounded, not pinned, for that reason:
+
+| scenario | records/mo | cost/mo |
+|---|---|---|
+| Worst case — 1 record/turn, B4's 20-turn cap, 67 calls/mo (R-08's high end) | 1,340 | **$1.34** |
+| Best case — 1 record/call, 67 calls/mo | 67 | **$0.07** |
+
+Both bounds are small against the **$14.60/mo fixed cost** and the $25/mo ceiling — roughly $10.40/mo
+of headroom exists above the current fixed cost before this changes R-08's verdict. **No R-08 recompute
+needed**: even the worst-case bound doesn't threaten the demo-runs/month gate of 5. This is priced here
+so the input isn't left unpriced, per this project's standing discipline — not because it moves any
+number that matters.
+
+**`APPROVED: Phase 8 Language resource` — given 2026-09-18, Marco (typed verbatim), at this corrected,
+non-free price.** Clears D2 for provisioning once Phase 8's build reaches that step.

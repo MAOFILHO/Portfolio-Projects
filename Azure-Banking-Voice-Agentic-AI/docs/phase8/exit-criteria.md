@@ -11,7 +11,7 @@
 > | The 13 design questions below (Q1-Q13) | **Given 2026-09-18**, question by question |
 > | The doc as a whole, as shared understanding | **Confirmed 2026-09-18**, Marco |
 > | `APPROVED: Phase 8` for billable resources | **Given 2026-09-18**, Marco (typed verbatim) |
-> | The Azure AI Language resource specifically | **Not yet** — gated on `/research` below, separately from the phase-level approval above |
+> | The Azure AI Language resource specifically | **Facts resolved 2026-09-18** (`docs/phase8/research-language-pii-quota.md`) — no free tier exists for Conversation PII detection; Standard-tier only, ~$0.07-$1.34/mo bounded at this project's volume (`COSTS.md`). **`APPROVED: Phase 8 Language resource` given 2026-09-18, Marco (typed verbatim), at the corrected non-free price.** |
 
 ---
 
@@ -128,11 +128,26 @@ of a genuine trade-off.
 
 ---
 
-## `/research` still owed — gates D2's provisioning only
+## `/research` — resolved 2026-09-18
 
-Azure AI Language Conversation PII detection's free-tier quota (records/month) and its availability in
-Canada Central. Nothing else in this design depends on it — D3, D4, D10, D11, D12 can all be built
-without it. Marco runs `/research` when convenient; flagged here so it isn't silently assumed.
+Full findings: `docs/phase8/research-language-pii-quota.md`, both primary-sourced from Microsoft's own
+pricing and Learn pages.
+
+- **No free tier for Conversation PII detection.** Only plain Text PII detection gets a free
+  allotment; Conversation PII redaction is Standard-tier only, billed from the first record —
+  **$1.00/1,000 text records** for the first 0.5M records/month in Canada Central, $0.75/1,000 after.
+  This corrects `docs/PLAN.md`'s original one-paragraph sketch, which assumed "Language free tier."
+- **Canada Central confirmed** — two independent primary sources, neither inferred from the base
+  Language resource's general availability (see the research doc §2).
+- **Cost bound at this project's call volume** (~45–67 demo calls/month, `COSTS.md`): the exact
+  billing unit per call is unconfirmed by any source found (per-turn vs. per-conversation is an open
+  question the research doc flags), so this bounds rather than pins a figure. Worst case — one record
+  per turn, capped at B4's 20 turns/call, 67 calls: **1,340 records/mo ≈ $1.34/mo.** Best case — one
+  record per call: **67 records/mo ≈ $0.07/mo.** Either bound is small against the $25/mo ceiling and
+  the ~$10.40/mo of headroom above the $14.60/mo fixed cost (`COSTS.md`).
+- **Still needs Marco's explicit go-ahead at this corrected, non-free price** before D2 provisions —
+  the blanket `APPROVED: Phase 8` was given on the "free tier" premise; that premise is now known
+  false, so it doesn't stand in for a decision Marco hasn't actually made yet.
 
 ---
 

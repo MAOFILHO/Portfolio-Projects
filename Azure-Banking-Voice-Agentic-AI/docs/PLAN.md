@@ -733,9 +733,13 @@ GitHub settings.
 
 ### Phase 8 — Post-call analytics, evals & docs
 Transcript (already in hand from realtime events — **no STT needed**) + metadata → Blob; PII
-redaction via Language free tier; summary/intent/outcome → Table Storage. L3 evals + L4 redteam
-suites at their weekly/on-demand cadence. Any ADRs not already written during their triggering phase
-(ADR-001/002 were written in Phase 0); `RESULTS.md`, `README.md`, architecture diagram.
+redaction via Azure AI Language's **Conversation PII detection** — **Standard tier, billed from the
+first record; no free tier exists for this specific feature** (corrected 2026-09-18,
+`docs/phase8/research-language-pii-quota.md`, this sketch originally assumed a free tier that turned
+out not to apply); summary/**call outcome**/intent → Table Storage. L3 evals + L4 redteam suites at
+their weekly/on-demand cadence. Any ADRs not already written during their triggering phase
+(ADR-001/002 were written in Phase 0); `RESULTS.md`, `README.md`, architecture diagram. Full design:
+`docs/phase8/exit-criteria.md`.
 **Exit:** the repo reads as a matched pair with FNOL.
 
 ---
