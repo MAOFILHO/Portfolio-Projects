@@ -1,0 +1,55 @@
+name: Azure-Banking-Voice-Agentic-AI — Teardown Azure Deploy
+
+# Manual-dispatch only, same posture as the deploy workflow beside this one (D3). The extra
+# `confirm` input below is this workflow's own gate, on top of GitHub's own "someone clicked Run
+# workflow" gate -- matching this project's standing pattern of a typed confirmation for a
+# consequential action (CLAUDE.md's `APPROVED: <phase name>`), not a decoration.
+#
+# ACS and the phone number are never a target here -- not a flag this workflow could pass, a
+# resource `azbank-deploy teardown` has no code path to delete (D5, R-09; src/azbank_deploy/
+# resources.py). `--yes` is required in this job because a GitHub Actions runner has no terminal for
+# the CLI's own interactive confirmation prompt to block on -- the `confirm` input above is what
+# stands in for it, checked before anything runs.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type TEARDOWN to proceed'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+# Same group as the deploy workflow, deliberately: deploy and teardown must never run against
+# this resource group at the same time.
+concurrency:
+  group: azure-banking-voice-agentic-ai-deploy
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    if: inputs.confirm == 'TEARDOWN'
+    defaults:
+      run:
+        working-directory: Azure-Banking-Voice-Agentic-AI
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Azure login (OIDC, no stored secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install azbank-deploy
+        run: pip install -e .
+
+      - name: Teardown (ACS + phone number excluded, D5)
+        run: azbank-deploy teardown --yes

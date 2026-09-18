@@ -53,6 +53,13 @@ ALLOWLIST: frozenset[str] = frozenset({
     # project's CI does (e.g. azure-microsoftfoundry-agentic-finetuning-platform-ci.yml) -- so a
     # per-project PROJECT_ROOT can never contain it.
     ".github/workflows/azure-banking-voice-agentic-ai-ci.yml",
+    # Marco approved these two exact absolute paths in chat, 2026-09-18, asked explicitly:
+    #   /Users/marco/K21/Real-world/.github/workflows/azure-banking-voice-agentic-ai-deploy.yml
+    #   /Users/marco/K21/Real-world/.github/workflows/azure-banking-voice-agentic-ai-teardown.yml
+    # Same reason as the ci.yml entry above -- GitHub Actions only reads workflows from the
+    # monorepo's shared .github/workflows/, never from a per-project subfolder.
+    ".github/workflows/azure-banking-voice-agentic-ai-deploy.yml",
+    ".github/workflows/azure-banking-voice-agentic-ai-teardown.yml",
 })
 
 

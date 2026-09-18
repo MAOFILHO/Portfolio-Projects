@@ -52,8 +52,17 @@ verified — ACS manages it exclusively via data-plane REST, outside ARM). All W
 D5 (phone-number safety) and D2 (AOAI key retirement)'s Bicep-side guard rails are real, blocking CI
 checks (`scripts/check_no_phone_number_release.py`, `scripts/check_aoai_key_migration_consistency.py`).
 
-Not done: the deploy/teardown CLI, the `deploy`/`teardown` GitHub Actions workflows (this phase's 2
-main deliverables). **D2's live-call verification closed 2026-09-17** —
+**Deploy/teardown CLI and workflows written 2026-09-18, not yet run against Azure** — `src/
+azbank_deploy/` (Typer, `make deploy`/`make teardown`), `.github/workflows/azure-banking-voice-
+agentic-ai-{deploy,teardown}.yml`. Full account, including a real bug the tests caught
+(`container_apps_env` could never tear down because `acs` depended on it and `acs` never goes
+absent) and the one documented Bicep workaround (Option B, Marco 2026-09-18): `docs/phase7/
+deploy-teardown-cli.md`. D5's static check now scans `src/azbank_deploy/` too. **Still needed before
+this phase can close**: `/code-review`, then a real `make deploy` run against the live resource
+group (already `APPROVED: Phase 7`, but genuinely untested code touching billable resources gets a
+look first) and a real `make teardown` run with Marco watching (exit-criteria's own rule).
+
+**D2's live-call verification closed 2026-09-17** —
 `docs/phase7/d2-live-call-result.md`, correlation id `c30c38ee-5428-4724-853a-05134b51b261`: balance
 spoken after PIN, proving the identity-token auth path works with no `AOAI_KEY` fallback in code.
 `disableLocalAuth: true` can now be reviewed as its own diff (`infra/modules/aoai.bicep`'s two-part
@@ -196,10 +205,13 @@ been observed to contradict the pre-provisioning estimate.
 6. *(closed 2026-09-16: `infra/modules/container-apps-env.bicep` and `infra/modules/voice-agent.bicep`
    written — `9eb300f`, `2d839e3`. All 7 live Azure resources this project owns now have a Bicep
    module.)*
-7. **Phase 7's deploy/teardown CLI.** Not yet designed — no command shape settled. This and the
-   workflows below are the phase's 2 main deliverables.
-8. **Phase 7's `deploy`/`teardown` GitHub Actions workflows.** `workflow_dispatch` only (D3); OIDC
-   is already wired (D4, done 2026-09-16), so no new portal setup is needed. Depends on #7.
+7. *(written 2026-09-18: `src/azbank_deploy/` (Typer CLI) — design settled via `/prototype`
+   (`infra/PROTOTYPE-deploy-teardown-ordering.html`, throwaway branch), Marco confirmed
+   auto-computed legal order is correct. 14 unit tests, `make lint`/`make test` clean. **Not yet
+   run against Azure.**)*
+8. *(written 2026-09-18: `.github/workflows/azure-banking-voice-agentic-ai-{deploy,teardown}.yml`,
+   `workflow_dispatch` only (D3), OIDC via the 3 secrets from D4. `DOCKERHUB_PASSWORD` is a NEW
+   required secret this needs that D4's setup didn't create — not yet added by Marco.)*
 9. *(closed 2026-09-17: `/research` found the exact RBAC role — `Cognitive Services OpenAI User` —
    `docs/phase7/research-aoai-rbac-realtime.md`. `realtime/client.py` migrated to a
    `DefaultAzureCredential` bearer token (commit `fd1da9b`), source no longer references the static
@@ -216,6 +228,11 @@ been observed to contradict the pre-provisioning estimate.
     handoff-skipping regression, and both fixes — full account in `docs/phase7/d2-live-call-
     result.md`. Third live-verified fix to that file this week; a fourth would be worth pausing to
     build a scripted conversation replay before iterating on more real calls.)*
+12. **`/code-review` on `src/azbank_deploy/`, then a real `make deploy` run** against the live
+    resource group, then **a real `make teardown` run with Marco watching** (exit-criteria's own
+    rule) — none of today's CLI/workflow work has touched live Azure yet; all of it so far is local
+    code, 14 unit tests, and static checks. `DOCKERHUB_PASSWORD` also needs adding as a GitHub
+    secret before the `deploy`/`teardown` workflows can run (items 7/8 above).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own

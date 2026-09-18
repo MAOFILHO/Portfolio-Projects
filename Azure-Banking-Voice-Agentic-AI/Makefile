@@ -1,4 +1,4 @@
-.PHONY: install-hooks verify-project-root-scope install test lint
+.PHONY: install-hooks verify-project-root-scope install test lint deploy teardown
 
 # Only targets that are genuinely functional today are listed here -- mirrors FNOL's own Makefile
 # discipline (AWS-Insurance-FNOL-Voice-Agentic-AI/Makefile: "nothing may be stubbed out and labeled
@@ -39,6 +39,7 @@ install:
 	@test -x "$(VENV)/python" || python3 -m venv .venv
 	@$(VENV)/pip install -q -e "voice-agent[test]"
 	@$(VENV)/pip install -q -e "mock-core-banking[dev]"
+	@$(VENV)/pip install -q -e .
 
 # Stdlib unittest, not pytest -- no test runner was installed and a handful of tests didn't justify
 # adding one.
@@ -76,8 +77,8 @@ test: install
 # `az bicep build` worked immediately).
 lint: install
 	@$(VENV)/pip install -q -e "voice-agent[dev]"
-	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent mock-core-banking tests scripts
-	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking
+	@$(VENV)/ruff check --config voice-agent/pyproject.toml voice-agent mock-core-banking tests scripts src
+	@$(VENV)/mypy --config-file voice-agent/pyproject.toml voice-agent/azbank_voice_agent mock-core-banking/azbank_core_banking src/azbank_deploy
 	@$(VENV)/python scripts/check_b3_allowlist.py
 	@$(VENV)/python scripts/check_no_phone_number_release.py
 	@$(VENV)/python scripts/check_aoai_key_migration_consistency.py
@@ -85,6 +86,19 @@ lint: install
 	  echo "bicep build: $$f"; \
 	  az bicep build --file "$$f" --stdout > /dev/null || exit 1; \
 	done
+
+# Phase 7's two main deliverables. `VOICE_AGENT_IMAGE` / `CORE_BANKING_IMAGE` are required (no
+# :latest default, matching every Bicep module's own comment on the point); `AZURE_RESOURCE_GROUP`
+# defaults to the live project group (config.py) but is the one thing meant to differ when actually
+# exercising the clean-subscription path this phase's exit criteria call for. `DOCKERHUB_PASSWORD`
+# is required and never has a default, on purpose.
+deploy: install
+	@$(VENV)/azbank-deploy deploy
+
+# Never wired to run non-interactively without --yes; the confirmation prompt is deliberate (docs/
+# phase7/exit-criteria.md, "What this phase must not do": no real teardown without a human watching).
+teardown: install
+	@$(VENV)/azbank-deploy teardown
 
 # `.git/hooks/` is not tracked by git -- a fresh clone has no hook until this runs once. The hook
 # installed here is the SHARED monorepo dispatcher (../scripts/git-hooks/pre-commit), not a copy local to

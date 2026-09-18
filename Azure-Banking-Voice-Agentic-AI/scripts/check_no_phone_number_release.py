@@ -77,13 +77,15 @@ COMPLETE_MODE_PATTERN = re.compile(
 
 def scan_targets():
     """Every file this check reads, sorted so a run is deterministic. `infra/` Bicep, every shell
-    script in the project, and any Python under a `cli/` or `deploy/` directory -- the deploy
-    tooling's eventual location isn't settled yet, so both are covered rather than guessed at."""
+    script in the project, and the deploy CLI's own source. Settled 2026-09-18 as `src/azbank_deploy/`
+    (docs/PLAN.md "Project layout") -- `cli/` and `deploy/` are kept too, harmlessly, rather than
+    removed, in case either is ever used for something else in this monorepo."""
     targets = set()
     targets.update(REPO_ROOT.glob("infra/**/*.bicep"))
     targets.update(p for p in REPO_ROOT.rglob("*.sh") if ".venv" not in p.parts)
     targets.update(p for p in REPO_ROOT.rglob("cli/**/*.py") if ".venv" not in p.parts)
     targets.update(p for p in REPO_ROOT.rglob("deploy/**/*.py") if ".venv" not in p.parts)
+    targets.update(p for p in REPO_ROOT.glob("src/azbank_deploy/**/*.py") if ".venv" not in p.parts)
     targets.discard(THIS_FILE)
     return sorted(targets)
 
