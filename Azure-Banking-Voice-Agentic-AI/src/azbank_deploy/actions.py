@@ -121,7 +121,7 @@ def purge_soft_deleted_aoai(resource_group: str) -> str | None:
     """The last step of every teardown run, unconditionally -- Marco, 2026-09-18: a soft-deleted
     AOAI account blocks recreating one with the same name (a real, well-documented Azure failure
     mode), so teardown must not leave one behind for the next deploy to trip over."""
-    for account in az_cli.list_soft_deleted_cognitive_services_accounts(config.LOCATION):
+    for account in az_cli.list_soft_deleted_cognitive_services_accounts():
         if account.get("name") == config.NAMES["aoai"]:
             az_cli.purge_cognitive_services_account(resource_group, config.NAMES["aoai"], config.LOCATION)
             return account["name"]

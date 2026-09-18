@@ -198,7 +198,9 @@ def delete_cognitive_services_account(resource_group: str, name: str) -> None:
 # project has none, by design -- docs/PLAN.md decision 3/D2).
 # ---------------------------------------------------------------------------
 
-def list_soft_deleted_cognitive_services_accounts(location: str) -> list[dict]:
+def list_soft_deleted_cognitive_services_accounts() -> list[dict]:
+    # `az cognitiveservices account list-deleted` takes no location filter -- confirmed via its
+    # own -h, 2026-09-18. It always lists every soft-deleted account in the subscription.
     return _run_json(["cognitiveservices", "account", "list-deleted"]) or []
 
 
