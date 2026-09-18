@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is not yet started** — see "Current phase" below.
+**Phase 8 is designed and approved, not yet built** — see "Current phase" below.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -47,8 +47,11 @@ webhook after a from-empty redeploy (Container Apps environments get a new rando
 recreation; the CLI doesn't yet detect a dependency's *value* drifting under an already-deployed
 resource) — fixed live, not yet fixed in the CLI itself.
 
-**Phase 8 is not yet started.** No design doc, no exit criteria, no `APPROVED: Phase 8` — per the stop
-conditions above, nothing is provisioned under its name until all three exist.
+**Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
+— `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
+is on record. One exception: the Azure AI Language resource (D2) is not cleared to provision yet — a
+`/research` pass on its free-tier quota and Canada Central availability is still owed, gating that one
+resource only. Everything else in the design can be built without it.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -197,8 +200,12 @@ been observed to contradict the pre-provisioning estimate.
 7. **`DOCKERHUB_PASSWORD` still needs adding as a GitHub repository secret** before the `deploy`/
    `teardown` *workflows* can run (the local CLI already works without it being a GitHub secret —
    Marco supplied it as a local env var for today's live runs).
-8. **Phase 8 not yet designed.** Needs a design doc + exit criteria + `APPROVED: Phase 8` before any
-   work starts, same as every prior phase.
+8. *(closed 2026-09-18: Phase 8 designed and approved — `docs/phase8/exit-criteria.md`, issue #66.)*
+9. **`/research`**: Azure AI Language Conversation PII detection's free-tier quota and Canada Central
+   availability (Phase 8, D2) — gates provisioning that one resource, not the rest of Phase 8's build.
+10. **Phase 8 build**: post-call transcript/metadata pipeline, `evals/`, both ADRs' code (second model
+    pin + B3 extension, redact-before-first-write), `RESULTS.md`, architecture diagram. Full criteria:
+    `docs/phase8/exit-criteria.md`.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own

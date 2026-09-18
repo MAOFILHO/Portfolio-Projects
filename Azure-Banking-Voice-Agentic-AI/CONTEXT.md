@@ -79,6 +79,13 @@ The model's request to run one named function. An attempt, not an outcome — wh
 the gate's decision alone.
 _Avoid_: function call, action, intent
 
+**Call outcome**:
+How a call ended — for example authenticated-and-served, escalated, abandoned, closed path, or error.
+Written after hangup, one per call. Distinct from a tool-call **outcome** (below), which is what one
+tool call produced to the caller within the call, not how the call itself ended. Spelled `end_reason`
+in code (`PROJECT_STATE.md` open item 19).
+_Avoid_: outcome (bare — ambiguous with the tool-call sense below), result, status
+
 ### Authorization
 
 **Auth gate**:
@@ -212,7 +219,7 @@ that record. Scoped to the call, never chosen by the model, and never containing
 an identifier that could spell four digits by chance would fail B2's scan on a coincidence.
 _Avoid_: request id, nonce, transaction id, dedup key
 
-### Outcomes
+### Tool-call outcomes
 
 The four ways a tool call can fail to give the caller what they asked for. They are genuinely
 different things, get genuinely different spoken responses, and are never collapsed into one:
