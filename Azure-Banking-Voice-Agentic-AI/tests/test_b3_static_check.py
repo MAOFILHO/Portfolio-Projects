@@ -175,9 +175,6 @@ class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
                 self.assertTrue(check_b3_allowlist.MODEL_PATTERN.search(f'X = "{model_id}"'))
 
     def test_an_unapproved_text_model_pair_fails_the_check(self):
-        sys.path.insert(0, str(REPO_ROOT / "scripts"))
-        import check_b3_allowlist
-
         target = REPO_ROOT / "voice-agent" / "azbank_voice_agent" / "boot.py"
         original = target.read_text()
         self.addCleanup(target.write_text, original)

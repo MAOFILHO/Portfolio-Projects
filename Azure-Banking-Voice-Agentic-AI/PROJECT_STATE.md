@@ -220,13 +220,19 @@ been observed to contradict the pre-provisioning estimate.
    Standard-tier only, ~$0.07-$1.34/mo bounded at this project's call volume, `COSTS.md`.
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
-10. **Phase 8 build**: post-call transcript/metadata pipeline, `evals/`, both ADRs' code (second model
-    pin + B3 extension, redact-before-first-write), `RESULTS.md`, architecture diagram. Full criteria:
-    `docs/phase8/exit-criteria.md`. **Two design gaps need Marco before the pipeline is built** (found
-    2026-09-19 by reading code; detail: `docs/handoffs/2026-09-19-phase8-b3-text-pin-committed-build-
-    pending.md`): (a) caller speech is never transcribed, so the "redacted transcript" is agent-side
-    only unless a caller-transcription deployment is added; (b) the code sets 8 `end_reason` values,
-    not the 3 the design doc says, and none maps onto D10's 5-value enum.
+10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; decisions D14-D18 settled 2026-09-19).
+    **Built, tested against fakes, on `main`**: agent-side transcript capture (`postcall/capture.py`),
+    call-outcome mapping (D17, `postcall/outcome.py`), the redact-before-write pipeline
+    (`postcall/pipeline.py`, ADR-007), the Blob transcript store (`postcall/blob.py`), the call-summary
+    row, and the background scheduling in `app.py`. **With no redactor wired, the pipeline writes
+    only the outcome row** — no transcript, no summary. **Not built**:
+    - the real Language redactor and the real `gpt-5.4-mini` summarizer (both need a `/research`
+      pass on API shape first, and the non-fatal text-pin guard rides with the summarizer);
+    - **Bicep for the `transcripts` container, its Blob role and `TRANSCRIPTS_ACCOUNT_URL`** is
+      written and compiles but **awaits Marco's review** (provisioning diff, never auto-accepted) and
+      has not been applied to the live account;
+    - the image rebuild/deploy, the live call, `evals/`, `RESULTS.md`, the diagram, the README badge,
+      the `COSTS.md` per-token rate; criteria 6-7 close with a stated limit (D15).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own

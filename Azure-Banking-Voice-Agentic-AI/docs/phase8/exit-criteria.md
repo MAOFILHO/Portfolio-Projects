@@ -126,6 +126,34 @@ cheap judge model rather than the realtime one.
 Both meet the three-part bar for an ADR: hard to reverse, surprising without context, and the result
 of a genuine trade-off.
 
+**D14 (added 2026-09-19, Marco) — the stored transcript is agent-side only.** Caller speech is never
+transcribed: `session.py` leaves `input_audio_transcription` off, and turning it on needs a named
+transcription deployment (a new billable resource and a third B3 pin). The Blob record holds what the
+agent said, not a two-sided conversation. This corrects `docs/PLAN.md`'s "transcript already in hand,
+no STT needed", which held for agent speech only. Open consequence: D2 chose Conversation PII
+detection for its speaker-turn design, and there is now one speaker. Whether it is still the right
+feature (plain Text PII detection has a free allotment, per `research-language-pii-quota.md`) is
+undecided and must be settled before the pipeline calls the Language resource. **Settled same day
+(D18 below): keep Conversation PII detection.**
+
+**D15 (2026-09-19, Marco) — Phase 8 closes with a stated limit on criteria 6 and 7.** Criteria 1-5 and
+8-10 are built and proved; the eval runner (needs TTS caller audio, no TTS resource is provisioned) and
+the redteam live run are recorded as debt with exactly what is missing, the precedent Phase 7 set for
+its 2 limited criteria. Marco's closure sign-off is still required.
+
+**D16 (2026-09-19, Marco) — "≥95% over 20 runs" means 20 scenario runs, once each.** Not 20 full-suite
+runs (~800 call-minutes, roughly $7-14 by `docs/PLAN.md`'s table, over the $6/mo ceiling).
+
+**D17 (2026-09-19, Marco) — Call outcome mapping, literal D10.** Code's 8 `end_reason` values resolve
+to the 5-value enum: `closed`→`closed_path`, `escalated`→`escalated`, `caller_hangup`→`caller_hangup`,
+`model_ended` while authenticated→`authenticated_served`. Everything else (`cost_cap`, `timeout`,
+`attempts_exhausted`, `model_ended` while anonymous, `error`, any unknown value)→`error`. The raw
+`end_reason` is stored beside it, so nothing is lost. `docs/phase8/exit-criteria.md`'s gap table
+originally said 3 values were in use; the code has 8.
+
+**D18 (2026-09-19, Marco) — keep Conversation PII detection (D2 stands).** Already provisioned, priced
+($0.07-$1.34/mo) and approved; one speaker does not invalidate it.
+
 ---
 
 ## `/research` — resolved 2026-09-18
@@ -155,7 +183,7 @@ pricing and Learn pages.
 
 | # | criterion | how it is proved |
 |---|---|---|
-| 1 | A redacted transcript reaches Blob for every completed call, with no raw-transcript write ever occurring first | D4's dedicated test — assert no unredacted transcript content appears in any Blob write, across a fake-call run |
+| 1 | A redacted agent-side transcript (D14) reaches Blob for every completed call, with no raw-transcript write ever occurring first | D4's dedicated test — assert no unredacted transcript content appears in any Blob write, across a fake-call run |
 | 2 | A summary/intent/**call outcome** record reaches Table Storage for every completed call | Live call + a queried row, same "200 OK proves creation, not delivery" discipline as Phase 6/7 |
 | 3 | **Call outcome** uses exactly the 5-value enum (D10), never an unclassified state | Test asserting every fake-call scenario resolves to one of the 5 values |
 | 4 | The redaction and summary/intent calls never affect B4 or B5 | Test proving fake-call latency and turn-cap behaviour are unchanged with the post-call pipeline attached vs. detached |
