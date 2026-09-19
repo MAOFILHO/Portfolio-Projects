@@ -57,7 +57,7 @@ a judgment call.
 |---|---|---|---|
 | **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification and asking for a person (`escalate_to_human`, granted to every row since Phase 5, issue #48) are the only operations reachable while anonymous, and a test asserts that set is exactly those two | **0 breaches / ≥120 adversarial cases** | L1, blocking CI |
 | **B2** | **PIN Confidentiality** — neither the DTMF PIN nor the caller's phone number appears in any transcript, log line, persisted record, or OpenTelemetry content channel — span attribute, span-event attribute, log record, or completion-hook upload (widened 2026-09-15, issue #65, from the single-channel, PIN-only wording it carried through Phase 5) | **0 occurrences**, artifact scan | L0+L1, blocking CI |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside the allowlist, keyed on **(deployment name, model version) together, not name alone** (an active pin plus one documented successor, not a single frozen constant) | **0 violations** | startup guard (reads the live deployment's actual model version at boot, not config alone) + CI static check + Bicep |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment, **or the pinned non-realtime text deployment (ADR-006, Phase 8)**, outside their respective allowlists, keyed on **(deployment name, model version) together, not name alone** (the realtime pin carries one documented successor; the text pin, `gpt-5.4-mini` as of 2026-09-18, has none vetted yet) | **0 violations** | realtime: startup guard, fatal, blocks boot (reads the live deployment's actual model version, not config alone). Text pin: **no runtime guard exists yet** — ADR-006 Decision 4 specifies a non-fatal one (never blocks a live call, since this deployment is never on the live-call path), to be built together with the post-call pipeline that would call it. Realtime: CI static check + Bicep. Text: CI static check only — `infra/modules/aoai.bicep` still declares only the realtime pin; the text deployment was hand-provisioned, not via Bicep, so Bicep-side enforcement for it is pending, not yet real |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate minute cap trips "we're closed"; **fails closed** | **0 overruns, 0 fail-open events** | L1, blocking CI |
 | **B5** | **Turn Latency** — p95 turn round-trip | **PROVISIONAL after Phase 2 (N≥100 real turns); FROZEN after Phase 5 (tool calls in path)** | L3 + production OTel |
 
@@ -68,11 +68,12 @@ threshold.** B4 is the only brake that exists. Any p95 latency figure quoted any
 Full detail (fail-closed test cases, the B3 startup guard, B5's staged measurement) lives in
 `docs/PLAN.md` — this table is the quick-reference, not the definition.
 
-**Model pin review**: B3's active pin (`docs/PLAN.md` decision 14) is checked against the live Models
-API at every phase gate — its retirement date is a scheduled decision to revisit on a known clock, not
-something that gets discovered as a surprise partway through a later phase. If the active pin's
-retirement is under 2 months out at any gate and no better-runway GA option exists yet, that's a
-stop-and-ask before the phase proceeds, same as any other named constraint here.
+**Model pin review**: B3's active pins — the realtime pin (`docs/PLAN.md` decision 14) and, as of
+Phase 8, the text pin (ADR-006) — are each checked against the live Models API at every phase gate;
+their retirement dates are scheduled decisions to revisit on a known clock, not surprises discovered
+partway through a later phase. If either pin's retirement is under 2 months out at any gate and no
+better-runway GA option exists yet, that's a stop-and-ask before the phase proceeds, same as any other
+named constraint here.
 
 Phase 0 also found (2026-08-20) that the startup guard's original design checked deployment *name*
 only, not name+version — promoted to a hard Phase 2 requirement after R-01's own evidence showed one

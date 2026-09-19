@@ -45,6 +45,16 @@ SUCCESSOR_REALTIME_MODEL = ("gpt-realtime-1.5", "2026-02-23")  # GA, retires 202
 
 ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_MODEL})
 
+# ADR-006 -- a second, non-realtime pin for post-call summary/intent and L3 eval judging. Never the
+# thing a live call talks to (ADR-006 Decision 4), so this is deliberately a separate constant, not
+# folded into ALLOWED_REALTIME_MODELS or assert_boot_safety. Enforced today by scripts/check_b3_
+# allowlist.py only; the non-fatal runtime guard ADR-006 Decision 4 calls for is built with the
+# post-call pipeline that would call it.
+# No successor entry yet: nothing has been vetted, unlike the realtime pin's SUCCESSOR_REALTIME_MODEL.
+ACTIVE_TEXT_MODEL = ("gpt-5.4-mini", "2026-03-17")  # GA, retires 2027-09-21
+
+ALLOWED_TEXT_MODELS = frozenset({ACTIVE_TEXT_MODEL})
+
 # The ambient key the OpenAI SDK picks up on its own. This project authenticates to the data plane
 # with AOAI_KEY today and moves to managed identity in Phase 7; this check is specifically about
 # *this* variable, whose presence would let the SDK silently authenticate as something other than

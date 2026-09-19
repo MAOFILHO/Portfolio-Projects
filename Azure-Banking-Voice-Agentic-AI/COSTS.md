@@ -419,3 +419,27 @@ number that matters.
 
 **`APPROVED: Phase 8 Language resource` — given 2026-09-18, Marco (typed verbatim), at this corrected,
 non-free price.** Clears D2 for provisioning once Phase 8's build reaches that step.
+
+## Phase 8 — both new resources provisioned live, 2026-09-18
+
+Both approved resources now exist. Neither is called by any code yet, so this section prices what was
+created, not what has been spent.
+
+- **Language resource `lang-azure-banking-voice-cc`** — `TextAnalytics` kind, Standard (`S`) SKU,
+  Canada Central. Bills per-record as priced above ($1.00/1,000 records first tier); the pricing page
+  already cited names no separate fixed monthly account fee for this SKU. The $0.07–$1.34/mo bound
+  above stands unchanged — it was priced before creation, and creation adds no new cost driver.
+- **Second AOAI deployment `gpt-5.4-mini`**, GlobalStandard SKU, on the existing
+  `aoai-azure-banking-voice-cc` account. GlobalStandard is pay-per-token with no capacity-reservation
+  fee — the same consumption-only, $0 fixed-cost treatment already given the realtime deployment above
+  ("First billable resource purchased" section). Per-token price for `gpt-5.4-mini` itself has not been
+  pulled — open item, not yet needed for a verdict: D12's usage (the eval judge) is already bounded by
+  `docs/PLAN.md`'s existing **$6.00/mo hard eval-budget ceiling**, which the eval runner enforces by
+  refusing new runs past it; D11's usage (one summary/intent call per completed call, ~45–67/mo) is a
+  much smaller, separate consumption pattern.
+- **No change to the $14.60/mo fixed cost or R-08's verdict.** Both resources are consumption-billed
+  with no fixed component, so R-08's recompute discipline (recompute only when the fixed total moves)
+  does not trigger here.
+- **Still open, not priced:** `gpt-5.4-mini`'s exact per-token rate in Canada Central, and the real
+  billing unit for D11's summary/intent call volume once measured (same "priced before provisioning,
+  measured once live" pattern R-08 already follows).

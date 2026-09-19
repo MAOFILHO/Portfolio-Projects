@@ -51,3 +51,21 @@ thing that summarizes and judges.
   version is retired, both jobs stop working at once, not independently. Accepted — the alternative
   (separate pins) trades that coupling for a second thing to keep in sync, judged the worse trade in
   Decision 2 above.
+
+## Build note — 2026-09-18
+
+Decision 1's class is filled in: the deployment is **`gpt-5.4-mini`** (2026-03-17, GlobalStandard),
+live on `aoai-azure-banking-voice-cc`. Chosen live over the ADR's own `gpt-4o-mini` example — status
+`Deprecating` on the Models API, wrong choice for a brand-new pin — and over `gpt-5-mini` (GA, but
+~4.7 months of runway from today vs. `gpt-5.4-mini`'s ~12, retiring 2027-09-21). This does not change
+the decision above; it fixes the string this ADR deliberately left open.
+
+**Decision 3 is now done** (2026-09-18, same session as this note): `CLAUDE.md`'s B3 row and
+"Model pin review" paragraph, and `scripts/check_b3_allowlist.py`'s scan scope and allowlist union,
+now cover both deployment classes. `boot.py` gained `ACTIVE_TEXT_MODEL` and `ALLOWED_TEXT_MODELS`.
+A runtime guard for the text pin (non-fatal, per Decision 4) was drafted and removed the same day:
+with no caller until the post-call pipeline exists, it enforced nothing. It is built with that
+pipeline instead. **Not done**: `infra/modules/aoai.bicep` still declares only the
+realtime pin. This deployment was hand-provisioned (`PROJECT_STATE.md`), not via Bicep, so the text
+pin has no Bicep-side enforcement yet — that gap is real follow-up work, not something this note
+should let `CLAUDE.md` claim as already covered (`CLAUDE.md`'s B3 row now says so explicitly).

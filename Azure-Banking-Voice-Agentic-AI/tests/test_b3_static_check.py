@@ -127,13 +127,15 @@ class TheCheckerCoversTheImageDescriptionFiles(unittest.TestCase):
 class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
     def test_its_allowed_names_come_from_the_boot_guard(self):
         # Not a restated copy: if the guard's allowlist changes, the checker must follow it
-        # automatically, or it would keep passing against a list nobody uses any more.
+        # automatically, or it would keep passing against a list nobody uses any more. The union
+        # with ALLOWED_TEXT_MODELS reflects ADR-006 Decision 3 -- the checker covers both
+        # deployment classes from one allowlist read, not two.
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import check_b3_allowlist
 
         self.assertEqual(
             check_b3_allowlist.allowed_names(),
-            {name for name, _ in boot.ALLOWED_REALTIME_MODELS},
+            {name for name, _ in boot.ALLOWED_REALTIME_MODELS | boot.ALLOWED_TEXT_MODELS},
         )
 
     def test_its_allowed_pairs_come_from_the_boot_guard(self):
@@ -142,7 +144,10 @@ class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
 
         self.assertEqual(
             check_b3_allowlist.allowed_pairs(),
-            {(name, version) for name, version in boot.ALLOWED_REALTIME_MODELS},
+            {
+                (name, version)
+                for name, version in boot.ALLOWED_REALTIME_MODELS | boot.ALLOWED_TEXT_MODELS
+            },
         )
 
     def test_the_pattern_recognises_realtime_model_ids(self):
@@ -158,6 +163,28 @@ class TheCheckerReadsTheRealAllowlist(unittest.TestCase):
         ):
             with self.subTest(model_id=model_id):
                 self.assertTrue(check_b3_allowlist.MODEL_PATTERN.search(f'X = "{model_id}"'))
+
+    def test_the_pattern_also_recognises_non_realtime_text_model_ids(self):
+        # Broadened 2026-09-18 (ADR-006 Decision 3) from realtime-only -- a hardcoded text-model
+        # name must be caught the same way a hardcoded realtime one already is.
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import check_b3_allowlist
+
+        for model_id in ("gpt-5.4-mini", "gpt-4o-mini", "gpt-5-mini"):
+            with self.subTest(model_id=model_id):
+                self.assertTrue(check_b3_allowlist.MODEL_PATTERN.search(f'X = "{model_id}"'))
+
+    def test_an_unapproved_text_model_pair_fails_the_check(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import check_b3_allowlist
+
+        target = REPO_ROOT / "voice-agent" / "azbank_voice_agent" / "boot.py"
+        original = target.read_text()
+        self.addCleanup(target.write_text, original)
+        target.write_text(original + '\n# BAD ("gpt-4o-mini", "2024-07-18")\n')
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("gpt-4o-mini", result.stdout)
 
     def test_the_pair_pattern_recognises_a_literal_name_version_pair(self):
         sys.path.insert(0, str(REPO_ROOT / "scripts"))

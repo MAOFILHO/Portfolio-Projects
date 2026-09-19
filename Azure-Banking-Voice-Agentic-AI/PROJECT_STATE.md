@@ -49,9 +49,8 @@ resource) — fixed live, not yet fixed in the CLI itself.
 
 **Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
 — `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
-is on record. One exception: the Azure AI Language resource (D2) is not cleared to provision yet — a
-`/research` pass on its free-tier quota and Canada Central availability is still owed, gating that one
-resource only. Everything else in the design can be built without it.
+is on record, and `APPROVED: Phase 8 Language resource` (at the corrected non-free price). Both new
+resources exist (see "Live Azure state"). The post-call pipeline, `evals/`, and the docs are not built.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -65,6 +64,21 @@ and goes stale between sessions.
 - AOAI `aoai-azure-banking-voice-cc` — `gpt-realtime-mini` 2025-10-06, GlobalStandard, NoAutoUpgrade.
   Re-verified live 2026-09-11: pin retires **2027-04-06**, ~6.8 months out, no stop-and-ask.
   Successor `gpt-realtime-1.5` still GA (retires 2027-08-24).
+- **Second AOAI deployment `gpt-5.4-mini` (2026-03-17, GlobalStandard) created 2026-09-18** — D11's
+  summary/intent model, reused as D12's eval judge. Chosen live over `gpt-4o-mini` (status
+  `Deprecating`) and `gpt-5-mini` (retires 2027-02-09, ~4.7 months runway) for best GA runway:
+  retires **2027-09-21**, ~12 months out. RBAC: no new grant needed — the voice agent's identity
+  already holds `Cognitive Services OpenAI User` scoped to the whole `aoai-azure-banking-voice-cc`
+  account, which covers this deployment too. **B3 covers it via the CI static check only**:
+  `boot.py` carries `ACTIVE_TEXT_MODEL` / `ALLOWED_TEXT_MODELS`, `scripts/check_b3_allowlist.py`
+  scans both deployment classes, `CLAUDE.md`'s B3 row updated. No runtime guard and no Bicep for this
+  deployment yet — ADR-006 Decision 4's non-fatal guard is built with the post-call pipeline.
+- **Azure AI Language resource `lang-azure-banking-voice-cc` created 2026-09-18** — `TextAnalytics`
+  kind, Standard (`S`) SKU, Canada Central, endpoint `https://lang-azure-banking-voice-cc.cognitive
+  services.azure.com/`. D2's PII redaction target. **RBAC granted 2026-09-18**: voice agent identity
+  holds `Cognitive Services Language Reader`, scoped to this resource only — verified live to include
+  `analyze-conversations/action` despite the misleading "Reader" name. Not yet called by any code —
+  that's the post-call pipeline, still open.
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
   image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-

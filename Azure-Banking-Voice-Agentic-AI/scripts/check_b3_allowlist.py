@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""B3's static check: no code path may name a realtime model outside the allowlist.
+"""B3's static check: no code path may name a realtime OR pinned text (ADR-006) model outside their
+allowlists.
+
+Extended 2026-09-18 (ADR-006 Decision 3) from realtime-only to both deployment classes. The pattern
+below now matches any gpt-* model id, realtime-shaped or not, and checks it against the union of
+boot.py's two allowlists -- one regex, one scan, rather than a second near-duplicate pair for the
+text model. Confirmed safe to broaden: no non-realtime gpt-* id existed anywhere in scan_targets()
+before this change, so nothing that used to pass silently starts failing here.
 
 Deliberately independent of the runtime boot guard (`azbank_voice_agent/boot.py`). The guard
 proves what is *deployed* is approved; this proves what is *written down in the source* is
@@ -68,15 +75,16 @@ import _scan_utils
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "voice-agent" / "azbank_voice_agent"
 
-# Anything that looks like a realtime model id, whether or not this project uses it.
-MODEL_PATTERN = re.compile(r"\bgpt-[a-z0-9.\-]*realtime[a-z0-9.\-]*\b", re.IGNORECASE)
+# Anything that looks like a gpt-* model id, realtime-shaped or not -- broadened 2026-09-18 from
+# realtime-only so a hardcoded text-model name is caught the same way a hardcoded realtime one is.
+MODEL_PATTERN = re.compile(r"\bgpt-[a-z0-9.\-]+\b", re.IGNORECASE)
 
 # A model id and a date-shaped version written together as a literal pair, quoted either way --
-# the shape ACTIVE_REALTIME_MODEL / SUCCESSOR_REALTIME_MODEL are declared in, in boot.py. `\s`
-# spans newlines too, so a pair split across lines (e.g. a wrapped tuple literal) still matches --
-# matched against each file's whole text, not scanned line by line (see main()).
+# the shape ACTIVE_REALTIME_MODEL / SUCCESSOR_REALTIME_MODEL / ACTIVE_TEXT_MODEL are declared in, in
+# boot.py. `\s` spans newlines too, so a pair split across lines (e.g. a wrapped tuple literal) still
+# matches -- matched against each file's whole text, not scanned line by line (see main()).
 PAIR_PATTERN = re.compile(
-    r"""["'](gpt-[a-z0-9.\-]*realtime[a-z0-9.\-]*)["']\s*,\s*["'](\d{4}-\d{2}-\d{2})["']""",
+    r"""["'](gpt-[a-z0-9.\-]+)["']\s*,\s*["'](\d{4}-\d{2}-\d{2})["']""",
     re.IGNORECASE,
 )
 
@@ -104,11 +112,14 @@ def allowed_names():
 
 
 def allowed_pairs():
-    """The exact (name, version) pairs B3 permits, read from the guard itself."""
+    """The exact (name, version) pairs B3 permits, read from the guard itself -- the union of both
+    allowlists (realtime, ADR-006's text pin), since this scanner no longer distinguishes which
+    deployment class a given match belongs to before checking it."""
     sys.path.insert(0, str(REPO_ROOT / "voice-agent"))
     from azbank_voice_agent import boot
 
-    return {(name.lower(), version) for name, version in boot.ALLOWED_REALTIME_MODELS}
+    all_pairs = boot.ALLOWED_REALTIME_MODELS | boot.ALLOWED_TEXT_MODELS
+    return {(name.lower(), version) for name, version in all_pairs}
 
 
 def main():
@@ -137,12 +148,12 @@ def main():
 
     return _scan_utils.report(
         violations,
-        title="B3 STATIC CHECK FAILED -- realtime model named outside the allowlist:",
+        title="B3 STATIC CHECK FAILED -- model named outside the realtime/text allowlists:",
         footer=(
             f"Allowed (name, version) pairs: {sorted(pairs_ok)}\n"
             "Change the allowlist in azbank_voice_agent/boot.py deliberately, or fix the code path."
         ),
-        ok_message=f"B3 static check: ok -- every realtime model named in the tree is allowlisted {sorted(names_ok)}",
+        ok_message=f"B3 static check: ok -- every model named in the tree is allowlisted {sorted(names_ok)}",
     )
 
 
