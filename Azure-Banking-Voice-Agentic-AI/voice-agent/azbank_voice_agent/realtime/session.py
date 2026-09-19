@@ -273,6 +273,7 @@ async def budget_or_closed(call_records, now=None):
 
 async def run_closed_call(
     transport, realtime, call_records, correlation_id=None, now=None, closed_path_cause=None,
+    capture=None,
 ):
     """Answer, say the service is closed, hang up. **Hard-bounded, by the relay.**
 
@@ -359,6 +360,13 @@ async def run_closed_call(
         span.set_attribute("end_reason", "closed")
         span.set_attribute("auth_state", gate.ANONYMOUS)
         span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
+        if capture is not None:
+            # turn_count 0: the closed path's one fixed sentence is not a counted turn, and it holds
+            # no words worth keeping -- the pipeline writes this call's outcome row and nothing more.
+            capture.finish(
+                correlation_id, "closed", gate.ANONYMOUS, 0,
+                telemetry.round_duration_ms(time.monotonic() - started),
+            )
     log.info("closed call ended, correlationId=%s", correlation_id)
 
 
@@ -408,7 +416,9 @@ async def _record_minutes(call_records, started, now=None):
         )
 
 
-async def run_call(transport, realtime, core_banking, call_records, correlation_id=None, now=None):
+async def run_call(
+    transport, realtime, core_banking, call_records, correlation_id=None, now=None, capture=None,
+):
     """Relay one call: media transport <-> realtime connection, with core banking behind the gate.
 
     `transport` satisfies transport.protocol.MediaTransport; `realtime` satisfies
@@ -672,9 +682,15 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
                 # would carry it, so no content lands here now either -- no exception carved out
                 # for Phase 2 just because there's nothing sensitive to say yet.
                 log.info("agent transcript delta received (%d chars)", len(event.delta))
+                # Phase 8 (D14): held in memory for the post-call pipeline, which redacts before
+                # anything is written (ADR-007). Nothing about this line reaches a log.
+                if capture is not None:
+                    capture.add_delta(event.delta)
             elif event.type == "response.done":
                 # One full model response cycle = one turn (B4).
                 turn_count += 1
+                if capture is not None:
+                    capture.end_turn()
                 # Issue #61 (D5): the "turn" span, created and closed here rather than opened at
                 # the top of the loop and held open -- a turn is only known to be over at this
                 # event, so it is recorded retroactively (`start_span` + `end()`, not
@@ -839,4 +855,9 @@ async def run_call(transport, realtime, core_banking, call_records, correlation_
         span.set_attribute("turn_count", turn_count)
         span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
         span.set_attribute("closed_path_taken", False)
+        if capture is not None:
+            capture.finish(
+                correlation_id, end_reason, auth_state, turn_count,
+                telemetry.round_duration_ms(time.monotonic() - started),
+            )
     log.info("call ended")
