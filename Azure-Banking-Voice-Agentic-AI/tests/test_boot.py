@@ -198,5 +198,26 @@ class BootRefusesAnUnconfiguredCoreBanking(unittest.TestCase):
             boot.core_banking_url(env=env)
 
 
+class TranscriptsAccountUrl(unittest.TestCase):
+    """Phase 8: where redacted transcripts go. Unlike the call-record store's address this one is
+    optional -- post-call work never blocks a call, so an unset value switches transcript storage
+    off (the pipeline records `not_configured`) rather than refusing to start. A value that is set
+    must still be an account URL: the no-keys stance holds for a value someone did set."""
+
+    def test_unset_means_transcript_storage_is_off(self):
+        self.assertIsNone(boot.transcripts_account_url(env={}))
+        self.assertIsNone(boot.transcripts_account_url(env={"TRANSCRIPTS_ACCOUNT_URL": ""}))
+
+    def test_an_account_url_is_returned_as_given(self):
+        url = "https://stazbankcallrecords.blob.core.windows.net/"
+        self.assertEqual(boot.transcripts_account_url(env={"TRANSCRIPTS_ACCOUNT_URL": url}), url)
+
+    def test_a_connection_string_is_refused_outright(self):
+        with self.assertRaises(SystemExit):
+            boot.transcripts_account_url(
+                env={"TRANSCRIPTS_ACCOUNT_URL": "DefaultEndpointsProtocol=https;AccountKey=abc"}
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

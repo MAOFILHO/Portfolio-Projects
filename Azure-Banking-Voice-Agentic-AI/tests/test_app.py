@@ -187,7 +187,9 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         # relay's own responsibility and is covered end to end by tests/test_whole_call.py.
         calls = []
 
-        async def fake_run_call(transport, realtime, core_banking, call_records, correlation_id=None):
+        async def fake_run_call(
+            transport, realtime, core_banking, call_records, correlation_id=None, capture=None,
+        ):
             calls.append((transport, realtime, core_banking, call_records, correlation_id))
 
         fake_ws = FakeWebSocket()
@@ -229,6 +231,115 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         with patch.object(app, "_call_automation", None), \
              self.assertRaises(RuntimeError):
             app.call_automation()
+
+
+class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
+    """Phase 8 exit criterion 4 at the entry point: the handler hands the finished call's capture to
+    a background task and returns. It never awaits the pipeline, on any path out of the handler."""
+
+    @staticmethod
+    def _drive(run_call_impl=None, run_closed_call_impl=None, budget=None, postcall_impl=None):
+        """Run one /ws call with everything stubbed; return (post-call invocations, handler done?)."""
+        invocations = []
+
+        async def fake_postcall(capture, **collaborators):
+            invocations.append((capture, collaborators))
+            if postcall_impl is not None:
+                await postcall_impl()
+
+        async def default_run_call(*args, capture=None, **kwargs):
+            capture.finish("corr-x", "model_ended", "anonymous", 1, 10)
+
+        async def default_budget(_records):
+            return None
+
+        async def main():
+            await app.media_stream(FakeWebSocket())
+            handler_returned = True
+            # Only now let any scheduled task run to completion (or stay blocked, if it is one that
+            # never finishes) so the test can look at it.
+            pending = list(app._postcall_tasks)
+            await asyncio.wait(pending, timeout=0.05)
+            for task in pending:
+                task.cancel()
+            return handler_returned
+
+        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+             patch.object(app, "_core_banking", FakeCoreBankingClient()), \
+             patch.object(app, "_call_records", FakeCallRecordStore()), \
+             patch.object(app, "budget_or_closed", budget or default_budget), \
+             patch.object(app, "run_call", run_call_impl or default_run_call), \
+             patch.object(app, "run_closed_call", run_closed_call_impl), \
+             patch.object(app, "run_postcall", fake_postcall):
+            returned = asyncio.run(main())
+        return invocations, returned
+
+    def test_a_finished_call_hands_its_capture_to_the_pipeline_once(self):
+        invocations, _ = self._drive()
+        self.assertEqual(len(invocations), 1)
+        capture, collaborators = invocations[0]
+        self.assertEqual(capture.end_reason, "model_ended")
+        self.assertEqual(
+            set(collaborators), {"call_records", "redactor", "summarizer", "transcripts"}
+        )
+
+    def test_the_handler_returns_while_the_pipeline_is_still_running(self):
+        never = asyncio.Event()
+
+        async def blocks_forever():
+            await never.wait()
+
+        invocations, returned = self._drive(postcall_impl=blocks_forever)
+        self.assertTrue(returned)
+        self.assertEqual(len(invocations), 1)
+
+    def test_a_call_that_raises_still_schedules_the_pipeline(self):
+        async def crashes(*args, capture=None, **kwargs):
+            raise RuntimeError("relay failed")
+
+        async def main():
+            with self.assertRaises(RuntimeError):
+                await app.media_stream(FakeWebSocket())
+            pending = list(app._postcall_tasks)
+            if pending:
+                await asyncio.wait(pending, timeout=0.05)
+
+        invocations = []
+
+        async def fake_postcall(capture, **collaborators):
+            invocations.append(capture)
+
+        async def no_budget_problem(_records):
+            return None
+
+        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+             patch.object(app, "_core_banking", FakeCoreBankingClient()), \
+             patch.object(app, "_call_records", FakeCallRecordStore()), \
+             patch.object(app, "budget_or_closed", no_budget_problem), \
+             patch.object(app, "run_call", crashes), \
+             patch.object(app, "run_postcall", fake_postcall):
+            asyncio.run(main())
+        self.assertEqual(len(invocations), 1)
+
+    def test_a_closed_call_gets_a_pipeline_run_too(self):
+        from azbank_voice_agent.cost import caps
+
+        async def spent(_records):
+            raise caps.DailyBudgetSpent("budget", cause=caps.CLOSED_PATH_BUDGET_SPENT)
+
+        async def closed_call(transport, realtime, call_records, correlation_id=None,
+                              closed_path_cause=None, capture=None, **kwargs):
+            capture.finish(correlation_id, "closed", "anonymous", 0, 5)
+
+        invocations, _ = self._drive(budget=spent, run_closed_call_impl=closed_call)
+        self.assertEqual([c.end_reason for c, _ in invocations], ["closed"])
+
+    def test_a_failure_to_schedule_never_reaches_the_caller(self):
+        async def main():
+            with patch.object(app, "_call_records", None):
+                app._schedule_postcall(app.CallCapture())
+
+        asyncio.run(main())
 
 
 class ImportingThisModuleHasNoSideEffects(unittest.TestCase):

@@ -12,6 +12,7 @@ azure-communication-callautomation version. Written from docs/PLAN.md's verified
 (frame shapes, WS URL, EnableBidirectional requirement), not independently re-checked against the
 current SDK signature.
 """
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -28,11 +29,20 @@ from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential
 from fastapi import FastAPI, Request, WebSocket
 
-from .boot import app_base_url, assert_boot_safety, call_records_account_url, core_banking_url
+from .boot import (
+    app_base_url,
+    assert_boot_safety,
+    call_records_account_url,
+    core_banking_url,
+    transcripts_account_url,
+)
 from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
 from .observability import telemetry
+from .postcall.blob import BlobTranscriptStore
+from .postcall.capture import CallCapture
+from .postcall.pipeline import run_postcall
 from .realtime.client import connect_realtime
 from .realtime.session import budget_or_closed, run_call, run_closed_call
 
@@ -90,6 +100,21 @@ _core_banking = None
 _call_records = None
 _call_automation = None
 
+#: Phase 8's post-call collaborators. `_redactor` and `_summarizer` stay None until their adapters
+#: exist: with no redactor the pipeline writes no transcript and no summary, only the call's outcome
+#: row (ADR-007 -- an unredacted transcript is never a fallback).
+_transcripts = None
+_redactor = None
+_summarizer = None
+
+#: The post-call tasks still running. Held so the event loop cannot drop one mid-flight, and so
+#: shutdown can give them a moment to finish.
+_postcall_tasks: set = set()
+
+#: How long shutdown waits for in-flight post-call work. Off the call path, so this only bounds how
+#: long a revision swap lingers, never a caller.
+POSTCALL_SHUTDOWN_GRACE_SECONDS = 10.0
+
 
 def _process_wide(value, name):
     """A collaborator built in lifespan(), or a loud failure if the app was never started properly.
@@ -118,6 +143,28 @@ def call_automation():
     return _process_wide(_call_automation, "call automation client")
 
 
+def _schedule_postcall(capture):
+    """Hand one finished call to the post-call pipeline as a background task, and return at once.
+
+    **Never awaited by the call** (ADR-006 Decision 4, exit criterion 4). Never raises either: a
+    failure to even schedule is logged and dropped, because this runs on the way out of a caller's
+    call and nothing about analytics may change what that caller experienced.
+    """
+    try:
+        task = asyncio.create_task(run_postcall(
+            capture,
+            call_records=call_records(),
+            redactor=_redactor,
+            summarizer=_summarizer,
+            transcripts=_transcripts,
+        ))
+    except Exception as e:  # noqa: BLE001 -- analytics must never break the call's exit
+        log.error("could not schedule the post-call pipeline (%s)", type(e).__name__)
+        return
+    _postcall_tasks.add(task)
+    task.add_done_callback(_postcall_tasks.discard)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """B3 runs here, before the first call can arrive -- and deliberately not at import time, so
@@ -132,7 +179,7 @@ async def lifespan(_app):
     today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
-    global _core_banking, _call_records, _call_automation
+    global _core_banking, _call_records, _call_automation, _transcripts
     assert_boot_safety()
     # Read and discarded, for its refusal. Every other address this app needs is validated by being
     # *used* here; this one is only used per-request, so without this line a missing value would
@@ -160,14 +207,28 @@ async def lifespan(_app):
     # **Managed identity, no connection string** -- DefaultAzureCredential picks up the Container
     # App's system-assigned identity, which is the same identity B3's boot guard already uses to
     # read ARM. Nothing here holds an account key.
+    credential = DefaultAzureCredential()
     _call_records = TableStorageCallRecordStore.from_account_url(
-        call_records_account_url(), DefaultAzureCredential()
+        call_records_account_url(), credential
     )
+    # Phase 8: the redacted-transcript store, same identity. Optional -- see
+    # `boot.transcripts_account_url`: unset switches transcript storage off rather than refusing to
+    # start, because post-call work must never be able to stop a call.
+    transcripts_url = transcripts_account_url()
+    if transcripts_url is not None:
+        _transcripts = BlobTranscriptStore.from_account_url(transcripts_url, credential)
+    else:
+        log.warning("boot: TRANSCRIPTS_ACCOUNT_URL is not set -- transcripts will not be stored")
     try:
         yield
     finally:
+        # In-flight post-call work gets a moment before the stores it writes to are closed.
+        if _postcall_tasks:
+            await asyncio.wait(list(_postcall_tasks), timeout=POSTCALL_SHUTDOWN_GRACE_SECONDS)
         await _core_banking.aclose()
         await _call_records.aclose()
+        if _transcripts is not None:
+            await _transcripts.aclose()
         # Not awaited: the ACS client is the SDK's synchronous one and holds no async resources.
         # It was never closed at all while it lived at module scope; closing it here is what
         # moving it into a lifespan makes possible.
@@ -175,6 +236,7 @@ async def lifespan(_app):
         _core_banking = None
         _call_records = None
         _call_automation = None
+        _transcripts = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -273,20 +335,31 @@ async def media_stream(websocket: WebSocket):
         # unknown budget is not permission. `budget_or_closed`'s own docstring records why this is
         # read here rather than in the incoming-call webhook, which is where the exit criteria
         # placed it.
+        # Phase 8: the relay fills this as the call runs, and whatever way the call ends -- a clean
+        # hangup, the closed path, an exception -- the `finally` hands it to the post-call pipeline
+        # as a background task. The handler never awaits that task (exit criterion 4).
+        capture = CallCapture()
         try:
-            await budget_or_closed(call_records())
-        except caps.DailyBudgetSpent as e:
+            try:
+                await budget_or_closed(call_records())
+            except caps.DailyBudgetSpent as e:
+                async with connect_realtime() as realtime:
+                    await run_closed_call(
+                        websocket, realtime, call_records(), correlation_id,
+                        closed_path_cause=e.cause, capture=capture,
+                    )
+                log.info("WS closed (service closed) correlationId=%s", correlation_id)
+                return
             async with connect_realtime() as realtime:
-                await run_closed_call(
-                    websocket, realtime, call_records(), correlation_id, closed_path_cause=e.cause,
+                # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
+                # escalation record has to carry it, and a relay that reached back through the
+                # transport for a header would be a relay that knew what kind of transport it had.
+                await run_call(
+                    websocket, realtime, core_banking(), call_records(), correlation_id,
+                    capture=capture,
                 )
-            log.info("WS closed (service closed) correlationId=%s", correlation_id)
-            return
-        async with connect_realtime() as realtime:
-            # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
-            # escalation record has to carry it, and a relay that reached back through the
-            # transport for a header would be a relay that knew what kind of transport it had.
-            await run_call(websocket, realtime, core_banking(), call_records(), correlation_id)
+        finally:
+            _schedule_postcall(capture)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 
 

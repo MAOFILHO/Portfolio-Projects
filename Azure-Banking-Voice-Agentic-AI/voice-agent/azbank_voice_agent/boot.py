@@ -74,6 +74,10 @@ CORE_BANKING_URL_VAR = "CORE_BANKING_URL"
 #: No default either, for the reason below.
 CALL_RECORDS_ACCOUNT_URL_VAR = "CALL_RECORDS_ACCOUNT_URL"
 
+#: The Blob endpoint redacted transcripts are written to (Phase 8). An account URL, never a connection
+#: string, like the variable above. **Unlike it, optional** -- see transcripts_account_url().
+TRANSCRIPTS_ACCOUNT_URL_VAR = "TRANSCRIPTS_ACCOUNT_URL"
+
 _ARM_API_VERSION = "2023-05-01"
 
 
@@ -149,6 +153,28 @@ def call_records_account_url(env=None):
     if not url.startswith(("http://", "https://")):
         raise SystemExit(
             f"{CALL_RECORDS_ACCOUNT_URL_VAR} must be an account URL, not a connection string. This "
+            "project authenticates to Storage with a managed identity and holds no account key."
+        )
+    return url
+
+
+def transcripts_account_url(env=None):
+    """The configured Blob endpoint for redacted transcripts, or None if transcript storage is off.
+
+    **The one address in this file that does not refuse to start when missing**, deliberately. The
+    others are on the live-call path, where a missing value is a call that fails in front of a
+    caller. This one is only ever read by the post-call pipeline (ADR-006 Decision 4), which must
+    never be able to stop a call: unset means the pipeline records `not_configured` for the
+    transcript and carries on. A value that *is* set still has to be an account URL -- somebody
+    pasting a connection string would get working software with the no-keys property silently gone.
+    """
+    env = os.environ if env is None else env
+    url = env.get(TRANSCRIPTS_ACCOUNT_URL_VAR)
+    if not url:
+        return None
+    if not url.startswith(("http://", "https://")):
+        raise SystemExit(
+            f"{TRANSCRIPTS_ACCOUNT_URL_VAR} must be an account URL, not a connection string. This "
             "project authenticates to Storage with a managed identity and holds no account key."
         )
     return url
