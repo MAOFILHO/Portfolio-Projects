@@ -1,4 +1,12 @@
-// The call-record store: a Storage account holding the day's ledger and the escalation records.
+// The call-record store: a Storage account holding the day's ledger, the escalation records, and
+// (Phase 8) the per-call summary rows and one private container of redacted transcripts.
+//
+// PHASE 8 ADDITION, APPLIED 2026-09-19 -- A DIFF TOUCHING THIS FILE IS NEVER AUTO-ACCEPTED:
+// the `transcripts` container and the Blob role assignment below. `APPROVED: Phase 8` is on record;
+// Marco reviewed the diff and approved it. Applied incrementally (what-if showed only the blob
+// service, the container and the role assignment as changes); container and role read back live.
+// The Storage Blob Data Contributor GUID was read back from a live `az role definition list` on
+// 2026-09-19 (exact match, BuiltInRole). The role is scoped to the container, not the account.
 //
 // WRITTEN, NOT APPLIED. Same rule the mock-core-banking module beside it follows, and for the same
 // reason: docs/PLAN.md's incremental-IaC rule says every phase adds its Bicep module, and writing it
@@ -62,6 +70,14 @@ param tableName string = 'callrecords'
 // BuiltInRole. See the header.
 var storageTableDataContributor = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
+// Storage Blob Data Contributor. Read, write and delete on blobs. VERIFIED 2026-09-19 against a live
+// `az role definition list --name "Storage Blob Data Contributor"`: exact match, BuiltInRole.
+// Assigned at the container's scope below, so it reaches transcripts and nothing else in the account.
+var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+
+@description('Container the post-call pipeline writes redacted transcripts to. Must match postcall/blob.py\'s TRANSCRIPT_CONTAINER.')
+param transcriptContainerName string = 'transcripts'
+
 resource account 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: name
   location: location
@@ -80,7 +96,7 @@ resource account 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     // the same rule stated a second time, on the other side; either alone is a convention, and both
     // together are a property.
     allowSharedKeyAccess: false
-    // Nothing here is ever public. There are no blobs, and if there were, they would not be either.
+    // Nothing here is ever public. The one blob container (Phase 8 transcripts) is private too.
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
@@ -100,6 +116,34 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-0
 resource table 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: tableName
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: account
+  name: 'default'
+}
+
+// Private: no anonymous access of any kind. Holds redacted, agent-side transcripts only (ADR-007, D14).
+resource transcripts 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: transcriptContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// Scoped to the container, narrower than the table role's account scope: the voice agent can write
+// transcripts and cannot touch any other blob container this account ever gains.
+resource transcriptAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(transcripts.id, voiceAgentPrincipalId, storageBlobDataContributor)
+  scope: transcripts
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions', storageBlobDataContributor
+    )
+    principalId: voiceAgentPrincipalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // Scoped to this account and no wider. A subscription- or resource-group-scoped assignment would
@@ -122,3 +166,6 @@ resource dataAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 
 @description('The table endpoint the voice agent uses as CALL_RECORDS_ACCOUNT_URL. An account URL, never a connection string -- see boot.py, which refuses the latter outright.')
 output tableEndpoint string = account.properties.primaryEndpoints.table
+
+@description('The blob endpoint the voice agent uses as TRANSCRIPTS_ACCOUNT_URL. An account URL, never a connection string.')
+output blobEndpoint string = account.properties.primaryEndpoints.blob

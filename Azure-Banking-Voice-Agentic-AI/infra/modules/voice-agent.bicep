@@ -131,6 +131,8 @@ resource voiceAgent 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AOAI_ACCOUNT_NAME', value: 'aoai-azure-banking-voice-cc' }
             { name: 'CORE_BANKING_URL', value: 'http://ca-azbank-core-banking.internal.${environment.properties.defaultDomain}' }
             { name: 'CALL_RECORDS_ACCOUNT_URL', value: callRecordsAccount.properties.primaryEndpoints.table }
+            // Phase 8: where the post-call pipeline writes redacted transcripts (Blob, same account).
+            { name: 'TRANSCRIPTS_ACCOUNT_URL', value: callRecordsAccount.properties.primaryEndpoints.blob }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-conn' }
             // Named fallback, not identity -- see this file's header, D10 still open.
             { name: 'AZURE_MONITOR_AUTH', value: 'connection_string' }
