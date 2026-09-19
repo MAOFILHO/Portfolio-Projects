@@ -222,7 +222,11 @@ been observed to contradict the pre-provisioning estimate.
    provision once Phase 8's build reaches it.)*
 10. **Phase 8 build**: post-call transcript/metadata pipeline, `evals/`, both ADRs' code (second model
     pin + B3 extension, redact-before-first-write), `RESULTS.md`, architecture diagram. Full criteria:
-    `docs/phase8/exit-criteria.md`.
+    `docs/phase8/exit-criteria.md`. **Two design gaps need Marco before the pipeline is built** (found
+    2026-09-19 by reading code; detail: `docs/handoffs/2026-09-19-phase8-b3-text-pin-committed-build-
+    pending.md`): (a) caller speech is never transcribed, so the "redacted transcript" is agent-side
+    only unless a caller-transcription deployment is added; (b) the code sets 8 `end_reason` values,
+    not the 3 the design doc says, and none maps onto D10's 5-value enum.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
