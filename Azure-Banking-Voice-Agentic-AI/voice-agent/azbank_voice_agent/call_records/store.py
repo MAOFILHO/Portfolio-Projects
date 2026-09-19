@@ -34,7 +34,7 @@ failure is what delayed.
 """
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -49,6 +49,7 @@ TABLE_NAME = "callrecords"
 #: partition key typo is a record that is written successfully and can never be found.
 ESCALATION_PARTITION = "escalation"
 LEDGER_PARTITION = "ledger"
+CALL_PARTITION = "call"
 
 #: The timezone "today" means, **written down here rather than inherited from the container's
 #: locale** (issue #49). A day boundary that moved with whatever the host happened to be set to
@@ -161,6 +162,36 @@ class EscalationRecord:
         )
 
 
+@dataclass(frozen=True)
+class CallSummaryRecord:
+    """One finished call: how it ended, and what the post-call pipeline made of it (Phase 8).
+
+    Written after hangup, one per call, keyed by `correlation_id`. `call_outcome` is D10's five-value
+    enum and `end_reason` is the raw value it was collapsed from, kept so nothing is lost (D17).
+
+    **B2 covers every field.** The summary and intent are produced from the *redacted* transcript
+    only (ADR-007), never the raw one, and the statuses are fixed strings, not prose. No transcript
+    text, no keyed digit, no caller phone number belongs here -- `tests/test_zz_b2_leak_scan.py`
+    sweeps these records like every other persisted one.
+
+    `transcript_status`: stored | none | not_configured | redaction_failed | write_failed.
+    `summary_status`: done | skipped | not_configured | failed.
+    """
+
+    correlation_id: str
+    call_outcome: str
+    end_reason: str
+    auth_state: str
+    turn_count: int
+    duration_ms: int
+    occurred_at: str
+    transcript_status: str
+    transcript_blob: str
+    summary_status: str
+    summary: str
+    intent: str
+
+
 def day_key(now=None):
     """The ledger key for the day `now` falls in: a date, in the stated timezone.
 
@@ -186,6 +217,14 @@ class CallRecordStore(Protocol):
         Reaching a person matters more than recording that somebody asked to, so a failure here is
         logged loudly and the call still ends with the same apology. This is the one place in the
         phase where the store failing is not fail-closed, and it is deliberate.
+        """
+        ...
+
+    async def record_call(self, record: CallSummaryRecord) -> None:
+        """Write one finished call's summary row. Raises CallRecordStoreUnavailable if it could not.
+
+        Called after hangup by the post-call pipeline, never on the live-call path. A failure is
+        logged and dropped by the caller: nothing about a finished call can be made worse by it.
         """
         ...
 
@@ -333,6 +372,21 @@ class TableStorageCallRecordStore:
         except Exception as e:
             raise CallRecordStoreUnavailable(
                 f"could not record the day's minutes: {type(e).__name__}"
+            ) from e
+
+    async def record_call(self, record):
+        # Upsert, keyed by the call: one row per call, and a retry of the same call's pipeline
+        # overwrites its own row rather than adding a second.
+        entity = {
+            "PartitionKey": CALL_PARTITION,
+            "RowKey": record.correlation_id,
+            **asdict(record),
+        }
+        try:
+            await self._table.upsert_entity(entity)
+        except Exception as e:
+            raise CallRecordStoreUnavailable(
+                f"could not record a call summary: {type(e).__name__}"
             ) from e
 
     async def record_escalation(self, record):

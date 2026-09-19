@@ -55,8 +55,20 @@ import unittest
 from azbank_voice_agent.call_records import REASONS, EscalationRecord
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingClient
+from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.observability import telemetry
-from azbank_voice_agent.realtime.fake import FakeRealtimeServer, function_call, response_done
+from azbank_voice_agent.postcall import pipeline
+from azbank_voice_agent.postcall.capture import CallCapture
+from azbank_voice_agent.postcall.fake import (
+    FakeRedactor,
+    FakeSummarizer,
+    FakeTranscriptStore,
+)
+from azbank_voice_agent.realtime.fake import (
+    FakeRealtimeServer,
+    function_call,
+    response_done,
+)
 from azbank_voice_agent.realtime.session import run_call
 from azbank_voice_agent.transport.fake import FakeTransport, audio_frame, dtmf_frame
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -323,6 +335,11 @@ def offending_records_in_the_call_record_stores(secrets=SECRETS):
         for day, minutes in store.minutes.items():
             if _carries(day, secrets) or _carries(minutes, secrets):
                 offenders.append(("ledger", day, minutes))
+        # Phase 8: the post-call summary row, every field, same no-carve-out rule.
+        for record in store.call_summaries:
+            for field, value in dataclasses.asdict(record).items():
+                if _carries(value, secrets):
+                    offenders.append(("call_summary", field, value))
     return offenders
 
 
@@ -481,3 +498,79 @@ class NoPinReachedAPersistedRecordAnywhereInThisRun(unittest.TestCase):
                     span.add_event("planted-event", {"detail": planted})
                 provider.force_flush()
                 self.assertTrue(offending_span_event_attributes(exporter.get_finished_spans()))
+
+
+def offending_stored_transcripts(secrets=(*SECRETS, FAKE_CALLER_PHONE_NUMBER)):
+    """Every credential found in any transcript the post-call pipeline wrote during this run.
+
+    Phase 8's fifth persisted surface (ADR-007): the redacted transcript in Blob. Swept from
+    `FakeTranscriptStore.WRITTEN` for the same run-wide reason the call-record sweep is, and over
+    the whole blob name and every turn with no carve-out.
+    """
+    offenders = []
+    for store in FakeTranscriptStore.WRITTEN:
+        for correlation_id, turns in store.writes:
+            for value in (correlation_id, *turns):
+                if _carries(value, secrets):
+                    offenders.append(("transcript", correlation_id, value))
+    return offenders
+
+
+def _a_call_whose_agent_speaks_the_credentials():
+    """The worst case ADR-007 exists for: the agent reads a PIN and a phone number back aloud."""
+    capture = CallCapture()
+    for turn in (
+        f"I heard {DEFAULT_PIN}, is that right?",
+        f"And you are calling from {FAKE_CALLER_PHONE_NUMBER}.",
+    ):
+        capture.add_delta(turn)
+        capture.end_turn()
+    capture.finish("corr-b2-transcript", "model_ended", gate.AUTHENTICATED, 2, 1000)
+    return capture
+
+
+class NoCredentialReachedAStoredTranscriptOrSummaryRowInThisRun(unittest.TestCase):
+    """B2 over the post-call pipeline's two outputs (Phase 8, ADR-007)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import asyncio
+        cls.store = FakeCallRecordStore()
+        cls.transcripts = FakeTranscriptStore()
+        asyncio.run(pipeline.run_postcall(
+            _a_call_whose_agent_speaks_the_credentials(),
+            call_records=cls.store,
+            redactor=FakeRedactor(terms=(DEFAULT_PIN, FAKE_CALLER_PHONE_NUMBER)),
+            summarizer=FakeSummarizer(),
+            transcripts=cls.transcripts,
+        ))
+
+    def test_the_pipeline_really_wrote_a_transcript_and_a_row_to_scan(self):
+        self.assertTrue(self.transcripts.writes)
+        self.assertTrue(self.store.call_summaries)
+
+    def test_no_stored_transcript_carries_a_pin_or_phone_number(self):
+        self.assertEqual(offending_stored_transcripts(), [])
+
+    def test_no_call_summary_row_carries_a_credential(self):
+        self.assertEqual(offending_records_in_the_call_record_stores(), [])
+
+    def test_the_transcript_scan_would_catch_a_leak(self):
+        planted = FakeTranscriptStore()
+        planted.writes.append(("corr-x", [f"leaked {DEFAULT_PIN}"]))
+        self.addCleanup(FakeTranscriptStore.WRITTEN.remove, planted)
+        self.assertTrue(offending_stored_transcripts())
+
+    def test_the_summary_row_scan_would_catch_a_leak(self):
+        from azbank_voice_agent.call_records import CallSummaryRecord
+        planted = FakeCallRecordStore()
+        planted.call_summaries.append(CallSummaryRecord(
+            correlation_id="corr-y", call_outcome="error", end_reason="error", auth_state="anonymous",
+            turn_count=1, duration_ms=1, occurred_at="2026-09-19T10:00:00Z",
+            transcript_status="none", transcript_blob="", summary_status="done",
+            summary=f"caller said {FAKE_CALLER_PHONE_NUMBER}", intent="x",
+        ))
+        self.addCleanup(FakeCallRecordStore.WRITTEN.remove, planted)
+        self.assertTrue(offending_records_in_the_call_record_stores(
+            secrets=(*SECRETS, FAKE_CALLER_PHONE_NUMBER)
+        ))

@@ -40,6 +40,7 @@ class FakeCallRecordStore:
         FakeCallRecordStore.WRITTEN.append(self)
         self.fail_with = fail_with
         self.escalations = []
+        self.call_summaries = []
         # day -> minutes spent. Public and pre-loadable, so a test can arrange "today is already
         # spent" without simulating a day's worth of calls.
         self.minutes = dict(minutes or {})
@@ -56,6 +57,10 @@ class FakeCallRecordStore:
     async def record_escalation(self, record):
         self._check("record_escalation")
         self.escalations.append(record)
+
+    async def record_call(self, record):
+        self._check("record_call")
+        self.call_summaries.append(record)
 
     async def minutes_used(self, day):
         """A day nothing has been recorded against is 0.0, exactly as the real client answers.
