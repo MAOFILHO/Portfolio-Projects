@@ -279,9 +279,7 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
         self.assertEqual(len(invocations), 1)
         capture, services = invocations[0]
         self.assertEqual(capture.end_reason, "model_ended")
-        self.assertEqual(
-            set(vars(services)), {"call_records", "redactor", "summarizer", "transcripts"}
-        )
+        self.assertIsInstance(services, app.PostcallServices)
 
     def test_the_handler_returns_while_the_pipeline_is_still_running(self):
         never = asyncio.Event()

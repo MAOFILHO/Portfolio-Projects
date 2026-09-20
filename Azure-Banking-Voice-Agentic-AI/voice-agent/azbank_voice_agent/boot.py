@@ -76,11 +76,11 @@ CALL_RECORDS_ACCOUNT_URL_VAR = "CALL_RECORDS_ACCOUNT_URL"
 
 #: The Blob endpoint redacted transcripts are written to (Phase 8). An account URL, never a connection
 #: string, like the variable above. **Unlike it, optional** -- see transcripts_account_url().
+TRANSCRIPTS_ACCOUNT_URL_VAR = "TRANSCRIPTS_ACCOUNT_URL"
+
 #: The Entra token scope for Azure OpenAI and Azure AI Language alike. Live-verified against both
 #: services on 2026-09-19 (docs/phase8/research-postcall-adapters.md); one place, so a change is one edit.
 COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
-
-TRANSCRIPTS_ACCOUNT_URL_VAR = "TRANSCRIPTS_ACCOUNT_URL"
 
 #: The Azure AI Language endpoint the post-call redactor calls (Phase 8). An https endpoint, no key.
 #: Optional, like the address above: unset switches redaction off, which means no transcript is

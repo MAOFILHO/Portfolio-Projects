@@ -234,6 +234,36 @@ class DigitsInTheModelWrittenSummaryAreMaskedBeforeTheRow(unittest.TestCase):
         self.assertIn("[REDACTED]", row.summary)
         self.assertEqual(row.summary_status, "done")
 
+    def test_a_digit_run_in_the_intent_never_reaches_the_row(self):
+        class Leaky(FakeSummarizer):
+            INTENT = "wants_account_1234567890"
+
+        store = _run(_finished_capture(TURNS), **_wired(summarizer=Leaky()))
+        row = store.call_summaries[0]
+        self.assertNotIn("1234567890", row.intent)
+        self.assertIn("[REDACTED]", row.intent)
+
+
+class ACorrelationIdThatIsNotAStorageKeyStillGetsItsRow(unittest.TestCase):
+    """The id is a Blob name *and* a Table RowKey. It arrives from a request header, so it is
+    checked where it enters the pipeline -- an id neither store can hold must cost the call its id,
+    never its row."""
+
+    def test_an_unsafe_id_is_replaced_before_either_store_sees_it(self):
+        parts = _wired()
+        store = _run(_finished_capture(TURNS, correlation_id="bad#id?x"), **parts)
+        [row] = store.call_summaries
+        self.assertNotIn("bad", row.correlation_id)
+        self.assertRegex(row.correlation_id, r"^[A-Za-z0-9._-]+$")
+        [(blob_id, _)] = parts["transcripts"].writes
+        self.assertEqual(blob_id, row.correlation_id)
+        self.assertEqual(row.transcript_status, "stored")
+
+    def test_an_acs_style_id_is_kept_as_it_is(self):
+        store = _run(_finished_capture(TURNS, correlation_id="0f8fad5b-d9cb-469f-a165-70867728950e"),
+                     **_wired())
+        self.assertEqual(store.call_summaries[0].correlation_id, "0f8fad5b-d9cb-469f-a165-70867728950e")
+
 
 class ThePipelineNeverRaisesIntoTheProcess(unittest.TestCase):
     def test_a_row_that_cannot_be_written_is_logged_and_swallowed(self):

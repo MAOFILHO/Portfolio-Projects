@@ -31,7 +31,9 @@ from ..call_records import (
     TRANSCRIPT_REDACTION_FAILED,
     TRANSCRIPT_STORED,
     TRANSCRIPT_WRITE_FAILED,
+    CallRecordStore,
     CallSummaryRecord,
+    is_storable_id,
 )
 from . import outcome
 from .scrub import scrub_numbers
@@ -45,12 +47,6 @@ STEP_DEADLINE_SECONDS = 60.0
 #: Bounds on the two model-written fields, so a runaway completion cannot bloat a Table row.
 MAX_SUMMARY_CHARS = 2000
 MAX_INTENT_CHARS = 200
-
-#: `_step`'s verdict when the adapter ran and its answer was used. The other two are the record's
-#: `NOT_CONFIGURED` (no adapter) and `_FAILED` (the adapter raised, timed out or answered nonsense).
-_OK = "ok"
-_FAILED = "failed"
-
 
 @dataclass(frozen=True)
 class Summary:
@@ -81,7 +77,7 @@ class PostcallServices:
     """What the pipeline works with, handed around as one thing. Each adapter is None when its
     configuration is absent; `call_records` is the only one the pipeline cannot do without."""
 
-    call_records: object
+    call_records: CallRecordStore
     redactor: Redactor | None = None
     summarizer: Summarizer | None = None
     transcripts: TranscriptStore | None = None
@@ -91,33 +87,25 @@ async def _bounded(awaitable):
     return await asyncio.wait_for(awaitable, timeout=STEP_DEADLINE_SECONDS)
 
 
-async def _step(name, adapter, call, valid=lambda _result: True):
-    """Run one adapter call under its deadline. Returns `(verdict, result)`.
+async def _step(name, adapter, call, failed, valid=lambda _result: True):
+    """Run one adapter call under its deadline. Returns `(result, problem)`.
 
-    The verdict is `_OK`, `NOT_CONFIGURED` (no adapter) or `_FAILED`, and the result is None unless
-    it is `_OK`. Every failure -- a raise, a timeout, an answer `valid` rejects -- is one field of
-    one row, logged as its type alone (B2: an adapter's error can echo the text it was given).
+    `problem` is None when the answer was used. Otherwise it is the record status to write:
+    `NOT_CONFIGURED` when there is no adapter, or `failed` -- the step's own failure status -- when
+    the adapter raised, timed out or gave an answer `valid` rejects, and `result` is None. Every
+    failure is one field of one row, logged as its type alone (B2: an adapter's error can echo the
+    text it was given).
     """
     if adapter is None:
-        return NOT_CONFIGURED, None
+        return None, NOT_CONFIGURED
     try:
         result = await _bounded(call(adapter))
         if not valid(result):
             raise ValueError(f"{name} returned a malformed result")
-        return _OK, result
+        return result, None
     except Exception as e:  # noqa: BLE001 -- any adapter failure is one field of one row
         log.warning("%s failed (%s)", name, type(e).__name__)
-        return _FAILED, None
-
-
-def _problem(verdict, failed):
-    """The record's status for a step that did not succeed."""
-    return NOT_CONFIGURED if verdict == NOT_CONFIGURED else failed
-
-
-def _status(verdict, ok, failed):
-    """A step's verdict as the record's status string."""
-    return ok if verdict == _OK else _problem(verdict, failed)
+        return None, failed
 
 
 def _valid_redaction(redacted, turns):
@@ -142,7 +130,12 @@ async def run_postcall(capture, services):
 
 
 async def _run(capture, services):
-    correlation_id = capture.correlation_id or uuid.uuid4().hex
+    correlation_id = capture.correlation_id
+    if not is_storable_id(correlation_id):
+        # No id, or one neither store can key on: the call loses its ACS id, never its row.
+        if correlation_id:
+            log.warning("post-call: the correlation id is not a storage key, using a generated one")
+        correlation_id = uuid.uuid4().hex
     turns = list(capture.agent_turns)
 
     transcript_status = TRANSCRIPT_NONE
@@ -150,29 +143,29 @@ async def _run(capture, services):
     redacted = None
     if turns:
         # ADR-007 Decision 2: a failed redaction is no transcript, never a fallback to the raw text.
-        verdict, redacted = await _step(
-            "redaction", services.redactor, lambda r: r.redact(turns),
+        redacted, problem = await _step(
+            "redaction", services.redactor, lambda r: r.redact(turns), TRANSCRIPT_REDACTION_FAILED,
             lambda result: _valid_redaction(result, turns),
         )
-        if verdict != _OK:
-            transcript_status = _problem(verdict, TRANSCRIPT_REDACTION_FAILED)
+        if problem:
+            transcript_status = problem
         else:
-            verdict, name = await _step(
+            name, problem = await _step(
                 "transcript write", services.transcripts,
-                lambda t: t.write(correlation_id, redacted),
+                lambda t: t.write(correlation_id, redacted), TRANSCRIPT_WRITE_FAILED,
             )
-            transcript_status = _status(verdict, TRANSCRIPT_STORED, TRANSCRIPT_WRITE_FAILED)
+            transcript_status = problem or TRANSCRIPT_STORED
             blob_name = name or ""
 
     summary_status = SUMMARY_SKIPPED
     summary = intent = ""
     if redacted is not None:
-        verdict, result = await _step(
-            "summary", services.summarizer, lambda s: s.summarize(redacted),
+        result, problem = await _step(
+            "summary", services.summarizer, lambda s: s.summarize(redacted), SUMMARY_FAILED,
             lambda r: isinstance(r, Summary) and isinstance(r.summary, str) and isinstance(r.intent, str),
         )
-        summary_status = _status(verdict, SUMMARY_DONE, SUMMARY_FAILED)
-        if verdict == _OK:
+        summary_status = problem or SUMMARY_DONE
+        if not problem:
             # The redactor's output is number-scrubbed; the model's account of it is too (B2).
             summary = scrub_numbers(result.summary)[:MAX_SUMMARY_CHARS]
             intent = scrub_numbers(result.intent)[:MAX_INTENT_CHARS]

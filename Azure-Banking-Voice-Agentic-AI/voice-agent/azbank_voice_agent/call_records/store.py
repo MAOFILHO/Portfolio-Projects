@@ -34,6 +34,7 @@ failure is what delayed.
 """
 import asyncio
 import logging
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -129,6 +130,22 @@ def _minutes(entity):
         raise CallRecordStoreUnavailable(
             f"the day's ledger row could not be read: {e!r}"
         ) from e
+
+
+#: What a call's correlation id may contain to be used as a storage key. An allow-list, not a list
+#: of bad characters: the id is a Table RowKey (where `/`, `\`, `#`, `?` and control characters are
+#: illegal) and a Blob name (where a path separator puts the blob somewhere the container never meant).
+_STORABLE_ID = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def is_storable_id(correlation_id):
+    """Whether an id can key a call's rows and blob. The id arrives from a request header the
+    caller's carrier controls, so it is checked where it enters rather than trusted."""
+    return (
+        isinstance(correlation_id, str)
+        and _STORABLE_ID.fullmatch(correlation_id) is not None
+        and ".." not in correlation_id
+    )
 
 
 @dataclass(frozen=True)

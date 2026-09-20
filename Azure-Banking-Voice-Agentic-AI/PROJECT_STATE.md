@@ -220,19 +220,14 @@ been observed to contradict the pre-provisioning estimate.
    Standard-tier only, ~$0.07-$1.34/mo bounded at this project's call volume, `COSTS.md`.
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
-10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18). **Built, on `main`, live
-    since 2026-09-20 (image `p8a`)**: agent-side transcript capture, D17 outcome mapping, the
-    redact-before-write pipeline (ADR-007), Blob transcript store, summary row, Language redactor plus
-    number scrub, `gpt-5.4-mini` summarizer, non-fatal B3 text-pin guard. Applied with Marco's
-    approval: private `transcripts` container + scoped Blob role; `gpt-5.4-mini` capacity 10 and
-    `NoAutoUpgrade`. **One real call (2026-09-20) proved criteria 1-2**: Table row (`caller_hangup`,
-    transcript `stored`, summary `done`, intent `balance_enquiry`) and a redacted blob with no PIN or
-    phone number. Marco's user holds Table/Blob Data Reader on `stazbankcallrecords` (granted 2026-09-20).
-    `/code-review` against `47eb921` ran 2026-09-20; its 12 Standards findings are fixed.
-    **Open from its Spec axis**: (a) a call whose `connect_realtime()` raises gets no row; (b) the row
+10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18; build history and
+    live-call evidence: `docs/phase8/build-notes.md`). **Built, on `main`, live (image `p8a`)**;
+    criteria 1-2 proven on one real call. Two `/code-review` rounds done.
+    **Open (Spec axis)**: (a) a call whose `connect_realtime()` raises gets no row; (b) the row
     is written last, after up to 3 x 60 s steps, so a container kill mid-pipeline loses it; (c)
     criterion 4's test measures no latency; (d) `$` amounts pass through the transcript unredacted
-    (B2 covers PIN and phone only) -- state it in `RESULTS.md`.
+    (B2 covers PIN and phone only) -- state it in `RESULTS.md`; (e) `scrub_numbers` leaves a formatted
+    number's area code -- Marco's call, `scrub.py` is B2.
     **Remaining**: criteria 6-7 write-up (D15), `RESULTS.md`, diagram, README badge (still 6 of 8),
     `COSTS.md` per-token rate, Marco's closure sign-off. **Known limit**: one agent turn over 1,000
     characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
