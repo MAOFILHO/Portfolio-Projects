@@ -228,11 +228,10 @@ been observed to contradict the pre-provisioning estimate.
     is written last, after up to 3 x 60 s steps, so a container kill mid-pipeline loses it; (c)
     criterion 4's test measures no latency; (d) `$` amounts pass through the transcript unredacted
     (B2 covers PIN and phone only) -- state it in `RESULTS.md`; (e) `scrub_numbers` leaves a formatted
-    number's area code -- Marco's call, `scrub.py` is B2; (f) the escalation row (`dispatch/tools.py:360`
-    -> `store.py` RowKey) still takes the raw header id, unchecked by `is_storable_id`, and there is no
-    id length cap; (g) a cancelled ledger-write loses that call's minutes (B4 undercount, pre-existing).
-    **Uncommitted, awaiting Marco's look** (PIN-path `finally`): `session.py` ledger-first reorder,
-    its tests, `CLAUDE.md` B3 wording. Handoff: `docs/handoffs/2026-09-20-phase8-review-round3.md`.
+    number's area code -- Marco's call, `scrub.py` is B2; (f) a cancelled ledger write loses that call's
+    minutes (B4 undercount, pre-existing; `asyncio.shield` is Marco's call); (g) a call with no id
+    header keeps `None`, so its escalation RowKey ends `_None`. Last handoff:
+    `docs/handoffs/2026-09-20-phase8-review-round3.md`.
     **Remaining**: criteria 6-7 write-up (D15), `RESULTS.md`, diagram, README badge (still 6 of 8),
     `COSTS.md` per-token rate, Marco's closure sign-off. **Known limit**: one agent turn over 1,000
     characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over

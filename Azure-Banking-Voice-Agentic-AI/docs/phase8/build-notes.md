@@ -49,3 +49,18 @@ Declined:
   validators to be merged; this is the cost of that, and there are two callers.
 - `scrub_numbers` leaves the area code of a formatted number (`(416) 555-0199` becomes
   `(416) [REDACTED]`). `scrub.py` is B2 territory; widening it is a design choice for Marco.
+
+## `/code-review` round 3 (against `4b857a2`, working tree included)
+
+Both axes found the same worst issue: an escalation row is keyed on the raw `x-ms-call-correlation-id`
+header, unchecked. Fixed by checking the id once where it enters (`app.media_stream`), so the relay, the
+escalation row, the capture, the logs and the span share one storable id; `dispatch/tools.py` is untouched.
+`is_storable_id` gained a 128-character cap; `storable_or_generated_id` is shared by `app.py` and the
+pipeline. A missing header still yields `None` (an existing test pins that).
+
+Marco accepted the `session.py` ledger-first reorder and the `CLAUDE.md` B3 wording. The two comments the
+review found overstating ("First, ahead of anything else", "on every path out") were corrected.
+
+Not done, Marco's call: shielding the ledger write from cancellation (`asyncio.shield`, changes B4
+behaviour). Low-priority judgement calls left as they are: `problem` naming in `pipeline.py`,
+duplicated test helper classes, `is_storable_id` living in the Table store module.

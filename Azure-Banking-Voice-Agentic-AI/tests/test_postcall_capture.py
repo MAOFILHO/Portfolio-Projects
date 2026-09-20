@@ -6,6 +6,7 @@ Exit criterion 4 is the point of most of this file: attaching a capture must not
 thing the call does -- same frames, same events consumed, same cap behaviour.
 """
 import asyncio
+import time
 import unittest
 from unittest.mock import patch
 
@@ -97,9 +98,10 @@ class TheCaptureKnowsHowTheCallEnded(unittest.TestCase):
             ))
         self.assertEqual(capture.end_reason, "error")
 
-    def test_the_capture_is_finished_before_the_ledger_write_so_a_cancellation_there_loses_nothing(self):
-        # The write is awaited in the same `finally`; a task cancelled during it must not leave the
-        # capture unfinished, or the pipeline skips the call and no outcome row is ever written.
+    def test_the_capture_is_finished_even_when_the_ledger_write_is_cancelled(self):
+        # The capture is finished in the inner `finally` around the ledger write; a task cancelled
+        # during that write must not leave it unfinished, or the pipeline skips the call and no
+        # outcome row is ever written.
         class CancelledDuringTheWrite(FakeCallRecordStore):
             async def record_minutes(self, day, minutes):
                 raise asyncio.CancelledError
@@ -114,15 +116,37 @@ class TheCaptureKnowsHowTheCallEnded(unittest.TestCase):
 
     def test_the_recorded_duration_is_the_calls_not_the_ledger_writes(self):
         class SlowLedger(FakeCallRecordStore):
-            async def record_minutes(self, day, minutes):
-                await asyncio.sleep(0.3)
+            entered = None
 
+            async def record_minutes(self, day, minutes):
+                self.entered = time.monotonic()
+                await asyncio.sleep(0.05)
+
+        ledger = SlowLedger()
         capture = CallCapture()
+        began = time.monotonic()
         asyncio.run(run_call(
             FakeTransport(), FakeRealtimeServer(events=[response_done()]),
-            FakeCoreBankingClient(), SlowLedger(), capture=capture,
+            FakeCoreBankingClient(), ledger, capture=capture,
         ))
-        self.assertLess(capture.duration_ms, 250)
+        # The duration was taken before the ledger write began, so it cannot exceed the time from
+        # the start of the run to that moment (+1 ms for rounding) -- whatever the machine's speed.
+        self.assertLessEqual(capture.duration_ms, (ledger.entered - began) * 1000 + 1)
+
+    def test_a_capture_that_raises_cannot_skip_the_ledger_charge(self):
+        # B4: a cap that undercounts fails open. The day is charged before the capture is finished,
+        # so a broken capture costs a row and never a minute.
+        class BrokenCapture(CallCapture):
+            def finish(self, *args):
+                raise RuntimeError("boom")
+
+        ledger = FakeCallRecordStore()
+        with self.assertRaises(RuntimeError):
+            asyncio.run(run_call(
+                FakeTransport(), FakeRealtimeServer(events=[response_done()]),
+                FakeCoreBankingClient(), ledger, capture=BrokenCapture(),
+            ))
+        self.assertTrue(ledger.minutes)
 
 
 class AttachingACaptureChangesNothingAboutTheCall(unittest.TestCase):
@@ -169,7 +193,7 @@ class TheClosedPathFillsACaptureToo(unittest.TestCase):
         self.assertEqual(capture.agent_turns, [])
         self.assertEqual(capture.correlation_id, "closed-1")
 
-    def test_a_closed_call_is_finished_before_the_ledger_write_too(self):
+    def test_a_closed_call_is_finished_even_when_the_ledger_write_is_cancelled(self):
         class CancelledDuringTheWrite(FakeCallRecordStore):
             async def record_minutes(self, day, minutes):
                 raise asyncio.CancelledError
@@ -184,6 +208,21 @@ class TheClosedPathFillsACaptureToo(unittest.TestCase):
                 correlation_id="closed-2", capture=capture,
             ))
         self.assertEqual(capture.end_reason, "closed")
+
+    def test_a_capture_that_raises_cannot_skip_the_ledger_charge_on_the_closed_path_either(self):
+        class BrokenCapture(CallCapture):
+            def finish(self, *args):
+                raise RuntimeError("boom")
+
+        ledger = FakeCallRecordStore()
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("were-closed"), response_done()], respond_after_appends=0,
+        )
+        with self.assertRaises(RuntimeError):
+            asyncio.run(run_closed_call(
+                FakeTransport(), realtime, ledger, correlation_id="closed-3", capture=BrokenCapture(),
+            ))
+        self.assertTrue(ledger.minutes)
 
 
 if __name__ == "__main__":
