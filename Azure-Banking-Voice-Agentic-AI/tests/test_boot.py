@@ -219,5 +219,66 @@ class TranscriptsAccountUrl(unittest.TestCase):
             )
 
 
+class LanguageEndpoint(unittest.TestCase):
+    """Phase 8: the Language account the redactor calls. Optional for the same reason as the
+    transcripts address: unset switches redaction off -- so no transcript is written, ADR-007 --
+    and never refuses to start."""
+
+    def test_unset_means_redaction_is_off(self):
+        self.assertIsNone(boot.language_endpoint(env={}))
+        self.assertIsNone(boot.language_endpoint(env={"LANGUAGE_ENDPOINT": ""}))
+
+    def test_an_https_endpoint_is_returned_as_given(self):
+        url = "https://lang-azure-banking-voice-cc.cognitiveservices.azure.com/"
+        self.assertEqual(boot.language_endpoint(env={"LANGUAGE_ENDPOINT": url}), url)
+
+    def test_anything_that_is_not_https_is_refused_outright(self):
+        for bad in ("Endpoint=https://x;Key=abc", "http://x.cognitiveservices.azure.com/", "lang-x"):
+            with self.assertRaises(SystemExit):
+                boot.language_endpoint(env={"LANGUAGE_ENDPOINT": bad})
+
+
+class TextDeploymentName(unittest.TestCase):
+    def test_unset_means_summaries_are_off(self):
+        self.assertIsNone(boot.text_deployment_name(env={}))
+        self.assertIsNone(boot.text_deployment_name(env={"AOAI_TEXT_DEPLOYMENT": ""}))
+
+    def test_a_name_is_returned_as_given(self):
+        self.assertEqual(boot.text_deployment_name(env={"AOAI_TEXT_DEPLOYMENT": "gpt-5.4-mini"}), "gpt-5.4-mini")
+
+
+class TheTextPinGuardNeverBlocksBootOnlyTheSummary(unittest.TestCase):
+    """ADR-006 Decision 4. B3's text pin is checked against the live deployment, but *non-fatally*:
+    the deployment is never on the live-call path, so a drifted pin costs one call's summary and
+    must never cost a caller anything. It raises an ordinary exception the pipeline catches -- not
+    SystemExit, which is what the realtime guard uses because that one blocks boot."""
+
+    def test_the_active_pin_passes_and_is_returned(self):
+        self.assertEqual(
+            boot.assert_text_model_safety(_reader_returning(boot.ACTIVE_TEXT_MODEL), "gpt-5.4-mini"),
+            boot.ACTIVE_TEXT_MODEL,
+        )
+
+    def test_a_known_name_on_an_unapproved_version_is_refused(self):
+        with self.assertRaises(boot.TextModelUnsafe):
+            boot.assert_text_model_safety(_reader_returning(("gpt-5.4-mini", "2099-01-01")), "gpt-5.4-mini")
+
+    def test_an_unknown_model_is_refused(self):
+        with self.assertRaises(boot.TextModelUnsafe):
+            boot.assert_text_model_safety(_reader_returning(("gpt-4o-mini", "2024-07-18")), "gpt-5.4-mini")
+
+    def test_a_realtime_pin_is_not_a_valid_text_pin(self):
+        with self.assertRaises(boot.TextModelUnsafe):
+            boot.assert_text_model_safety(_reader_returning(boot.ACTIVE_REALTIME_MODEL), "gpt-5.4-mini")
+
+    def test_an_unreadable_deployment_fails_closed(self):
+        with self.assertRaises(boot.TextModelUnsafe):
+            boot.assert_text_model_safety(_reader_raising(RuntimeError("ARM is down")), "gpt-5.4-mini")
+
+    def test_it_is_an_ordinary_exception_not_a_boot_refusal(self):
+        self.assertTrue(issubclass(boot.TextModelUnsafe, Exception))
+        self.assertFalse(issubclass(boot.TextModelUnsafe, SystemExit))
+
+
 if __name__ == "__main__":
     unittest.main()

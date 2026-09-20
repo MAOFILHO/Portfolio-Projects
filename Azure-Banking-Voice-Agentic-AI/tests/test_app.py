@@ -376,5 +376,79 @@ class ImportingThisModuleHasNoSideEffects(unittest.TestCase):
         )
 
 
+class _AsyncCredentialStub:
+    closed = False
+
+    async def close(self):
+        type(self).closed = True
+
+
+class PostCallAdaptersAreBuiltFromConfigurationAndNeverBlockBoot(unittest.TestCase):
+    """Phase 8: the redactor and summariser exist only when their configuration does, and a missing
+    value switches one feature off -- it never stops the app starting, because post-call work must
+    never be able to stop a call. Inspected from *inside* the lifespan, where the process-wide
+    collaborators are live."""
+
+    @staticmethod
+    def _inside_lifespan(env):
+        from azbank_voice_agent.postcall.language import LanguagePIIRedactor
+        from azbank_voice_agent.postcall.summarizer import OpenAISummarizer
+
+        seen = {}
+        _AsyncCredentialStub.closed = False
+
+        async def go():
+            async with app.lifespan(app.app):
+                seen["redactor"] = app._redactor
+                seen["summarizer"] = app._summarizer
+                seen["types"] = (LanguagePIIRedactor, OpenAISummarizer)
+            seen["after"] = (app._redactor, app._summarizer)
+
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("LANGUAGE_ENDPOINT", "AOAI_TEXT_DEPLOYMENT", "AOAI_ENDPOINT",
+                              "TRANSCRIPTS_ACCOUNT_URL")}
+        with patch.object(app, "assert_boot_safety", lambda: None), \
+             patch.object(app, "HttpCoreBankingClient", lambda **kwargs: _ClosableStub()), \
+             patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
+             patch.object(app, "TableStorageCallRecordStore", _StubStoreFactory()), \
+             patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
+             patch.object(app, "DefaultAzureCredential", lambda: None), \
+             patch.object(app, "AsyncDefaultAzureCredential", _AsyncCredentialStub), \
+             patch.object(app, "get_bearer_token_provider", lambda credential, scope: (lambda: None)), \
+             patch.dict(os.environ, {**clean, **env}, clear=True):
+            asyncio.run(go())
+        return seen
+
+    def test_unconfigured_means_neither_adapter_and_no_credential_is_built(self):
+        seen = self._inside_lifespan({})
+        self.assertIsNone(seen["redactor"])
+        self.assertIsNone(seen["summarizer"])
+        self.assertFalse(_AsyncCredentialStub.closed)
+
+    def test_a_language_endpoint_builds_the_redactor_only(self):
+        seen = self._inside_lifespan({"LANGUAGE_ENDPOINT": "https://lang.cognitiveservices.azure.com/"})
+        self.assertIsInstance(seen["redactor"], seen["types"][0])
+        self.assertIsNone(seen["summarizer"])
+
+    def test_a_text_deployment_and_an_openai_endpoint_build_the_summarizer(self):
+        seen = self._inside_lifespan({"AOAI_TEXT_DEPLOYMENT": "gpt-5.4-mini",
+                                      "AOAI_ENDPOINT": "https://aoai.openai.azure.com/"})
+        self.assertIsInstance(seen["summarizer"], seen["types"][1])
+        self.assertIsNone(seen["redactor"])
+
+    def test_a_text_deployment_with_no_openai_endpoint_switches_summaries_off_without_failing(self):
+        seen = self._inside_lifespan({"AOAI_TEXT_DEPLOYMENT": "gpt-5.4-mini"})
+        self.assertIsNone(seen["summarizer"])
+
+    def test_shutdown_clears_the_adapters_and_closes_the_credential(self):
+        seen = self._inside_lifespan({"LANGUAGE_ENDPOINT": "https://lang.cognitiveservices.azure.com/"})
+        self.assertEqual(seen["after"], (None, None))
+        self.assertTrue(_AsyncCredentialStub.closed)
+
+    def test_a_malformed_language_endpoint_is_refused_at_boot_not_at_the_first_call(self):
+        with self.assertRaises(SystemExit):
+            self._inside_lifespan({"LANGUAGE_ENDPOINT": "Endpoint=https://x;Key=abc"})
+
+
 if __name__ == "__main__":
     unittest.main()

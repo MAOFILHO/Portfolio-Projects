@@ -47,9 +47,9 @@ ALLOWED_REALTIME_MODELS = frozenset({ACTIVE_REALTIME_MODEL, SUCCESSOR_REALTIME_M
 
 # ADR-006 -- a second, non-realtime pin for post-call summary/intent and L3 eval judging. Never the
 # thing a live call talks to (ADR-006 Decision 4), so this is deliberately a separate constant, not
-# folded into ALLOWED_REALTIME_MODELS or assert_boot_safety. Enforced today by scripts/check_b3_
-# allowlist.py only; the non-fatal runtime guard ADR-006 Decision 4 calls for is built with the
-# post-call pipeline that would call it.
+# folded into ALLOWED_REALTIME_MODELS or assert_boot_safety. Enforced by scripts/check_b3_
+# allowlist.py (source) and, at runtime, by assert_text_model_safety below -- non-fatal, called by the
+# post-call summariser before every summary (ADR-006 Decision 4).
 # No successor entry yet: nothing has been vetted, unlike the realtime pin's SUCCESSOR_REALTIME_MODEL.
 ACTIVE_TEXT_MODEL = ("gpt-5.4-mini", "2026-03-17")  # GA, retires 2027-09-21
 
@@ -77,6 +77,15 @@ CALL_RECORDS_ACCOUNT_URL_VAR = "CALL_RECORDS_ACCOUNT_URL"
 #: The Blob endpoint redacted transcripts are written to (Phase 8). An account URL, never a connection
 #: string, like the variable above. **Unlike it, optional** -- see transcripts_account_url().
 TRANSCRIPTS_ACCOUNT_URL_VAR = "TRANSCRIPTS_ACCOUNT_URL"
+
+#: The Azure AI Language endpoint the post-call redactor calls (Phase 8). An https endpoint, no key.
+#: Optional, like the address above: unset switches redaction off, which means no transcript is
+#: written and no summary made (ADR-007), never that a call refuses to start.
+LANGUAGE_ENDPOINT_VAR = "LANGUAGE_ENDPOINT"
+
+#: Name of the text deployment the post-call summariser calls (ADR-006). Optional; unset switches
+#: summaries off. Its (name, version) is checked against ALLOWED_TEXT_MODELS before every summary.
+TEXT_DEPLOYMENT_VAR = "AOAI_TEXT_DEPLOYMENT"
 
 _ARM_API_VERSION = "2023-05-01"
 
@@ -180,6 +189,28 @@ def transcripts_account_url(env=None):
     return url
 
 
+def language_endpoint(env=None):
+    """The configured Language endpoint, or None if redaction is off. Same shape of rule as
+    transcripts_account_url(): unset is allowed, a value that is set must be an https URL -- a
+    connection string would carry a key, and this project holds none."""
+    env = os.environ if env is None else env
+    url = env.get(LANGUAGE_ENDPOINT_VAR)
+    if not url:
+        return None
+    if not url.startswith("https://"):
+        raise SystemExit(
+            f"{LANGUAGE_ENDPOINT_VAR} must be an https endpoint URL, not a connection string. This "
+            "project authenticates to Language with a managed identity and holds no key."
+        )
+    return url
+
+
+def text_deployment_name(env=None):
+    """The configured text deployment name, or None if summaries are off."""
+    env = os.environ if env is None else env
+    return env.get(TEXT_DEPLOYMENT_VAR) or None
+
+
 def parse_deployment_response(payload):
     """Pulls (modelName, modelVersion) out of an ARM deployment response.
 
@@ -221,6 +252,35 @@ def read_live_model(deployment_name):
     response = httpx.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
     response.raise_for_status()
     return parse_deployment_response(response.json())
+
+
+class TextModelUnsafe(Exception):
+    """The text deployment is not the pinned (name, version), or could not be read.
+
+    An ordinary exception on purpose, not SystemExit like the realtime guard: that guard blocks boot
+    because a realtime deployment carries live calls. This deployment never does (ADR-006 Decision
+    4), so a drifted pin costs the post-call pipeline one summary and nothing else.
+    """
+
+
+def assert_text_model_safety(reader, deployment_name):
+    """Checks the live text deployment against B3's text pin; raises TextModelUnsafe if it is off.
+
+    Fails closed the same way the realtime guard does -- an unreadable deployment is an unapproved
+    one -- but non-fatally. The reader is injected (production passes `read_live_model`) so every
+    branch runs with no network. The failure text never carries the reader's own message.
+    """
+    try:
+        live = reader(deployment_name)
+    except Exception as e:
+        raise TextModelUnsafe(
+            f"B3: could not read the live model for text deployment {deployment_name!r} ({type(e).__name__})"
+        ) from e
+    if live not in ALLOWED_TEXT_MODELS:
+        raise TextModelUnsafe(
+            f"B3: text deployment {deployment_name!r} serves {live!r}, not one of {sorted(ALLOWED_TEXT_MODELS)!r}"
+        )
+    return live
 
 
 def assert_boot_safety(reader=read_live_model, env=None):

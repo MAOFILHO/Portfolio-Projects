@@ -17,6 +17,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+import httpx
 from azure.communication.callautomation import (
     AudioFormat,
     CallAutomationClient,
@@ -27,6 +28,8 @@ from azure.communication.callautomation import (
 )
 from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
+from azure.identity.aio import get_bearer_token_provider
 from fastapi import FastAPI, Request, WebSocket
 
 from .boot import (
@@ -34,15 +37,22 @@ from .boot import (
     assert_boot_safety,
     call_records_account_url,
     core_banking_url,
+    language_endpoint,
+    read_live_model,
+    text_deployment_name,
     transcripts_account_url,
 )
 from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
 from .observability import telemetry
+from .postcall import language as postcall_language
+from .postcall import summarizer as postcall_summarizer
 from .postcall.blob import BlobTranscriptStore
 from .postcall.capture import CallCapture
+from .postcall.language import LanguagePIIRedactor
 from .postcall.pipeline import run_postcall
+from .postcall.summarizer import OpenAISummarizer
 from .realtime.client import connect_realtime
 from .realtime.session import budget_or_closed, run_call, run_closed_call
 
@@ -100,9 +110,9 @@ _core_banking = None
 _call_records = None
 _call_automation = None
 
-#: Phase 8's post-call collaborators. `_redactor` and `_summarizer` stay None until their adapters
-#: exist: with no redactor the pipeline writes no transcript and no summary, only the call's outcome
-#: row (ADR-007 -- an unredacted transcript is never a fallback).
+#: Phase 8's post-call collaborators, each None when its configuration is absent. With no redactor
+#: the pipeline writes no transcript and no summary, only the call's outcome row (ADR-007 -- an
+#: unredacted transcript is never a fallback).
 _transcripts = None
 _redactor = None
 _summarizer = None
@@ -165,6 +175,44 @@ def _schedule_postcall(capture):
     task.add_done_callback(_postcall_tasks.discard)
 
 
+def _build_postcall_adapters():
+    """The redactor and summariser, each built only when its configuration is present.
+
+    Returns `(redactor, summarizer, http_client, credential)`, the last two None when neither
+    adapter is wanted. Nothing here may stop the app starting: an absent value switches one feature
+    off (post-call work must never be able to stop a call). A value that is *set* but malformed
+    still refuses -- `language_endpoint` says why -- because that is a mistake, not a choice.
+    """
+    language_url = language_endpoint()
+    text_deployment = text_deployment_name()
+    openai_endpoint = os.environ.get("AOAI_ENDPOINT")
+    if text_deployment and not openai_endpoint:
+        log.warning("boot: AOAI_TEXT_DEPLOYMENT is set but AOAI_ENDPOINT is not -- no summaries")
+        text_deployment = None
+    if not language_url:
+        log.warning("boot: LANGUAGE_ENDPOINT is not set -- no transcript will be written (ADR-007)")
+    if not text_deployment:
+        log.warning("boot: AOAI_TEXT_DEPLOYMENT is not set -- calls will not be summarised")
+    if not (language_url or text_deployment):
+        return None, None, None, None
+
+    # Their own async credential: the bearer-token provider awaits it, which the sync
+    # `DefaultAzureCredential` the Table and Blob clients are handed cannot do. Same identity.
+    credential = AsyncDefaultAzureCredential()
+    http = httpx.AsyncClient(timeout=30.0)
+    redactor = summarizer = None
+    if language_url:
+        redactor = LanguagePIIRedactor(
+            language_url, http, get_bearer_token_provider(credential, postcall_language.TOKEN_SCOPE),
+        )
+    if text_deployment:
+        summarizer = OpenAISummarizer(
+            openai_endpoint, text_deployment, http,
+            get_bearer_token_provider(credential, postcall_summarizer.TOKEN_SCOPE), read_live_model,
+        )
+    return redactor, summarizer, http, credential
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """B3 runs here, before the first call can arrive -- and deliberately not at import time, so
@@ -179,7 +227,7 @@ async def lifespan(_app):
     today -- until it is, this guard will correctly refuse to start. Verify the ARM leg first with
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
-    global _core_banking, _call_records, _call_automation, _transcripts
+    global _core_banking, _call_records, _call_automation, _transcripts, _redactor, _summarizer
     assert_boot_safety()
     # Read and discarded, for its refusal. Every other address this app needs is validated by being
     # *used* here; this one is only used per-request, so without this line a missing value would
@@ -219,6 +267,7 @@ async def lifespan(_app):
         _transcripts = BlobTranscriptStore.from_account_url(transcripts_url, credential)
     else:
         log.warning("boot: TRANSCRIPTS_ACCOUNT_URL is not set -- transcripts will not be stored")
+    _redactor, _summarizer, postcall_http, postcall_credential = _build_postcall_adapters()
     try:
         yield
     finally:
@@ -229,6 +278,10 @@ async def lifespan(_app):
         await _call_records.aclose()
         if _transcripts is not None:
             await _transcripts.aclose()
+        if postcall_http is not None:
+            await postcall_http.aclose()
+        if postcall_credential is not None:
+            await postcall_credential.close()
         # Not awaited: the ACS client is the SDK's synchronous one and holds no async resources.
         # It was never closed at all while it lived at module scope; closing it here is what
         # moving it into a lifespan makes possible.
@@ -237,6 +290,8 @@ async def lifespan(_app):
         _call_records = None
         _call_automation = None
         _transcripts = None
+        _redactor = None
+        _summarizer = None
 
 
 app = FastAPI(lifespan=lifespan)
