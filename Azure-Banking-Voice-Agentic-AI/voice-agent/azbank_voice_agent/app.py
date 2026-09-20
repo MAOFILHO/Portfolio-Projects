@@ -43,7 +43,7 @@ from .boot import (
     text_deployment_name,
     transcripts_account_url,
 )
-from .call_records import TableStorageCallRecordStore
+from .call_records import TableStorageCallRecordStore, is_storable_id, storable_or_generated_id
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
 from .observability import telemetry
@@ -371,6 +371,12 @@ async def media_stream(websocket: WebSocket):
     This is the only place the real connection is opened; the relay itself takes it as an
     argument (issue #18), which is what lets a whole call run against fakes in CI."""
     correlation_id = websocket.headers.get("x-ms-call-correlation-id")
+    if correlation_id is not None and not is_storable_id(correlation_id):
+        # A request header, so it is the carrier's to set, and it becomes a Table RowKey (an
+        # escalation row) and a Blob name. Replaced once, here, so every consumer -- the relay, the
+        # capture, the logs and the span -- shares one id no store can refuse. Never logged raw.
+        log.warning("WS: the correlation id header is not a storage key, using a generated one")
+        correlation_id = storable_or_generated_id(correlation_id)
     connection_id = websocket.headers.get("x-ms-call-connection-id")
     await websocket.accept()
     log.info("WS open correlationId=%s connectionId=%s", correlation_id, connection_id)

@@ -35,6 +35,7 @@ failure is what delayed.
 import asyncio
 import logging
 import re
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -135,7 +136,9 @@ def _minutes(entity):
 #: What a call's correlation id may contain to be used as a storage key. An allow-list, not a list
 #: of bad characters: the id is a Table RowKey (where `/`, `\`, `#`, `?` and control characters are
 #: illegal) and a Blob name (where a path separator puts the blob somewhere the container never meant).
-_STORABLE_ID = re.compile(r"[A-Za-z0-9._-]+")
+#: Capped at 128 characters -- an ACS GUID is 36 -- so a header cannot push a key past what Table
+#: Storage accepts (1 KiB for the RowKey, of which the escalation key already spends 21).
+_STORABLE_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 def is_storable_id(correlation_id):
@@ -146,6 +149,12 @@ def is_storable_id(correlation_id):
         and _STORABLE_ID.fullmatch(correlation_id) is not None
         and ".." not in correlation_id
     )
+
+
+def storable_or_generated_id(correlation_id):
+    """The id itself if it can key a call's rows, else a fresh one. A call that arrives with an id
+    no store can hold loses its ACS id, never its row."""
+    return correlation_id if is_storable_id(correlation_id) else uuid.uuid4().hex
 
 
 @dataclass(frozen=True)
@@ -422,8 +431,9 @@ class TableStorageCallRecordStore:
     async def record_escalation(self, record):
         # RowKey is the instant plus the correlation id: unique because no two calls share an id,
         # and sorted by time within the partition because Table Storage orders by RowKey. Neither
-        # value can contain a character the key forbids -- an ISO instant is digits, dashes, colons
-        # and a Z, and ACS correlation ids are hyphenated hex.
+        # value can contain a character the key forbids: an ISO instant is digits, dashes, colons
+        # and a Z, and the correlation id is checked against `is_storable_id` where it enters
+        # (`app.media_stream`), because it comes from a request header rather than from ACS itself.
         entity = {
             "PartitionKey": ESCALATION_PARTITION,
             "RowKey": f"{record.occurred_at}_{record.correlation_id}",

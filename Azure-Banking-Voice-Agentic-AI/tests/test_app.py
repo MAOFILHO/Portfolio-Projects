@@ -212,6 +212,41 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
             [(fake_ws, realtime, core_banking, call_records, fake_ws.headers.get("x-ms-call-correlation-id"))],
         )
 
+    def _id_handed_to_the_relay(self, header):
+        handed = []
+
+        async def fake_run_call(
+            transport, realtime, core_banking, call_records, correlation_id=None, capture=None,
+        ):
+            handed.append(correlation_id)
+
+        fake_ws = FakeWebSocket()
+        fake_ws.headers = {"x-ms-call-correlation-id": header}
+        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+             patch.object(app, "_core_banking", FakeCoreBankingClient()), \
+             patch.object(app, "_call_records", FakeCallRecordStore()), \
+             patch.object(app, "run_call", fake_run_call):
+            asyncio.run(app.media_stream(fake_ws))
+        return handed[0]
+
+    def test_an_acs_correlation_id_reaches_the_relay_as_it_is(self):
+        acs = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        self.assertEqual(self._id_handed_to_the_relay(acs), acs)
+
+    def test_a_header_id_no_store_can_key_on_is_replaced_before_the_relay_sees_it(self):
+        # The id is a Table RowKey (an escalation row is keyed on it from inside the relay) and a
+        # Blob name, and the header is the carrier's to set. `#`, `?`, a path separator or an
+        # absurd length must cost the call its ACS id, never its escalation or summary row.
+        for bad in ("bad#id?x", "a/b", "back\\slash", "x" * 5000, "has space"):
+            handed = self._id_handed_to_the_relay(bad)
+            self.assertNotEqual(handed, bad)
+            self.assertRegex(handed, r"^[A-Za-z0-9._-]{1,128}$")
+
+    def test_the_replacement_is_not_logged_with_the_raw_id(self):
+        with self.assertLogs(level="INFO") as logs:
+            self._id_handed_to_the_relay("bad#id?x")
+        self.assertNotIn("bad#id?x", "\n".join(logs.output))
+
     def test_the_handler_refuses_to_run_without_an_initialised_store(self):
         # The same rule the core-banking client already has, for the same reason: a store built on
         # first use would be built per call, and a per-call store is one whose failures nobody

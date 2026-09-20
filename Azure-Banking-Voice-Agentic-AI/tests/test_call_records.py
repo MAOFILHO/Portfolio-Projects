@@ -22,6 +22,7 @@ from azbank_voice_agent.call_records import (
     EscalationRecord,
     EscalationRequested,
     TableStorageCallRecordStore,
+    is_storable_id,
 )
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore, unavailable
 from azbank_voice_agent.call_records.store import (
@@ -199,6 +200,23 @@ class EscalationHasItsOwnType(unittest.TestCase):
         from azbank_voice_agent.auth import AttemptsExhausted
         self.assertFalse(issubclass(EscalationRequested, AttemptsExhausted))
         self.assertFalse(issubclass(AttemptsExhausted, EscalationRequested))
+
+
+class TheStorableId(unittest.TestCase):
+    """A correlation id is a Table RowKey and a Blob name, and it comes from a request header."""
+
+    def test_an_acs_guid_and_the_generated_fallback_are_storable(self):
+        self.assertTrue(is_storable_id("0f8fad5b-d9cb-469f-a165-70867728950e"))
+        self.assertTrue(is_storable_id("0f8fad5bd9cb469fa16570867728950e"))
+        self.assertTrue(is_storable_id("closed-1"))
+
+    def test_characters_a_key_forbids_are_not(self):
+        for bad in ("a#b", "a?b", "a/b", "a\\b", "a b", "a\nb", "a..b", "", None, 7):
+            self.assertFalse(is_storable_id(bad), repr(bad))
+
+    def test_a_length_the_table_would_refuse_is_not(self):
+        self.assertTrue(is_storable_id("x" * 128))
+        self.assertFalse(is_storable_id("x" * 129))
 
 
 if __name__ == "__main__":

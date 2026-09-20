@@ -21,6 +21,7 @@ from .store import (
     EscalationRequested,
     TableStorageCallRecordStore,
     is_storable_id,
+    storable_or_generated_id,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "EscalationRequested",
     "TableStorageCallRecordStore",
     "is_storable_id",
+    "storable_or_generated_id",
 ]

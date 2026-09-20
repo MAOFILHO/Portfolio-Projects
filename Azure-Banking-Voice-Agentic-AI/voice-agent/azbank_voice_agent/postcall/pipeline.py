@@ -17,7 +17,6 @@ one row and nothing else. **Only outcomes are logged, never words, and never an 
 """
 import asyncio
 import logging
-import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -33,7 +32,7 @@ from ..call_records import (
     TRANSCRIPT_WRITE_FAILED,
     CallRecordStore,
     CallSummaryRecord,
-    is_storable_id,
+    storable_or_generated_id,
 )
 from . import outcome
 from .scrub import scrub_numbers
@@ -47,6 +46,7 @@ STEP_DEADLINE_SECONDS = 60.0
 #: Bounds on the two model-written fields, so a runaway completion cannot bloat a Table row.
 MAX_SUMMARY_CHARS = 2000
 MAX_INTENT_CHARS = 200
+
 
 @dataclass(frozen=True)
 class Summary:
@@ -130,12 +130,11 @@ async def run_postcall(capture, services):
 
 
 async def _run(capture, services):
-    correlation_id = capture.correlation_id
-    if not is_storable_id(correlation_id):
-        # No id, or one neither store can key on: the call loses its ACS id, never its row.
-        if correlation_id:
-            log.warning("post-call: the correlation id is not a storage key, using a generated one")
-        correlation_id = uuid.uuid4().hex
+    # No id, or one neither store can key on (`app.media_stream` already replaces a bad header, so
+    # this is the pipeline's own guard): the call loses its ACS id, never its row.
+    correlation_id = storable_or_generated_id(capture.correlation_id)
+    if capture.correlation_id and correlation_id != capture.correlation_id:
+        log.warning("post-call: the correlation id is not a storage key, using a generated one")
     turns = list(capture.agent_turns)
 
     transcript_status = TRANSCRIPT_NONE
