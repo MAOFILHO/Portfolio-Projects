@@ -133,6 +133,10 @@ resource voiceAgent 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CALL_RECORDS_ACCOUNT_URL', value: callRecordsAccount.properties.primaryEndpoints.table }
             // Phase 8: where the post-call pipeline writes redacted transcripts (Blob, same account).
             { name: 'TRANSCRIPTS_ACCOUNT_URL', value: callRecordsAccount.properties.primaryEndpoints.blob }
+            // Phase 8: the redactor's Language endpoint and the summariser's text deployment (ADR-006, the
+            // B3 text pin). Both optional in the app -- unset switches that one feature off.
+            { name: 'LANGUAGE_ENDPOINT', value: 'https://lang-azure-banking-voice-cc.cognitiveservices.azure.com/' }
+            { name: 'AOAI_TEXT_DEPLOYMENT', value: 'gpt-5.4-mini' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-conn' }
             // Named fallback, not identity -- see this file's header, D10 still open.
             { name: 'AZURE_MONITOR_AUTH', value: 'connection_string' }

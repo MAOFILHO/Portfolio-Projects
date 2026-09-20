@@ -221,18 +221,25 @@ been observed to contradict the pre-provisioning estimate.
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
 10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; decisions D14-D18 settled 2026-09-19).
-    **Built, tested against fakes, on `main`**: agent-side transcript capture (`postcall/capture.py`),
-    call-outcome mapping (D17, `postcall/outcome.py`), the redact-before-write pipeline
-    (`postcall/pipeline.py`, ADR-007), the Blob transcript store (`postcall/blob.py`), the call-summary
-    row, and the background scheduling in `app.py`. **With no redactor wired, the pipeline writes
-    only the outcome row** — no transcript, no summary. **Not built**:
-    - the real Language redactor and the real `gpt-5.4-mini` summarizer (both need a `/research`
-      pass on API shape first, and the non-fatal text-pin guard rides with the summarizer);
-    - **Bicep for the `transcripts` container, its Blob role and `TRANSCRIPTS_ACCOUNT_URL`** is
-      written and compiles but **awaits Marco's review** (provisioning diff, never auto-accepted) and
-      has not been applied to the live account;
-    - the image rebuild/deploy, the live call, `evals/`, `RESULTS.md`, the diagram, the README badge,
-      the `COSTS.md` per-token rate; criteria 6-7 close with a stated limit (D15).
+    **Built, tested, on `main`**: agent-side transcript capture, call-outcome mapping (D17), the
+    redact-before-write pipeline (ADR-007), the Blob transcript store, the call-summary row, background
+    scheduling in `app.py`, and (2026-09-19, `docs/phase8/research-postcall-adapters.md`) the **real
+    Language redactor** (`postcall/language.py`, Conversation PII job API by REST, plus a number scrub),
+    the **real `gpt-5.4-mini` summarizer** (`postcall/summarizer.py`) and the **non-fatal B3 text-pin
+    guard** (`boot.assert_text_model_safety`, checked before every summary). Both adapters were run
+    once against the live services with fake transcript data: Language redacted a name, account number
+    and phone number in 3.6 s; the summarizer returned a valid summary. Entra scope
+    `cognitiveservices.azure.com` works on both.
+    **Live, applied 2026-09-19 with Marco's approval**: private `transcripts` container + Blob role
+    scoped to it (`call-records-store.bicep`); `gpt-5.4-mini` capacity 1 -> 10 (was 1 RPM / 1,000 TPM)
+    and `NoAutoUpgrade` (was `OnceNewDefaultVersionAvailable`), both read back.
+    **Not yet live**: the running app is still `p7c`, without any of this code or the three env vars
+    (`TRANSCRIPTS_ACCOUNT_URL`, `LANGUAGE_ENDPOINT`, `AOAI_TEXT_DEPLOYMENT`, all in
+    `voice-agent.bicep`). Needs an amd64 image build + push (Marco, Docker) then a container-app update.
+    **Then**: the live call (criteria 1-2), `evals/`, `RESULTS.md`, diagram, README badge, `COSTS.md`
+    per-token rate, `/code-review` before the gate; criteria 6-7 close with a stated limit (D15).
+    **Known limit**: a single agent turn over 1,000 characters (Language's item limit) fails closed,
+    so that call gets an outcome row and no transcript.
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own
