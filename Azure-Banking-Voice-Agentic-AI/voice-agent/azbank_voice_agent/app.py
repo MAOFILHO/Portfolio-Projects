@@ -15,6 +15,7 @@ current SDK signature.
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
 import httpx
@@ -46,6 +47,7 @@ from .boot import (
 from .call_records import TableStorageCallRecordStore, is_storable_id, storable_or_generated_id
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
+from .dispatch import gate
 from .observability import telemetry
 from .postcall.blob import BlobTranscriptStore
 from .postcall.capture import CallCapture
@@ -399,6 +401,7 @@ async def media_stream(websocket: WebSocket):
         # hangup, the closed path, an exception -- the `finally` hands it to the post-call pipeline
         # as a background task. The handler never awaits that task (exit criterion 4).
         capture = CallCapture()
+        began = time.monotonic()
         try:
             try:
                 await budget_or_closed(call_records())
@@ -419,6 +422,14 @@ async def media_stream(websocket: WebSocket):
                     capture=capture,
                 )
         finally:
+            if capture.end_reason is None:
+                # The relay never ran to its own `finish` -- the realtime connection could not be
+                # opened. The caller got nothing and was never authenticated, but the call happened
+                # and gets its row (exit criterion 2). It touched no ledger: no relay, no minutes.
+                capture.finish(
+                    correlation_id, "error", gate.ANONYMOUS, 0,
+                    telemetry.round_duration_ms(time.monotonic() - began),
+                )
             _schedule_postcall(capture)
     log.info("WS closed correlationId=%s connectionId=%s", correlation_id, connection_id)
 

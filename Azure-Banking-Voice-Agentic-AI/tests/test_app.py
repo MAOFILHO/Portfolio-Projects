@@ -354,6 +354,59 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
             asyncio.run(main())
         self.assertEqual(len(invocations), 1)
 
+    def _drive_a_connect_that_raises(self, budget=None):
+        """Run one /ws call whose realtime connection cannot be opened, through the real pipeline
+        (no adapters configured, so only the row is written); return the store it wrote to."""
+        class Refuses:
+            async def __aenter__(self):
+                raise ConnectionError("realtime endpoint unreachable")
+
+            async def __aexit__(self, *exc_info):
+                return False
+
+        async def no_budget_problem(_records):
+            return None
+
+        records = FakeCallRecordStore()
+
+        async def main():
+            with self.assertRaises(ConnectionError):
+                await app.media_stream(FakeWebSocket())
+            pending = list(app._postcall_tasks)
+            if pending:
+                await asyncio.wait(pending, timeout=1)
+
+        with patch.object(app, "connect_realtime", lambda: Refuses()), \
+             patch.object(app, "_core_banking", FakeCoreBankingClient()), \
+             patch.object(app, "_call_records", records), \
+             patch.object(app, "budget_or_closed", budget or no_budget_problem), \
+             patch.object(app, "_redactor", None), \
+             patch.object(app, "_summarizer", None), \
+             patch.object(app, "_transcripts", None):
+            asyncio.run(main())
+        return records
+
+    def test_a_call_whose_realtime_connection_cannot_be_opened_still_gets_its_row(self):
+        # Exit criterion 2: one row per completed call. The relay never ran, so nothing finished the
+        # capture; the handler does, as an error the caller never got past.
+        records = self._drive_a_connect_that_raises()
+        self.assertEqual(len(records.call_summaries), 1)
+        row = records.call_summaries[0]
+        self.assertEqual(row.call_outcome, "error")
+        self.assertEqual(row.end_reason, "error")
+        self.assertEqual(row.auth_state, "anonymous")
+        self.assertEqual(row.turn_count, 0)
+        self.assertEqual(row.transcript_status, "none")
+
+    def test_the_closed_path_whose_connection_cannot_be_opened_gets_its_row_too(self):
+        from azbank_voice_agent.cost import caps
+
+        async def spent(_records):
+            raise caps.DailyBudgetSpent("budget", cause=caps.CLOSED_PATH_BUDGET_SPENT)
+
+        records = self._drive_a_connect_that_raises(budget=spent)
+        self.assertEqual([r.call_outcome for r in records.call_summaries], ["error"])
+
     def test_a_closed_call_gets_a_pipeline_run_too(self):
         from azbank_voice_agent.cost import caps
 

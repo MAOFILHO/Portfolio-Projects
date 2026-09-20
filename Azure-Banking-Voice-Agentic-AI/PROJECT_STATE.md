@@ -224,13 +224,14 @@ been observed to contradict the pre-provisioning estimate.
 10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18; build history and
     live-call evidence: `docs/phase8/build-notes.md`). **Built, on `main`, live (image `p8a`)**;
     criteria 1-2 proven on one real call. Two `/code-review` rounds done.
-    **Open (Spec axis)**: (a) a call whose `connect_realtime()` raises gets no row; (b) the row
-    is written last, after up to 3 x 60 s steps, so a container kill mid-pipeline loses it; (c)
-    criterion 4's test measures no latency; (d) `$` amounts pass through the transcript unredacted
-    (B2 covers PIN and phone only) -- state it in `RESULTS.md`; (e) `scrub_numbers` leaves a formatted
-    number's area code -- Marco's call, `scrub.py` is B2; (f) a cancelled ledger write loses that call's
-    minutes (B4 undercount, pre-existing; `asyncio.shield` is Marco's call); (g) a call with no id
-    header keeps `None`, so its escalation RowKey ends `_None`. Last handoff:
+    **Open (Spec axis)**: (b) the row is written last, after up to 3 x 60 s steps, so a container
+    kill mid-pipeline loses it -- to be stated as a limit; (c) criterion 4's test measures no
+    latency; (d) `$` amounts pass through the transcript unredacted (B2 covers PIN and phone only)
+    -- state it in `RESULTS.md`; (e) `scrub_numbers` leaves a formatted number's area code -- Marco's
+    call, `scrub.py` is B2; (f) a cancelled ledger write loses that call's minutes (B4 undercount,
+    pre-existing; `asyncio.shield` is Marco's call); (g) a call with no id header keeps `None`, so
+    its escalation RowKey ends `_None`. (a) closed 2026-09-20: `app.media_stream` finishes an
+    unfinished capture as `error`/anonymous, so a failed realtime connect still gets its row. Last handoff:
     `docs/handoffs/2026-09-20-phase8-review-round3.md`.
     **Remaining**: criteria 6-7 write-up (D15), `RESULTS.md`, diagram, README badge (still 6 of 8),
     `COSTS.md` per-token rate, Marco's closure sign-off. **Known limit**: one agent turn over 1,000
