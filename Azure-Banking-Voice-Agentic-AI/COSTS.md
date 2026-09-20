@@ -440,6 +440,53 @@ created, not what has been spent.
 - **No change to the $14.60/mo fixed cost or R-08's verdict.** Both resources are consumption-billed
   with no fixed component, so R-08's recompute discipline (recompute only when the fixed total moves)
   does not trigger here.
-- **Still open, not priced:** `gpt-5.4-mini`'s exact per-token rate in Canada Central, and the real
-  billing unit for D11's summary/intent call volume once measured (same "priced before provisioning,
-  measured once live" pattern R-08 already follows).
+- **Priced 2026-09-20, see the next section:** `gpt-5.4-mini`'s per-token rate and Blob storage. What
+  is still not measured (the real billing unit for Language records, the Global meter's applicability
+  to a `canadacentral` account) is listed there.
+
+## Phase 8 — every input priced, R-08 recomputed — 2026-09-20 (exit criterion 10)
+
+**Verdict: PASSES. The fixed monthly total does not move ($14.60); the per-run variable cost rises by
+at most $0.028, and R-08's runs/month falls from 67 to 57 (45 to 38 on the comparable basis), against a
+gate of 5.**
+
+| Input | Rate | Source |
+|---|---|---|
+| `gpt-5.4-mini` input | **$0.75 / 1M tokens** (cached $0.075) | Azure Retail Prices API, Global Standard meter `5.4 mini Inp Gl 1M Tokens`, read 2026-09-19 (`docs/phase8/research-postcall-adapters.md`, Q2) |
+| `gpt-5.4-mini` output | **$4.50 / 1M tokens** | same, `5.4 mini Opt Gl 1M Tokens` |
+| Blob, Hot LRS, `canadacentral` | **$0.02 / GB-month** (first tier), **$0.055 / 10K writes** | Azure Retail Prices API, `General Block Blob v2`, read live 2026-09-20 |
+| Language, Conversation PII | $1.00 / 1,000 text records | already priced above; a text record is 1,000 characters (data-limits page) |
+
+Per completed call, worst case (a 20-turn call, B4's cap):
+
+```
+summary   ~2,000 in + ~1,500 out tokens (reasoning included)   ≈ $0.0083
+language  20 turns x 1 record                                   =  $0.0200  (turns over 1,000 chars fail closed, so <= 1 record each)
+blob      <= 20 KB, one write                                   ≈  $0.0000  (67 calls/mo = 1.3 MB and 67 writes = about $0.0004/mo)
+                                                                 -------
+                                                                 ≈ $0.0283 per call
+```
+
+At 67 calls/month that is **$0.55 + $1.34 + $0.00 = $1.89/mo variable**, on top of $14.60 fixed: **$16.49/mo
+against the $25 ceiling**. No resource added a fixed component (both AOAI deployments are GlobalStandard,
+pay-per-token; the Language SKU has no monthly account fee on the pricing page cited above; Blob shares
+the existing storage account), so the fixed total is unchanged and R-08's trigger for a recompute is not
+met. It is done anyway, because the per-run figure moved:
+
+```
+one demo run at B4's 5-minute cap   = 5 x $0.031 + $0.0283      = $0.1833   (was $0.155)
+demo runs/month (step 10's formula) = $10.40 / $0.1833           =  56.7     (was 67.1)
+demo runs/month (comparable basis)  = 45 x ($0.155 / $0.1833)    =  38.0     (was 45)
+```
+
+**Not measured, stated rather than smoothed over:**
+- The billing unit for a Conversation PII record (one per turn, or one per conversation) is still
+  unconfirmed by any source. The $0.07-$1.34/mo bound above stands; the worst case is what this section
+  uses.
+- The Retail Prices API has no `canadacentral` row for `gpt-5.4-mini`. That the Global meter is what a
+  `canadacentral` account is billed at is UNVERIFIED (`research-postcall-adapters.md`, Q2). The 25 regions
+  that do carry it all price it identically.
+- The token counts (2,000 in / 1,500 out) are an estimate from the summariser's prompt shape, not a
+  measurement. If the model's reasoning tokens run far above that, $0.0083 is low. No real spend has been
+  read back from Cost Management for either resource, and the eval judge (D12) has run nowhere (D15), so it
+  has cost nothing.

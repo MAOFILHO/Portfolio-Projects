@@ -179,7 +179,10 @@ pricing and Learn pages.
 
 ---
 
-## Proposed exit criteria (draft — not in force)
+## Exit criteria (in force)
+
+In force since the whole doc was approved 2026-09-18. **Criteria 6 and 7 close with a stated limit, not a
+result (D15):** `docs/phase8/eval-redteam-limits.md`. Status against each: `docs/phase8/exit-check.md`.
 
 | # | criterion | how it is proved |
 |---|---|---|

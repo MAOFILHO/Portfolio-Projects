@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is built and live-verified on one real call; docs, the criteria 6-7 write-up and the gate remain** — see "Current phase".
+**Phase 8 is built, its docs written, live-verified on one real call; the gate remains** — see "Current phase".
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -51,7 +51,7 @@ resource) — fixed live, not yet fixed in the CLI itself.
 **Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
 — `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
 is on record, and `APPROVED: Phase 8 Language resource` (at the corrected non-free price). Both new
-resources exist (see "Live Azure state"). The post-call pipeline is built and live (open item 10); `evals/` and the docs are not.
+resources exist (see "Live Azure state"). The post-call pipeline and the docs are built (open item 10); `evals/` is not (D15).
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -190,11 +190,9 @@ because they are genuinely unresolved, not because any of them is currently bloc
 **R-01–R-06 resolved** (R-03 partial, see item 3). **R-08 recomputed 2026-09-11, passes**: fixed
 $14.60/mo, 45–67 demo runs/month against a gate of 5 (`COSTS.md`). No input is unpriced. **R-09**
 (number irreplaceability) and **R-07** (`spendingLimit: Off`) are standing facts, not open items.
-**R-08 recomputed again for Phase 6, 2026-09-13** (`COSTS.md`) — Application Insights shares the
-container logs' free grant rather than adding one; worst-case bound **$0.00/mo added**, fixed total
-unchanged at $14.60/mo. Priced before provisioning, per `docs/phase6/exit-criteria.md` D4; the
-resource is now live (created 2026-09-14, see "Live Azure state" above), and no cost delta has
-been observed to contradict the pre-provisioning estimate.
+**R-08 recomputed for Phase 6, 2026-09-13** — Application Insights adds **$0.00/mo**, fixed total
+unchanged. **Recomputed for Phase 8, 2026-09-20** (`COSTS.md`): fixed total still $14.60/mo; worst-case
+variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithmetic, not a billed figure.
 
 ## Next actions (in order)
 
@@ -233,9 +231,11 @@ been observed to contradict the pre-provisioning estimate.
     its escalation RowKey ends `_None`. (a) closed 2026-09-20: `app.media_stream` finishes an
     unfinished capture as `error`/anonymous, so a failed realtime connect still gets its row. Last handoff:
     `docs/handoffs/2026-09-20-phase8-review-round3.md`.
-    **Remaining**: criteria 6-7 write-up (D15), `RESULTS.md`, diagram, README badge (still 6 of 8),
-    `COSTS.md` per-token rate, Marco's closure sign-off. **Known limit**: one agent turn over 1,000
-    characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
+    **Written 2026-09-20**: `RESULTS.md`, `docs/architecture.md`, `docs/phase8/eval-redteam-limits.md`
+    (criteria 6-7, D15), `docs/phase8/exit-check.md`, README refresh, `COSTS.md` Phase 8 pricing.
+    **Remaining**: Marco's call on redeploying `ca-azbank-echo-p0` (live image `p8a` predates five code
+    commits, incl. the B4 reorder; needs a rebuild + one call), the gate's `/code-review`, closure sign-off.
+    **Known limit**: one agent turn over 1,000 characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
     the caller (turn detection / barge-in; `silence_duration_ms` is 600, see item 9).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.

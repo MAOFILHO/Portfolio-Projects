@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
 ![Azure](https://img.shields.io/badge/Azure-ACS_·_OpenAI_·_Container_Apps-0078D4?style=flat&logo=microsoftazure&logoColor=white&labelColor=1a1a2e)
 ![Region](https://img.shields.io/badge/Region-Canada_Central-D22128?style=flat&labelColor=1a1a2e)
-![Phase](https://img.shields.io/badge/Phase-6_of_8_(in_progress)-f0a020?style=flat&labelColor=1a1a2e)
+![Phase](https://img.shields.io/badge/Phase-8_of_8_(exit_gate_pending)-f0a020?style=flat&labelColor=1a1a2e)
 ![Budget](https://img.shields.io/badge/Ceiling-$25%2Fmo_(spendingLimit%3A_Off)-2ea043?style=flat&labelColor=1a1a2e)
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-banking-voice-agentic-ai-ci.yml/badge.svg?branch=main)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-banking-voice-agentic-ai-ci.yml)
@@ -36,7 +36,7 @@ exclusions below. Full inventory: `docs/PLAN.md`, "Reuse reality."
   banking, cards) swapped in on the same session via `session.update`, a deny-all-by-default auth gate
   keyed on `(agent, auth_state, tool_name)`, and a real second network hop to `mock-core-banking`
   (FastAPI + SQLite) behind that gate.
-- **A deterministic, adversarial test suite built alongside the code, not after it** — 607 tests
+- **A deterministic, adversarial test suite built alongside the code, not after it** — 788 tests
   (`FakeTransport` + `FakeRealtimeServer` standing in for both real integrations), and an 18-idea,
   593-case adversarial corpus run in every `make test` pass, not sampled or weekly.
 - **Cost control as a design constraint, not an afterthought** — a hard 5-minute/20-turn per-call cap
@@ -67,9 +67,11 @@ adversarially-tested, CI-blocking constraints rather than design guidance — se
 
 ## Results — measured
 
-This project has no live-model accuracy/retrieval eval harness yet (that's Phase 8, not started) — its
-"results" are the named safety constraints (`CLAUDE.md`, `docs/PLAN.md`), each with a real target and a
-real measured outcome, not an estimate:
+This project has no live-model eval harness: Phase 8's `evals/` suite and live redteam run were closed
+with a stated limit, not run (`docs/phase8/eval-redteam-limits.md`), so there is no behavioural pass rate
+to quote. Its "results" are the named safety constraints (`CLAUDE.md`, `docs/PLAN.md`), each with a real
+target and a real measured outcome, not an estimate. The compact version, with Phase 8's exit criteria,
+is [`RESULTS.md`](RESULTS.md):
 
 | Constraint | Kind | Target | **Measured** | |
 |---|---|---|---|---|
@@ -93,7 +95,7 @@ real measured outcome, not an estimate:
   held throughout — no balance was ever released — but root cause was never found, and Marco's call was
   to accept the day's cumulative evidence and stop chasing a clean repro (`docs/phase5/exit-criteria.md`,
   known-partial 9).
-- **607 green tests is evidence the known cases hold, not that the space is covered** — every real defect
+- **788 green tests is evidence the known cases hold, not that the space is covered** — every real defect
   in the table below was found on a live call, not in this suite. See the next section.
 
 ## What happened when real calls started
@@ -134,13 +136,14 @@ Reflects what's actually built and verified live, not aspirational. Items not ye
 | **AI platform** | Azure OpenAI realtime API, `gpt-realtime-mini` (`2025-10-06`, GlobalStandard, `NoAutoUpgrade`) — one model, in the call path directly | Live — a realtime session opens on every call |
 | **Compute** | Azure Container Apps, two apps (`ca-azbank-echo-p0` voice agent, `ca-azbank-core-banking` internal-only), Consumption plan, amd64-only | Live |
 | **Region** | Canada Central, no fallback chain | Confirmed live: realtime models exist in exactly 6 regions worldwide; Canada Central is one |
-| **Container registry** | Docker Hub free tier (private repo), deliberately not ACR | Still the choice as of Phase 6 — the ACR-vs-Docker-Hub decision due at Phase 1 kickoff is a standing open item |
-| **IaC** | Bicep, one module per resource | Partial — modules exist for `mock-core-banking` and Application Insights, but no `bicep` CLI has ever validated any of them; full completion is Phase 7's job |
-| **Deploy tooling** | Python Typer CLI wrapping `az` + Bicep, `deployment_state.json` checkpointing | **Not started** — deploys today go through ad hoc scripts (`docs/phase0/wizard/*.sh`, `infra/provision-app-insights.sh`) and manual `docker buildx` builds; Phase 7's job |
+| **Container registry** | Docker Hub free tier (private repo), deliberately not ACR | Still the choice as of Phase 8 — the ACR-vs-Docker-Hub decision due at Phase 1 kickoff is a standing open item |
+| **IaC** | Bicep, one module per resource | Live — 7 modules in `infra/modules/`, all built by `bicep build` inside `make lint` (Phase 7). The `gpt-5.4-mini` deployment and the Language resource were hand-provisioned and have no module yet |
+| **Deploy tooling** | Python Typer CLI wrapping `az` + Bicep (`src/azbank_deploy`), `make deploy` / `make teardown` | Live since Phase 7 — a full teardown and from-empty redeploy was run live 2026-09-18 (`docs/phase7/exit-check.md`); the phone number is excluded from teardown by design |
 | **Orchestration** | Persistent realtime session per call; agent swap via `session.update` across triage/banking/cards; declarative `AgentSpec` table | Live since Phase 2, three-agent handoff since Phase 5 |
 | **Auth** | PIN via DTMF only (spoken KBA dropped, decision 7) | Live since Phase 4 — B1/B2 held 0 breaches |
-| **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | In progress — resource live, exporter code deployed, delivery not yet confirmed by a queried row |
-| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 607 tests pass locally; L2 cassettes / L3 live-scenario evals / L4 sampled live redteam are designed in `docs/PLAN.md` but not yet built |
+| **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | Live — delivery confirmed by queried rows 2026-09-15 (Phase 6 closed, `docs/phase6/exit-check.md`) |
+| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on one real call, 2026-09-20 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
+| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 788 tests pass locally (698 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
 
 ## Architecture
 
@@ -179,11 +182,17 @@ Azure Communication Services ──Event Grid──► POST /api/incoming-call
                                     FastAPI + SQLite, real network hop, internal-only ingress
 ```
 
-**Observability (Phase 6, in progress):** every box above now emits OpenTelemetry via the Azure
-Monitor OpenTelemetry Distro into Application Insights `appi-azure-banking-voice`, Canada Central —
-code deployed 2026-09-14, delivery still to be confirmed by a queried row. Evaluated against LangFuse
-and rejected for that phase's use: `docs/PLAN.md`, "Observability tooling"; the never-govern decision
-is `docs/adr/ADR-004-telemetry-observes-never-governs.md`.
+**After the call ends (Phase 8):** a background task redacts the agent's words in memory (Azure AI
+Language), writes only the redacted text to Blob, has a second pinned model (`gpt-5.4-mini`) summarise it,
+and writes one outcome row to Table Storage. It is never awaited by the call, so it cannot touch B4 or B5.
+Drawn in full, with the auth, gate and cost paths, in [`docs/architecture.md`](docs/architecture.md); the
+design is `docs/adr/ADR-006-*.md` and `docs/adr/ADR-007-redact-before-first-write.md`.
+
+**Observability (Phase 6, closed 2026-09-15):** every box above emits OpenTelemetry via the Azure
+Monitor OpenTelemetry Distro into Application Insights `appi-azure-banking-voice`, Canada Central, and
+delivery was confirmed by queried rows, not by an ARM 200 (`docs/phase6/exit-check.md`). Evaluated against
+LangFuse and rejected for that phase's use: `docs/PLAN.md`, "Observability tooling"; the never-govern
+decision is `docs/adr/ADR-004-telemetry-observes-never-governs.md`.
 
 **Region & residency, verified live, not assumed:** realtime models exist in exactly six regions
 worldwide (`canadacentral`, `centralus`, `eastus2`, `francecentral`, `swedencentral`, `southindia`).
@@ -194,7 +203,7 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 
 ## Build status
 
-**5 phases closed, Phase 6 in progress, 2 phases not started.**
+**Phases 0-7 closed. Phase 8 is built and live-verified on one call; its exit gate is pending.**
 
 | Phase | Status |
 |---|---|
@@ -204,35 +213,34 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 | **3 · `mock-core-banking` (FastAPI + SQLite)** | ✅ **Approved 2026-09-09** |
 | **4 · Auth gate permissions (KBA + DTMF PIN) — B1/B2 threshold** | ✅ **Closed 2026-09-10** |
 | **5 · Intents + cost controls — B5 frozen here** | ✅ **Closed 2026-09-12** |
-| **6 · Observability (OTel, PII redaction)** | 🟡 **In progress** — resource live, code deployed 2026-09-14, delivery unconfirmed, B2 widening sign-off outstanding |
-| 7 · IaC completion & CI/CD (Bicep, Typer CLI, GitHub OIDC) | ⬜ not started |
-| 8 · Post-call analytics, evals & docs | ⬜ not started |
+| **6 · Observability (OTel, PII redaction)** | ✅ **Closed 2026-09-15** — all 14 criteria met |
+| **7 · IaC completion & CI/CD (Bicep, Typer CLI, GitHub OIDC)** | ✅ **Closed 2026-09-18** — 9 criteria, 2 with a stated limit |
+| **8 · Post-call analytics, evals & docs** | 🟡 **Built; exit gate pending** — criteria 1-5, 8-10 met; 6-7 (`evals/`, live redteam) closed with a stated limit, not run |
 
-**Live resources: two Container Apps, an Azure OpenAI deployment, an ACS phone number, and Application
-Insights are all deployed and billing.** The Container Apps and Application Insights are IaC-managed
-(partially — see Tech Stack) and destroyable; the phone number is protected by standing rule (R-09) and
+**Live resources: two Container Apps, two Azure OpenAI deployments (realtime and `gpt-5.4-mini`), an Azure
+AI Language resource, a storage account, an ACS phone number, and Application Insights are all deployed
+and billing.** Everything except the phone number and (in Phase 8) the Language resource and the second
+model deployment is IaC-managed and destroyable; the phone number is protected by standing rule (R-09) and
 never released by any script, at any phase, for any reason.
 
-### Known gaps — current, not historical (full list of 19: `PROJECT_STATE.md` "Open items")
+### Known gaps — current, not historical (full list: `PROJECT_STATE.md`, "Open items")
 
-Phase 0's provisioning-era issues (container arch mismatch, `ECHO_DIR` misdirection, the stale `az`
-CLI default) are all resolved — history in `docs/phase0/findings.md`. What's actually open today:
-
-1. **B2's widened definition is not signed off.** Blocks the part of Phase 6's design that touches it
-   (`docs/phase6/exit-criteria.md`, "B2, proposed new wording").
-2. **25 commits (`git log e42c063..HEAD`) still owe a human code review**, carried forward from Phase
-   5 entry.
-3. **The D16 smoke call must be redone** against the current Application Insights-wired image and a
-   row queried back — nothing has confirmed delivery yet.
-4. **A dropped connection during a pending escalation can still mislabel how the call ended** in the
-   log. The two known races were fixed 2026-09-14 (`fe1bb82`); a genuine abnormal socket close can
-   still slip through, and there's no test fixture for one yet.
-5. **Still on Docker Hub, not ACR** — a decision due at Phase 1 kickoff, still pending.
-6. **The DTMF `#` tone's exact media-path spelling is unconfirmed** (`*` is, confirmed live).
-7. **No Bicep module in this repo has ever been validated by any tool** — no `bicep` CLI in this
-   environment; human review is the only check that exists.
-8. **The IAM role Application Insights ingestion needs for identity-based auth is unresearched** —
-   the exporter runs on the named connection-string fallback today, a named Phase 7 debt.
+1. **No behavioural evals, and no live redteam run** (Phase 8 criteria 6-7, D15). Needs caller audio, so a
+   TTS resource and a new `APPROVED:`. `docs/phase8/eval-redteam-limits.md`.
+2. **Post-call analytics is proven live on one call.** The summary row is written last, so a container
+   killed mid-pipeline loses it; a turn over 1,000 characters loses the transcript (it fails closed); `$`
+   amounts pass through the stored transcript unredacted (B2 covers the PIN and phone number only);
+   `scrub_numbers` leaves the area code of a formatted number.
+3. **A cancelled daily-ledger write loses that call's minutes** (a B4 undercount that predates Phase 8).
+4. **The B3 text-model pin has no Bicep enforcement** — the deployment was hand-provisioned.
+5. **One live call went silent after a correct refusal**, root cause never found. B1 held.
+6. **The agent talks over the caller** (barge-in). Seen live, not yet addressed.
+7. **A genuine dropped connection during a pending escalation can still misreport `end_reason`.** No
+   fixture for an abnormal close exists yet.
+8. **The DTMF `#` tone's media-path spelling is unconfirmed** (`*` is, confirmed live), and nothing
+   guarantees DTMF and audio frames arrive in order.
+9. **Still on Docker Hub, not ACR.** `DOCKERHUB_PASSWORD` is not yet a GitHub secret, and `AOAI_KEY` is
+   still on the container, unused by code, pending the `disableLocalAuth` flip.
 
 ## Agentic AI Architecture
 
@@ -308,11 +316,11 @@ flowchart TD
 Named, measurable constraints, adversarially tested where noted, CI-blocking. Full detail: `CLAUDE.md`,
 `docs/PLAN.md` "Named constraints."
 
-| ID | Invariant | Target | Held as of Phase 5/6 |
+| ID | Invariant | Target | Held as of Phase 8 |
 |---|---|---|---|
-| **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification is the only operation reachable while anonymous | 0 breaches / ≥120 adversarial cases | **0 breaches / 593 cases**, 18 attack ideas, held across every live call too |
-| **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, span, or record | 0 occurrences, artifact scan | **0 occurrences**, held since Phase 4; Phase 6 proposes widening the surface this covers (not yet signed off) |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment outside an allowlist keyed on (deployment name, model version) together | 0 violations | **0 violations** — startup guard reads the live deployment's actual version + CI static check; Bicep-level enforcement not yet validated (see Known gaps) |
+| **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification and asking for a person are the only operations reachable while anonymous | 0 breaches / ≥120 adversarial cases | **0 breaches / 593 cases**, 18 attack ideas, held across every live call too |
+| **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, span, or record | 0 occurrences, artifact scan | **0 occurrences**, held since Phase 4; widened in Phase 6 (signed off 2026-09-15) to the caller's phone number and to every OpenTelemetry content channel |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment, or (Phase 8) the pinned `gpt-5.4-mini` text deployment, outside an allowlist keyed on (deployment name, model version) together | 0 violations | **0 violations** — the realtime pin has a fatal startup guard that reads the live deployment's version; the text pin has a non-fatal runtime guard; both have the CI static check. No Bicep enforces the text pin (see Known gaps) |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate cap fails **closed** | 0 overruns, 0 fail-open events | Built and blocking by construction since Phase 5 |
 | **B5** | **Turn Latency**, p95 | Provisional after Phase 2; frozen after Phase 5 | **FROZEN 2026-09-12: p95 1025ms, N=13** real-call turns with an allowed tool call — probe pool not gathered (internal-only ingress unreachable from outside) |
 | **R-09** | **Number irreplaceability** — the phone number is never released, by any script, at any phase | 0 release calls in any teardown path | Held throughout; verified in the teardown script and a standing `CLAUDE.md` stop condition |
@@ -329,10 +337,10 @@ B4 is the only brake that exists,** and it has been in force since Phase 5.
 | `mock-core-banking` Container App, marginal (free grant fully consumed by the first app) | **$7.88/mo** |
 | Table Storage (call records) | **$0.00/mo** (rounds to under a cent, live-priced 2026-09-12) |
 | Application Insights (issue #62, live 2026-09-14) | **$0.00/mo added** — shares the container logs' existing 5 GB free grant; worst case ~0.16% of it |
-| Azure OpenAI + ACS resources | $0 fixed, consumption-only — priced per call below |
+| Azure OpenAI (both deployments), Language, Blob, ACS | $0 fixed, consumption-only — Phase 8's worst case adds about **$1.89/mo** at 67 calls/month, priced from list rates and not yet read back from a bill (`COSTS.md`, "Phase 8 — every input priced") |
 | **Fixed monthly total** | **$14.60/mo** |
 | **Ceiling** | **$25.00/mo, unenforced by the platform** |
-| **Headroom → demo runs/month** | **$10.40/mo → 45–67 runs/mo** at B4's 5-minute cap (two comparable formulas give different figures; both reported in `COSTS.md` rather than one chosen for looking better) |
+| **Headroom → demo runs/month** | **$10.40/mo → 38–57 runs/mo** at B4's 5-minute cap, recomputed for Phase 8's per-call cost (was 45–67; two comparable formulas give different figures, and both are reported in `COSTS.md` rather than one chosen for looking better) |
 
 Full per-meter log with raw API evidence: [`COSTS.md`](COSTS.md). Free-tier-promotion suppression risk
 (the subscription has an active `freetier` promotion through 2027-02-28, which can make Cost Analysis
@@ -376,19 +384,16 @@ historical record of the first provisioning pass — not something re-run for ro
 
 ### Named but not yet built
 
-Per the Makefile's own comment, the canonical target list this project will eventually need is
-`install, test, lint, fixtures, deploy, teardown`. Three exist:
+The canonical target list is `install, test, lint, fixtures, deploy, teardown`. Only one is missing:
 
 | Target | Status |
 |---|---|
-| `make fixtures` | not yet built — Phase 7/8 |
-| `make deploy` | not yet built — Phase 7's Typer CLI replaces today's ad hoc scripts |
-| `make teardown` | not yet built — same |
+| `make fixtures` | not built — the TTS caller-audio pipeline `docs/PLAN.md` designs for L3/L4; blocked on the same missing TTS resource as `evals/` |
 
 ## Testing
 
-**607 tests pass locally** (517 voice-agent + 90 mock-core-banking, `make test`, most recently run
-2026-09-14), with **zero Azure dependency** — `FakeTransport` + `FakeRealtimeServer` stand in for both
+**788 tests pass locally** (698 voice-agent + 90 mock-core-banking, 3 skipped by design, `make test`,
+most recently run 2026-09-20), with **zero Azure dependency** — `FakeTransport` + `FakeRealtimeServer` stand in for both
 real integrations. Per the CI workflow's own comment (mirroring `docs/PLAN.md`'s "Verification"
 section): `make test` runs **L0 units + L1 fakes + L2**.
 
@@ -397,8 +402,9 @@ attempt) holds **0 breaches**, run deterministically inside `make test` — this
 blocking, not a sampled live check.
 
 `docs/PLAN.md` also designs **L3** (live-model scripted scenarios, LLM-judge rubric) and **L4** (a
-sampled live-model adversarial subset, weekly/on-demand, its own $-cap) — this pass found no `evals/`
-directory confirming either is built yet, flagged here rather than assumed.
+sampled live-model adversarial subset, weekly/on-demand, its own $-cap). **Neither is built** — there is no
+`evals/` directory. Phase 8 closed both with a stated limit rather than a result
+(`docs/phase8/eval-redteam-limits.md`).
 
 ## CI/CD — GitHub Actions
 
@@ -413,7 +419,7 @@ tests passing).
 | Step | What runs | What it catches |
 |---|---|---|
 | Lint | `ruff` + `mypy` + `scripts/check_b3_allowlist.py` | Static defects, type errors, and any realtime deployment reference outside B3's allowlist |
-| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 607 tests, including B1's 593-case adversarial corpus |
+| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 788 tests, including B1's 593-case adversarial corpus |
 
 **What it deliberately does not check: whether a live call actually sounds right, or whether telemetry
 actually reaches Application Insights.** Those need a real phone call and a queried row — this workflow
@@ -500,10 +506,12 @@ that already looked fine.
 | [`PROJECT_STATE.md`](PROJECT_STATE.md) | **Start here.** Current phase, open items, active risks, next actions — fixed-size, current-state only |
 | [`CLAUDE.md`](CLAUDE.md) | Stop conditions, named constraints, hard exclusions, skill discipline |
 | [`docs/PLAN.md`](docs/PLAN.md) | Scope, architecture, budget, region, phase plan, tracked risks — the source of truth this README summarizes |
+| [`RESULTS.md`](RESULTS.md) | The measured outcomes, in one page, with the limits stated |
+| [`docs/architecture.md`](docs/architecture.md) | The architecture diagram, including the post-call pipeline |
 | [`COSTS.md`](COSTS.md) | Every measured meter, with raw API evidence, including the free-tier-suppression investigation |
-| [`docs/adr/`](docs/adr/) | ADR-001 (data residency), ADR-002 (geography knobs), ADR-003 (realtime SDK choice), ADR-004 (telemetry observes, never governs) |
+| [`docs/adr/`](docs/adr/) | ADR-001 (data residency), ADR-002 (geography knobs), ADR-003 (realtime SDK choice), ADR-004 (telemetry observes, never governs), ADR-005 (shared core-banking client), ADR-006 (second model pin for post-call text), ADR-007 (redact before the first write) |
 | [`docs/phase0/findings.md`](docs/phase0/findings.md) | Every raw finding Phase 0 produced, in the order it was found |
-| [`docs/handoffs/`](docs/handoffs/) | 16 session handoff documents, written at phase/context boundaries |
+| [`docs/handoffs/`](docs/handoffs/) | More than 20 session handoff documents, written at phase/context boundaries |
 
 This project is one top-level folder in the
 [`MAOFILHO/Portfolio-Projects`](https://github.com/MAOFILHO/Portfolio-Projects) monorepo, and the
