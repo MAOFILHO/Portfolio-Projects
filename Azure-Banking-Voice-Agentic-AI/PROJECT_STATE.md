@@ -28,8 +28,9 @@ live bearing on the current moment:
 1. **The phone number `+17059100383` is never released**, by any script, at any phase, for any
    reason (R-09). Irreplaceable, not merely billable.
 2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`,
-   `APPROVED: Phase 6`, and `APPROVED: Phase 7` are all on record and all spent. Phase 8 has not been
-   designed or approved yet — nothing may be provisioned under its name until it is.
+   `APPROVED: Phase 6`, `APPROVED: Phase 7`, `APPROVED: Phase 8` and `APPROVED: Phase 8 Language
+   resource` are all on record and spent. Anything further billable (e.g. a Language Bicep module, a
+   TTS resource for the evals) needs a new `APPROVED:` line.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -69,10 +70,10 @@ and goes stale between sessions.
   `Deprecating`) and `gpt-5-mini` (retires 2027-02-09, ~4.7 months runway) for best GA runway:
   retires **2027-09-21**, ~12 months out. RBAC: no new grant needed — the voice agent's identity
   already holds `Cognitive Services OpenAI User` scoped to the whole `aoai-azure-banking-voice-cc`
-  account, which covers this deployment too. **B3 covers it via the CI static check only**:
-  `boot.py` carries `ACTIVE_TEXT_MODEL` / `ALLOWED_TEXT_MODELS`, `scripts/check_b3_allowlist.py`
-  scans both deployment classes, `CLAUDE.md`'s B3 row updated. Non-fatal runtime guard built
-  (`boot.assert_text_model_safety`, checked before every summary); no Bicep for this deployment yet.
+  account, which covers this deployment too. **B3 covers it by the CI static check and a non-fatal
+  runtime guard**: `boot.py` carries `ACTIVE_TEXT_MODEL` / `ALLOWED_TEXT_MODELS`,
+  `scripts/check_b3_allowlist.py` scans both deployment classes, `boot.assert_text_model_safety` runs
+  before every summary. No Bicep for this deployment yet.
 - **Azure AI Language resource `lang-azure-banking-voice-cc` created 2026-09-18** — `TextAnalytics`
   kind, Standard (`S`) SKU, Canada Central, endpoint `https://lang-azure-banking-voice-cc.cognitive
   services.azure.com/`. D2's PII redaction target. **RBAC granted 2026-09-18**: voice agent identity
