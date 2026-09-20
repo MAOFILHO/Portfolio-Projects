@@ -76,6 +76,10 @@ CALL_RECORDS_ACCOUNT_URL_VAR = "CALL_RECORDS_ACCOUNT_URL"
 
 #: The Blob endpoint redacted transcripts are written to (Phase 8). An account URL, never a connection
 #: string, like the variable above. **Unlike it, optional** -- see transcripts_account_url().
+#: The Entra token scope for Azure OpenAI and Azure AI Language alike. Live-verified against both
+#: services on 2026-09-19 (docs/phase8/research-postcall-adapters.md); one place, so a change is one edit.
+COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
+
 TRANSCRIPTS_ACCOUNT_URL_VAR = "TRANSCRIPTS_ACCOUNT_URL"
 
 #: The Azure AI Language endpoint the post-call redactor calls (Phase 8). An https endpoint, no key.
@@ -167,6 +171,21 @@ def call_records_account_url(env=None):
     return url
 
 
+def _optional_service_url(var, schemes, expected, service, holds, env):
+    """An address that may be unset, but must not be a connection string when it is set. Somebody
+    pasting one would get working software with the no-keys property silently gone."""
+    env = os.environ if env is None else env
+    url = env.get(var)
+    if not url:
+        return None
+    if not url.startswith(schemes):
+        raise SystemExit(
+            f"{var} must be {expected}, not a connection string. This project authenticates to "
+            f"{service} with a managed identity and holds no {holds}."
+        )
+    return url
+
+
 def transcripts_account_url(env=None):
     """The configured Blob endpoint for redacted transcripts, or None if transcript storage is off.
 
@@ -174,35 +193,20 @@ def transcripts_account_url(env=None):
     others are on the live-call path, where a missing value is a call that fails in front of a
     caller. This one is only ever read by the post-call pipeline (ADR-006 Decision 4), which must
     never be able to stop a call: unset means the pipeline records `not_configured` for the
-    transcript and carries on. A value that *is* set still has to be an account URL -- somebody
-    pasting a connection string would get working software with the no-keys property silently gone.
+    transcript and carries on. A value that *is* set still has to be an account URL.
     """
-    env = os.environ if env is None else env
-    url = env.get(TRANSCRIPTS_ACCOUNT_URL_VAR)
-    if not url:
-        return None
-    if not url.startswith(("http://", "https://")):
-        raise SystemExit(
-            f"{TRANSCRIPTS_ACCOUNT_URL_VAR} must be an account URL, not a connection string. This "
-            "project authenticates to Storage with a managed identity and holds no account key."
-        )
-    return url
+    return _optional_service_url(
+        TRANSCRIPTS_ACCOUNT_URL_VAR, ("http://", "https://"), "an account URL", "Storage",
+        "account key", env,
+    )
 
 
 def language_endpoint(env=None):
-    """The configured Language endpoint, or None if redaction is off. Same shape of rule as
-    transcripts_account_url(): unset is allowed, a value that is set must be an https URL -- a
-    connection string would carry a key, and this project holds none."""
-    env = os.environ if env is None else env
-    url = env.get(LANGUAGE_ENDPOINT_VAR)
-    if not url:
-        return None
-    if not url.startswith("https://"):
-        raise SystemExit(
-            f"{LANGUAGE_ENDPOINT_VAR} must be an https endpoint URL, not a connection string. This "
-            "project authenticates to Language with a managed identity and holds no key."
-        )
-    return url
+    """The configured Language endpoint, or None if redaction is off. Same rule as
+    transcripts_account_url(): unset is allowed, a value that is set must be an https URL."""
+    return _optional_service_url(
+        LANGUAGE_ENDPOINT_VAR, ("https://",), "an https endpoint URL", "Language", "key", env,
+    )
 
 
 def text_deployment_name(env=None):

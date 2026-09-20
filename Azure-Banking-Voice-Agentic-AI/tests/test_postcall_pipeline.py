@@ -34,10 +34,9 @@ def _finished_capture(turns, end_reason="model_ended", auth_state=gate.AUTHENTIC
 
 def _run(capture, redactor=None, summarizer=None, transcripts=None, call_records=None):
     call_records = call_records if call_records is not None else FakeCallRecordStore()
-    asyncio.run(pipeline.run_postcall(
-        capture, call_records=call_records,
-        redactor=redactor, summarizer=summarizer, transcripts=transcripts,
-    ))
+    asyncio.run(pipeline.run_postcall(capture, pipeline.PostcallServices(
+        call_records=call_records, redactor=redactor, summarizer=summarizer, transcripts=transcripts,
+    )))
     return call_records
 
 
@@ -221,6 +220,21 @@ class EachStepFailsOnItsOwnWithoutTakingTheOthersDown(unittest.TestCase):
         self.assertEqual(store.call_summaries[0].summary_status, "failed")
 
 
+class DigitsInTheModelWrittenSummaryAreMaskedBeforeTheRow(unittest.TestCase):
+    """The summary is model output, and a persisted record: the redactor's output is scrubbed for
+    digit runs (language.py), so what the model writes about it gets the same treatment (B2)."""
+
+    def test_a_digit_run_in_the_summary_never_reaches_the_row(self):
+        class Leaky(FakeSummarizer):
+            SUMMARY = "The caller gave account 1234567890 and asked for the balance."
+
+        store = _run(_finished_capture(TURNS), **_wired(summarizer=Leaky()))
+        row = store.call_summaries[0]
+        self.assertNotIn("1234567890", row.summary)
+        self.assertIn("[REDACTED]", row.summary)
+        self.assertEqual(row.summary_status, "done")
+
+
 class ThePipelineNeverRaisesIntoTheProcess(unittest.TestCase):
     def test_a_row_that_cannot_be_written_is_logged_and_swallowed(self):
         store = FakeCallRecordStore(fail_with=unavailable())
@@ -237,8 +251,10 @@ class ThePipelineNeverRaisesIntoTheProcess(unittest.TestCase):
     def test_cancellation_is_not_swallowed(self):
         async def go():
             task = asyncio.create_task(pipeline.run_postcall(
-                _finished_capture(TURNS), call_records=FakeCallRecordStore(),
-                **_wired(redactor=FakeRedactor(hang=True)),
+                _finished_capture(TURNS),
+                pipeline.PostcallServices(
+                    call_records=FakeCallRecordStore(), **_wired(redactor=FakeRedactor(hang=True)),
+                ),
             ))
             await asyncio.sleep(0.01)
             task.cancel()

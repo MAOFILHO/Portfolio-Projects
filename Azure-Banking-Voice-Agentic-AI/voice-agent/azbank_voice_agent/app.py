@@ -33,6 +33,7 @@ from azure.identity.aio import get_bearer_token_provider
 from fastapi import FastAPI, Request, WebSocket
 
 from .boot import (
+    COGNITIVE_SERVICES_SCOPE,
     app_base_url,
     assert_boot_safety,
     call_records_account_url,
@@ -46,12 +47,10 @@ from .call_records import TableStorageCallRecordStore
 from .core_banking import HttpCoreBankingClient
 from .cost import caps
 from .observability import telemetry
-from .postcall import language as postcall_language
-from .postcall import summarizer as postcall_summarizer
 from .postcall.blob import BlobTranscriptStore
 from .postcall.capture import CallCapture
 from .postcall.language import LanguagePIIRedactor
-from .postcall.pipeline import run_postcall
+from .postcall.pipeline import PostcallServices, run_postcall
 from .postcall.summarizer import OpenAISummarizer
 from .realtime.client import connect_realtime
 from .realtime.session import budget_or_closed, run_call, run_closed_call
@@ -163,10 +162,12 @@ def _schedule_postcall(capture):
     try:
         task = asyncio.create_task(run_postcall(
             capture,
-            call_records=call_records(),
-            redactor=_redactor,
-            summarizer=_summarizer,
-            transcripts=_transcripts,
+            PostcallServices(
+                call_records=call_records(),
+                redactor=_redactor,
+                summarizer=_summarizer,
+                transcripts=_transcripts,
+            ),
         ))
     except Exception as e:  # noqa: BLE001 -- analytics must never break the call's exit
         log.error("could not schedule the post-call pipeline (%s)", type(e).__name__)
@@ -200,15 +201,13 @@ def _build_postcall_adapters():
     # `DefaultAzureCredential` the Table and Blob clients are handed cannot do. Same identity.
     credential = AsyncDefaultAzureCredential()
     http = httpx.AsyncClient(timeout=30.0)
+    token_provider = get_bearer_token_provider(credential, COGNITIVE_SERVICES_SCOPE)
     redactor = summarizer = None
     if language_url:
-        redactor = LanguagePIIRedactor(
-            language_url, http, get_bearer_token_provider(credential, postcall_language.TOKEN_SCOPE),
-        )
+        redactor = LanguagePIIRedactor(language_url, http, token_provider)
     if text_deployment:
         summarizer = OpenAISummarizer(
-            openai_endpoint, text_deployment, http,
-            get_bearer_token_provider(credential, postcall_summarizer.TOKEN_SCOPE), read_live_model,
+            openai_endpoint, text_deployment, http, token_provider, read_live_model,
         )
     return redactor, summarizer, http, credential
 

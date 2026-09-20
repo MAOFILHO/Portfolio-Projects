@@ -54,7 +54,7 @@ class TheStoreWritesOneImmutableJsonBlobPerCall(unittest.TestCase):
 
     def test_a_correlation_id_that_could_escape_the_container_is_refused(self):
         store = BlobTranscriptStore(_FakeContainer())
-        for bad in ("../x", "a/b", "", "a\\b"):
+        for bad in ("../x", "a/b", "", "a\\b", "a#b", "a?b", "a b", "a\nb"):
             with self.assertRaises(ValueError, msg=bad):
                 asyncio.run(store.write(bad, ["Hi."]))
 

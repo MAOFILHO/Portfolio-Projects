@@ -13,9 +13,14 @@ against real Storage is unverified until the first live call, the standing the T
 its first real deploy: a role assignment returning 200 OK proves creation, not access.
 """
 import json
+import re
 
 #: The one container transcripts live in. `infra/modules/call-records-store.bicep` creates it.
 TRANSCRIPT_CONTAINER = "transcripts"
+
+#: What a correlation id may contain to be used as a blob name. An allow-list, not a list of bad
+#: characters: the id is also a Table RowKey, where `#` and `?` are illegal as well as `/` and `\`.
+_SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")
 
 
 class BlobTranscriptStore:
@@ -37,7 +42,7 @@ class BlobTranscriptStore:
     async def write(self, correlation_id, turns):
         # A name comes from a header the caller's carrier controls, so it is checked rather than
         # trusted: a path separator would put the blob somewhere the container never meant.
-        if not correlation_id or any(c in correlation_id for c in "/\\") or ".." in correlation_id:
+        if not correlation_id or not _SAFE_NAME.fullmatch(correlation_id) or ".." in correlation_id:
             raise ValueError("correlation id is not a safe blob name")
         name = f"{correlation_id}.json"
         await self._container.upload_blob(

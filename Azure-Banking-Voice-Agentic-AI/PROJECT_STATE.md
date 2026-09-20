@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is designed and approved, not yet built** — see "Current phase" below.
+**Phase 8 is built and live-verified on one real call; docs, the criteria 6-7 write-up and the gate remain** — see "Current phase".
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -50,7 +50,7 @@ resource) — fixed live, not yet fixed in the CLI itself.
 **Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
 — `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
 is on record, and `APPROVED: Phase 8 Language resource` (at the corrected non-free price). Both new
-resources exist (see "Live Azure state"). The post-call pipeline, `evals/`, and the docs are not built.
+resources exist (see "Live Azure state"). The post-call pipeline is built and live (open item 10); `evals/` and the docs are not.
 
 Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
 Full account: `docs/phase6/exit-check.md`.
@@ -71,14 +71,14 @@ and goes stale between sessions.
   already holds `Cognitive Services OpenAI User` scoped to the whole `aoai-azure-banking-voice-cc`
   account, which covers this deployment too. **B3 covers it via the CI static check only**:
   `boot.py` carries `ACTIVE_TEXT_MODEL` / `ALLOWED_TEXT_MODELS`, `scripts/check_b3_allowlist.py`
-  scans both deployment classes, `CLAUDE.md`'s B3 row updated. No runtime guard and no Bicep for this
-  deployment yet — ADR-006 Decision 4's non-fatal guard is built with the post-call pipeline.
+  scans both deployment classes, `CLAUDE.md`'s B3 row updated. Non-fatal runtime guard built
+  (`boot.assert_text_model_safety`, checked before every summary); no Bicep for this deployment yet.
 - **Azure AI Language resource `lang-azure-banking-voice-cc` created 2026-09-18** — `TextAnalytics`
   kind, Standard (`S`) SKU, Canada Central, endpoint `https://lang-azure-banking-voice-cc.cognitive
   services.azure.com/`. D2's PII redaction target. **RBAC granted 2026-09-18**: voice agent identity
   holds `Cognitive Services Language Reader`, scoped to this resource only — verified live to include
-  `analyze-conversations/action` despite the misleading "Reader" name. Not yet called by any code —
-  that's the post-call pipeline, still open.
+  `analyze-conversations/action` despite the misleading "Reader" name. Called by the post-call
+  pipeline (`postcall/language.py`); verified on a real call 2026-09-20.
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
   image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-
@@ -91,7 +91,7 @@ and goes stale between sessions.
 - Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
   Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
 - **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p7c`, rebuilt from empty 2026-09-18 by the new deploy CLI. Its
+  `docker.io/maofilho/azbank-echo-p0:p8a` (since 2026-09-20), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
   system-assigned identity is **`bb712203-9e00-42a5-a0b5-0f38b376c79e`** — a fresh GUID, since
   recreating the app regenerates the identity. Holds `Cognitive Services OpenAI User` on the AOAI
   resource (granted automatically by the CLI's `aoai` deploy step, no manual `az role assignment
@@ -106,7 +106,7 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` carries `p7c`** — D2's identity-auth code plus both `agents/specs.py` fixes
+- **`ca-azbank-echo-p0` carries `p8a`** (`p7c` plus Phase 8's post-call code) — `p7c` was D2's identity-auth code plus both `agents/specs.py` fixes
   from `docs/phase7/d2-live-call-result.md`, live-verified 2026-09-17 and again 2026-09-18 after the
   from-empty rebuild. Revision number is stale after that rebuild — re-check live, don't trust a
   recorded number. Carries `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and
@@ -220,26 +220,23 @@ been observed to contradict the pre-provisioning estimate.
    Standard-tier only, ~$0.07-$1.34/mo bounded at this project's call volume, `COSTS.md`.
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
-10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; decisions D14-D18 settled 2026-09-19).
-    **Built, tested, on `main`**: agent-side transcript capture, call-outcome mapping (D17), the
-    redact-before-write pipeline (ADR-007), the Blob transcript store, the call-summary row, background
-    scheduling in `app.py`, and (2026-09-19, `docs/phase8/research-postcall-adapters.md`) the **real
-    Language redactor** (`postcall/language.py`, Conversation PII job API by REST, plus a number scrub),
-    the **real `gpt-5.4-mini` summarizer** (`postcall/summarizer.py`) and the **non-fatal B3 text-pin
-    guard** (`boot.assert_text_model_safety`, checked before every summary). Both adapters were run
-    once against the live services with fake transcript data: Language redacted a name, account number
-    and phone number in 3.6 s; the summarizer returned a valid summary. Entra scope
-    `cognitiveservices.azure.com` works on both.
-    **Live, applied 2026-09-19 with Marco's approval**: private `transcripts` container + Blob role
-    scoped to it (`call-records-store.bicep`); `gpt-5.4-mini` capacity 1 -> 10 (was 1 RPM / 1,000 TPM)
-    and `NoAutoUpgrade` (was `OnceNewDefaultVersionAvailable`), both read back.
-    **Not yet live**: the running app is still `p7c`, without any of this code or the three env vars
-    (`TRANSCRIPTS_ACCOUNT_URL`, `LANGUAGE_ENDPOINT`, `AOAI_TEXT_DEPLOYMENT`, all in
-    `voice-agent.bicep`). Needs an amd64 image build + push (Marco, Docker) then a container-app update.
-    **Then**: the live call (criteria 1-2), `evals/`, `RESULTS.md`, diagram, README badge, `COSTS.md`
-    per-token rate, `/code-review` before the gate; criteria 6-7 close with a stated limit (D15).
-    **Known limit**: a single agent turn over 1,000 characters (Language's item limit) fails closed,
-    so that call gets an outcome row and no transcript.
+10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18). **Built, on `main`, live
+    since 2026-09-20 (image `p8a`)**: agent-side transcript capture, D17 outcome mapping, the
+    redact-before-write pipeline (ADR-007), Blob transcript store, summary row, Language redactor plus
+    number scrub, `gpt-5.4-mini` summarizer, non-fatal B3 text-pin guard. Applied with Marco's
+    approval: private `transcripts` container + scoped Blob role; `gpt-5.4-mini` capacity 10 and
+    `NoAutoUpgrade`. **One real call (2026-09-20) proved criteria 1-2**: Table row (`caller_hangup`,
+    transcript `stored`, summary `done`, intent `balance_enquiry`) and a redacted blob with no PIN or
+    phone number. Marco's user holds Table/Blob Data Reader on `stazbankcallrecords` (granted 2026-09-20).
+    `/code-review` against `47eb921` ran 2026-09-20; its 12 Standards findings are fixed.
+    **Open from its Spec axis**: (a) a call whose `connect_realtime()` raises gets no row; (b) the row
+    is written last, after up to 3 x 60 s steps, so a container kill mid-pipeline loses it; (c)
+    criterion 4's test measures no latency; (d) `$` amounts pass through the transcript unredacted
+    (B2 covers PIN and phone only) -- state it in `RESULTS.md`.
+    **Remaining**: criteria 6-7 write-up (D15), `RESULTS.md`, diagram, README badge (still 6 of 8),
+    `COSTS.md` per-token rate, Marco's closure sign-off. **Known limit**: one agent turn over 1,000
+    characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
+    the caller (turn detection / barge-in; `silence_duration_ms` is 600, see item 9).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own

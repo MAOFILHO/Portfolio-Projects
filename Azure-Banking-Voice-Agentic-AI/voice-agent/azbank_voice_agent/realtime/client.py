@@ -16,6 +16,8 @@ from typing import Any, Protocol
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AsyncOpenAI
 
+from ..boot import COGNITIVE_SERVICES_SCOPE
+
 
 class RealtimeConnection(Protocol):
     """What the relay needs from a realtime connection: send events, iterate events."""
@@ -48,7 +50,7 @@ def connect_realtime():
     # not yet live-verified against this deployment; do that before flipping
     # `disableLocalAuth: true` in aoai.bicep.
     token_provider = get_bearer_token_provider(
-        DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+        DefaultAzureCredential(), COGNITIVE_SERVICES_SCOPE
     )
     client = AsyncOpenAI(api_key=token_provider(), websocket_base_url=base_url)
     return client.realtime.connect(model=deployment)

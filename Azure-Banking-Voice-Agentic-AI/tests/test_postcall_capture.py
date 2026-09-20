@@ -97,6 +97,33 @@ class TheCaptureKnowsHowTheCallEnded(unittest.TestCase):
             ))
         self.assertEqual(capture.end_reason, "error")
 
+    def test_the_capture_is_finished_before_the_ledger_write_so_a_cancellation_there_loses_nothing(self):
+        # The write is awaited in the same `finally`; a task cancelled during it must not leave the
+        # capture unfinished, or the pipeline skips the call and no outcome row is ever written.
+        class CancelledDuringTheWrite(FakeCallRecordStore):
+            async def record_minutes(self, day, minutes):
+                raise asyncio.CancelledError
+
+        capture = CallCapture()
+        with self.assertRaises(asyncio.CancelledError):
+            asyncio.run(run_call(
+                FakeTransport(), FakeRealtimeServer(events=[response_done()]),
+                FakeCoreBankingClient(), CancelledDuringTheWrite(), capture=capture,
+            ))
+        self.assertIsNotNone(capture.end_reason)
+
+    def test_the_recorded_duration_is_the_calls_not_the_ledger_writes(self):
+        class SlowLedger(FakeCallRecordStore):
+            async def record_minutes(self, day, minutes):
+                await asyncio.sleep(0.3)
+
+        capture = CallCapture()
+        asyncio.run(run_call(
+            FakeTransport(), FakeRealtimeServer(events=[response_done()]),
+            FakeCoreBankingClient(), SlowLedger(), capture=capture,
+        ))
+        self.assertLess(capture.duration_ms, 250)
+
 
 class AttachingACaptureChangesNothingAboutTheCall(unittest.TestCase):
     """Exit criterion 4: the same scripted call, with and without a capture."""
@@ -141,6 +168,22 @@ class TheClosedPathFillsACaptureToo(unittest.TestCase):
         self.assertEqual(capture.auth_state, gate.ANONYMOUS)
         self.assertEqual(capture.agent_turns, [])
         self.assertEqual(capture.correlation_id, "closed-1")
+
+    def test_a_closed_call_is_finished_before_the_ledger_write_too(self):
+        class CancelledDuringTheWrite(FakeCallRecordStore):
+            async def record_minutes(self, day, minutes):
+                raise asyncio.CancelledError
+
+        capture = CallCapture()
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("were-closed"), response_done()], respond_after_appends=0,
+        )
+        with self.assertRaises(asyncio.CancelledError):
+            asyncio.run(run_closed_call(
+                FakeTransport(), realtime, CancelledDuringTheWrite(),
+                correlation_id="closed-2", capture=capture,
+            ))
+        self.assertEqual(capture.end_reason, "closed")
 
 
 if __name__ == "__main__":

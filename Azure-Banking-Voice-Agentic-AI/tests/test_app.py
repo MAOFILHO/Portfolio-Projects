@@ -242,8 +242,8 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
         """Run one /ws call with everything stubbed; return (post-call invocations, handler done?)."""
         invocations = []
 
-        async def fake_postcall(capture, **collaborators):
-            invocations.append((capture, collaborators))
+        async def fake_postcall(capture, services):
+            invocations.append((capture, services))
             if postcall_impl is not None:
                 await postcall_impl()
 
@@ -277,10 +277,10 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
     def test_a_finished_call_hands_its_capture_to_the_pipeline_once(self):
         invocations, _ = self._drive()
         self.assertEqual(len(invocations), 1)
-        capture, collaborators = invocations[0]
+        capture, services = invocations[0]
         self.assertEqual(capture.end_reason, "model_ended")
         self.assertEqual(
-            set(collaborators), {"call_records", "redactor", "summarizer", "transcripts"}
+            set(vars(services)), {"call_records", "redactor", "summarizer", "transcripts"}
         )
 
     def test_the_handler_returns_while_the_pipeline_is_still_running(self):
@@ -306,7 +306,7 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
 
         invocations = []
 
-        async def fake_postcall(capture, **collaborators):
+        async def fake_postcall(capture, services):
             invocations.append(capture)
 
         async def no_budget_problem(_records):

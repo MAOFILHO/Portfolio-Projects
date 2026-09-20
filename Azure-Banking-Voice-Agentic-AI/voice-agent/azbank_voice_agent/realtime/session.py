@@ -356,17 +356,16 @@ async def run_closed_call(
     except (TimeoutError, WebSocketDisconnect):
         log.warning("closed path ended without a complete response")
     finally:
-        await _record_minutes(call_records, started, now)
-        span.set_attribute("end_reason", "closed")
-        span.set_attribute("auth_state", gate.ANONYMOUS)
-        span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
+        # Duration taken once, and the capture finished, before the ledger write: see run_call.
+        duration_ms = telemetry.round_duration_ms(time.monotonic() - started)
         if capture is not None:
             # turn_count 0: the closed path's one fixed sentence is not a counted turn, and it holds
             # no words worth keeping -- the pipeline writes this call's outcome row and nothing more.
-            capture.finish(
-                correlation_id, "closed", gate.ANONYMOUS, 0,
-                telemetry.round_duration_ms(time.monotonic() - started),
-            )
+            capture.finish(correlation_id, "closed", gate.ANONYMOUS, 0, duration_ms)
+        await _record_minutes(call_records, started, now)
+        span.set_attribute("end_reason", "closed")
+        span.set_attribute("auth_state", gate.ANONYMOUS)
+        span.set_attribute("duration_ms", duration_ms)
     log.info("closed call ended, correlationId=%s", correlation_id)
 
 
@@ -841,6 +840,14 @@ async def run_call(
         # The third point the buffer is zeroed at, after submit and clear -- on call end, whatever
         # the outcome. In a finally because "whatever the outcome" includes the paths that raise.
         authenticator.end_call()
+        # The call's own duration, taken once and *before* the ledger write below: the capture and
+        # the span both report the call, not the time spent recording it. The capture is finished
+        # here too, ahead of that `await`, because a task cancelled during the write would otherwise
+        # leave it unfinished -- and the post-call pipeline skips a call that never finished, so no
+        # outcome row would ever be written for it.
+        duration_ms = telemetry.round_duration_ms(time.monotonic() - started)
+        if capture is not None:
+            capture.finish(correlation_id, end_reason, auth_state, turn_count, duration_ms)
         # And the day is charged for this call, on every path out -- a clean hangup, either B4 cap,
         # exhausted attempts, an escalation, or an unhandled failure (issue #50). A call that ended
         # badly still counts against the day, because minutes the cap cannot see are minutes it
@@ -853,11 +860,6 @@ async def run_call(
         span.set_attribute("auth_state", auth_state)
         span.set_attribute("end_reason", end_reason)
         span.set_attribute("turn_count", turn_count)
-        span.set_attribute("duration_ms", telemetry.round_duration_ms(time.monotonic() - started))
+        span.set_attribute("duration_ms", duration_ms)
         span.set_attribute("closed_path_taken", False)
-        if capture is not None:
-            capture.finish(
-                correlation_id, end_reason, auth_state, turn_count,
-                telemetry.round_duration_ms(time.monotonic() - started),
-            )
     log.info("call ended")

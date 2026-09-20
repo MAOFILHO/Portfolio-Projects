@@ -539,10 +539,12 @@ class NoCredentialReachedAStoredTranscriptOrSummaryRowInThisRun(unittest.TestCas
         cls.transcripts = FakeTranscriptStore()
         asyncio.run(pipeline.run_postcall(
             _a_call_whose_agent_speaks_the_credentials(),
-            call_records=cls.store,
-            redactor=FakeRedactor(terms=(DEFAULT_PIN, FAKE_CALLER_PHONE_NUMBER)),
-            summarizer=FakeSummarizer(),
-            transcripts=cls.transcripts,
+            pipeline.PostcallServices(
+                call_records=cls.store,
+                redactor=FakeRedactor(terms=(DEFAULT_PIN, FAKE_CALLER_PHONE_NUMBER)),
+                summarizer=FakeSummarizer(),
+                transcripts=cls.transcripts,
+            ),
         ))
 
     def test_the_pipeline_really_wrote_a_transcript_and_a_row_to_scan(self):

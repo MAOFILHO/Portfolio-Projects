@@ -69,3 +69,12 @@ pipeline instead. **Not done**: `infra/modules/aoai.bicep` still declares only t
 realtime pin. This deployment was hand-provisioned (`PROJECT_STATE.md`), not via Bicep, so the text
 pin has no Bicep-side enforcement yet — that gap is real follow-up work, not something this note
 should let `CLAUDE.md` claim as already covered (`CLAUDE.md`'s B3 row now says so explicitly).
+
+## Build note — 2026-09-20
+
+**Decision 4 is now done.** `boot.assert_text_model_safety` (built 2026-09-19 with the post-call
+pipeline) reads the live deployment's `(name, version)` and raises `TextModelUnsafe` on a mismatch or
+an unreadable deployment. `postcall/summarizer.py` calls it before every summary, off the event loop;
+the pipeline records `summary_status=failed` and carries on. It never blocks boot or a call. Verified
+live on 2026-09-19 (a real summary came back) and on a real call on 2026-09-20. **Still not done**:
+Bicep-side enforcement (above), unchanged.

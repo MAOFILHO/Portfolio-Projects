@@ -162,6 +162,19 @@ class EscalationRecord:
         )
 
 
+#: The values `CallSummaryRecord.transcript_status` and `.summary_status` may take. Defined beside
+#: the record so the pipeline that sets them and the docstring that lists them cannot drift apart.
+TRANSCRIPT_STORED = "stored"
+TRANSCRIPT_NONE = "none"
+TRANSCRIPT_REDACTION_FAILED = "redaction_failed"
+TRANSCRIPT_WRITE_FAILED = "write_failed"
+SUMMARY_DONE = "done"
+SUMMARY_SKIPPED = "skipped"
+SUMMARY_FAILED = "failed"
+#: Either field, when the adapter that would have produced it was never configured.
+NOT_CONFIGURED = "not_configured"
+
+
 @dataclass(frozen=True)
 class CallSummaryRecord:
     """One finished call: how it ended, and what the post-call pipeline made of it (Phase 8).
@@ -174,8 +187,8 @@ class CallSummaryRecord:
     text, no keyed digit, no caller phone number belongs here -- `tests/test_zz_b2_leak_scan.py`
     sweeps these records like every other persisted one.
 
-    `transcript_status`: stored | none | not_configured | redaction_failed | write_failed.
-    `summary_status`: done | skipped | not_configured | failed.
+    `transcript_status` is one of the `TRANSCRIPT_*` values or `NOT_CONFIGURED` above, and
+    `summary_status` one of the `SUMMARY_*` values or `NOT_CONFIGURED`.
     """
 
     correlation_id: str

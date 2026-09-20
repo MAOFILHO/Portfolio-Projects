@@ -16,8 +16,9 @@ It accepts one shape of answer -- `finish_reason == "stop"`, no refusal, JSON wi
 `summary` and an `intent` from a closed set -- and raises on everything else. It logs nothing: a
 provider's error body can echo the prompt (B2).
 
-Not verified against the live service until the first live call. In particular the Entra token scope
-for this endpoint is documented two contradictory ways (research note, UNVERIFIED #7).
+Live-verified on 2026-09-19 with fake data and on a real call. The Entra token scope is
+`boot.COGNITIVE_SERVICES_SCOPE`: Learn documents two contradictory ones (research note, UNVERIFIED
+#7), and this is the one the live probe settled on.
 """
 import asyncio
 import json
@@ -25,11 +26,6 @@ from urllib.parse import urlsplit
 
 from .. import boot
 from .pipeline import Summary
-
-#: Entra scope. Learn's v1 pages say `https://ai.azure.com/.default`; the v1 OpenAPI spec and the
-#: realtime client (`realtime/client.py`) use this one. Kept in one place so a live probe that
-#: disagrees is a one-line change.
-TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
 
 #: Room for the model's reasoning tokens as well as the two short fields: a reasoning model that runs
 #: out of cap returns nothing visible (research note, 2e). Under the deployment's token-per-minute

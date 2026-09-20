@@ -22,8 +22,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from ..call_records import CallSummaryRecord
+from ..call_records import (
+    NOT_CONFIGURED,
+    SUMMARY_DONE,
+    SUMMARY_FAILED,
+    SUMMARY_SKIPPED,
+    TRANSCRIPT_NONE,
+    TRANSCRIPT_REDACTION_FAILED,
+    TRANSCRIPT_STORED,
+    TRANSCRIPT_WRITE_FAILED,
+    CallSummaryRecord,
+)
 from . import outcome
+from .scrub import scrub_numbers
 
 log = logging.getLogger("postcall")
 
@@ -35,14 +46,10 @@ STEP_DEADLINE_SECONDS = 60.0
 MAX_SUMMARY_CHARS = 2000
 MAX_INTENT_CHARS = 200
 
-TRANSCRIPT_STORED = "stored"
-TRANSCRIPT_NONE = "none"
-NOT_CONFIGURED = "not_configured"
-TRANSCRIPT_REDACTION_FAILED = "redaction_failed"
-TRANSCRIPT_WRITE_FAILED = "write_failed"
-SUMMARY_DONE = "done"
-SUMMARY_SKIPPED = "skipped"
-SUMMARY_FAILED = "failed"
+#: `_step`'s verdict when the adapter ran and its answer was used. The other two are the record's
+#: `NOT_CONFIGURED` (no adapter) and `_FAILED` (the adapter raised, timed out or answered nonsense).
+_OK = "ok"
+_FAILED = "failed"
 
 
 @dataclass(frozen=True)
@@ -69,8 +76,48 @@ class TranscriptStore(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class PostcallServices:
+    """What the pipeline works with, handed around as one thing. Each adapter is None when its
+    configuration is absent; `call_records` is the only one the pipeline cannot do without."""
+
+    call_records: object
+    redactor: Redactor | None = None
+    summarizer: Summarizer | None = None
+    transcripts: TranscriptStore | None = None
+
+
 async def _bounded(awaitable):
     return await asyncio.wait_for(awaitable, timeout=STEP_DEADLINE_SECONDS)
+
+
+async def _step(name, adapter, call, valid=lambda _result: True):
+    """Run one adapter call under its deadline. Returns `(verdict, result)`.
+
+    The verdict is `_OK`, `NOT_CONFIGURED` (no adapter) or `_FAILED`, and the result is None unless
+    it is `_OK`. Every failure -- a raise, a timeout, an answer `valid` rejects -- is one field of
+    one row, logged as its type alone (B2: an adapter's error can echo the text it was given).
+    """
+    if adapter is None:
+        return NOT_CONFIGURED, None
+    try:
+        result = await _bounded(call(adapter))
+        if not valid(result):
+            raise ValueError(f"{name} returned a malformed result")
+        return _OK, result
+    except Exception as e:  # noqa: BLE001 -- any adapter failure is one field of one row
+        log.warning("%s failed (%s)", name, type(e).__name__)
+        return _FAILED, None
+
+
+def _problem(verdict, failed):
+    """The record's status for a step that did not succeed."""
+    return NOT_CONFIGURED if verdict == NOT_CONFIGURED else failed
+
+
+def _status(verdict, ok, failed):
+    """A step's verdict as the record's status string."""
+    return ok if verdict == _OK else _problem(verdict, failed)
 
 
 def _valid_redaction(redacted, turns):
@@ -81,67 +128,54 @@ def _valid_redaction(redacted, turns):
     )
 
 
-async def run_postcall(capture, *, call_records, redactor=None, summarizer=None, transcripts=None):
+async def run_postcall(capture, services):
     """Turn one finished call into a redacted transcript and one summary row. Never raises."""
     if capture.end_reason is None:
         log.warning("post-call skipped: the call never finished")
         return
     try:
-        await _run(capture, call_records, redactor, summarizer, transcripts)
+        await _run(capture, services)
     except asyncio.CancelledError:
         raise
     except Exception as e:  # noqa: BLE001 -- the process must never see a post-call failure
         log.error("post-call failed unexpectedly (%s)", type(e).__name__)
 
 
-async def _run(capture, call_records, redactor, summarizer, transcripts):
+async def _run(capture, services):
     correlation_id = capture.correlation_id or uuid.uuid4().hex
     turns = list(capture.agent_turns)
 
     transcript_status = TRANSCRIPT_NONE
-    blob = ""
+    blob_name = ""
     redacted = None
     if turns:
-        if redactor is None:
-            transcript_status = NOT_CONFIGURED
+        # ADR-007 Decision 2: a failed redaction is no transcript, never a fallback to the raw text.
+        verdict, redacted = await _step(
+            "redaction", services.redactor, lambda r: r.redact(turns),
+            lambda result: _valid_redaction(result, turns),
+        )
+        if verdict != _OK:
+            transcript_status = _problem(verdict, TRANSCRIPT_REDACTION_FAILED)
         else:
-            try:
-                candidate = await _bounded(redactor.redact(turns))
-                if not _valid_redaction(candidate, turns):
-                    raise ValueError("redactor returned a malformed result")
-                redacted = candidate
-            except Exception as e:  # noqa: BLE001 -- any redaction failure fails closed
-                # ADR-007 Decision 2: no fallback to the raw text, ever.
-                log.warning("redaction failed (%s), no transcript for this call", type(e).__name__)
-                transcript_status = TRANSCRIPT_REDACTION_FAILED
-        if redacted is not None:
-            if transcripts is None:
-                transcript_status = NOT_CONFIGURED
-            else:
-                try:
-                    blob = await _bounded(transcripts.write(correlation_id, redacted))
-                    transcript_status = TRANSCRIPT_STORED
-                except Exception as e:  # noqa: BLE001 -- any adapter failure is one field of one row
-                    log.warning("transcript write failed (%s)", type(e).__name__)
-                    transcript_status = TRANSCRIPT_WRITE_FAILED
+            verdict, name = await _step(
+                "transcript write", services.transcripts,
+                lambda t: t.write(correlation_id, redacted),
+            )
+            transcript_status = _status(verdict, TRANSCRIPT_STORED, TRANSCRIPT_WRITE_FAILED)
+            blob_name = name or ""
 
     summary_status = SUMMARY_SKIPPED
     summary = intent = ""
     if redacted is not None:
-        if summarizer is None:
-            summary_status = NOT_CONFIGURED
-        else:
-            try:
-                result = await _bounded(summarizer.summarize(redacted))
-                if not (isinstance(result, Summary)
-                        and isinstance(result.summary, str) and isinstance(result.intent, str)):
-                    raise ValueError("summarizer returned a malformed result")
-                summary = result.summary[:MAX_SUMMARY_CHARS]
-                intent = result.intent[:MAX_INTENT_CHARS]
-                summary_status = SUMMARY_DONE
-            except Exception as e:  # noqa: BLE001 -- any adapter failure is one field of one row
-                log.warning("summary failed (%s)", type(e).__name__)
-                summary_status = SUMMARY_FAILED
+        verdict, result = await _step(
+            "summary", services.summarizer, lambda s: s.summarize(redacted),
+            lambda r: isinstance(r, Summary) and isinstance(r.summary, str) and isinstance(r.intent, str),
+        )
+        summary_status = _status(verdict, SUMMARY_DONE, SUMMARY_FAILED)
+        if verdict == _OK:
+            # The redactor's output is number-scrubbed; the model's account of it is too (B2).
+            summary = scrub_numbers(result.summary)[:MAX_SUMMARY_CHARS]
+            intent = scrub_numbers(result.intent)[:MAX_INTENT_CHARS]
 
     record = CallSummaryRecord(
         correlation_id=correlation_id,
@@ -152,13 +186,13 @@ async def _run(capture, call_records, redactor, summarizer, transcripts):
         duration_ms=capture.duration_ms,
         occurred_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         transcript_status=transcript_status,
-        transcript_blob=blob,
+        transcript_blob=blob_name,
         summary_status=summary_status,
         summary=summary,
         intent=intent,
     )
     try:
-        await _bounded(call_records.record_call(record))
+        await _bounded(services.call_records.record_call(record))
     except Exception as e:  # noqa: BLE001 -- nothing about a finished call can be made worse
         log.error("could not record the call summary (%s)", type(e).__name__)
         return

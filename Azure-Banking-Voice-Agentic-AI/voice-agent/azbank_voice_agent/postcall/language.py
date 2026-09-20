@@ -32,9 +32,6 @@ JOBS_PATH = "/language/analyze-conversations/jobs"
 #: turn fails closed rather than being split, because a split could cut a PII span in two.
 MAX_ITEM_CHARS = 1000
 
-#: Entra scope for Language, from the OAuth2 declaration in both Language OpenAPI specs.
-TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
-
 _TERMINAL = frozenset({"succeeded", "partiallyCompleted", "failed", "cancelled"})
 
 
