@@ -5,6 +5,7 @@ string ("without context, a ten-digit number is just a number"), so the redactor
 alone. Anything that looks like an account, card or phone number is masked no matter what Language
 said -- over-masking a date is fine, leaking an account number is not.
 """
+import random
 import unittest
 
 from azbank_voice_agent.postcall.scrub import MASK, scrub_numbers
@@ -74,6 +75,35 @@ class AFormattedPhoneNumberIsMaskedWhole(unittest.TestCase):
         for run in ("41655501991", "416555019912", "4165550199123", "1234567890123", "416-555-0199-123"):
             with self.subTest(run=run):
                 self.assertEqual(scrub_numbers(f"id {run} end"), f"id {MASK} end")
+
+    def test_a_separator_of_several_characters_is_masked_whole(self):
+        # Gate review 3: the old pattern masked `416 .. 555 .. 0199`; the first rewrite capped the
+        # gap at three characters and left the area code and exchange for anything longer.
+        for sep in (" .. ", " ... ", " - - ", " -- ", " / / ", " \u2013 \u2013 ", ") - (", "  ", "\n\n", " .  . "):
+            number = f"416{sep}555{sep}0199"
+            with self.subTest(sep=sep):
+                self.assertEqual(scrub_numbers(f"call {number} now"), f"call {MASK} now")
+
+    def test_no_shape_the_generator_can_build_leaves_a_digit(self):
+        # The fuzz behind the claim "no leak", kept so the claim can be rerun: 10-16 digits, each
+        # gap 0-8 characters drawn from punctuation and whitespace, never a letter or a dollar sign.
+        pieces = list(" .-/,_()+\u2013\u2014\u00b7\u00a0\n")
+        rng = random.Random(1)
+        for _ in range(3000):
+            digits = rng.randint(10, 16)
+            text = ""
+            for i in range(digits):
+                text += str(rng.randint(0, 9))
+                if i < digits - 1:
+                    text += "".join(rng.choice(pieces) for _ in range(rng.randint(0, 8)))
+            scrubbed = scrub_numbers(f"my number is {text} thanks")
+            self.assertFalse(any(c.isdigit() for c in scrubbed), (text, scrubbed))
+
+    def test_a_gap_of_letters_or_a_dollar_sign_still_separates_numbers(self):
+        for text in ("1900 and 1000", "$1,900 and $1,000 and $3.25", "you owe $12.50, $3.25 and $8.75"):
+            with self.subTest(text=text):
+                self.assertNotEqual(scrub_numbers(text), MASK)
+                self.assertNotIn(MASK + MASK, scrub_numbers(text))
 
     def test_a_dotted_seven_digit_local_number_is_masked(self):
         self.assertFalse(any(c.isdigit() for c in scrub_numbers("call 555.0199 now")))
