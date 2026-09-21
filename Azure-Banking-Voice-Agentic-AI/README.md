@@ -142,7 +142,7 @@ Reflects what's actually built and verified live, not aspirational. Items not ye
 | **Orchestration** | Persistent realtime session per call; agent swap via `session.update` across triage/banking/cards; declarative `AgentSpec` table | Live since Phase 2, three-agent handoff since Phase 5 |
 | **Auth** | PIN via DTMF only (spoken KBA dropped, decision 7) | Live since Phase 4 — B1/B2 held 0 breaches |
 | **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | Live — delivery confirmed by queried rows 2026-09-15 (Phase 6 closed, `docs/phase6/exit-check.md`) |
-| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on one real call, 2026-09-20 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
+| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on three real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
 | **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 788 tests pass locally (698 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
 
 ## Architecture
@@ -227,7 +227,7 @@ never released by any script, at any phase, for any reason.
 
 1. **No behavioural evals, and no live redteam run** (Phase 8 criteria 6-7, D15). Needs caller audio, so a
    TTS resource and a new `APPROVED:`. `docs/phase8/eval-redteam-limits.md`.
-2. **Post-call analytics is proven live on one call.** The summary row is written last, so a container
+2. **Post-call analytics is proven live on three calls.** The summary row is written last, so a container
    killed mid-pipeline loses it; a turn over 1,000 characters loses the transcript (it fails closed); `$`
    amounts pass through the stored transcript unredacted (B2 covers the PIN and phone number only);
    `scrub_numbers` leaves the area code of a formatted number.

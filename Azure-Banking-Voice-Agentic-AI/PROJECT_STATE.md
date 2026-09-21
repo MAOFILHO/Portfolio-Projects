@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is built, its docs written, live-verified on one real call; the gate remains** — see "Current phase".
+**Phase 8 is built, its docs written, live-verified on three real calls; the gate remains** — see "Current phase".
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -92,7 +92,7 @@ and goes stale between sessions.
 - Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
   Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
 - **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p8a` (since 2026-09-20), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
+  `docker.io/maofilho/azbank-echo-p0:p8b` (since 2026-09-21, revision `--0000002`), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
   system-assigned identity is **`bb712203-9e00-42a5-a0b5-0f38b376c79e`** — a fresh GUID, since
   recreating the app regenerates the identity. Holds `Cognitive Services OpenAI User` on the AOAI
   resource (granted automatically by the CLI's `aoai` deploy step, no manual `az role assignment
@@ -107,7 +107,7 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` carries `p8a`** (`p7c` plus Phase 8's post-call code) — `p7c` was D2's identity-auth code plus both `agents/specs.py` fixes
+- **`ca-azbank-echo-p0` carries `p8b`** (`p8a`, which was `p7c` plus Phase 8's post-call code, plus the review fixes; `p8a` is the rollback) — `p7c` was D2's identity-auth code plus both `agents/specs.py` fixes
   from `docs/phase7/d2-live-call-result.md`, live-verified 2026-09-17 and again 2026-09-18 after the
   from-empty rebuild. Revision number is stale after that rebuild — re-check live, don't trust a
   recorded number. Carries `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and
@@ -220,8 +220,8 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
 10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18; build history and
-    live-call evidence: `docs/phase8/build-notes.md`). **Built, on `main`, live (image `p8a`)**;
-    criteria 1-2 proven on one real call. Two `/code-review` rounds done.
+    live-call evidence: `docs/phase8/build-notes.md`). **Built, on `main`, live (image `p8b`)**;
+    criteria 1-2 proven on three real calls (one on `p8b`). Three `/code-review` rounds done.
     **Open (Spec axis)**: (b) the row is written last, after up to 3 x 60 s steps, so a container
     kill mid-pipeline loses it -- to be stated as a limit; (c) criterion 4's test measures no
     latency; (d) `$` amounts pass through the transcript unredacted (B2 covers PIN and phone only)
@@ -233,8 +233,7 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
     `docs/handoffs/2026-09-20-phase8-review-round3.md`.
     **Written 2026-09-20**: `RESULTS.md`, `docs/architecture.md`, `docs/phase8/eval-redteam-limits.md`
     (criteria 6-7, D15), `docs/phase8/exit-check.md`, README refresh, `COSTS.md` Phase 8 pricing.
-    **Remaining**: Marco's call on redeploying `ca-azbank-echo-p0` (live image `p8a` predates five code
-    commits, incl. the B4 reorder; needs a rebuild + one call), the gate's `/code-review`, closure sign-off.
+    **Remaining**: the gate's `/code-review`, Marco's call on the two open findings, closure sign-off.
     **Known limit**: one agent turn over 1,000 characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
     the caller (turn detection / barge-in; `silence_duration_ms` is 600, see item 9).
 

@@ -10,7 +10,7 @@ Measured outcomes only, as of 2026-09-20 (Phase 8, `main`). Anything not measure
 | | constraint | target | measured | source |
 |---|---|---|---|---|
 | **B1** | no banking operation before authentication | 0 breaches, ≥120 cases | **0 breaches, 593 cases** (18 attack ideas, 542 reach an attempt), run in every `make test`. Held across every live call in Phase 5. | `tests/test_redteam.py`, `docs/phase5/exit-check.md` |
-| **B2** | no PIN or caller phone number in any transcript, log, record or telemetry channel | 0 occurrences | **0** in the CI artifact scan. Phase 8's live call: the stored blob was read back, no PIN and no phone number. That is **one call**. | `tests/test_zz_b2_leak_scan.py`, `docs/phase8/build-notes.md` |
+| **B2** | no PIN or caller phone number in any transcript, log, record or telemetry channel | 0 occurrences | **0** in the CI artifact scan. Phase 8's live calls: the stored blobs were read back, no PIN, phone number or digit run. **Three calls** (two on `p8a`, one on `p8b`). | `tests/test_zz_b2_leak_scan.py`, `docs/phase8/build-notes.md` |
 | **B3** | model pinning, by (deployment, version) | 0 violations | **0.** Realtime pin: fatal boot guard reading the live deployment. Text pin (`gpt-5.4-mini`, added in Phase 8): non-fatal guard before each summary, plus the CI static check. **No Bicep enforces the text pin** (it was hand-provisioned). | `CLAUDE.md`, ADR-006 |
 | **B4** | cost ceiling, fails closed | 0 overruns, 0 fail-open | **0 observed.** One known undercount (see limits). | `tests/`, `docs/PLAN.md` |
 | **B5** | turn latency, p95 | frozen after Phase 5 | **1025 ms, N=13** authenticated real-call turns with a tool call. Small N, real-call pool only. Phase 2's earlier 932 ms / N=106 is superseded, not merged. Phase 8 measured **no** latency. | `docs/phase5/exit-check.md` |
@@ -20,8 +20,8 @@ Measured outcomes only, as of 2026-09-20 (Phase 8, `main`). Anything not measure
 
 | # | criterion | result |
 |---|---|---|
-| 1 | redacted transcript to Blob, no raw write first | Met. Unit-proved; live on **one** call. One agent turn over 1,000 characters fails closed (a row, no transcript). |
-| 2 | summary/intent/outcome row for every completed call | Met, with limits below. Live on **one** call; the row is written last, so a container kill mid-pipeline loses it. |
+| 1 | redacted transcript to Blob, no raw write first | Met. Unit-proved; live on **three** calls. One agent turn over 1,000 characters fails closed (a row, no transcript). |
+| 2 | summary/intent/outcome row for every completed call | Met, with limits below. Live on **three** calls, one of them on the final code; the row is written last, so a container kill mid-pipeline loses it. |
 | 3 | five-value outcome enum | Met (D17). |
 | 4 | pipeline cannot affect B4 or B5 | Met by construction (background task, never awaited). The test proves the same frames and turn cap; it **measures no latency**. |
 | 5 | B3 covers the second deployment | Met. |
@@ -39,10 +39,11 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 - `python -m unittest discover -s tests`: **698 tests, 3 skipped by design**, run against fakes
   (`FakeTransport`, `FakeRealtimeServer`, `FakeCallRecordStore`). `make lint`: ruff, mypy, the B3/D5/D2 checks
   and `bicep build` on every module, clean.
-- **Live, Phase 8, one real call** (image `p8a`, 2026-09-20): a Table row (`caller_hangup`, transcript
-  `stored`, summary `done`, intent `balance_enquiry`) and a redacted blob. Read back through Entra data roles.
-  **`p8a` was deployed before the review fixes: five later code commits are tested but not live**, among them the
-  B4 ledger reordering, the correlation-id check and the failed-connect row. They need a redeploy and a call.
+- **Live, Phase 8, three real calls**, each a Table row (`caller_hangup`, transcript `stored`, summary `done`) and a
+  redacted blob, read back through Entra data roles. Two on image `p8a` (2026-09-20, 2026-09-21). One on **`p8b`**
+  (2026-09-21, `33adab6`'s code, the final commits): row and blob as above, and the day's ledger (2.071 min)
+  matches the two calls that day (56.9 s + 67.4 s), written before the row. **Not exercised live:** the
+  failed-connect row and the unsafe-id replacement (no real call produces either); tests cover them.
 - Three `/code-review` rounds found real defects, fixed: a B4 ordering bug that would have let a failing
   capture skip the day's charge, and a correlation id (a carrier-controlled header) that could lose a whole row
   when it contained a character a Table key refuses. Two findings stayed open (see the limits below).
