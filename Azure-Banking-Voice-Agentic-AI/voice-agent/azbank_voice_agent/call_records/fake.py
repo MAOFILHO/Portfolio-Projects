@@ -60,6 +60,11 @@ class FakeCallRecordStore:
 
     async def record_call(self, record):
         self._check("record_call")
+        # An upsert, like the real store: a call's second write replaces its first in place.
+        for i, existing in enumerate(self.call_summaries):
+            if existing.correlation_id == record.correlation_id:
+                self.call_summaries[i] = record
+                return
         self.call_summaries.append(record)
 
     async def minutes_used(self, day):

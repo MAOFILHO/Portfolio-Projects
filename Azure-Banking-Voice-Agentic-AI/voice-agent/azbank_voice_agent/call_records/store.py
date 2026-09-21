@@ -197,6 +197,11 @@ TRANSCRIPT_WRITE_FAILED = "write_failed"
 SUMMARY_DONE = "done"
 SUMMARY_SKIPPED = "skipped"
 SUMMARY_FAILED = "failed"
+#: Either field, on the row written the moment the call ends and before the slow steps run. A row
+#: still saying this when nobody is working on it is a pipeline that started and never finished (the
+#: container was killed mid-way); the finished pipeline overwrites it.
+TRANSCRIPT_PENDING = "pending"
+SUMMARY_PENDING = "pending"
 #: Either field, when the adapter that would have produced it was never configured.
 NOT_CONFIGURED = "not_configured"
 
@@ -214,7 +219,8 @@ class CallSummaryRecord:
     sweeps these records like every other persisted one.
 
     `transcript_status` is one of the `TRANSCRIPT_*` values or `NOT_CONFIGURED` above, and
-    `summary_status` one of the `SUMMARY_*` values or `NOT_CONFIGURED`.
+    `summary_status` one of the `SUMMARY_*` values or `NOT_CONFIGURED`. Each may be `pending` on the
+    first of a call's two writes (see `TRANSCRIPT_PENDING`).
     """
 
     correlation_id: str

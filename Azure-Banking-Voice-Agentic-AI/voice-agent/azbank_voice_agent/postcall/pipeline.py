@@ -11,9 +11,16 @@ redaction exists to remove. A transcript that cannot be redacted -- the call fai
 returns nonsense, or no redactor is configured -- is never written unredacted as a fallback. That
 call gets a row saying so, and no transcript and no summary.
 
-Every step has its own deadline and its own failure, so one degraded dependency costs one field of
-one row and nothing else. **Only outcomes are logged, never words, and never an exception's message**
-(B2): a redactor's error can echo the text it was given, so a failure is logged as its type alone.
+**The row is written twice.** The call's own facts (outcome, turns, duration) are known the moment it
+ends, and the steps below can take up to three minutes, so the row goes in first with the two slow
+fields `pending` and is overwritten when they finish. A container killed mid-pipeline then leaves an
+honest "started, never finished" row instead of no row at all (Phase 8 gate review). A call with
+nothing to redact has no slow step and is written once.
+
+Every step has its own deadline and its own failure, so one degraded dependency costs its own fields
+of the row (a redaction failure takes the transcript and the summary with it) and nothing else.
+**Only outcomes are logged, never words, and never an exception's message** (B2): a redactor's error
+can echo the text it was given, so a failure is logged as its type alone.
 """
 import asyncio
 import logging
@@ -25,8 +32,10 @@ from ..call_records import (
     NOT_CONFIGURED,
     SUMMARY_DONE,
     SUMMARY_FAILED,
+    SUMMARY_PENDING,
     SUMMARY_SKIPPED,
     TRANSCRIPT_NONE,
+    TRANSCRIPT_PENDING,
     TRANSCRIPT_REDACTION_FAILED,
     TRANSCRIPT_STORED,
     TRANSCRIPT_WRITE_FAILED,
@@ -137,6 +146,22 @@ async def _run(capture, services):
         log.warning("post-call: the correlation id is not a storage key, using a generated one")
     turns = list(capture.agent_turns)
 
+    call = {
+        "correlation_id": correlation_id,
+        "call_outcome": outcome.call_outcome(capture.end_reason, capture.auth_state),
+        "end_reason": capture.end_reason,
+        "auth_state": capture.auth_state,
+        "turn_count": capture.turn_count,
+        "duration_ms": capture.duration_ms,
+        "occurred_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    if turns:
+        # Before the slow steps. A failure here costs nothing the finished write cannot still fix.
+        await _write_row(services, CallSummaryRecord(
+            **call, transcript_status=TRANSCRIPT_PENDING, transcript_blob="",
+            summary_status=SUMMARY_PENDING, summary="", intent="",
+        ), "first row")
+
     transcript_status = TRANSCRIPT_NONE
     blob_name = ""
     redacted = None
@@ -170,25 +195,27 @@ async def _run(capture, services):
             intent = scrub_numbers(result.intent)[:MAX_INTENT_CHARS]
 
     record = CallSummaryRecord(
-        correlation_id=correlation_id,
-        call_outcome=outcome.call_outcome(capture.end_reason, capture.auth_state),
-        end_reason=capture.end_reason,
-        auth_state=capture.auth_state,
-        turn_count=capture.turn_count,
-        duration_ms=capture.duration_ms,
-        occurred_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        **call,
         transcript_status=transcript_status,
         transcript_blob=blob_name,
         summary_status=summary_status,
         summary=summary,
         intent=intent,
     )
-    try:
-        await _bounded(services.call_records.record_call(record))
-    except Exception as e:  # noqa: BLE001 -- nothing about a finished call can be made worse
-        log.error("could not record the call summary (%s)", type(e).__name__)
+    if not await _write_row(services, record, "summary"):
         return
     log.info(
         "post-call done correlationId=%s outcome=%s transcript=%s summary=%s",
         correlation_id, record.call_outcome, transcript_status, summary_status,
     )
+
+
+async def _write_row(services, record, what):
+    """One write of the call's row. True if it landed. A failure is logged as its type alone and
+    swallowed: nothing about a finished call can be made worse by it."""
+    try:
+        await _bounded(services.call_records.record_call(record))
+    except Exception as e:  # noqa: BLE001 -- nothing about a finished call can be made worse
+        log.error("could not record the call %s (%s)", what, type(e).__name__)
+        return False
+    return True

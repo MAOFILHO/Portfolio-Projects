@@ -191,6 +191,102 @@ class ACallWithNothingToRedactStillGetsItsOutcomeRow(unittest.TestCase):
         self.assertEqual(row.summary_status, "skipped")
 
 
+class _EveryVersionOfTheRow(FakeCallRecordStore):
+    """Keeps each version of a call's row, since the fake (like the real upsert) replaces in place."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.versions = []
+
+    async def record_call(self, record):
+        self.versions.append(record)
+        await super().record_call(record)
+
+
+class TheRowExistsBeforeTheSlowStepsRun(unittest.TestCase):
+    """The Phase 8 gate review's Spec finding: the row was written last, after up to three 60-second
+    steps, so a container killed mid-pipeline lost the call's row altogether. The call's own facts
+    (outcome, turns, duration) are known the moment it ends. The row is written then, with the two
+    slow fields `pending`, and overwritten when the steps finish -- so a kill leaves an honest
+    "started, never finished" row instead of nothing."""
+
+    def test_the_row_is_already_there_when_redaction_starts(self):
+        seen = []
+        store = _EveryVersionOfTheRow()
+
+        class Watching(FakeRedactor):
+            async def redact(self, turns):
+                seen.append([(r.transcript_status, r.summary_status) for r in store.call_summaries])
+                return await super().redact(turns)
+
+        _run(_finished_capture(TURNS), **_wired(redactor=Watching(terms=(MARKER,))), call_records=store)
+        self.assertEqual(seen, [[("pending", "pending")]])
+
+    def test_the_first_version_already_carries_the_calls_own_facts(self):
+        store = _EveryVersionOfTheRow()
+        _run(_finished_capture(TURNS, end_reason="caller_hangup"), **_wired(), call_records=store)
+        first = store.versions[0]
+        self.assertEqual((first.call_outcome, first.end_reason), ("caller_hangup", "caller_hangup"))
+        self.assertEqual((first.turn_count, first.duration_ms), (2, 4200))
+        self.assertEqual((first.summary, first.intent, first.transcript_blob), ("", "", ""))
+
+    def test_the_finished_pipeline_overwrites_it_rather_than_adding_a_second_row(self):
+        store = _EveryVersionOfTheRow()
+        _run(_finished_capture(TURNS), **_wired(), call_records=store)
+        self.assertEqual(len(store.call_summaries), 1)
+        row = store.call_summaries[0]
+        self.assertEqual((row.transcript_status, row.summary_status), ("stored", "done"))
+        self.assertEqual(len(store.versions), 2)
+
+    def test_a_pipeline_killed_mid_redaction_leaves_the_pending_row(self):
+        store = FakeCallRecordStore()
+
+        async def scenario():
+            task = asyncio.create_task(pipeline.run_postcall(
+                _finished_capture(TURNS),
+                pipeline.PostcallServices(
+                    call_records=store, redactor=FakeRedactor(hang=True),
+                    summarizer=FakeSummarizer(), transcripts=FakeTranscriptStore(),
+                ),
+            ))
+            await asyncio.sleep(0.02)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(scenario())
+        self.assertEqual(len(store.call_summaries), 1)
+        row = store.call_summaries[0]
+        self.assertEqual((row.transcript_status, row.summary_status), ("pending", "pending"))
+
+    def test_no_version_of_the_row_ever_carries_the_marker(self):
+        store = _EveryVersionOfTheRow()
+        _run(_finished_capture(TURNS), **_wired(), call_records=store)
+        for version in store.versions:
+            for value in vars(version).values():
+                self.assertNotIn(MARKER, str(value))
+
+    def test_a_first_write_that_fails_does_not_stop_the_pipeline(self):
+        class FailsOnce(FakeCallRecordStore):
+            async def record_call(self, record):
+                if not self.calls.count("record_call"):
+                    self.calls.append("record_call")
+                    raise unavailable()
+                await super().record_call(record)
+
+        store = FailsOnce()
+        parts = _wired()
+        _run(_finished_capture(TURNS), **parts, call_records=store)
+        self.assertTrue(parts["transcripts"].writes)
+        self.assertEqual(store.call_summaries[0].transcript_status, "stored")
+
+    def test_a_call_with_nothing_to_redact_writes_its_row_once(self):
+        store = _EveryVersionOfTheRow()
+        _run(_finished_capture([], end_reason="closed", auth_state=gate.ANONYMOUS), call_records=store)
+        self.assertEqual(len(store.versions), 1)
+        self.assertEqual(store.versions[0].transcript_status, "none")
+
+
 class EachStepFailsOnItsOwnWithoutTakingTheOthersDown(unittest.TestCase):
     def test_a_summary_failure_keeps_the_transcript_and_the_row(self):
         parts = _wired(summarizer=FakeSummarizer(fail_with=RuntimeError("model down")))
