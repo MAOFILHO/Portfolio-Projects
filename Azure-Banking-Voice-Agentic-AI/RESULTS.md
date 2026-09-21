@@ -23,7 +23,7 @@ Measured outcomes only, as of 2026-09-21 (Phase 8, `main`; live timestamps are U
 | 1 | redacted transcript to Blob, no raw write first | Met. Unit-proved; live on **four** calls. No blob for a closed-line call or one with no agent turns (nothing to store); one agent turn over 1,000 characters fails closed (a row, no transcript). |
 | 2 | summary/intent/outcome row for every completed call | Met. Live on **four** calls. The row is now written first (`pending`) and overwritten when the steps finish, so a kill mid-pipeline leaves the pending row (tested; the pending state itself was never observed live, it is overwritten within seconds). |
 | 3 | five-value outcome enum | Met (D17). |
-| 4 | pipeline cannot affect B4 or B5 | Met by construction (background task, never awaited). The test proves the same frames and turn cap; it **measures no latency**. The gate review also moved every async Azure client onto one async credential, so a token refresh no longer blocks the event loop (**live on `p8c`**: the ledger read and write, the Blob write and both service tokens worked). |
+| 4 | pipeline cannot affect B4 or B5 | Met by construction (background task, never awaited). The test proves the same frames and turn cap; it **measures no latency**. The gate review also moved the Table, Blob, Language and text-model clients onto one async credential, so a token refresh no longer blocks the event loop (**live on `p8c`**: the ledger read and write, the Blob write and both service tokens worked); a second review moved the realtime connection onto it too (tested, not yet live). |
 | 5 | B3 covers the second deployment | Met. The static check now also pins each pin's name to the files that may carry it. Bicep for the text deployment is written, **never deployed**. |
 | 6 | `evals/`, 20 scenarios, ≥95% | **Not built. No pass rate exists.** Closed with a stated limit (D15). |
 | 7 | `redteam/` live run | **Not run.** The 18-idea corpus exists and its deterministic runner passes (B1 row). Closed with a stated limit (D15). |
@@ -36,7 +36,7 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 
 ## What was checked, and how
 
-- `python -m unittest discover -s tests`: **729 tests, 3 skipped by design**, run against fakes
+- `python -m unittest discover -s tests`: **743 tests, 3 skipped by design**, run against fakes
   (`FakeTransport`, `FakeRealtimeServer`, `FakeCallRecordStore`). `make lint`: ruff, mypy, the B3/D5/D2 checks
   and `bicep build` on every module, clean.
 - **Live, Phase 8, four real calls**, each a Table row (`caller_hangup`, transcript `stored`, summary `done`) and a
@@ -60,7 +60,8 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 
 ## Known limits and open defects
 
-- **Live on `p8c`:** one async credential for every Azure client. **Tested, not exercised live:** the shielded
+- **Live on `p8c`:** one async credential for the Table, Blob, Language and text-model clients. **Tested, not
+  exercised live:** the realtime connection's token from that same credential, the shielded
   daily-ledger write (a cancelled call cannot be staged), the phone scrub's new pattern (the agent never spoke a
   phone number), and the pending-first row (overwritten within seconds; the row's `occurred_at` is now taken at the
   start of the pipeline, which the `p8c` row shows, but the pending state itself was not seen).

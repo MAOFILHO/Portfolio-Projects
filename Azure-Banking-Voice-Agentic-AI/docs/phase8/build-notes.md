@@ -86,3 +86,15 @@ Not changed, and why: `capture=None` guards in `session.py` (used by hundreds of
 the PIN buffer), `StrEnum` for statuses (a dozen files, no behaviour gained), one shared endpoint check (two
 three-line copies with different messages), a once-built `PostcallServices` (a trivial per-call cost), and the
 model-name literal in Bicep (Bicep cannot import Python; the static check now pins which files may carry it).
+
+## The second `/code-review` (against `b0110ce`, 2026-09-21), and what was done
+
+Neither axis found a hard violation of B1-B5, R-09 or the hard exclusions. Both found the same defect in my own
+B2 fix: the phone pattern took ten digits out of a longer run and left the tail, and knew only a few separators
+between groups. I reproduced it, and a `client.py` claim too: the realtime connection still built a sync
+credential per call, so "one async credential for every Azure client" was overstated. Fixed: the scrub is now one
+chain rule (10+ digits, up to three non-word characters between them, masked whole), the realtime client takes
+the shared provider, and the doc drift and the four weak spots in the tests (a registration test that could be
+deleted without failing, a flaky assertion, a missing boot-refusal test, an overstated "each ending" claim).
+Disposition of every finding: `docs/phase8/exit-check.md`, "The second review's findings". Two credentials stay
+outside the shared one on purpose: the B3 guards' ARM read (a thread, off the loop) and the telemetry exporter.

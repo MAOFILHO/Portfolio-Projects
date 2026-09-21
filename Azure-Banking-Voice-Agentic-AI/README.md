@@ -36,7 +36,7 @@ exclusions below. Full inventory: `docs/PLAN.md`, "Reuse reality."
   banking, cards) swapped in on the same session via `session.update`, a deny-all-by-default auth gate
   keyed on `(agent, auth_state, tool_name)`, and a real second network hop to `mock-core-banking`
   (FastAPI + SQLite) behind that gate.
-- **A deterministic, adversarial test suite built alongside the code, not after it** — 819 tests
+- **A deterministic, adversarial test suite built alongside the code, not after it** — 833 tests
   (`FakeTransport` + `FakeRealtimeServer` standing in for both real integrations), and an 18-idea,
   593-case adversarial corpus run in every `make test` pass, not sampled or weekly.
 - **Cost control as a design constraint, not an afterthought** — a hard 5-minute/20-turn per-call cap
@@ -95,7 +95,7 @@ is [`RESULTS.md`](RESULTS.md):
   held throughout — no balance was ever released — but root cause was never found, and Marco's call was
   to accept the day's cumulative evidence and stop chasing a clean repro (`docs/phase5/exit-criteria.md`,
   known-partial 9).
-- **819 green tests is evidence the known cases hold, not that the space is covered** — every real defect
+- **833 green tests is evidence the known cases hold, not that the space is covered** — every real defect
   in the table below was found on a live call, not in this suite. See the next section.
 
 ## What happened when real calls started
@@ -143,7 +143,7 @@ Reflects what's actually built and verified live, not aspirational. Items not ye
 | **Auth** | PIN via DTMF only (spoken KBA dropped, decision 7) | Live since Phase 4 — B1/B2 held 0 breaches |
 | **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | Live — delivery confirmed by queried rows 2026-09-15 (Phase 6 closed, `docs/phase6/exit-check.md`) |
 | **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on four real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
-| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 819 tests pass locally (729 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
+| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 833 tests pass locally (743 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
 
 ## Architecture
 
@@ -231,10 +231,11 @@ never released by any script, at any phase, for any reason.
    (it fails closed); a closed-line call or one with no agent turns stores no transcript, by design; `$`
    amounts pass through the stored transcript unredacted (B2 covers the PIN and phone number only); Azure
    AI Language keeps its job results, including the entity text it matched, for 24 hours (ADR-007).
-3. **Three of the Phase 8 gate-review fixes have no live trigger.** The shielded daily-ledger write (a
-   cancelled call cannot be staged), the phone scrub's new pattern (the agent never speaks a phone number) and
-   the pending-first row rest on tests. The fourth, one async credential for every Azure client, is live on
-   `p8c`.
+3. **Some of the Phase 8 gate-review fixes have no live proof.** The shielded daily-ledger write (a
+   cancelled call cannot be staged), the phone scrub's new patterns (the agent never speaks a phone number) and
+   the pending-first row rest on tests. One async credential serves the Table, Blob, Language and text-model
+   clients, live on `p8c`; the realtime connection's token now comes from it too (tested; a new image and a
+   call are owed before that is live).
 4. **The B3 text-model pin's Bicep is written, not deployed.** `language.bicep` cannot be applied over the
    live account as it stands: it would create a duplicate role assignment, which Azure refuses.
 5. **One live call went silent after a correct refusal**, root cause never found. B1 held.
@@ -324,7 +325,7 @@ Named, measurable constraints, adversarially tested where noted, CI-blocking. Fu
 |---|---|---|---|
 | **B1** | **Auth Gate Integrity** — no *banking* operation (balance, transfer, list) reaches the core-banking client while `session.auth_state != Authenticated`. PIN verification and asking for a person are the only operations reachable while anonymous | 0 breaches / ≥120 adversarial cases | **0 breaches / 593 cases**, 18 attack ideas, held across every live call too |
 | **B2** | **PIN Confidentiality** — the DTMF PIN never appears in any transcript, log line, span, or record | 0 occurrences, artifact scan | **0 occurrences**, held since Phase 4; widened in Phase 6 (signed off 2026-09-15) to the caller's phone number and to every OpenTelemetry content channel |
-| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment, or (Phase 8) the pinned `gpt-5.4-mini` text deployment, outside an allowlist keyed on (deployment name, model version) together | 0 violations | **0 violations** — the realtime pin has a fatal startup guard that reads the live deployment's version; the text pin has a non-fatal runtime guard; both have the CI static check. the text pin's Bicep is written but never deployed (see Known gaps) |
+| **B3** | **Model Pinning** — no code path can instantiate a realtime deployment, or (Phase 8) the pinned `gpt-5.4-mini` text deployment, outside an allowlist keyed on (deployment name, model version) together | 0 violations | **0 violations** — the realtime pin has a fatal startup guard that reads the live deployment's version; the text pin has a non-fatal runtime guard; both have the CI static check. The text pin's Bicep is written but never deployed (see Known gaps) |
 | **B4** | **Cost Ceiling** — no call exceeds 5 min / 20 turns; daily aggregate cap fails **closed** | 0 overruns, 0 fail-open events | Built and blocking by construction since Phase 5 |
 | **B5** | **Turn Latency**, p95 | Provisional after Phase 2; frozen after Phase 5 | **FROZEN 2026-09-12: p95 1025ms, N=13** real-call turns with an allowed tool call — probe pool not gathered (internal-only ingress unreachable from outside) |
 | **R-09** | **Number irreplaceability** — the phone number is never released, by any script, at any phase | 0 release calls in any teardown path | Held throughout; verified in the teardown script and a standing `CLAUDE.md` stop condition |
@@ -396,8 +397,8 @@ The canonical target list is `install, test, lint, fixtures, deploy, teardown`. 
 
 ## Testing
 
-**819 tests pass locally** (729 voice-agent + 90 mock-core-banking, 3 skipped by design, `make test`,
-most recently run 2026-09-20), with **zero Azure dependency** — `FakeTransport` + `FakeRealtimeServer` stand in for both
+**833 tests pass locally** (743 voice-agent + 90 mock-core-banking, 3 skipped by design, `make test`,
+most recently run 2026-09-21), with **zero Azure dependency** — `FakeTransport` + `FakeRealtimeServer` stand in for both
 real integrations. Per the CI workflow's own comment (mirroring `docs/PLAN.md`'s "Verification"
 section): `make test` runs **L0 units + L1 fakes + L2**.
 
@@ -423,7 +424,7 @@ tests passing).
 | Step | What runs | What it catches |
 |---|---|---|
 | Lint | `ruff` + `mypy` + `scripts/check_b3_allowlist.py` | Static defects, type errors, and any realtime deployment reference outside B3's allowlist |
-| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 819 tests, including B1's 593-case adversarial corpus |
+| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 833 tests, including B1's 593-case adversarial corpus |
 
 **What it deliberately does not check: whether a live call actually sounds right, or whether telemetry
 actually reaches Application Insights.** Those need a real phone call and a queried row — this workflow

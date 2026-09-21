@@ -210,10 +210,12 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    provision once Phase 8's build reaches it.)*
 10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
     became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
-    is stale). Built on `main` (last commit `bb3faf7`), live on `p8c`, criteria 1-2 proven on four real calls.
-    The B2 scrub, B4 shield and billable-IaC diffs were approved and committed 2026-09-21. **Live on `p8c`:**
-    the async credential. **Tested, no live trigger:** the shield, the new phone pattern, the pending-first row.
-    **Remaining:** your `/code-review` of the fixes (`c494e98^..HEAD`); closure sign-off; `/handoff`; `/clear`.
+    is stale). Built on `main`, live on `p8c`, criteria 1-2 proven on four real calls. The first gate
+    review's B2, B4 and billable-IaC diffs were approved and committed 2026-09-21 (`854842d`). **Live on `p8c`:**
+    the async credential for Table, Blob, Language, text. **Second review (`b0110ce..854842d`) fixed in the tree,
+    not committed:** the phone scrub (B2, needs your look), the realtime client's token from the shared credential
+    (needs image `p8d` and a call), doc drift, five tests. **Tested, no live trigger:** the shield, the phone
+    patterns, the pending-first row. **Remaining:** commit; `p8d` + one call; closure sign-off; `/handoff`; `/clear`.
     **Open, none blocking:** criterion 4's test measures no latency; `$` amounts are unredacted in the
     transcript; Language keeps results 24 h (ADR-007); a call with no id header keeps `None`; a turn over
     1,000 characters fails closed; the agent talks over the caller (item 9); the Azure Monitor exporter logs a

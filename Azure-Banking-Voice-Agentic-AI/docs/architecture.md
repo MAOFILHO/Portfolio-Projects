@@ -54,7 +54,9 @@ flowchart TD
   mid-pipeline leaves the pending row. A closed-line call, or one with no agent turns, has nothing to redact,
   so it stores no transcript and its row is written once.
 - **Auth to every Azure service is a managed identity token**, with no keys in code: one async credential,
-  shared by the Table client, the Blob client and the token provider behind Language and the text model.
+  shared by the Table client, the Blob client and the token providers behind the realtime connection,
+  Language and the text model. Two things build their own credential, off the call path: the B3 guards'
+  ARM read (at boot, and in a thread before each summary) and the telemetry exporter.
   The storage account has shared-key access off.
 - Not drawn: the phone number `+17059100383` (an ACS resource, never released by any script), the Event Grid
   subscription, and the deploy CLI (`make deploy`, `make teardown`).
