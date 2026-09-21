@@ -203,7 +203,7 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 
 ## Build status
 
-**Phases 0-7 closed. Phase 8 is built and live-verified on four calls; its exit gate is pending.**
+**Phases 0-7 closed. Phase 8 is built and live-verified on five calls; its exit gate is pending.**
 
 | Phase | Status |
 |---|---|
@@ -227,15 +227,14 @@ never released by any script, at any phase, for any reason.
 
 1. **No behavioural evals, and no live redteam run** (Phase 8 criteria 6-7, D15). Needs caller audio, so a
    TTS resource and a new `APPROVED:`. `docs/phase8/eval-redteam-limits.md`.
-2. **Post-call analytics is proven live on four calls.** A turn over 1,000 characters loses the transcript
+2. **Post-call analytics is proven live on five calls.** A turn over 1,000 characters loses the transcript
    (it fails closed); a closed-line call or one with no agent turns stores no transcript, by design; `$`
    amounts pass through the stored transcript unredacted (B2 covers the PIN and phone number only); Azure
    AI Language keeps its job results, including the entity text it matched, for 24 hours (ADR-007).
 3. **Some of the Phase 8 gate-review fixes have no live proof.** The shielded daily-ledger write (a
    cancelled call cannot be staged), the phone scrub's new patterns (the agent never speaks a phone number) and
    the pending-first row rest on tests. One async credential serves the Table, Blob, Language and text-model
-   clients, live on `p8c`; the realtime connection's token now comes from it too (tested; a new image and a
-   call are owed before that is live).
+   clients and the realtime connection, live on `p8d` (one call).
 4. **The B3 text-model pin's Bicep is written, not deployed.** `language.bicep` cannot be applied over the
    live account as it stands: it would create a duplicate role assignment, which Azure refuses.
 5. **One live call went silent after a correct refusal**, root cause never found. B1 held.

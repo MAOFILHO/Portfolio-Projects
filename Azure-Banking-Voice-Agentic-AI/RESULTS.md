@@ -39,10 +39,10 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 - `python -m unittest discover -s tests`: **743 tests, 3 skipped by design**, run against fakes
   (`FakeTransport`, `FakeRealtimeServer`, `FakeCallRecordStore`). `make lint`: ruff, mypy, the B3/D5/D2 checks
   and `bicep build` on every module, clean.
-- **Live, Phase 8, four real calls**, each a Table row (`caller_hangup`, transcript `stored`, summary `done`) and a
+- **Live, Phase 8, five real calls**, each a Table row (`caller_hangup`, transcript `stored`, summary `done`) and a
   redacted blob, read back through Entra data roles. Two on image `p8a` (2026-09-20, 2026-09-21). One on **`p8b`**
   (2026-09-21): row and blob as above, and the day's ledger (2.071 min) matches the two calls that day (56.9 s +
-  67.4 s), written before the row. One on **`p8c`** (2026-09-21 10:34 UTC, revision `--0000003`, the gate-review code): row, blob and ledger as above; the ledger rose 2.071 to 3.169 min, 1.098 min = 65.9 s against the call's 65,856 ms. Its blob: 6 agent turns, no digit run of four, no
+  67.4 s), written before the row. One on **`p8c`** (2026-09-21 10:34 UTC, revision `--0000003`, the gate-review code): row, blob and ledger as above; the ledger rose 2.071 to 3.169 min, 1.098 min = 65.9 s against the call's 65,856 ms. One on **`p8d`** (2026-09-21 12:56 UTC, revision `--0000004`, the second review's code): the realtime connection opened on the shared credential and the caller authenticated; one row, `balance_enquiry`, 7 turns; ledger 3.169 to 3.796 min = 0.627 min against the call's 37,607 ms; blob 5 agent turns, no digit run of four (digits only in `$1,900`, `$1,000`). Its blob: 6 agent turns, no digit run of four, no
   phone-shaped or spoken-digit run; the only digits are `$` amounts (the known limit). **Not exercised live:** the
   failed-connect row and the unsafe-id replacement (no real call produces either); tests cover them.
 - Three `/code-review` rounds found real defects, fixed: a B4 ordering bug that would have let a failing
@@ -60,8 +60,8 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 
 ## Known limits and open defects
 
-- **Live on `p8c`:** one async credential for the Table, Blob, Language and text-model clients. **Tested, not
-  exercised live:** the realtime connection's token from that same credential, the shielded
+- **Live on `p8d`:** one async credential for the Table, Blob, Language and text-model clients and the realtime
+  connection (one call; not a latency measurement). **Tested, not exercised live:** the shielded
   daily-ledger write (a cancelled call cannot be staged), the phone scrub's new pattern (the agent never spoke a
   phone number), and the pending-first row (overwritten within seconds; the row's `occurred_at` is now taken at the
   start of the pipeline, which the `p8c` row shows, but the pending state itself was not seen).

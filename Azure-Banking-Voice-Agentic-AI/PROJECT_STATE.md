@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is built, its docs written, live-verified on four real calls; the gate review has run and its fixes are committed** — see item 10.
+**Phase 8 is built, its docs written, live-verified on five real calls; the gate review has run twice and its fixes are committed** — see item 10.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -84,7 +84,7 @@ and goes stale between sessions.
 - Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
   Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
 - **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p8c` (since 2026-09-21, revision `--0000003`), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
+  `docker.io/maofilho/azbank-echo-p0:p8d` (since 2026-09-21, revision `--0000004`), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
   system-assigned identity is **`bb712203-9e00-42a5-a0b5-0f38b376c79e`** — a fresh GUID, since
   recreating the app regenerates the identity. Holds `Cognitive Services OpenAI User` on the AOAI
   resource (granted automatically by the CLI's `aoai` deploy step, no manual `az role assignment
@@ -99,7 +99,7 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` carries `p8c`**, the gate-review code (`p8b` is the rollback, then `p8a`). It carries
+- **`ca-azbank-echo-p0` carries `p8d`**, the second gate-review code (`p8c` is the rollback, then `p8b`, `p8a`). It carries
   `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the named
   fallback; D10's IAM role is still an open `/research` question).
 - **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
@@ -210,13 +210,12 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    provision once Phase 8's build reaches it.)*
 10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
     became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
-    is stale). Built on `main`, live on `p8c`, criteria 1-2 proven on four real calls. The first gate
-    review's B2, B4 and billable-IaC diffs were approved and committed 2026-09-21 (`854842d`). **Live on `p8c`:**
-    the async credential for Table, Blob, Language, text. **Second review (`b0110ce..854842d`) fixed in the tree,
-    not committed:** the phone scrub (B2, needs your look), the realtime client's token from the shared credential
-    (needs image `p8d` and a call), doc drift, five tests. **Tested, no live trigger:** the shield, the phone
-    patterns, the pending-first row. **Remaining:** commit; `p8d` + one call; closure sign-off; `/handoff`; `/clear`.
-    **Open, none blocking:** criterion 4's test measures no latency; `$` amounts are unredacted in the
+    is stale). Built on `main` (HEAD `305361e`), live on `p8d`, criteria 1-2 proven on five real calls. Both gate
+    reviews' B2, B4 and billable-IaC diffs were approved and committed 2026-09-21. **Live on `p8d`:** the async
+    credential for Table, Blob, Language, text and the realtime connection (call 2026-09-21 12:56 UTC), the
+    digit-free ids. **Tested, no live trigger:** the shield, the phone patterns, the pending-first row.
+    **Remaining:** closure sign-off; `/handoff`; `/clear`. A third `/code-review` is Marco's call (`b0110ce`).
+    **Open, none blocking:** the B2 log scan fails ~1 run in 150 on an `httpcore` memory address (`exit-check.md`); criterion 4's test measures no latency; `$` amounts are unredacted in the
     transcript; Language keeps results 24 h (ADR-007); a call with no id header keeps `None`; a turn over
     1,000 characters fails closed; the agent talks over the caller (item 9); the Azure Monitor exporter logs a
     `ProxyTracerProvider` traceback on every revision since 2026-09-14 (telemetry fails open, not ours).

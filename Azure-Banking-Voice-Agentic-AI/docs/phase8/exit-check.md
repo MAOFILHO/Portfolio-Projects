@@ -2,18 +2,18 @@
 
 **Status, 2026-09-21: criteria 1-5 and 8-10 met, 6-7 closed with a stated limit (D15). The gate's
 `/code-review` has been run twice (fixed points `2dc4961`, then `b0110ce`) and both sets of findings are
-addressed below; the second round's fixes are in the tree, not yet committed or reviewed. Not yet signed off.**
-Nothing in this table is a projection: where a criterion rests on a live call, it says how many. One more real
-call (`p8c`) confirmed the async credential live for Table, Blob, Language and the text model. The realtime
-connection's token, the shield, the new phone patterns and the pending-first row have no live proof and rest on
-tests; the first of those needs image `p8d` and a call.
+addressed below; the second round's fixes are committed (`2b4b2e2`, `305361e`) but not reviewed. Not yet signed off.**
+Nothing in this table is a projection: where a criterion rests on a live call, it says how many. Two more real
+calls (`p8c`, `p8d`) confirmed the async credential live: Table, Blob, Language and the text model on `p8c`, and
+the realtime connection on `p8d`. The shield, the new phone patterns and the pending-first row have no live
+proof and rest on tests.
 
 | | |
 |---|---|
 | `make lint` | clean: ruff, mypy, the B3/D5/D2 checks, `bicep build` on all 8 modules |
 | `make test` | 743 voice-agent (3 skipped by design) + 90 mock-core-banking, all pass; B1 corpus 593 cases, 0 breaches |
 | `/code-review` | 3 rounds during the build (`build-notes.md`), then **the gate review, 2026-09-21, fixed point `2dc4961`**, then **a second review of its fixes, fixed point `b0110ce`** (Standards and Spec axes, run separately each time). Disposition of every finding: below. |
-| Live | four real calls: two on image `p8a`, one on `p8b`, one on **`p8c`** (revision `ca-azbank-echo-p0--0000003`, 2026-09-21 10:34 UTC, the gate-review code). Ledger 2.071 to 3.169 min = 1.098 min = 65.9 s, matching the call's 65,856 ms; one row; blob clean (6 turns, no digit run of four, no phone-shaped or spoken-digit run; digits only in `$` amounts). |
+| Live | five real calls: two on image `p8a`, one on `p8b`, one on `p8c`, one on **`p8d`** (revision `ca-azbank-echo-p0--0000004`, 2026-09-21 12:56 UTC, the second review's code: booted clean with the B3 guard passing, connected, authenticated, one row `balance_enquiry`, 7 turns; ledger 3.169 to 3.796 min = 0.627 min against the call's 37,607 ms; blob 5 agent turns, digits only in `$1,900` and `$1,000`). Earlier, **`p8c`** (revision `ca-azbank-echo-p0--0000003`, 2026-09-21 10:34 UTC, the gate-review code). Ledger 2.071 to 3.169 min = 1.098 min = 65.9 s, matching the call's 65,856 ms; one row; blob clean (6 turns, no digit run of four, no phone-shaped or spoken-digit run; digits only in `$` amounts). |
 | Model pin review (`CLAUDE.md`, at every gate) | read live from the Models API and ARM, 2026-09-20: `gpt-realtime-mini` `2025-10-06` retires **2027-04-06** (6.5 months), `NoAutoUpgrade`; `gpt-5.4-mini` `2026-03-17` retires **2027-09-21** (12 months), `NoAutoUpgrade`. Neither is under 2 months; no stop-and-ask. Successor `gpt-realtime-1.5` is GA, retires 2027-08-24. |
 
 ## Criterion by criterion
@@ -21,9 +21,9 @@ tests; the first of those needs image `p8d` and a call.
 | # | criterion | evidence |
 |---|---|---|
 | 1 | Redacted transcript reaches Blob, no raw write first | ✅ Unit tests prove the blob writer only receives redacted text and that a failed redaction writes nothing (ADR-007). **Live on four calls**: each blob read back, no PIN, phone number or digit run. **Limits:** no blob for a closed-line call or one with no agent turns (nothing to store, so `transcript_status=none`); one agent turn over 1,000 characters fails closed and keeps its row. |
-| 2 | A summary/intent/outcome row for every completed call | ✅ Live on four calls, each `caller_hangup`, transcript `stored`, summary `done`. A call whose realtime connection cannot be opened also gets a row (tested on the main and closed paths, not live). The row is now written **first** with `pending` fields and overwritten when the steps finish, so a kill mid-pipeline leaves the pending row (tested; the pending state itself was not observed live). |
+| 2 | A summary/intent/outcome row for every completed call | ✅ Live on five calls, each `caller_hangup`, transcript `stored`, summary `done`. A call whose realtime connection cannot be opened also gets a row (tested on the main and closed paths, not live). The row is now written **first** with `pending` fields and overwritten when the steps finish, so a kill mid-pipeline leaves the pending row (tested; the pending state itself was not observed live). |
 | 3 | Outcome is exactly the five-value enum | ✅ `postcall/outcome.py`; a drift test on `session.py`; and (gate review) seven endings are driven through `run_call` / `run_closed_call` and their outcome read off the capture, mutation-checked: `caller_hangup`, `escalated`, `closed_path`, and four that land on `error` (turn cap, time cap, the model ending an unauthenticated call, a relay that fails). **`authenticated_served` and `attempts_exhausted` are covered by the outcome unit tests only, not driven through `run_call`.** |
-| 4 | The pipeline cannot affect B4 or B5 | ✅ **with a limit.** Background task, never awaited; tests prove the same frames, events and turn cap, and that a capture that raises cannot skip the ledger charge. **The tests measure no latency**; B5's frozen figure (p95 1025 ms, N=13) is not re-measured. Gate review: the Table and Blob clients had a sync credential whose token refresh ran on the event loop; one async credential now serves them and the Language and text-model tokens (**live on `p8c`**: ledger read and write, Blob write, both tokens). Second review: the realtime connection still built a sync credential per call; it now takes a provider from the shared one (**tested, not live**). |
+| 4 | The pipeline cannot affect B4 or B5 | ✅ **with a limit.** Background task, never awaited; tests prove the same frames, events and turn cap, and that a capture that raises cannot skip the ledger charge. **The tests measure no latency**; B5's frozen figure (p95 1025 ms, N=13) is not re-measured. Gate review: the Table and Blob clients had a sync credential whose token refresh ran on the event loop; one async credential now serves them and the Language and text-model tokens (**live on `p8c`**: ledger read and write, Blob write, both tokens). Second review: the realtime connection still built a sync credential per call; it now takes a provider from the shared one (**live on `p8d`**: the call connected and ran; `client.py` has no other route to a token. This is one call, not a latency measurement). |
 | 5 | B3 covers the second deployment | ✅ `CLAUDE.md` B3 row; the static check scans both deployment classes and (gate review) pins each name to the files that may carry it; `boot.assert_text_model_safety` is the non-fatal runtime guard (ADR-006). Bicep now declares the text deployment, **never deployed**. |
 | 6 | `evals/`: 20 scenarios, ≥95% over 20 runs | ⚠️ **Not built, no result. Closed with a stated limit (D15)**: `eval-redteam-limits.md`. |
 | 7 | `redteam/` at its L4 cadence | ⚠️ **Live run not done. Closed with a stated limit (D15)**, same document. The deterministic corpus (593 cases, 0 breaches) runs in `make test`. |
@@ -53,13 +53,13 @@ Fixed and tested. The three on B2, B4 and billable IaC were shown to Marco and a
 
 ## The second review's findings (fixed point `b0110ce`), and what became of each
 
-Two verified defects in my own fixes, then drift. Fixed in the tree, **not committed**: the scrub is B2 and waits for Marco's look.
+Two verified defects in my own fixes, then drift. Committed (`2b4b2e2`) after Marco's look at the B2 diffs.
 
 | finding | disposition |
 |---|---|
-| **Scrub regression:** the phone pattern took ten digits out of a longer run and left the tail (`4165550199123` gave `[REDACTED]123`); a slash, comma, dash, underscore, middle dot, non-breaking space or newline between groups left two groups | **Fixed (B2, awaiting a look).** A chain of 10+ digits with up to three non-word characters between digits is masked whole; four-digit runs allow more separators. 0 leaks in 20,000 random shapes; `$12.50` and amount lists survive. |
-| **B2 leak scan failed ~3 runs in 100.** A generated correlation id (`uuid4().hex`, more than half digits) can spell the test PIN `1234` or `9999`; found by repeating the suite, not by the review | **Fixed (B2-adjacent, awaiting a look).** `storable_or_generated_id` now translates digits to letters, as `session.py` already does for its frame ids. |
-| **Realtime client** built a sync `DefaultAzureCredential` per call and called it on the loop | **Fixed in code, not live.** `connect_realtime(token_provider)` is handed the shared async provider; needs image `p8d` and a call. |
+| **Scrub regression:** the phone pattern took ten digits out of a longer run and left the tail (`4165550199123` gave `[REDACTED]123`); a slash, comma, dash, underscore, middle dot, non-breaking space or newline between groups left two groups | **Fixed (B2, approved and committed).** A chain of 10+ digits with up to three non-word characters between digits is masked whole; four-digit runs allow more separators. 0 leaks in 20,000 random shapes; `$12.50` and amount lists survive. |
+| **B2 leak scan failed ~3 runs in 100.** A generated correlation id (`uuid4().hex`, more than half digits) can spell the test PIN `1234` or `9999`; found by repeating the suite, not by the review | **Fixed (B2-adjacent, approved and committed).** `storable_or_generated_id` now translates digits to letters, as `session.py` already does for its frame ids. |
+| **Realtime client** built a sync `DefaultAzureCredential` per call and called it on the loop | **Fixed, live on `p8d`.** `connect_realtime(token_provider)` is handed the shared async provider; one real call connected and ran on it. |
 | Criterion 3 "each ending" overstated | **Reworded** (above). |
 | `RoleAssignmentExists` written as observed | **Reworded** as inferred from the `what-if` `Create`. |
 | Only `LANGUAGE_ENDPOINT` had a boot-refusal test | **Added** for `TRANSCRIPTS_ACCOUNT_URL`. |
@@ -67,6 +67,7 @@ Two verified defects in my own fixes, then drift. Fixed in the tree, **not commi
 | Flaky `assertNotIn("bad", generated_id)` (a hex id can contain "bad", ~1 in 75) | **Fixed.** |
 | Pending row after a failed final write undocumented | **Documented** in `store.py` and `pipeline.py`. |
 | Doc drift: review range, "last commit", test-run date, README casing, dangling `item 10 (f)`, `allowed_pairs` docstring, `aoai.bicep` header | **Fixed.** |
+| **B2 log scan fails about 1 run in 150** on an `httpcore` debug record whose memory address (`0x10ee77770`) has a digit run that matches a secret; pre-existing, third-party | **Not fixed.** The fix strips `0x...` addresses inside the B2 detector, so it waits for Marco. |
 | Not changed, by choice: the smells (record built twice, `_write_row(what)` naming), the B3 per-file check (a per-variable check is not worth it), the credential not closed if startup fails between its creation and the `try` (the process exits either way), the unused `textDeploymentName` output, a hung store adding a fourth 60 s step, the test that writes into the real `summarizer.py` | Say so if you want any of them. |
 
 **Seen live, not a criterion:** the agent talks over the caller (barge-in). Other open items:
@@ -75,8 +76,8 @@ Two verified defects in my own fixes, then drift. Fixed in the tree, **not commi
 ## Owed before this phase is closed
 
 1. *(done 2026-09-21: the first round's B2, B4 and billable-IaC diffs were approved and committed; `/code-review` of them ran over `b0110ce..854842d`.)*
-2. **Marco's look at the scrub diff (B2), then the commit.** The second round's fixes are uncommitted and unreviewed; whether they need a third `/code-review` is Marco's call.
-3. **Image `p8d`, deploy, one real call**, to prove the realtime connection on the shared credential. Until then that line stays "tested, not live". The rollback is `p8c` (revision `--0000003`), then `p8b`, then `p8a`.
+2. *(done 2026-09-21: the scrub and the other B2 and billable-IaC diffs were approved and committed.)* Whether the second round needs a third `/code-review` (`b0110ce`) is Marco's call.
+3. *(done 2026-09-21: `p8d` built, deployed and called; see the Live row.)*
 4. **Closure sign-off**, then `/handoff` (copied to `docs/handoffs/` and committed), then `/clear`.
 
 **Closure sign-off**: not yet given.
