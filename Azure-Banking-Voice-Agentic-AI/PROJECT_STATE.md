@@ -210,8 +210,7 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
 10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
-    became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
-    is stale). Built on `main`, live on `p8e`, criteria 1-2 proven on six real calls. Four gate `/code-review`s
+    became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-21-phase8-closed.md`). Built on `main`, live on `p8e`, criteria 1-2 proven on six real calls. Four gate `/code-review`s
     have run (`2dc4961`, `b0110ce`, `854842d`, `fc4cc52`); every finding is dispositioned in `exit-check.md` and their B2, B4
     and billable-IaC diffs were approved and committed 2026-09-21. **`p8e` (revision `--0000005`, digest
     `sha256:3e71d119…`) carries the scrub fix `476bead`:** booted clean, one call 2026-09-21 21:38 UTC (row, ledger 1.003
