@@ -14,8 +14,9 @@ account of what happened:
 | 5 | `docs/phase5/exit-check.md`, `docs/phase5/review-fixes.md`, `docs/phase5/commit-review-digest.md` (exit criteria: `docs/phase5/exit-criteria.md`) — **closed 2026-09-12** |
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
+| 8 | `docs/phase8/exit-check.md`, `RESULTS.md` (exit criteria: `docs/phase8/exit-criteria.md`) — **closed 2026-09-21** |
 
-**Phase 8 is built, its docs written, live-verified on six real calls; four gate reviews have run and their fixes are committed and deployed** — see item 10.
+**Phase 8 is closed (Marco's sign-off, 2026-09-21): built, live-verified on six real calls, four gate reviews run, their fixes committed and deployed on `p8e`** — see item 10.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -40,12 +41,12 @@ live bearing on the current moment:
 
 ## Current phase
 
-Phases 6 and 7 are closed (`docs/phase6/exit-check.md`, `docs/phase7/exit-check.md`).
+Phases 6, 7 and 8 are closed (`docs/phase6/exit-check.md`, `docs/phase7/exit-check.md`, `docs/phase8/exit-check.md`). Phase 8 was the last phase in `docs/PLAN.md`; what follows is the open items below.
 
 **Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
 — `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
 is on record, and `APPROVED: Phase 8 Language resource` (at the corrected non-free price). Both new
-resources exist (see "Live Azure state"). The post-call pipeline and the docs are built (open item 10); `evals/` is not (D15).
+resources exist (see "Live Azure state"). The post-call pipeline and the docs are built and closed (open item 10); `evals/` is not (D15).
 
 ## Live Azure state
 
@@ -218,7 +219,7 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
     realtime connection. **Tested, no live trigger:** the shield, the phone patterns (the `p8e` blob held no
     phone-shaped text, so `476bead` ran only in tests and inside the image), the pending-first row, the digit-free id
     replacing an unsafe header id. **Not run:** `scripts/b5_probe.py` (fixed for the provider, dials a billable
-    connection). **Remaining:** closure sign-off; `/handoff`; `/clear`. A fifth `/code-review` is Marco's call.
+    connection). **Signed off 2026-09-21 without a fifth `/code-review`** (round four's small fixes were not separately reviewed). **Remaining:** `/handoff`; `/clear`.
     **Open, none blocking:** the B2 log scan fails ~1 run in 150 on an `httpcore` memory address (`exit-check.md`); criterion 4's test measures no latency; `$` amounts are unredacted in the
     transcript; Language keeps results 24 h (ADR-007); a call with no id header keeps `None`; a turn over
     1,000 characters fails closed; the agent talks over the caller (item 9); the Azure Monitor exporter logs a

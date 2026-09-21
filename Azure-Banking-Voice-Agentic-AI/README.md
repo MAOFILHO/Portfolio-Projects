@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white&labelColor=1a1a2e)
 ![Azure](https://img.shields.io/badge/Azure-ACS_·_OpenAI_·_Container_Apps-0078D4?style=flat&logo=microsoftazure&logoColor=white&labelColor=1a1a2e)
 ![Region](https://img.shields.io/badge/Region-Canada_Central-D22128?style=flat&labelColor=1a1a2e)
-![Phase](https://img.shields.io/badge/Phase-8_of_8_(exit_gate_pending)-f0a020?style=flat&labelColor=1a1a2e)
+![Phase](https://img.shields.io/badge/Phase-8_of_8_(closed)-2ea043?style=flat&labelColor=1a1a2e)
 ![Budget](https://img.shields.io/badge/Ceiling-$25%2Fmo_(spendingLimit%3A_Off)-2ea043?style=flat&labelColor=1a1a2e)
 
 [![CI](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-banking-voice-agentic-ai-ci.yml/badge.svg?branch=main)](https://github.com/MAOFILHO/Portfolio-Projects/actions/workflows/azure-banking-voice-agentic-ai-ci.yml)
@@ -203,7 +203,7 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 
 ## Build status
 
-**Phases 0-7 closed. Phase 8 is built and live-verified on six calls; its exit gate is pending.**
+**Phases 0-8 closed. Phase 8 (signed off 2026-09-21) is live-verified on six calls.**
 
 | Phase | Status |
 |---|---|
@@ -215,7 +215,7 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 | **5 · Intents + cost controls — B5 frozen here** | ✅ **Closed 2026-09-12** |
 | **6 · Observability (OTel, PII redaction)** | ✅ **Closed 2026-09-15** — all 14 criteria met |
 | **7 · IaC completion & CI/CD (Bicep, Typer CLI, GitHub OIDC)** | ✅ **Closed 2026-09-18** — 9 criteria, 2 with a stated limit |
-| **8 · Post-call analytics, evals & docs** | 🟡 **Built; exit gate pending** — criteria 1-5, 8-10 met; 6-7 (`evals/`, live redteam) closed with a stated limit, not run |
+| **8 · Post-call analytics, evals & docs** | ✅ **Closed 2026-09-21** — criteria 1-5, 8-10 met; 6-7 (`evals/`, live redteam) closed with a stated limit, not run |
 
 **Live resources: two Container Apps, two Azure OpenAI deployments (realtime and `gpt-5.4-mini`), an Azure
 AI Language resource, a storage account, an ACS phone number, and Application Insights are all deployed

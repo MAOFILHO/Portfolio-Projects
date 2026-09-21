@@ -2,7 +2,7 @@
 
 **Status, 2026-09-21: criteria 1-5 and 8-10 met, 6-7 closed with a stated limit (D15). The gate's
 `/code-review` has been run four times (fixed points `2dc4961`, `b0110ce`, `854842d`, then `fc4cc52`) and all four sets
-of findings are addressed below; the fourth round's own small fixes have not been reviewed. Not yet signed off.**
+of findings are addressed below; the fourth round's own small fixes were not separately reviewed. Signed off by Marco, 2026-09-21 (last line).**
 Nothing in this table is a projection: where a criterion rests on a live call, it says how many. Three more real
 calls (`p8c`, `p8d`, `p8e`) confirmed the async credential live: Table, Blob, Language and the text model on `p8c`, and
 the realtime connection on `p8d`; `p8e` carries the scrub fix and ran one clean call. The shield, the new phone patterns
@@ -108,6 +108,6 @@ Marco in-session, and `session.py` is docstring-only.
 1. *(done 2026-09-21: the first round's B2, B4 and billable-IaC diffs were approved and committed; `/code-review` of them ran over `b0110ce..854842d`.)*
 2. *(done 2026-09-21: the scrub and the other B2 and billable-IaC diffs were approved and committed.)* The third (`854842d`) and fourth (`fc4cc52`) `/code-review`s ran; whether the fourth round's small fixes need a fifth is Marco's call.
 3. *(done 2026-09-21: `p8d`, then `p8e`, built, deployed and called; see the Live row.)*
-4. **Closure sign-off**, then `/handoff` (copied to `docs/handoffs/` and committed), then `/clear`.
+4. *(done 2026-09-21: closure sign-off given.)* Then `/handoff` (copied to `docs/handoffs/` and committed), then `/clear`.
 
-**Closure sign-off**: not yet given.
+**Closure sign-off**: given by Marco on 2026-09-21 ("Phase 8: Sign-off"), on image `p8e`, six real calls, four gate `/code-review`s, and the limits stated above (criteria 6-7 closed with a stated limit; the shield, phone patterns and pending-first row proven by tests only; `scripts/b5_probe.py` not run live; no fifth `/code-review`).
