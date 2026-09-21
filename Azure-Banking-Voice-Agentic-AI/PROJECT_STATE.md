@@ -71,7 +71,7 @@ and goes stale between sessions.
   holds `Cognitive Services Language Reader`, scoped to this resource only — verified live to include
   `analyze-conversations/action` despite the misleading "Reader" name. Called by the post-call
   pipeline (`postcall/language.py`); verified on a real call 2026-09-20. `language.bicep` is written, **never
-  deployed**, and would create a duplicate role assignment over this account (Azure refuses it).
+  deployed**, and would create a duplicate role assignment over this account (Azure is expected to refuse it, `RoleAssignmentExists`; inferred from `what-if`, not observed).
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
   image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-
@@ -210,11 +210,14 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    provision once Phase 8's build reaches it.)*
 10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
     became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
-    is stale). Built on `main` (HEAD `305361e`), live on `p8d`, criteria 1-2 proven on five real calls. Both gate
-    reviews' B2, B4 and billable-IaC diffs were approved and committed 2026-09-21. **Live on `p8d`:** the async
-    credential for Table, Blob, Language, text and the realtime connection (call 2026-09-21 12:56 UTC), the
-    digit-free ids. **Tested, no live trigger:** the shield, the phone patterns, the pending-first row.
-    **Remaining:** closure sign-off; `/handoff`; `/clear`. A third `/code-review` is Marco's call (`b0110ce`).
+    is stale). Built on `main`, live on `p8d`, criteria 1-2 proven on five real calls. Four gate `/code-review`s
+    have run (`2dc4961`, `b0110ce`, `854842d`, `fc4cc52`); every finding is dispositioned in `exit-check.md` and their B2, B4
+    and billable-IaC diffs were approved and committed 2026-09-21. **The third review's scrub fix (`476bead`) is
+    committed but NOT deployed:** `p8d` carries the three-character-gap phone pattern; `p8e` is needed. **Live on `p8d`:** the async
+    credential for Table, Blob, Language, text and the realtime connection (call 2026-09-21 12:56 UTC).
+    **Tested, no live trigger:** the shield, the phone patterns, the pending-first row, the digit-free id
+    replacing an unsafe header id. **Not run:** `scripts/b5_probe.py` (fixed for the provider, dials a billable
+    connection). **Remaining:** closure sign-off; `/handoff`; `/clear`. A fifth `/code-review` is Marco's call.
     **Open, none blocking:** the B2 log scan fails ~1 run in 150 on an `httpcore` memory address (`exit-check.md`); criterion 4's test measures no latency; `$` amounts are unredacted in the
     transcript; Language keeps results 24 h (ADR-007); a call with no id header keeps `None`; a turn over
     1,000 characters fails closed; the agent talks over the caller (item 9); the Azure Monitor exporter logs a

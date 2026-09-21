@@ -36,7 +36,7 @@ exclusions below. Full inventory: `docs/PLAN.md`, "Reuse reality."
   banking, cards) swapped in on the same session via `session.update`, a deny-all-by-default auth gate
   keyed on `(agent, auth_state, tool_name)`, and a real second network hop to `mock-core-banking`
   (FastAPI + SQLite) behind that gate.
-- **A deterministic, adversarial test suite built alongside the code, not after it** — 836 tests
+- **A deterministic, adversarial test suite built alongside the code, not after it** — 845 tests
   (`FakeTransport` + `FakeRealtimeServer` standing in for both real integrations), and an 18-idea,
   593-case adversarial corpus run in every `make test` pass, not sampled or weekly.
 - **Cost control as a design constraint, not an afterthought** — a hard 5-minute/20-turn per-call cap
@@ -95,7 +95,7 @@ is [`RESULTS.md`](RESULTS.md):
   held throughout — no balance was ever released — but root cause was never found, and Marco's call was
   to accept the day's cumulative evidence and stop chasing a clean repro (`docs/phase5/exit-criteria.md`,
   known-partial 9).
-- **836 green tests is evidence the known cases hold, not that the space is covered** — every real defect
+- **845 green tests is evidence the known cases hold, not that the space is covered** — every real defect
   in the table below was found on a live call, not in this suite. See the next section.
 
 ## What happened when real calls started
@@ -142,8 +142,8 @@ Reflects what's actually built and verified live, not aspirational. Items not ye
 | **Orchestration** | Persistent realtime session per call; agent swap via `session.update` across triage/banking/cards; declarative `AgentSpec` table | Live since Phase 2, three-agent handoff since Phase 5 |
 | **Auth** | PIN via DTMF only (spoken KBA dropped, decision 7) | Live since Phase 4 — B1/B2 held 0 breaches |
 | **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | Live — delivery confirmed by queried rows 2026-09-15 (Phase 6 closed, `docs/phase6/exit-check.md`) |
-| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on four real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
-| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 836 tests pass locally (746 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
+| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on five real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
+| **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 845 tests pass locally (755 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
 
 ## Architecture
 
@@ -236,7 +236,7 @@ never released by any script, at any phase, for any reason.
    the pending-first row rest on tests. One async credential serves the Table, Blob, Language and text-model
    clients and the realtime connection, live on `p8d` (one call).
 4. **The B3 text-model pin's Bicep is written, not deployed.** `language.bicep` cannot be applied over the
-   live account as it stands: it would create a duplicate role assignment, which Azure refuses.
+   live account as it stands: it would create a duplicate role assignment, which Azure is expected to refuse (`RoleAssignmentExists`; inferred from a `what-if` that shows `Create`, not observed).
 5. **One live call went silent after a correct refusal**, root cause never found. B1 held.
 6. **The agent talks over the caller** (barge-in). Seen live, not yet addressed.
 7. **A genuine dropped connection during a pending escalation can still misreport `end_reason`.** No
@@ -396,7 +396,7 @@ The canonical target list is `install, test, lint, fixtures, deploy, teardown`. 
 
 ## Testing
 
-**836 tests pass locally** (746 voice-agent + 90 mock-core-banking, 3 skipped by design, `make test`,
+**845 tests pass locally** (755 voice-agent + 90 mock-core-banking, 3 skipped by design, `make test`,
 most recently run 2026-09-21), with **zero Azure dependency** — `FakeTransport` + `FakeRealtimeServer` stand in for both
 real integrations. Per the CI workflow's own comment (mirroring `docs/PLAN.md`'s "Verification"
 section): `make test` runs **L0 units + L1 fakes + L2**.
@@ -423,7 +423,7 @@ tests passing).
 | Step | What runs | What it catches |
 |---|---|---|
 | Lint | `ruff` + `mypy` + `scripts/check_b3_allowlist.py` | Static defects, type errors, and any realtime deployment reference outside B3's allowlist |
-| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 836 tests, including B1's 593-case adversarial corpus |
+| Test | `make test` — L0 units + L1 fakes + L2, zero Azure dependency | Code-level regressions across 845 tests, including B1's 593-case adversarial corpus |
 
 **What it deliberately does not check: whether a live call actually sounds right, or whether telemetry
 actually reaches Application Insights.** Those need a real phone call and a queried row — this workflow
