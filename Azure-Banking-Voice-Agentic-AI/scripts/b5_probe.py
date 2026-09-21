@@ -29,14 +29,18 @@ a probe that authenticated but reached nothing, or reached something but stayed 
 re-measure those refusals under a new name. The whole reason B5 freezes in this phase is that tool
 calls are the slowest leg.
 
-Requires the three env vars connect_realtime() already needs -- fetch AOAI_KEY yourself, never
-paste it into chat or a committed file:
+**Authenticates the way the deployed app does, as whoever you are logged in as.** `connect_realtime`
+takes a bearer-token provider (the `AOAI_KEY` secret is retired, D2), and this script builds one over
+`azure.identity.aio.DefaultAzureCredential` -- `az login` on a laptop. That identity needs a role
+with inference data actions on the account: `Cognitive Services OpenAI User`, the one
+`infra/modules/aoai.bicep` grants the Container App's identity, or `Foundry User`, which Marco's login
+holds (its `dataActions` are `Microsoft.CognitiveServices/*`). `Owner` and `Contributor` carry none
+(`az role definition list`, 2026-09-21). Not yet run against the live deployment -- it dials a billable
+realtime connection. It needs two env vars:
 
-    AOAI_KEY=$(az containerapp secret show -n ca-azbank-echo-p0 \\
-        -g rg-azure-banking-voice-agentic-ai --secret-name aoai-key --query value -o tsv) \\
     AOAI_ENDPOINT=https://aoai-azure-banking-voice-cc.openai.azure.com/ \\
     AOAI_DEPLOYMENT=gpt-realtime-mini \\
-    python3 scripts/b5_probe.py --calls 20
+    python3 scripts/b5_probe.py --calls 20 --core-banking-url <url>
 
 Requires macOS (`say` + `afconvert`, both stdlib to the OS) to synthesize caller audio -- no
 network TTS, no new dependency. Run on Marco's laptop, same as the Docker builds.
@@ -56,11 +60,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "voice-agent"))
 
+from azbank_voice_agent.boot import COGNITIVE_SERVICES_SCOPE
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking import HttpCoreBankingClient
 from azbank_voice_agent.core_banking.fake import DEFAULT_PIN
 from azbank_voice_agent.realtime.client import connect_realtime
 from azbank_voice_agent.realtime.session import run_call
+from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from fastapi import WebSocketDisconnect
 
 log = logging.getLogger("b5_probe")
@@ -165,23 +171,45 @@ def assert_probe_matches_run_call():
     implementation; here the signature *is* the contract between two files that nothing else
     connects.
     """
-    parameters = list(inspect.signature(run_call).parameters)
-    expected = list(_RUN_CALL_ARGUMENTS)
+    _assert_signature_matches(run_call, "run_call", _RUN_CALL_ARGUMENTS)
+
+
+#: What this probe passes to `connect_realtime`. See `assert_probe_matches_connect_realtime`.
+_CONNECT_REALTIME_ARGUMENTS = ("token_provider",)
+
+
+def assert_probe_matches_connect_realtime():
+    """The same guard, for the other function this probe is wired to (Phase 8 gate review 3).
+
+    `connect_realtime` gained a required `token_provider` and the probe kept calling it with
+    nothing: `TypeError` before a connection opened. Ruff lints `scripts/` but cannot see an arity
+    mismatch, mypy does not cover it, and no test reached it. Same mechanism, same tolerance for a
+    new optional parameter.
+    """
+    _assert_signature_matches(connect_realtime, "connect_realtime", _CONNECT_REALTIME_ARGUMENTS)
+
+
+def _assert_signature_matches(function, name, expected):
+    """`name` is passed rather than read off `function`: the tests patch in stand-ins whose own name
+    is not the one an operator should see."""
+    signature = inspect.signature(function).parameters
+    parameters = list(signature)
+    expected = list(expected)
     if parameters[:len(expected)] != expected:
         raise SystemExit(
-            "b5_probe is out of date: run_call's signature has changed.\n"
+            f"b5_probe is out of date: {name}'s signature has changed.\n"
             f"  this probe passes: {expected}\n"
-            f"  run_call now takes: {parameters}\n"
+            f"  {name} now takes: {parameters}\n"
             "Fix _run_one() to match before running the probe -- a figure produced by a probe "
             "that guessed at the relay's shape is not a measurement of the relay."
         )
     required = [
-        name for name, parameter in inspect.signature(run_call).parameters.items()
+        parameter_name for parameter_name, parameter in signature.items()
         if parameter.default is inspect.Parameter.empty
     ]
     if set(required) - set(expected):
         raise SystemExit(
-            "b5_probe is out of date: run_call has required parameters this probe does not pass: "
+            f"b5_probe is out of date: {name} has required parameters this probe does not pass: "
             f"{sorted(set(required) - set(expected))}"
         )
 
@@ -239,8 +267,8 @@ class _DebugRealtime:
             yield event
 
 
-async def _run_one(frames, debug, core_banking, call_records, keys):
-    async with connect_realtime() as realtime:
+async def _run_one(frames, debug, core_banking, call_records, keys, token_provider):
+    async with connect_realtime(token_provider) as realtime:
         if debug:
             realtime = _DebugRealtime(realtime)
         await run_call(
@@ -254,6 +282,7 @@ _SILENCE_TAIL_SECONDS = 1.0  # > silence_duration_ms (200ms, session.py's _AUDIO
 async def _main(calls, debug, core_banking_url, pin):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     assert_probe_matches_run_call()
+    assert_probe_matches_connect_realtime()
     log.info("synthesizing %d utterance(s)...", len(UTTERANCES))
     silence_tail = _silence_frames(_SILENCE_TAIL_SECONDS)
     frame_sets = [
@@ -271,19 +300,25 @@ async def _main(calls, debug, core_banking_url, pin):
     call_records = FakeCallRecordStore()
     keys = tuple(pin)
 
+    # One credential for the whole run, so its token cache serves every synthetic call -- the same
+    # shape as the app's one shared credential.
+    credential = DefaultAzureCredential()
+    token_provider = get_bearer_token_provider(credential, COGNITIVE_SERVICES_SCOPE)
+
     completed, failed = 0, 0
     try:
         for i in range(calls):
             frames = frame_sets[i % len(frame_sets)]
             log.info("--- synthetic call %d/%d ---", i + 1, calls)
             try:
-                await _run_one(frames, debug, core_banking, call_records, keys)
+                await _run_one(frames, debug, core_banking, call_records, keys, token_provider)
                 completed += 1
             except Exception:
                 log.exception("synthetic call %d failed, continuing", i + 1)
                 failed += 1
     finally:
         await core_banking.aclose()
+        await credential.close()
     # **N, printed by the run itself.** Every percentile this project quotes states the turn count
     # behind it, and a probe that made the operator count log lines to find one would be inviting
     # the figure to be reported without it.
@@ -315,7 +350,7 @@ if __name__ == "__main__":
         help="log every event.type sent/received -- verbose, use with a small --calls",
     )
     args = parser.parse_args()
-    for var in ("AOAI_KEY", "AOAI_ENDPOINT", "AOAI_DEPLOYMENT"):
+    for var in ("AOAI_ENDPOINT", "AOAI_DEPLOYMENT"):
         if var not in os.environ:
             sys.exit(f"b5_probe: {var} is not set -- see this script's own docstring.")
     if not args.core_banking_url:

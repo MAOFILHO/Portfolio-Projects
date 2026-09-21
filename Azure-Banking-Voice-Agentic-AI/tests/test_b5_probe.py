@@ -15,6 +15,7 @@ otherwise avoids. It is one of exactly two: the other is B2's leak detector, whi
 to prove it fires. Both exist for the same reason -- a check that silently stopped checking would
 pass forever.
 """
+import asyncio
 import importlib.util
 import inspect
 import pathlib
@@ -95,6 +96,88 @@ class TheProbeMatchesTheRelayItDrives(unittest.TestCase):
     def patched(self, replacement):
         from unittest.mock import patch
         return patch.object(self.probe, "run_call", replacement)
+
+
+class TheProbeMatchesTheConnectionItOpens(unittest.TestCase):
+    """The same guard for the second file the probe is wired to (Phase 8 gate review 3).
+
+    `connect_realtime` gained a required `token_provider` when the realtime client moved onto the
+    app's shared async credential. The probe went on calling it with nothing, which raises
+    `TypeError` before a connection opens -- the Phase 3 failure again, through a different door,
+    and again invisible to the linters (ruff cannot see an arity mismatch, mypy does not cover `scripts/`).
+    """
+
+    def setUp(self):
+        self.probe = _load_probe()
+        self.addCleanup(sys.modules.pop, "b5_probe_under_test", None)
+
+    def test_the_guard_passes_against_the_real_connect_realtime(self):
+        self.probe.assert_probe_matches_connect_realtime()
+
+    def test_the_guard_fails_when_the_provider_is_no_longer_the_first_parameter(self):
+        def drifted(deployment, token_provider):
+            pass
+
+        with self.patched(drifted), self.assertRaises(SystemExit):
+            self.probe.assert_probe_matches_connect_realtime()
+
+    def test_the_guard_fails_when_a_required_parameter_is_appended(self):
+        def drifted(token_provider, something_required):
+            pass
+
+        with self.patched(drifted), self.assertRaises(SystemExit):
+            self.probe.assert_probe_matches_connect_realtime()
+
+    def test_the_guard_fails_for_the_zero_argument_shape_the_probe_used_to_call(self):
+        def old_shape():
+            pass
+
+        with self.patched(old_shape), self.assertRaises(SystemExit):
+            self.probe.assert_probe_matches_connect_realtime()
+
+    def test_the_guard_tolerates_a_new_optional_parameter(self):
+        def widened(token_provider, timeout=None):
+            pass
+
+        with self.patched(widened):
+            self.probe.assert_probe_matches_connect_realtime()
+
+    def test_a_synthetic_call_opens_its_connection_with_the_provider_it_was_given(self):
+        # The guard checks a signature; this checks the call. A probe that passed `None` would
+        # satisfy the guard and still fail its first connection.
+        from unittest.mock import patch
+
+        provider = object()
+        handed = []
+
+        class _Connection:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        def fake_connect(token_provider):
+            handed.append(token_provider)
+            return _Connection()
+
+        async def fake_run_call(*args, **kwargs):
+            return None
+
+        with patch.object(self.probe, "connect_realtime", fake_connect), \
+             patch.object(self.probe, "run_call", fake_run_call):
+            asyncio.run(self.probe._run_one([], False, object(), object(), (), provider))
+        self.assertEqual(len(handed), 1)
+        self.assertIs(handed[0], provider)
+
+    def test_it_no_longer_demands_a_key_nothing_reads(self):
+        # `AOAI_KEY` retired with D2. A probe that still refused to start without it would send an
+        # operator to fetch a secret the client no longer uses.
+        self.assertNotIn('"AOAI_KEY"', _PROBE.read_text())
+
+    def patched(self, replacement):
+        from unittest.mock import patch
+        return patch.object(self.probe, "connect_realtime", replacement)
 
 
 class TheProbeMeasuresTheRightThing(unittest.TestCase):

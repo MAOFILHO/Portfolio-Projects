@@ -212,6 +212,61 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
             [(fake_ws, realtime, core_banking, call_records, fake_ws.headers.get("x-ms-call-correlation-id"))],
         )
 
+    def _provider_handed_to_connect(self, budget=None):
+        """Drives one call and returns what `connect_realtime` was given.
+
+        The other tests here stub `connect_realtime` with `lambda _provider:`, which accepts any
+        value -- so a call site that dropped or mangled the argument would pass all of them. This
+        is the one that reads it. The sentinel is a distinct object, so `None` (the module's
+        unset value) and a freshly built provider cannot pass for it.
+        """
+        sentinel = object()
+        handed = []
+
+        def recording_connect(provider):
+            handed.append(provider)
+            return FakeRealtimeConnectCM(FakeRealtimeServer())
+
+        async def run_call(*args, capture=None, **kwargs):
+            capture.finish("corr-x", "model_ended", "anonymous", 1, 10)
+
+        async def run_closed_call(*args, capture=None, **kwargs):
+            capture.finish("corr-x", "closed", "anonymous", 0, 5)
+
+        async def no_postcall(*args, **kwargs):
+            return None
+
+        async def open_day(_records):
+            return None
+
+        with patch.object(app, "connect_realtime", recording_connect), \
+             patch.object(app, "_realtime_token_provider", sentinel), \
+             patch.object(app, "_core_banking", FakeCoreBankingClient()), \
+             patch.object(app, "_call_records", FakeCallRecordStore()), \
+             patch.object(app, "budget_or_closed", budget or open_day), \
+             patch.object(app, "run_call", run_call), \
+             patch.object(app, "run_closed_call", run_closed_call), \
+             patch.object(app, "run_postcall", no_postcall):
+            asyncio.run(app.media_stream(FakeWebSocket()))
+        return sentinel, handed
+
+    def test_a_normal_call_connects_with_the_shared_token_provider(self):
+        sentinel, handed = self._provider_handed_to_connect()
+        self.assertEqual(len(handed), 1)
+        self.assertIs(handed[0], sentinel)
+
+    def test_a_closed_call_connects_with_the_shared_token_provider(self):
+        # The second call site, on the "we're closed" path: a spent day still speaks to the caller
+        # over a realtime connection, and it needs the same provider.
+        from azbank_voice_agent.cost import caps
+
+        async def spent(_records):
+            raise caps.DailyBudgetSpent("budget", cause=caps.CLOSED_PATH_BUDGET_SPENT)
+
+        sentinel, handed = self._provider_handed_to_connect(budget=spent)
+        self.assertEqual(len(handed), 1)
+        self.assertIs(handed[0], sentinel)
+
     def _id_handed_to_the_relay(self, header):
         handed = []
 

@@ -119,8 +119,10 @@ def _new_idempotency_key():
     caller's second request must.
 
     Digit-free through the same translation `_new_event_id` uses, and for the same B2 reason -- see
-    that function. The rule lives in one place so a second identifier cannot quietly be exempt from
-    it. The prefix is `idem_` so a key and a frame id are not mistaken for each other in a log.
+    that function. Within this file the rule is `_DIGIT_FREE`, so a second identifier here cannot
+    quietly be exempt from it; `call_records/store.py` carries its own copy of the same table, so an
+    id generated anywhere else has to apply it too. The prefix is `idem_` so a key and a frame id
+    are not mistaken for each other in a log.
     """
     return "idem_" + uuid.uuid4().hex.translate(_DIGIT_FREE)
 

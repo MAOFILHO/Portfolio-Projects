@@ -4,7 +4,7 @@ Azure AI Language does not promise to catch a bare digit string -- its own trans
 "without context, a ten-digit number is just a number" (docs/phase8/research-postcall-adapters.md,
 Q1f). So the redactor treats the service as one layer and masks anything number-shaped itself:
 a chain of ten or more digits joined by up to eight characters of punctuation or whitespace (a phone
-number in whatever shape, and anything longer), a run of four or more digits joined by one or two
+number with any of those between its groups, and anything longer), a run of four or more digits joined by one or two
 whitespace characters (a newline and a non-breaking space count), hyphens, dashes, slashes, underscores or
 middle dots, and four or more spoken digits in a row, because a voice transcript spells numbers out.
 
@@ -15,6 +15,12 @@ which the first pattern had masked (the Phase 8 gate reviews). The chain cannot 
 allows a dot or a closing parenthesis between digits, which the short runs cannot without eating
 `$12.50` and `4.25 percent`; the dollar sign is never a separator, so a list of amounts stays apart.
 A dotted seven-digit local number (`555.0199`) is its own pattern for the same reason.
+
+Known limits, listed rather than fixed: a gap of nine or more characters between digits ends the chain
+(`416 ........ 555 ........ 0199` leaves `416` and `555`; the fuzz in tests/test_postcall_scrub.py covers gaps
+of 0-8 only); a letter or a dollar sign is never a separator, so `416 abc 555 abc 0199` masks only the last
+group; and a four-digit run split by a comma or a semicolon (`4,1,6,5`) is not one run. Each widening of these
+is a B2 change.
 
 Deliberately blunt. It will mask a year or a large round amount too; over-masking a call
 transcript costs nothing, and a leaked account number cannot be taken back.
