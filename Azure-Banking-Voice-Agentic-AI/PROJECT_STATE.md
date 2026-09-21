@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is built, its docs written, live-verified on five real calls; the gate review has run twice and its fixes are committed** — see item 10.
+**Phase 8 is built, its docs written, live-verified on six real calls; four gate reviews have run and their fixes are committed and deployed** — see item 10.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -84,7 +84,7 @@ and goes stale between sessions.
 - Container App `ca-azbank-core-banking`, internal-only ingress (deliberate, criterion 22 — also why
   Phase 5's B5 probe pool could not be gathered from outside the environment), `Healthy`, one replica.
 - **Container App `ca-azbank-echo-p0`**, min-replicas=1 (**billing now**), running
-  `docker.io/maofilho/azbank-echo-p0:p8d` (since 2026-09-21, revision `--0000004`), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
+  `docker.io/maofilho/azbank-echo-p0:p8e` (since 2026-09-21, revision `--0000005`), rebuilt from empty 2026-09-18 by the new deploy CLI. Its
   system-assigned identity is **`bb712203-9e00-42a5-a0b5-0f38b376c79e`** — a fresh GUID, since
   recreating the app regenerates the identity. Holds `Cognitive Services OpenAI User` on the AOAI
   resource (granted automatically by the CLI's `aoai` deploy step, no manual `az role assignment
@@ -99,7 +99,7 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` carries `p8d`**, the second gate-review code (`p8c` is the rollback, then `p8b`, `p8a`). It carries
+- **`ca-azbank-echo-p0` carries `p8e`**, the fourth gate-review code (`p8d` is the rollback, then `p8c`, `p8b`, `p8a`). It carries
   `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the named
   fallback; D10's IAM role is still an open `/research` question).
 - **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
@@ -210,12 +210,13 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    provision once Phase 8's build reaches it.)*
 10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
     became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
-    is stale). Built on `main`, live on `p8d`, criteria 1-2 proven on five real calls. Four gate `/code-review`s
+    is stale). Built on `main`, live on `p8e`, criteria 1-2 proven on six real calls. Four gate `/code-review`s
     have run (`2dc4961`, `b0110ce`, `854842d`, `fc4cc52`); every finding is dispositioned in `exit-check.md` and their B2, B4
-    and billable-IaC diffs were approved and committed 2026-09-21. **The third review's scrub fix (`476bead`) is
-    committed but NOT deployed:** `p8d` carries the three-character-gap phone pattern; `p8e` is needed. **Live on `p8d`:** the async
-    credential for Table, Blob, Language, text and the realtime connection (call 2026-09-21 12:56 UTC).
-    **Tested, no live trigger:** the shield, the phone patterns, the pending-first row, the digit-free id
+    and billable-IaC diffs were approved and committed 2026-09-21. **`p8e` (revision `--0000005`, digest
+    `sha256:3e71d119…`) carries the scrub fix `476bead`:** booted clean, one call 2026-09-21 21:38 UTC (row, ledger 1.003
+    min = the call's 60.2 s, blob clean). **Live on `p8d`/`p8e`:** the async credential for Table, Blob, Language, text and the
+    realtime connection. **Tested, no live trigger:** the shield, the phone patterns (the `p8e` blob held no
+    phone-shaped text, so `476bead` ran only in tests and inside the image), the pending-first row, the digit-free id
     replacing an unsafe header id. **Not run:** `scripts/b5_probe.py` (fixed for the provider, dials a billable
     connection). **Remaining:** closure sign-off; `/handoff`; `/clear`. A fifth `/code-review` is Marco's call.
     **Open, none blocking:** the B2 log scan fails ~1 run in 150 on an `httpcore` memory address (`exit-check.md`); criterion 4's test measures no latency; `$` amounts are unredacted in the
