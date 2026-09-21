@@ -8,6 +8,11 @@ boot.py's two allowlists -- one regex, one scan, rather than a second near-dupli
 text model. Confirmed safe to broaden: no non-realtime gpt-* id existed anywhere in scan_targets()
 before this change, so nothing that used to pass silently starts failing here.
 
+Narrowed 2026-09-21 (Phase 8 gate review): a union check cannot tell the two classes apart, so the
+text pin's name passed in a realtime code path. It is now also checked *by file* -- the text pin
+may be named only in `TEXT_PIN_FILES`, and the realtime pin not at all in `TEXT_ONLY_FILES`.
+Adding a legitimate new home for a pin is a deliberate edit to those two sets.
+
 Deliberately independent of the runtime boot guard (`azbank_voice_agent/boot.py`). The guard
 proves what is *deployed* is approved; this proves what is *written down in the source* is
 approved. Either alone leaves a gap:
@@ -102,6 +107,40 @@ def scan_targets():
     ])
 
 
+# Which files may name which pin. The name is checked against the union of both allowlists, but a
+# name that is legitimate in one file is a defect in another: the text pin in a realtime code path
+# (or the realtime pin in the summariser) is exactly the cross-wiring B3 exists to stop, and the
+# union alone waved it through -- only the runtime guard would have caught it (Phase 8 gate review,
+# 2026-09-21). Paths are relative to the repo root, posix-style.
+TEXT_PIN_FILES = frozenset({
+    "voice-agent/azbank_voice_agent/boot.py",  # declares both pins and their guards
+    "voice-agent/azbank_voice_agent/postcall/summarizer.py",  # the one caller of the text deployment
+    "infra/modules/voice-agent.bicep",  # hands the deployment name to the container as an env var
+})
+TEXT_ONLY_FILES = frozenset({"voice-agent/azbank_voice_agent/postcall/summarizer.py"})
+
+
+def class_violation(rel_posix, name):
+    """Why `name` may not appear in `rel_posix`, or None. `name` is already known to be allowlisted."""
+    text_names, realtime_names = allowed_names_by_class()
+    if name in text_names and rel_posix not in TEXT_PIN_FILES:
+        return f"{name!r} is the text pin (ADR-006), named outside the files that may name it"
+    if name in realtime_names and rel_posix in TEXT_ONLY_FILES:
+        return f"{name!r} is the realtime pin, named in a text-only file"
+    return None
+
+
+def allowed_names_by_class():
+    """`(text names, realtime names)`, read from the guard like every other allowlist here."""
+    sys.path.insert(0, str(REPO_ROOT / "voice-agent"))
+    from azbank_voice_agent import boot
+
+    return (
+        {name.lower() for name, _ in boot.ALLOWED_TEXT_MODELS},
+        {name.lower() for name, _ in boot.ALLOWED_REALTIME_MODELS},
+    )
+
+
 def allowed_names():
     """The model names B3 permits, read from the guard itself rather than restated here.
 
@@ -140,8 +179,9 @@ def main():
                 )
 
         for match in MODEL_PATTERN.finditer(text):
-            if match.group(0).lower() not in names_ok:
-                found = repr(match.group(0))
+            name = match.group(0).lower()
+            found = repr(match.group(0)) if name not in names_ok else class_violation(rel.as_posix(), name)
+            if found:
                 violations.append(
                     (rel, _scan_utils.lineno(text, match.start()), found, _scan_utils.flatten(match.group(0)))
                 )

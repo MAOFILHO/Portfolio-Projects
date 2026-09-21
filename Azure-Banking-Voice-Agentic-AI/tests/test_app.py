@@ -130,7 +130,7 @@ class BootGuardIsOnTheStartupPath(unittest.TestCase):
              patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
              patch.object(app, "TableStorageCallRecordStore", _StubStoreFactory()), \
              patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
-             patch.object(app, "DefaultAzureCredential", lambda: None):
+             patch.object(app, "AsyncDefaultAzureCredential", _AsyncCredentialStub):
             asyncio.run(enter_and_exit())
 
     def test_startup_refuses_without_the_apps_own_base_url(self):
@@ -498,18 +498,16 @@ class PostCallAdaptersAreBuiltFromConfigurationAndNeverBlockBoot(unittest.TestCa
              patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
              patch.object(app, "TableStorageCallRecordStore", _StubStoreFactory()), \
              patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
-             patch.object(app, "DefaultAzureCredential", lambda: None), \
              patch.object(app, "AsyncDefaultAzureCredential", _AsyncCredentialStub), \
              patch.object(app, "get_bearer_token_provider", lambda credential, scope: (lambda: None)), \
              patch.dict(os.environ, {**clean, **env}, clear=True):
             asyncio.run(go())
         return seen
 
-    def test_unconfigured_means_neither_adapter_and_no_credential_is_built(self):
+    def test_unconfigured_means_neither_adapter(self):
         seen = self._inside_lifespan({})
         self.assertIsNone(seen["redactor"])
         self.assertIsNone(seen["summarizer"])
-        self.assertFalse(_AsyncCredentialStub.closed)
 
     def test_a_language_endpoint_builds_the_redactor_only(self):
         seen = self._inside_lifespan({"LANGUAGE_ENDPOINT": "https://lang.cognitiveservices.azure.com/"})
@@ -534,6 +532,70 @@ class PostCallAdaptersAreBuiltFromConfigurationAndNeverBlockBoot(unittest.TestCa
     def test_a_malformed_language_endpoint_is_refused_at_boot_not_at_the_first_call(self):
         with self.assertRaises(SystemExit):
             self._inside_lifespan({"LANGUAGE_ENDPOINT": "Endpoint=https://x;Key=abc"})
+
+
+class _RecordingFactory:
+    """A store constructor that keeps the credential it was handed."""
+
+    def __init__(self):
+        self.credentials = []
+
+    def from_account_url(self, account_url, credential):
+        self.credentials.append(credential)
+        return _ClosableStub()
+
+
+class OneAsyncCredentialServesEveryAzureClient(unittest.TestCase):
+    """The Table and Blob clients are async. Handed a sync `DefaultAzureCredential`, azure-core calls
+    its `get_token` inline on the event loop (`await_result`), so a token refresh blocks every call
+    in flight -- a B5 exposure the Phase 8 gate review found, and one the ledger client had carried
+    since Phase 5. One async credential, shared, closed once."""
+
+    @staticmethod
+    def _run(env):
+        tables, blobs = _RecordingFactory(), _RecordingFactory()
+        _AsyncCredentialStub.closed = False
+        built = []
+
+        def make_credential():
+            built.append(_AsyncCredentialStub())
+            return built[-1]
+
+        async def go():
+            async with app.lifespan(app.app):
+                pass
+
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("LANGUAGE_ENDPOINT", "AOAI_TEXT_DEPLOYMENT", "AOAI_ENDPOINT",
+                              "TRANSCRIPTS_ACCOUNT_URL")}
+        with patch.object(app, "assert_boot_safety", lambda: None), \
+             patch.object(app, "HttpCoreBankingClient", lambda **kwargs: _ClosableStub()), \
+             patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
+             patch.object(app, "TableStorageCallRecordStore", tables), \
+             patch.object(app, "BlobTranscriptStore", blobs), \
+             patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
+             patch.object(app, "AsyncDefaultAzureCredential", make_credential), \
+             patch.object(app, "get_bearer_token_provider", lambda credential, scope: (lambda: None)), \
+             patch.dict(os.environ, {**clean, **env}, clear=True):
+            asyncio.run(go())
+        return tables, blobs, built
+
+    def test_the_table_client_gets_an_async_credential(self):
+        tables, _, built = self._run({})
+        self.assertEqual(tables.credentials, built)
+
+    def test_the_blob_client_shares_that_same_credential(self):
+        tables, blobs, built = self._run({"TRANSCRIPTS_ACCOUNT_URL": "https://blob.test"})
+        self.assertEqual(len(built), 1)
+        self.assertEqual(blobs.credentials, built)
+        self.assertEqual(tables.credentials, built)
+
+    def test_the_credential_is_closed_at_shutdown_even_with_no_post_call_adapter(self):
+        self._run({})
+        self.assertTrue(_AsyncCredentialStub.closed)
+
+    def test_no_sync_credential_is_built_by_the_app(self):
+        self.assertFalse(hasattr(app, "DefaultAzureCredential"))
 
 
 if __name__ == "__main__":

@@ -59,6 +59,25 @@ class TheCheckerActuallyDetects(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("unapproved version", result.stdout)
 
+    def test_the_text_pin_named_on_the_realtime_path_fails_the_check(self):
+        # The gate review's finding: the scanner used to check the union of both allowlists, so the
+        # text pin's name, perfectly legitimate in the summariser, passed anywhere -- including a
+        # realtime code path (agents/specs.py). Only the runtime guard would have caught it.
+        text_name = boot.ACTIVE_TEXT_MODEL[0]
+        self.TARGET.write_text(self._original + f'\nWRONG_CLASS = "{text_name}"\n')
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("text pin", result.stdout)
+
+    def test_the_realtime_pin_named_in_the_summariser_fails_the_check(self):
+        target = REPO_ROOT / "voice-agent" / "azbank_voice_agent" / "postcall" / "summarizer.py"
+        original = target.read_text()
+        self.addCleanup(target.write_text, original)
+        target.write_text(original + f'\nWRONG_CLASS = "{boot.ACTIVE_REALTIME_MODEL[0]}"\n')
+        result = _run_checker()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("realtime pin", result.stdout)
+
     def test_an_allowed_pair_written_as_a_literal_tuple_passes(self):
         name, version = boot.ACTIVE_REALTIME_MODEL
         self.TARGET.write_text(self._original + f'\nFINE = ("{name}", "{version}")\n')

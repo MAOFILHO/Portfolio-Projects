@@ -28,7 +28,6 @@ from azure.communication.callautomation import (
     StreamingTransportType,
 )
 from azure.core.exceptions import AzureError
-from azure.identity import DefaultAzureCredential
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.identity.aio import get_bearer_token_provider
 from fastapi import FastAPI, Request, WebSocket
@@ -178,13 +177,14 @@ def _schedule_postcall(capture):
     task.add_done_callback(_postcall_tasks.discard)
 
 
-def _build_postcall_adapters():
+def _build_postcall_adapters(credential):
     """The redactor and summariser, each built only when its configuration is present.
 
-    Returns `(redactor, summarizer, http_client, credential)`, the last two None when neither
-    adapter is wanted. Nothing here may stop the app starting: an absent value switches one feature
-    off (post-call work must never be able to stop a call). A value that is *set* but malformed
-    still refuses -- `language_endpoint` says why -- because that is a mistake, not a choice.
+    Returns `(redactor, summarizer, http_client)`, the last None when neither adapter is wanted.
+    `credential` is the process's one async credential, shared with the Table and Blob clients and
+    closed by `lifespan()`. Nothing here may stop the app starting: an absent value switches one
+    feature off (post-call work must never be able to stop a call). A value that is *set* but
+    malformed still refuses -- `language_endpoint` says why -- because that is a mistake, not a choice.
     """
     language_url = language_endpoint()
     text_deployment = text_deployment_name()
@@ -197,11 +197,8 @@ def _build_postcall_adapters():
     if not text_deployment:
         log.warning("boot: AOAI_TEXT_DEPLOYMENT is not set -- calls will not be summarised")
     if not (language_url or text_deployment):
-        return None, None, None, None
+        return None, None, None
 
-    # Their own async credential: the bearer-token provider awaits it, which the sync
-    # `DefaultAzureCredential` the Table and Blob clients are handed cannot do. Same identity.
-    credential = AsyncDefaultAzureCredential()
     http = httpx.AsyncClient(timeout=30.0)
     token_provider = get_bearer_token_provider(credential, COGNITIVE_SERVICES_SCOPE)
     redactor = summarizer = None
@@ -211,7 +208,7 @@ def _build_postcall_adapters():
         summarizer = OpenAISummarizer(
             openai_endpoint, text_deployment, http, token_provider, read_live_model,
         )
-    return redactor, summarizer, http, credential
+    return redactor, summarizer, http
 
 
 @asynccontextmanager
@@ -256,7 +253,12 @@ async def lifespan(_app):
     # **Managed identity, no connection string** -- DefaultAzureCredential picks up the Container
     # App's system-assigned identity, which is the same identity B3's boot guard already uses to
     # read ARM. Nothing here holds an account key.
-    credential = DefaultAzureCredential()
+    #
+    # **The async credential, one for every async Azure client here** (Table, Blob, and the
+    # bearer-token provider behind Language and the text model). azure-core calls a *sync*
+    # credential's `get_token` inline on the event loop, so a token refresh would stall every call in
+    # flight -- B5. It was the sync one until the Phase 8 gate review (2026-09-21).
+    credential = AsyncDefaultAzureCredential()
     _call_records = TableStorageCallRecordStore.from_account_url(
         call_records_account_url(), credential
     )
@@ -268,7 +270,7 @@ async def lifespan(_app):
         _transcripts = BlobTranscriptStore.from_account_url(transcripts_url, credential)
     else:
         log.warning("boot: TRANSCRIPTS_ACCOUNT_URL is not set -- transcripts will not be stored")
-    _redactor, _summarizer, postcall_http, postcall_credential = _build_postcall_adapters()
+    _redactor, _summarizer, postcall_http = _build_postcall_adapters(credential)
     try:
         yield
     finally:
@@ -281,8 +283,7 @@ async def lifespan(_app):
             await _transcripts.aclose()
         if postcall_http is not None:
             await postcall_http.aclose()
-        if postcall_credential is not None:
-            await postcall_credential.close()
+        await credential.close()
         # Not awaited: the ACS client is the SDK's synchronous one and holds no async resources.
         # It was never closed at all while it lived at module scope; closing it here is what
         # moving it into a lifespan makes possible.

@@ -173,7 +173,13 @@ def call_records_account_url(env=None):
 
 def _optional_service_url(var, schemes, expected, service, holds, env):
     """An address that may be unset, but must not be a connection string when it is set. Somebody
-    pasting one would get working software with the no-keys property silently gone."""
+    pasting one would get working software with the no-keys property silently gone.
+
+    Refusing here does not contradict "post-call work must never stop a call" (Phase 8 gate review,
+    Spec finding): the value is fixed per revision, so a bad one fails when the revision is created,
+    and in single-revision mode (the Bicep sets none, so it is the default) a revision that will not
+    boot never takes traffic while the previous one keeps answering. Unset is the choice; a set,
+    malformed value is a mistake, and mistakes stop at the deploy, never in front of a caller."""
     env = os.environ if env is None else env
     url = env.get(var)
     if not url:
