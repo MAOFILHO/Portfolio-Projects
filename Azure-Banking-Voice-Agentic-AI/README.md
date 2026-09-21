@@ -142,7 +142,7 @@ Reflects what's actually built and verified live, not aspirational. Items not ye
 | **Orchestration** | Persistent realtime session per call; agent swap via `session.update` across triage/banking/cards; declarative `AgentSpec` table | Live since Phase 2, three-agent handoff since Phase 5 |
 | **Auth** | PIN via DTMF only (spoken KBA dropped, decision 7) | Live since Phase 4 — B1/B2 held 0 breaches |
 | **Observability** | Azure Monitor / Application Insights via the Azure Monitor OpenTelemetry Distro | Live — delivery confirmed by queried rows 2026-09-15 (Phase 6 closed, `docs/phase6/exit-check.md`) |
-| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on three real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
+| **Post-call analytics** | Azure AI Language Conversation PII redaction, a second pinned model `gpt-5.4-mini` for summary and intent, a private Blob container for the redacted transcript, a Table row per call | Live on four real calls, 2026-09-20 and 2026-09-21 (Phase 8; `docs/phase8/build-notes.md`). Agent-side transcript only: caller speech is never transcribed (D14) |
 | **Testing** | L0 units + L1 fakes (`FakeAcsTransport`/`FakeTransport`, `FakeRealtimeServer`), CI-blocking | Live — 819 tests pass locally (729 voice-agent + 90 mock-core-banking); L2 cassettes, L3 live-scenario evals and L4 sampled live redteam are designed in `docs/PLAN.md` but not built (L3/L4: `docs/phase8/eval-redteam-limits.md`) |
 
 ## Architecture
@@ -203,7 +203,7 @@ states this both ways deliberately). Full detail: `docs/PLAN.md`, "Region & data
 
 ## Build status
 
-**Phases 0-7 closed. Phase 8 is built and live-verified on three calls; its exit gate is pending.**
+**Phases 0-7 closed. Phase 8 is built and live-verified on four calls; its exit gate is pending.**
 
 | Phase | Status |
 |---|---|
@@ -227,14 +227,14 @@ never released by any script, at any phase, for any reason.
 
 1. **No behavioural evals, and no live redteam run** (Phase 8 criteria 6-7, D15). Needs caller audio, so a
    TTS resource and a new `APPROVED:`. `docs/phase8/eval-redteam-limits.md`.
-2. **Post-call analytics is proven live on three calls.** A turn over 1,000 characters loses the transcript
+2. **Post-call analytics is proven live on four calls.** A turn over 1,000 characters loses the transcript
    (it fails closed); a closed-line call or one with no agent turns stores no transcript, by design; `$`
    amounts pass through the stored transcript unredacted (B2 covers the PIN and phone number only); Azure
    AI Language keeps its job results, including the entity text it matched, for 24 hours (ADR-007).
-3. **The Phase 8 gate-review fixes are tested but not yet live.** One async credential for every Azure
-   client, the row written before the slow steps, the shielded daily-ledger write (a cancelled call no
-   longer loses its minutes), and a phone scrub that masks every punctuated shape. They need one new image
-   and one real call.
+3. **Three of the Phase 8 gate-review fixes have no live trigger.** The shielded daily-ledger write (a
+   cancelled call cannot be staged), the phone scrub's new pattern (the agent never speaks a phone number) and
+   the pending-first row rest on tests. The fourth, one async credential for every Azure client, is live on
+   `p8c`.
 4. **The B3 text-model pin's Bicep is written, not deployed.** `language.bicep` cannot be applied over the
    live account as it stands: it would create a duplicate role assignment, which Azure refuses.
 5. **One live call went silent after a correct refusal**, root cause never found. B1 held.
