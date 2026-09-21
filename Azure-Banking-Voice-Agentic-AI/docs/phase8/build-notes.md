@@ -64,3 +64,25 @@ review found overstating ("First, ahead of anything else", "on every path out") 
 Not done, Marco's call: shielding the ledger write from cancellation (`asyncio.shield`, changes B4
 behaviour). Low-priority judgement calls left as they are: `problem` naming in `pipeline.py`,
 duplicated test helper classes, `is_storable_id` living in the Table store module.
+
+## The gate `/code-review` (against `2dc4961`, 2026-09-21), and what was done
+
+The Standards axis found no hard violation of B1-B4, R-09 or the hard exclusions. The Spec axis found
+four criteria met more weakly than their ✅ and one boot behaviour it read as contradicting the spec.
+Disposition of every finding: `docs/phase8/exit-check.md`, "The gate review's findings".
+
+Marco asked for all of them to be fixed. Fixed: the phone scrub, the shielded ledger write, the row written
+first, the one async credential, the file-scoped B3 static check, end-to-end outcome tests, the Bicep (written,
+never deployed). Kept on purpose: a malformed optional endpoint still refuses boot (single-revision mode, so no
+call is stopped, and `test_app.py` pins it).
+
+**Accepted as scope beyond the written spec**, so they are decisions and not accidents: the `scrub_numbers` layer
+(a second B2 net under Language, which does not promise to catch a bare digit run), the correlation-id
+replacement (a carrier-controlled header could lose a whole row), the closed `INTENTS` list (the summariser
+needed a bounded set), the `realtime/client.py` change, and the README rewrite beyond the badge (it still
+described Phases 6-7 as unbuilt).
+
+Not changed, and why: `capture=None` guards in `session.py` (used by hundreds of tests, on the block that zeroes
+the PIN buffer), `StrEnum` for statuses (a dozen files, no behaviour gained), one shared endpoint check (two
+three-line copies with different messages), a once-built `PostcallServices` (a trivial per-call cost), and the
+model-name literal in Bicep (Bicep cannot import Python; the static check now pins which files may carry it).

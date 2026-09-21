@@ -80,10 +80,11 @@ the gate's decision alone.
 _Avoid_: function call, action, intent
 
 **Call outcome**:
-How a call ended — for example authenticated-and-served, escalated, abandoned, closed path, or error.
-Written after hangup, one per call. Distinct from a tool-call **outcome** (below), which is what one
-tool call produced to the caller within the call, not how the call itself ended. Spelled `end_reason`
-in code (`PROJECT_STATE.md` open item 19).
+How a call ended — exactly one of five values: `authenticated_served`, `escalated`, `caller_hangup`,
+`closed_path` or `error` (`postcall/outcome.py`, Phase 8 D10 and D17). Written after hangup, one per call.
+Distinct from a tool-call **outcome** (below), which is what one tool call produced to the caller within
+the call, not how the call itself ended. In code it is `call_outcome`; the raw, eight-valued `end_reason`
+`session.py` classifies a call with is kept beside it, so nothing is lost by collapsing.
 _Avoid_: outcome (bare — ambiguous with the tool-call sense below), result, status
 
 ### Authorization

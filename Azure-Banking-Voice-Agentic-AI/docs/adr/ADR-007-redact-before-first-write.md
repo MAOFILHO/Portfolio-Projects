@@ -54,3 +54,21 @@ about a window where the wrong thing was written and not yet fixed.
   never on the live call's critical path (ADR-006, Decision 4) — a slow or degraded Language service
   reduces transcript coverage, not call quality. Acceptable: a missing transcript is a worse analytics
   month, not a worse call for the caller.
+
+## Build note — 2026-09-21 (Phase 8 gate review)
+
+**Decisions 1-3 are built and unchanged.** Two facts the Context and Decision 1 did not carry:
+
+- **D14 shrank the premise, not the decision.** The Context imagines a caller reading their PIN back
+  to confirm it. D14 (`docs/phase8/exit-criteria.md`, 2026-09-19) made the stored transcript
+  agent-side only, so a caller's own words, including a PIN they speak, never enter it. What remains
+  at risk is anything the *agent* says: an account number it reads out, a name, a figure. Redaction
+  before the first write is still right, for that smaller surface.
+- **"No other persistent sink" governs this project's storage. Azure AI Language is a processor, and it
+  keeps job results for 24 hours** (`docs/phase8/research-postcall-adapters.md`, results shape). Those
+  results carry the redacted text and the detected entities, and an entity records the text it
+  matched, so for that window the service holds the PII it found. The adapter does not delete a job
+  after reading it, and the voice agent's role (`Cognitive Services Language Reader`) grants
+  `jobscancel` and no delete action, so it could not. This is the service's own retention, disclosed
+  here rather than designed out; closing it would take a role with delete rights and a `DELETE` after
+  each read, a change to be weighed against widening a data-plane grant.

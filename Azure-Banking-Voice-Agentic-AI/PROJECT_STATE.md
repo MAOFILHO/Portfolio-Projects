@@ -15,7 +15,7 @@ account of what happened:
 | 6 | `docs/phase6/exit-check.md` (exit criteria: `docs/phase6/exit-criteria.md`) — **closed 2026-09-15** |
 | 7 | `docs/phase7/exit-check.md` (exit criteria: `docs/phase7/exit-criteria.md`) — **closed 2026-09-18** |
 
-**Phase 8 is built, its docs written, live-verified on three real calls; the gate remains** — see "Current phase".
+**Phase 8 is built, its docs written, live-verified on three real calls; the gate review has run and its fixes await your look** — see item 10.
 
 Check this file's size before every edit — ceiling is **≤400 lines / ~20KB**; move the oldest closed
 material into the archive above if an addition would exceed it.
@@ -29,8 +29,8 @@ live bearing on the current moment:
    reason (R-09). Irreplaceable, not merely billable.
 2. **No billable Azure resource without Marco typing `APPROVED: <phase name>`.** `APPROVED: Phase 5`,
    `APPROVED: Phase 6`, `APPROVED: Phase 7`, `APPROVED: Phase 8` and `APPROVED: Phase 8 Language
-   resource` are all on record and spent. Anything further billable (e.g. a Language Bicep module, a
-   TTS resource for the evals) needs a new `APPROVED:` line.
+   resource` are all on record and spent. Anything further billable (deploying `language.bicep`, wiring it
+   into `azbank-deploy`, a TTS resource for the evals) needs a new `APPROVED:` line.
 3. **`dispatch/` changes are never auto-accepted**, even when `gate.py` itself is untouched.
 4. **B1's sharpened definition stands**: no *banking* operation — balance, transfer, list,
    transactions, card block — reaches the core-banking client while the call is unauthenticated. The
@@ -40,21 +40,12 @@ live bearing on the current moment:
 
 ## Current phase
 
-**Phase 7 (IaC completion & CI/CD) closed 2026-09-18** — all 9 exit criteria met, 2 with a stated
-limit (both accepted by Marco, both tracked as Phase 7 debt). Full account: `docs/phase7/exit-
-check.md`. Real Azure findings from closing it out: a live RBAC gap (research claimed "already
-granted," wasn't), two `agents/specs.py` conversational bugs found on real calls, and a stale ACS
-webhook after a from-empty redeploy (Container Apps environments get a new random domain suffix on
-recreation; the CLI doesn't yet detect a dependency's *value* drifting under an already-deployed
-resource) — fixed live, not yet fixed in the CLI itself.
+Phases 6 and 7 are closed (`docs/phase6/exit-check.md`, `docs/phase7/exit-check.md`).
 
 **Phase 8 designed 2026-09-18** (`/grill-with-docs`, 13 decisions, issue #66) and **approved same day**
 — `docs/phase8/exit-criteria.md`, `docs/adr/ADR-006-*.md`, `docs/adr/ADR-007-*.md`. `APPROVED: Phase 8`
 is on record, and `APPROVED: Phase 8 Language resource` (at the corrected non-free price). Both new
 resources exist (see "Live Azure state"). The post-call pipeline and the docs are built (open item 10); `evals/` is not (D15).
-
-Phase 6 (Observability) **closed 2026-09-15** — all 14 exit criteria met, none with a stated limit.
-Full account: `docs/phase6/exit-check.md`.
 
 ## Live Azure state
 
@@ -73,13 +64,14 @@ and goes stale between sessions.
   account, which covers this deployment too. **B3 covers it by the CI static check and a non-fatal
   runtime guard**: `boot.py` carries `ACTIVE_TEXT_MODEL` / `ALLOWED_TEXT_MODELS`,
   `scripts/check_b3_allowlist.py` scans both deployment classes, `boot.assert_text_model_safety` runs
-  before every summary. No Bicep for this deployment yet.
+  before every summary. Bicep for it is written in `aoai.bicep`, **never deployed**.
 - **Azure AI Language resource `lang-azure-banking-voice-cc` created 2026-09-18** — `TextAnalytics`
   kind, Standard (`S`) SKU, Canada Central, endpoint `https://lang-azure-banking-voice-cc.cognitive
   services.azure.com/`. D2's PII redaction target. **RBAC granted 2026-09-18**: voice agent identity
   holds `Cognitive Services Language Reader`, scoped to this resource only — verified live to include
   `analyze-conversations/action` despite the misleading "Reader" name. Called by the post-call
-  pipeline (`postcall/language.py`); verified on a real call 2026-09-20.
+  pipeline (`postcall/language.py`); verified on a real call 2026-09-20. `language.bicep` is written, **never
+  deployed**, and would create a duplicate role assignment over this account (Azure refuses it).
 - ACS `acs-azure-banking-voice`; phone number **`+17059100383`** (owned, $1.00/mo, never released).
 - Container Apps environment `cae-azure-banking-voice-p0`, Consumption plan, **amd64-only** — every
   image build for this project must pin `--platform linux/amd64` (memory: `azure-banking-docker-
@@ -107,12 +99,10 @@ and goes stale between sessions.
   exist, not two.
 - **Application Insights `appi-azure-banking-voice`** (issue #62), workspace-based on `...1D`,
   `provisioningState: Succeeded`, created 2026-09-14 (Marco, `infra/provision-app-insights.sh`).
-- **`ca-azbank-echo-p0` carries `p8b`** (`p8a`, which was `p7c` plus Phase 8's post-call code, plus the review fixes; `p8a` is the rollback) — `p7c` was D2's identity-auth code plus both `agents/specs.py` fixes
-  from `docs/phase7/d2-live-call-result.md`, live-verified 2026-09-17 and again 2026-09-18 after the
-  from-empty rebuild. Revision number is stale after that rebuild — re-check live, don't trust a
-  recorded number. Carries `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and
-  `AZURE_MONITOR_AUTH=connection_string` (the named fallback, not identity — D10's IAM role is still
-  an open `/research` question).
+- **`ca-azbank-echo-p0` carries `p8b`** (`p8a` is the rollback), which **predates the gate-review fixes**:
+  they need a new image and one real call before they are live. It carries
+  `APPLICATIONINSIGHTS_CONNECTION_STRING` (secretref) and `AZURE_MONITOR_AUTH=connection_string` (the named
+  fallback; D10's IAM role is still an open `/research` question).
 - **D16 smoke call redone and delivery confirmed, 2026-09-15** (`docs/phase6/d16-smoke-call-result.md`,
   correlation id `aa509ec4`). 17 spans landed in `...1D`, `call` span attributes match D15 exactly, B2
   scan zero matches, both cost/latency metrics landed. The first attempt (2026-09-14, `393815d8`) had
@@ -219,23 +209,17 @@ variable +$1.89/mo at 67 calls; **38-57 runs/month**, gate 5. List-price arithme
    Standard-tier only, ~$0.07-$1.34/mo bounded at this project's call volume, `COSTS.md`.
    `APPROVED: Phase 8 Language resource` given 2026-09-18, Marco, at the corrected price. D2 clear to
    provision once Phase 8's build reaches it.)*
-10. **Phase 8 build** (criteria: `docs/phase8/exit-criteria.md`; D14-D18; build history and
-    live-call evidence: `docs/phase8/build-notes.md`). **Built, on `main`, live (image `p8b`)**;
-    criteria 1-2 proven on three real calls (one on `p8b`). Three `/code-review` rounds done.
-    **Open (Spec axis)**: (b) the row is written last, after up to 3 x 60 s steps, so a container
-    kill mid-pipeline loses it -- to be stated as a limit; (c) criterion 4's test measures no
-    latency; (d) `$` amounts pass through the transcript unredacted (B2 covers PIN and phone only)
-    -- state it in `RESULTS.md`; (e) `scrub_numbers` leaves a formatted number's area code -- Marco's
-    call, `scrub.py` is B2; (f) a cancelled ledger write loses that call's minutes (B4 undercount,
-    pre-existing; `asyncio.shield` is Marco's call); (g) a call with no id header keeps `None`, so
-    its escalation RowKey ends `_None`. (a) closed 2026-09-20: `app.media_stream` finishes an
-    unfinished capture as `error`/anonymous, so a failed realtime connect still gets its row. Last handoff:
-    `docs/handoffs/2026-09-20-phase8-review-round3.md`.
-    **Written 2026-09-20**: `RESULTS.md`, `docs/architecture.md`, `docs/phase8/eval-redteam-limits.md`
-    (criteria 6-7, D15), `docs/phase8/exit-check.md`, README refresh, `COSTS.md` Phase 8 pricing.
-    **Remaining**: the gate's `/code-review`, Marco's call on the two open findings, closure sign-off.
-    **Known limit**: one agent turn over 1,000 characters fails closed (row, no transcript). **Seen live, not a criterion**: the agent talks over
-    the caller (turn detection / barge-in; `silence_duration_ms` is 600, see item 9).
+10. **Phase 8** (`docs/phase8/exit-criteria.md`; results: `RESULTS.md`; the gate review's findings and what
+    became of each: `docs/phase8/exit-check.md`; last handoff `docs/handoffs/2026-09-20-phase8-review-round3.md`
+    is stale). Built on `main`, live on `p8b`, criteria 1-2 proven on three real calls.
+    **Awaiting your look, uncommitted:** the B2 phone scrub (`scrub.py`), the B4 shielded ledger write
+    (`session.py`, `app.py` shutdown), and the billable-IaC change (`language.bicep`, `aoai.bicep`,
+    `check_b3_allowlist.py`, the `CLAUDE.md` B3 sentence). **Committed, tested, not live:** one async
+    credential, the row written first, the file-scoped B3 check, end-to-end outcome tests.
+    **Remaining:** your look; a new image and one real call; closure sign-off; `/handoff`; `/clear`.
+    **Open, none blocking:** criterion 4's test measures no latency; `$` amounts are unredacted in the
+    transcript; Language keeps results 24 h (ADR-007); a call with no id header keeps `None`; a turn over
+    1,000 characters fails closed; the agent talks over the caller (item 9).
 
 **Still not written, needs Marco:** the root `CONTEXT-MAP.md` that `docs/agents/domain.md` calls for.
 It sits outside `PROJECT_ROOT` and needs approval by absolute path. `CONTEXT.md` (this project's own

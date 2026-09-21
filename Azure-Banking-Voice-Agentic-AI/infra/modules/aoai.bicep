@@ -64,6 +64,18 @@ param voiceAgentPrincipalId string
 // (added Phase 7, 2026-09-16) and catches drift for real, not just by naming convention.
 var realtimeModelPin = ['gpt-realtime-mini', '2025-10-06']
 
+// B3's second pin, the non-realtime text deployment the post-call summariser calls (ADR-006;
+// boot.py's ALLOWED_TEXT_MODELS). Same single-literal-pair form as above, for the same reason.
+// Added at the Phase 8 gate review: the deployment was hand-provisioned on 2026-09-19 and this file
+// declared only the realtime pin, so the text pin had no Bicep-side enforcement. Every property in
+// `textDeployment` below was read back on 2026-09-21 from `az cognitiveservices account deployment
+// list`: GlobalStandard, capacity 10, NoAutoUpgrade, rai policy Microsoft.DefaultV2 (the default,
+// which the realtime deployment above also carries and this file leaves unstated). Never deployed.
+// `what-if` (read-only, 2026-09-21) shows this deployment `Modify` on `currentCapacity`
+// (server-populated) and `raiPolicyName` (unset here, DefaultV2 live) -- the same two deltas the
+// existing realtime deployment already shows, so the text pin adds no new kind of change.
+var textModelPin = ['gpt-5.4-mini', '2026-03-17']
+
 // Cognitive Services OpenAI User. Data-plane inference only (including
 // .../deployments/realtime/action) -- notably NOT a control-plane role, so this identity cannot
 // create or delete deployments, rotate keys, or change the account's own configuration. Verified
@@ -111,6 +123,28 @@ resource realtimeDeployment 'Microsoft.CognitiveServices/accounts/deployments@20
   }
 }
 
+resource textDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-09-01' = {
+  parent: account
+  name: textModelPin[0]
+  // Deployments on one account are created one at a time; a second in parallel is refused.
+  dependsOn: [realtimeDeployment]
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 10
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: textModelPin[0]
+      version: textModelPin[1]
+    }
+    // Matches the live deployment. A drifted pin costs one call's summary and nothing else
+    // (`boot.assert_text_model_safety`, non-fatal), which is why this is not the fatal guard the
+    // realtime pin has.
+    versionUpgradeOption: 'NoAutoUpgrade'
+  }
+}
+
 // Scoped to this account and no wider -- the same reasoning call-records-store.bicep's identical
 // comment gives for its own role assignment: a subscription- or resource-group-scoped grant would
 // hand the voice agent inference access to every Cognitive Services account this project ever
@@ -132,3 +166,6 @@ output endpoint string = account.properties.endpoint
 
 @description('The realtime deployment name, for anything building the deployment-scoped realtime URL.')
 output realtimeDeploymentName string = realtimeDeployment.name
+
+@description('The text deployment name: the `AOAI_TEXT_DEPLOYMENT` the voice agent reads.')
+output textDeploymentName string = textDeployment.name

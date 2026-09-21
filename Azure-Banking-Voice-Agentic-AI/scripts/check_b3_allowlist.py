@@ -116,6 +116,7 @@ TEXT_PIN_FILES = frozenset({
     "voice-agent/azbank_voice_agent/boot.py",  # declares both pins and their guards
     "voice-agent/azbank_voice_agent/postcall/summarizer.py",  # the one caller of the text deployment
     "infra/modules/voice-agent.bicep",  # hands the deployment name to the container as an env var
+    "infra/modules/aoai.bicep",  # declares the deployment itself (added with the text deployment)
 })
 TEXT_ONLY_FILES = frozenset({"voice-agent/azbank_voice_agent/postcall/summarizer.py"})
 

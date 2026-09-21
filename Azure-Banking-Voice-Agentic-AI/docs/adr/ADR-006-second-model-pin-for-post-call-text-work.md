@@ -78,3 +78,14 @@ an unreadable deployment. `postcall/summarizer.py` calls it before every summary
 the pipeline records `summary_status=failed` and carries on. It never blocks boot or a call. Verified
 live on 2026-09-19 (a real summary came back) and on a real call on 2026-09-20. **Still not done**:
 Bicep-side enforcement (above), unchanged.
+
+## Build note — 2026-09-21 (Phase 8 gate review)
+
+**Bicep-side enforcement is now written, not in effect.** `infra/modules/aoai.bicep` declares the text
+deployment beside the realtime one, as a literal `('gpt-5.4-mini', '2026-03-17')` pair the static check
+scans, and `infra/modules/language.bicep` declares the Language account. Neither has been deployed:
+both were written against the live resources, and a read-only `what-if` found them matching except for
+server-populated properties and one deploy blocker (a duplicate Language role assignment, described in
+`language.bicep`). Neither is wired into `azbank-deploy`. The static check now also fails a text-pin
+name in any file outside `TEXT_PIN_FILES` and a realtime-pin name in the summariser, closing the
+"union of both allowlists" gap the review found.
