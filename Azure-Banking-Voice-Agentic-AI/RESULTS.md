@@ -36,7 +36,7 @@ resource; a new one needs `APPROVED:`), the scenarios, a judge and a budget-enfo
 
 ## What was checked, and how
 
-- `python -m unittest discover -s tests`: **743 tests, 3 skipped by design**, run against fakes
+- `python -m unittest discover -s tests`: **746 tests, 3 skipped by design**, run against fakes
   (`FakeTransport`, `FakeRealtimeServer`, `FakeCallRecordStore`). `make lint`: ruff, mypy, the B3/D5/D2 checks
   and `bicep build` on every module, clean.
 - **Live, Phase 8, five real calls**, each a Table row (`caller_hangup`, transcript `stored`, summary `done`) and a

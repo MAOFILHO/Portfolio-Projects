@@ -93,7 +93,7 @@ Neither axis found a hard violation of B1-B5, R-09 or the hard exclusions. Both 
 B2 fix: the phone pattern took ten digits out of a longer run and left the tail, and knew only a few separators
 between groups. I reproduced it, and a `client.py` claim too: the realtime connection still built a sync
 credential per call, so "one async credential for every Azure client" was overstated. Fixed: the scrub is now one
-chain rule (10+ digits, up to three non-word characters between them, masked whole), the realtime client takes
+chain rule (10+ digits, up to eight non-word characters between them, masked whole; three was too few, see the third review), the realtime client takes
 the shared provider, and the doc drift and the four weak spots in the tests (a registration test that could be
 deleted without failing, a flaky assertion, a missing boot-refusal test, an overstated "each ending" claim).
 Disposition of every finding: `docs/phase8/exit-check.md`, "The second review's findings". Two credentials stay

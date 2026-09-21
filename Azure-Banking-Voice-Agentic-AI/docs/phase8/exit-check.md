@@ -11,7 +11,7 @@ proof and rest on tests.
 | | |
 |---|---|
 | `make lint` | clean: ruff, mypy, the B3/D5/D2 checks, `bicep build` on all 8 modules |
-| `make test` | 743 voice-agent (3 skipped by design) + 90 mock-core-banking, all pass; B1 corpus 593 cases, 0 breaches |
+| `make test` | 746 voice-agent (3 skipped by design) + 90 mock-core-banking, all pass; B1 corpus 593 cases, 0 breaches |
 | `/code-review` | 3 rounds during the build (`build-notes.md`), then **the gate review, 2026-09-21, fixed point `2dc4961`**, then **a second review of its fixes, fixed point `b0110ce`** (Standards and Spec axes, run separately each time). Disposition of every finding: below. |
 | Live | five real calls: two on image `p8a`, one on `p8b`, one on `p8c`, one on **`p8d`** (revision `ca-azbank-echo-p0--0000004`, 2026-09-21 12:56 UTC, the second review's code: booted clean with the B3 guard passing, connected, authenticated, one row `balance_enquiry`, 7 turns; ledger 3.169 to 3.796 min = 0.627 min against the call's 37,607 ms; blob 5 agent turns, digits only in `$1,900` and `$1,000`). Earlier, **`p8c`** (revision `ca-azbank-echo-p0--0000003`, 2026-09-21 10:34 UTC, the gate-review code). Ledger 2.071 to 3.169 min = 1.098 min = 65.9 s, matching the call's 65,856 ms; one row; blob clean (6 turns, no digit run of four, no phone-shaped or spoken-digit run; digits only in `$` amounts). |
 | Model pin review (`CLAUDE.md`, at every gate) | read live from the Models API and ARM, 2026-09-20: `gpt-realtime-mini` `2025-10-06` retires **2027-04-06** (6.5 months), `NoAutoUpgrade`; `gpt-5.4-mini` `2026-03-17` retires **2027-09-21** (12 months), `NoAutoUpgrade`. Neither is under 2 months; no stop-and-ask. Successor `gpt-realtime-1.5` is GA, retires 2027-08-24. |
@@ -57,7 +57,7 @@ Two verified defects in my own fixes, then drift. Committed (`2b4b2e2`) after Ma
 
 | finding | disposition |
 |---|---|
-| **Scrub regression:** the phone pattern took ten digits out of a longer run and left the tail (`4165550199123` gave `[REDACTED]123`); a slash, comma, dash, underscore, middle dot, non-breaking space or newline between groups left two groups | **Fixed (B2, approved and committed).** A chain of 10+ digits with up to three non-word characters between digits is masked whole; four-digit runs allow more separators. 0 leaks in 20,000 random shapes; `$12.50` and amount lists survive. |
+| **Scrub regression:** the phone pattern took ten digits out of a longer run and left the tail (`4165550199123` gave `[REDACTED]123`); a slash, comma, dash, underscore, middle dot, non-breaking space or newline between groups left two groups | **Fixed (B2, approved and committed).** A chain of 10+ digits with non-word characters between digits is masked whole; four-digit runs allow more separators. Judged by a fuzz that turned out too narrow: see the third review (the gap was capped at three characters). |
 | **B2 leak scan failed ~3 runs in 100.** A generated correlation id (`uuid4().hex`, more than half digits) can spell the test PIN `1234` or `9999`; found by repeating the suite, not by the review | **Fixed (B2-adjacent, approved and committed).** `storable_or_generated_id` now translates digits to letters, as `session.py` already does for its frame ids. |
 | **Realtime client** built a sync `DefaultAzureCredential` per call and called it on the loop | **Fixed, live on `p8d`.** `connect_realtime(token_provider)` is handed the shared async provider; one real call connected and ran on it. |
 | Criterion 3 "each ending" overstated | **Reworded** (above). |
@@ -69,6 +69,19 @@ Two verified defects in my own fixes, then drift. Committed (`2b4b2e2`) after Ma
 | Doc drift: review range, "last commit", test-run date, README casing, dangling `item 10 (f)`, `allowed_pairs` docstring, `aoai.bicep` header | **Fixed.** |
 | **B2 log scan fails about 1 run in 150** on an `httpcore` debug record whose memory address (`0x10ee77770`) has a digit run that matches a secret; pre-existing, third-party | **Not fixed.** The fix strips `0x...` addresses inside the B2 detector, so it waits for Marco. |
 | Not changed, by choice: the smells (record built twice, `_write_row(what)` naming), the B3 per-file check (a per-variable check is not worth it), the credential not closed if startup fails between its creation and the `try` (the process exits either way), the unused `textDeploymentName` output, a hung store adding a fourth 60 s step, the test that writes into the real `summarizer.py` | Say so if you want any of them. |
+
+## The third review's findings (fixed point `854842d`), and what became of each
+
+Neither axis found a hard violation of a documented standard. One defect in my own fix, and doc drift.
+
+| finding | disposition |
+|---|---|
+| **Scrub regression, again (B2):** the gap between digits was capped at three characters, so `416 .. 555 .. 0199`, `416 ... 555 ... 0199` and `416 - - 555 - - 0199` left the area code and exchange (the first pattern masked them). "0 leaks in 20,000 random shapes" held only for shapes the generator built | **Fixed in the tree, not committed (B2, awaits Marco's look).** The gap is now up to eight characters, four-digit runs allow two separators, and the fuzz is a committed test (3,000 shapes, gaps of 0-8 characters). **`p8d` carries the three-character version; this needs an image `p8e` to be live.** |
+| Known limit, not new: four-digit runs still leak in `4,1,6,5`, `1, 2, 3, 4`, `4;1;6;5`, zero-width joiners and `1 two 3 four`; commas are excluded on purpose so `$1,900` survives | **Listed, not changed.** |
+| Over-masking: `$12,345,678.90` and `$5,000,000,000` now masked (10+ digits) | **Accepted**, within "deliberately blunt". |
+| `scripts/b5_probe.py:243` calls `connect_realtime()` with no argument (`TypeError`); no test checks that `app.py` passes `_realtime_token_provider` | **Open.** |
+| Doc drift: `RESULTS.md` lines 13, 23-24, 26 and 45 (stale "not yet live", a spliced `p8c`/`p8d` sentence, "four calls"), "Azure refuses" stated as fact in `README.md`, `PROJECT_STATE.md`, `RESULTS.md`; HEAD hash; "digit-free ids live on `p8d`"; `session.py` "one place" | **Open.** |
+| Smells: `_DIGIT_FREE` duplicated, `_LINK` and `_DIGIT_FREE` names, four ordered regex passes | **Not changed.** |
 
 **Seen live, not a criterion:** the agent talks over the caller (barge-in). Other open items:
 `PROJECT_STATE.md`.
