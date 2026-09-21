@@ -378,7 +378,7 @@ the floor assumes zero model-token overhead.
 
 ```bash
 make install   # editable .venv from voice-agent[test]
-make test      # 517 + 90 tests, zero Azure dependency
+make test      # 755 + 90 tests, zero Azure dependency
 make lint      # ruff + mypy + B3's static allowlist check
 ```
 
@@ -393,6 +393,63 @@ The canonical target list is `install, test, lint, fixtures, deploy, teardown`. 
 | Target | Status |
 |---|---|
 | `make fixtures` | not built — the TTS caller-audio pipeline `docs/PLAN.md` designs for L3/L4; blocked on the same missing TTS resource as `evals/` |
+
+## Quickstart
+
+Clone to green needs no Azure account: `make install && make test && make lint` (Setup above).
+
+Clone to a live call is `make deploy`, which **creates billable resources**. Read `COSTS.md` first — the
+fixed footprint is $14.60/month and Azure will not stop spend at any threshold (`spendingLimit: Off`).
+
+```bash
+# 1. Build and push both images. Container Apps is amd64-only; on Apple Silicon the flag is not optional.
+docker buildx build --platform linux/amd64 -t <user>/azbank-echo-p0:<tag> --push voice-agent
+docker buildx build --platform linux/amd64 -t <user>/<core-banking-image>:<tag> --push mock-core-banking
+
+# 2. Deploy. Image refs are required and never default to :latest.
+az login
+export VOICE_AGENT_IMAGE=docker.io/<user>/azbank-echo-p0:<tag>
+export CORE_BANKING_IMAGE=docker.io/<user>/<core-banking-image>:<tag>
+export DOCKERHUB_USERNAME=<user>
+export DOCKERHUB_PASSWORD=<token>           # no default, on purpose
+export AZURE_RESOURCE_GROUP=<your-group>    # optional; defaults to the live project group
+make deploy
+```
+
+`make deploy` resumes from whatever already exists and checkpoints after every step. It stands up
+Application Insights, the Container Apps environment, the call-records storage account, `mock-core-banking`,
+ACS, the voice agent, the storage role assignment, and Azure OpenAI, in a dependency-respecting order it
+computes from live state.
+
+**What it does not do:**
+
+- **Buy the phone number.** A number is purchased and attached to ACS separately — Phase 0's
+  `docs/phase0/wizard/01-provision.sh` is the record of how it was done here. No script in this repo may
+  create, delete or replace it (`scripts/check_no_phone_number_release.py`, run by `make lint`).
+- **Create the Azure AI Language resource.** The post-call pipeline calls it, and it was hand-provisioned
+  here; `infra/modules/language.bicep` describes it but has never been deployed.
+- **Run the call.** Dial the number; that is the acceptance test. Every live call is a billable minute
+  against B4's daily cap.
+
+## Teardown
+
+```bash
+make teardown    # lists every step, then asks "Proceed with teardown?"
+```
+
+Teardown removes Application Insights, the Container Apps environment, both Container Apps, the storage
+account and the Azure OpenAI account, in reverse dependency order, then purges the soft-deleted Azure
+OpenAI account so the next deploy does not collide with its own name. `--yes` skips the prompt; do not set
+it anywhere a human is not watching. Stated limit: three auto-created Log Analytics workspaces and two
+Application Insights alert artifacts sit outside the CLI's resource graph and survive teardown — checked
+live, no active ingestion and inside the free retention window, so $0 ongoing (`docs/phase7/exit-check.md`,
+criterion 5).
+
+**ACS and the phone number are never touched.** They are not a step in the list, and there is no flag that
+adds them (`docs/phase7/exit-criteria.md`, D5). Nothing in this project releases the number, by any script,
+at any phase (R-09): ACS's Canadian geographic-number inventory has been observed to lose entire localities
+within ~20 minutes, so a released number may have no purchasable replacement. A full teardown and
+from-empty redeploy was run live on 2026-09-18 (`docs/phase7/exit-check.md`); the number survived it.
 
 ## Testing
 
@@ -430,8 +487,6 @@ actually reaches Application Insights.** Those need a real phone call and a quer
 has zero Azure credentials and zero network access by design (`docs/PLAN.md` "Verification"). A green
 run here means "no regression on the free, repeatable checks," not "the last live call worked."
 
-<!-- screenshot: paste the passing CI Actions run here -->
-
 ## Engineering decisions
 
 Selected findings that changed the plan, each with live evidence rather than a prior assumption — full
@@ -452,16 +507,17 @@ write-ups in each phase's own `docs/phaseN/` folder:
 **Application tracing** (Phase 6, `docs/adr/ADR-004-telemetry-observes-never-governs.md`) — Application
 Insights `appi-azure-banking-voice`, workspace-based, Canada Central, live since 2026-09-14. Every call
 gets one "call" span with a "turn" span per response cycle, deny-by-default attribute allowlist, and a
-fail-open exporter — telemetry can never govern a named constraint, only observe it. **Delivery is not
-yet confirmed** — the D16 smoke call needs to be redone against the current image and a row queried back
-from Log Analytics before this can be shown live.
-
-<!-- screenshot: Log Analytics query result for the D16 smoke call, once redone and confirmed -->
-<!-- screenshot: Azure Cost Management view showing actual spend against the $14.60/mo fixed baseline -->
+fail-open exporter — telemetry can never govern a named constraint, only observe it. **Delivery is
+confirmed by queried rows, not an ARM 200:** the D16 smoke call (2026-09-15, correlation id `aa509ec4`)
+landed 17 spans in the Log Analytics workspace, the `call` span's attributes matched the design exactly,
+both cost/latency metrics landed, and the B2 scan of the exported data found zero matches
+(`docs/phase6/d16-smoke-call-result.md`).
 
 ## Screenshots
 
-Requested, not yet added — see the note to Marco at the end of this session for exactly which ones.
+None are included. The evidence for every claim above is text you can check — the queried rows in
+`docs/phase6/d16-smoke-call-result.md`, the measured figures in [`RESULTS.md`](RESULTS.md), and the CI
+run linked under "CI/CD" — not images of a portal.
 
 ## Sample call script
 
@@ -500,7 +556,7 @@ that already looked fine.
 | 2 | **A fix that raises one event too early looks like the same bug, fixed** | A second live regression on the same code path, caught in `/code-review` before it shipped rather than on a call |
 | 3 | **A shared instruction copied across three agents drifts** | Escalation and routing-invisibility instructions moved to single shared constants after per-copy wording started diverging |
 | 4 | **"Does the target exist" is not "did this agent declare the edge"** | A hallucinated handoff could have silently reconfigured a session with no check at all — caught in `/code-review`, 2026-09-07 |
-| 5 | **A fakes-only suite structurally cannot reach live-model defects** | 6 real defects on live calls, 0 of them visible to a 607-test suite that stayed green throughout |
+| 5 | **A fakes-only suite structurally cannot reach live-model defects** | 6 real defects on live calls, 0 of them visible to the fakes-only suite (607 tests when they were found; 845 now) that stayed green throughout |
 | 6 | **An irreplaceable resource needs a stop condition, not a guideline** | ACS's Canadian phone-number inventory measurably losing localities in ~20 minutes turned "don't release the number" into an absolute, standing rule (R-09) rather than a caution |
 
 ## Documentation
