@@ -30,6 +30,7 @@ from azbank_voice_agent.core_banking.fake import DEFAULT_PIN, FakeCoreBankingCli
 from azbank_voice_agent.cost import caps
 from azbank_voice_agent.dispatch import gate
 from azbank_voice_agent.dispatch import tools as tools_module
+from azbank_voice_agent.postcall.capture import CallCapture
 from azbank_voice_agent.realtime import session as session_module
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -1797,6 +1798,96 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
             self._run(FakeTransport(frames=[audio_frame("hi")], hang=False),
                       FakeRealtimeServer(events=[response_done()], respond_after_appends=1))
         self.assertTrue(any("undercounting" in line for line in cm.output))
+
+
+class ACallCancelledDuringItsLedgerWriteStillChargesTheDay(unittest.TestCase):
+    """The B4 undercount PROJECT_STATE.md item 10 (f) carried, closed by the Phase 8 gate review.
+
+    The write sits in a `finally`, so a task cancelled *while it was awaiting the store* aborted the
+    write and those minutes were never recorded -- and a cap that undercounts fails open. The write
+    now runs as its own task, shielded: the cancelled call still ends at once, and the write
+    completes behind it.
+    """
+
+    @staticmethod
+    def _cancel_during_the_write(run):
+        """Start `run(ledger)`, cancel its task once the write has begun, then let the write finish.
+        Returns `(ledger, the call task's outcome)`."""
+        async def scenario():
+            began, release = asyncio.Event(), asyncio.Event()
+
+            class SlowLedger(FakeCallRecordStore):
+                async def record_minutes(self, day, minutes):
+                    began.set()
+                    await release.wait()
+                    await super().record_minutes(day, minutes)
+
+            ledger = SlowLedger()
+            task = asyncio.create_task(run(ledger))
+            await began.wait()
+            task.cancel()
+            with_cancel = None
+            try:
+                await task
+            except asyncio.CancelledError as e:
+                with_cancel = e
+            release.set()
+            # The write is a task of its own, so it outlives the call's.
+            await asyncio.gather(*session_module.pending_ledger_writes())
+            return ledger, with_cancel
+
+        return asyncio.run(scenario())
+
+    def test_the_main_path(self):
+        ledger, cancelled = self._cancel_during_the_write(lambda ledger: run_call(
+            FakeTransport(hang=False), FakeRealtimeServer(events=[response_done()]),
+            FakeCoreBankingClient(), ledger,
+        ))
+        self.assertIsInstance(cancelled, asyncio.CancelledError)
+        self.assertGreaterEqual(ledger.minutes.get(day_key(), -1), 0)
+
+    def test_the_closed_path(self):
+        ledger, cancelled = self._cancel_during_the_write(lambda ledger: run_closed_call(
+            FakeTransport(hang=False),
+            FakeRealtimeServer(events=[response_done()], respond_after_appends=0), ledger,
+        ))
+        self.assertIsInstance(cancelled, asyncio.CancelledError)
+        self.assertGreaterEqual(ledger.minutes.get(day_key(), -1), 0)
+
+    def test_the_capture_is_still_finished(self):
+        capture = CallCapture()
+        self._cancel_during_the_write(lambda ledger: run_call(
+            FakeTransport(hang=False), FakeRealtimeServer(events=[response_done()]),
+            FakeCoreBankingClient(), ledger, capture=capture,
+        ))
+        self.assertIsNotNone(capture.end_reason)
+
+    def test_the_pin_buffer_is_zeroed_before_the_write_can_be_cancelled(self):
+        # B2 ordering, unchanged by the shield: `authenticator.end_call()` is the first line of the
+        # `finally`, so a cancellation during the ledger write cannot leave the keypad buffer full.
+        ended = []
+        real_end_call = auth_module.Authenticator.end_call
+
+        def spy(self):
+            ended.append(True)
+            return real_end_call(self)
+
+        with patch.object(auth_module.Authenticator, "end_call", spy):
+            self._cancel_during_the_write(lambda ledger: run_call(
+                FakeTransport(hang=False), FakeRealtimeServer(events=[response_done()]),
+                FakeCoreBankingClient(), ledger,
+            ))
+        self.assertEqual(ended, [True])
+
+    def test_a_write_nobody_cancels_still_completes_before_the_call_returns(self):
+        # The shield must be invisible on the ordinary path: every existing "charged on every path
+        # out" test relies on the write having landed by the time run_call returns.
+        ledger = FakeCallRecordStore()
+        asyncio.run(run_call(
+            FakeTransport(hang=False), FakeRealtimeServer(events=[response_done()]),
+            FakeCoreBankingClient(), ledger,
+        ))
+        self.assertIn("record_minutes", ledger.calls)
 
 
 class TheAgentGreetsWithoutWaiting(unittest.TestCase):

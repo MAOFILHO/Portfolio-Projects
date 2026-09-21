@@ -54,7 +54,7 @@ from .postcall.language import LanguagePIIRedactor
 from .postcall.pipeline import PostcallServices, run_postcall
 from .postcall.summarizer import OpenAISummarizer
 from .realtime.client import connect_realtime
-from .realtime.session import budget_or_closed, run_call, run_closed_call
+from .realtime.session import budget_or_closed, pending_ledger_writes, run_call, run_closed_call
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("app")
@@ -274,9 +274,11 @@ async def lifespan(_app):
     try:
         yield
     finally:
-        # In-flight post-call work gets a moment before the stores it writes to are closed.
-        if _postcall_tasks:
-            await asyncio.wait(list(_postcall_tasks), timeout=POSTCALL_SHUTDOWN_GRACE_SECONDS)
+        # In-flight post-call work, and the ledger writes a cancelled call left running behind its
+        # shield, get a moment before the stores they write to are closed.
+        in_flight = [*_postcall_tasks, *pending_ledger_writes()]
+        if in_flight:
+            await asyncio.wait(in_flight, timeout=POSTCALL_SHUTDOWN_GRACE_SECONDS)
         await _core_banking.aclose()
         await _call_records.aclose()
         if _transcripts is not None:

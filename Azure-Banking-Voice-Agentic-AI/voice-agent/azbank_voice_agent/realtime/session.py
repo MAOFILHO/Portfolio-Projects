@@ -360,7 +360,7 @@ async def run_closed_call(
         # that write is cancelled: see run_call.
         duration_ms = telemetry.round_duration_ms(time.monotonic() - started)
         try:
-            await _record_minutes(call_records, started, now)
+            await _charge_the_day(call_records, started, now)
         finally:
             if capture is not None:
                 # turn_count 0: the closed path's one fixed sentence is not a counted turn, and it
@@ -371,6 +371,32 @@ async def run_closed_call(
         span.set_attribute("auth_state", gate.ANONYMOUS)
         span.set_attribute("duration_ms", duration_ms)
     log.info("closed call ended, correlationId=%s", correlation_id)
+
+
+#: Ledger writes in flight. Each runs as a task of its own so a cancelled call cannot abort it; held
+#: here because the event loop keeps only a weak reference to a task, and so shutdown can wait.
+_ledger_writes: set = set()
+
+
+def pending_ledger_writes():
+    """The ledger writes still running, for a shutdown that wants to give them a moment."""
+    return list(_ledger_writes)
+
+
+async def _charge_the_day(call_records, started, now=None):
+    """`_record_minutes`, made to survive the cancellation of the call that asked for it.
+
+    The write sits in a `finally`, so a task cancelled *while awaiting the store* used to abort it and
+    those minutes went unrecorded -- and B4's cap fails open on minutes it cannot see (Phase 8 gate
+    review, PROJECT_STATE.md item 10 (f)). The write is its own task and the caller awaits it through
+    `asyncio.shield`: a cancellation still ends the call at once (`CancelledError` propagates from
+    the `await`, so the `finally` around this still finishes the capture), and the write completes
+    behind it. Uncancelled, this is exactly `await _record_minutes(...)`.
+    """
+    write = asyncio.ensure_future(_record_minutes(call_records, started, now))
+    _ledger_writes.add(write)
+    write.add_done_callback(_ledger_writes.discard)
+    await asyncio.shield(write)
 
 
 async def _record_minutes(call_records, started, now=None):
@@ -852,10 +878,10 @@ async def run_call(
         # hangup, either B4 cap, exhausted attempts, an escalation, or an unhandled failure (issue
         # #50). A call that ended badly still counts against the day, because minutes the cap cannot
         # see are minutes it fails open on. **Ahead of the capture and the span attributes below,
-        # the parts of this block that can raise.** Not guarded: a task cancelled *during* the write
-        # aborts it and those minutes go unrecorded (PROJECT_STATE.md, open item 10 (f)).
+        # the parts of this block that can raise.** A task cancelled *during* the write still ends
+        # the call at once, but the write itself is shielded and completes (`_charge_the_day`).
         try:
-            await _record_minutes(call_records, started, now)
+            await _charge_the_day(call_records, started, now)
         finally:
             # The capture is finished in the inner `finally` so a task cancelled during that write
             # still finishes it: the post-call pipeline skips a call that never finished, so an

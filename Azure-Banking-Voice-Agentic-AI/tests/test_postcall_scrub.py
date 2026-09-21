@@ -30,6 +30,39 @@ class DigitRunsAreMasked(unittest.TestCase):
         self.assertEqual(scrub_numbers(text), text)
 
 
+class AFormattedPhoneNumberIsMaskedWhole(unittest.TestCase):
+    """B2 covers the caller's phone number. The code's own comment says a formatted number leaks
+    nothing -- the /code-review gate found it left the area code (parentheses) or six digits (dots)."""
+
+    def test_no_shape_leaves_any_digit_behind(self):
+        for number in (
+            "(416) 555-0199",
+            "(416)555-0199",
+            "416.555.0199",
+            "416 555 0199",
+            "416-555-0199",
+            "4165550199",
+            "+1 416 555 0199",
+            "+1 (416) 555-0199",
+            "1-416-555-0199",
+            "+1.416.555.0199",
+        ):
+            with self.subTest(number=number):
+                scrubbed = scrub_numbers(f"my number is {number} thanks")
+                self.assertFalse(any(c.isdigit() for c in scrubbed), scrubbed)
+
+    def test_a_dotted_seven_digit_local_number_is_masked(self):
+        self.assertFalse(any(c.isdigit() for c in scrub_numbers("call 555.0199 now")))
+
+    def test_the_words_around_it_survive(self):
+        self.assertEqual(scrub_numbers("call 416.555.0199 now"), f"call {MASK} now")
+
+    def test_amounts_and_versions_still_survive(self):
+        for text in ("You have $12.50 today", "rate is 4.25 percent", "on 3.5 accounts", "page 2.1"):
+            with self.subTest(text=text):
+                self.assertEqual(scrub_numbers(text), text)
+
+
 class SpokenDigitsAreMaskedToo(unittest.TestCase):
     """A voice transcript often spells numbers out."""
 

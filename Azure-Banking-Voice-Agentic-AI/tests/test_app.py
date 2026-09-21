@@ -598,5 +598,34 @@ class OneAsyncCredentialServesEveryAzureClient(unittest.TestCase):
         self.assertFalse(hasattr(app, "DefaultAzureCredential"))
 
 
+class ShutdownWaitsForTheLedgerWritesACancelledCallLeftBehind(unittest.TestCase):
+    """A shielded ledger write outlives the call that started it (`session._charge_the_day`), so a
+    revision swap that closed the store first would lose exactly the minutes the shield saved."""
+
+    def test_an_in_flight_write_finishes_before_the_stores_close(self):
+        from azbank_voice_agent.realtime import session as session_module
+
+        finished = []
+
+        async def go():
+            async with app.lifespan(app.app):
+                async def slow_write():
+                    await asyncio.sleep(0.05)
+                    finished.append(True)
+
+                write = asyncio.ensure_future(slow_write())
+                session_module._ledger_writes.add(write)
+                write.add_done_callback(session_module._ledger_writes.discard)
+
+        with patch.object(app, "assert_boot_safety", lambda: None), \
+             patch.object(app, "HttpCoreBankingClient", lambda **kwargs: _ClosableStub()), \
+             patch.object(app, "core_banking_url", lambda: "http://core-banking.test"), \
+             patch.object(app, "TableStorageCallRecordStore", _StubStoreFactory()), \
+             patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
+             patch.object(app, "AsyncDefaultAzureCredential", _AsyncCredentialStub):
+            asyncio.run(go())
+        self.assertEqual(finished, [True])
+
+
 if __name__ == "__main__":
     unittest.main()
