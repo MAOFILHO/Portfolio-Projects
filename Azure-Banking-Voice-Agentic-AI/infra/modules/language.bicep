@@ -25,9 +25,10 @@
 //   * The account shows `Modify` on `disableLocalAuth` (unset live, `false` here: the same effect,
 //     keys allowed) and on `allowProjectManagement`, a property this file does not declare.
 //   * **The role assignment shows `Create`, not `NoChange`.** The live one was made by hand under a
-//     different assignment name, and Azure refuses a second assignment of the same role to the same
-//     principal at the same scope (`RoleAssignmentExists`). So this module cannot be deployed over
-//     the live account as it stands: remove the hand-made assignment first, or deploy only into a
+//     different assignment name, and Azure is expected to refuse a second assignment of the same role
+//     to the same principal at the same scope (`RoleAssignmentExists`) -- inferred from the `Create`,
+//     not observed: a `what-if` does not run the deployment. So this module should not be deployed
+//     over the live account as it stands: remove the hand-made assignment first, or deploy only into a
 //     clean subscription. (aoai.bicep's assignment shows `NoChange`; it was made by that module.)
 //
 // **Not verified: the billing unit.** COSTS.md, "Phase 8 -- every input priced", says how Language

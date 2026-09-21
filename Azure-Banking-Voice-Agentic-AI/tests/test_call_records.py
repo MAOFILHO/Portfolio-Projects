@@ -23,6 +23,7 @@ from azbank_voice_agent.call_records import (
     EscalationRequested,
     TableStorageCallRecordStore,
     is_storable_id,
+    storable_or_generated_id,
 )
 from azbank_voice_agent.call_records.fake import FakeCallRecordStore, unavailable
 from azbank_voice_agent.call_records.store import (
@@ -367,3 +368,23 @@ class TheDayKey(unittest.TestCase):
 
     def test_it_is_a_date_string(self):
         self.assertRegex(day_key(), r"^\d{4}-\d{2}-\d{2}$")
+
+
+class AGeneratedCorrelationIdCarriesNoDigit(unittest.TestCase):
+    """B2's run-wide scan looks for four-digit credentials in every persisted record. A raw
+    `uuid4().hex` is more than half digits, so it spells `1234` or `9999` by chance and fails that
+    scan about 3 runs in 100 (found by the Phase 8 gate review's own repeated runs). `session.py`
+    already keeps its frame and idempotency ids digit-free for the same reason."""
+
+    def test_no_digit_in_any_of_a_thousand_generated_ids(self):
+        for _ in range(1000):
+            generated = storable_or_generated_id("bad#id?x")
+            self.assertFalse(any(c.isdigit() for c in generated), generated)
+
+    def test_a_generated_id_is_still_storable_and_distinct(self):
+        ids = {storable_or_generated_id(None) for _ in range(200)}
+        self.assertEqual(len(ids), 200)
+        self.assertTrue(all(is_storable_id(i) for i in ids))
+
+    def test_an_id_that_is_already_storable_is_kept_as_it_is(self):
+        self.assertEqual(storable_or_generated_id("call-1234"), "call-1234")

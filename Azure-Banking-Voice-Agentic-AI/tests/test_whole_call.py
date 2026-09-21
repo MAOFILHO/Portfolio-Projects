@@ -1801,7 +1801,7 @@ class MinutesAreRecordedOnEveryPathOut(unittest.TestCase):
 
 
 class ACallCancelledDuringItsLedgerWriteStillChargesTheDay(unittest.TestCase):
-    """The B4 undercount PROJECT_STATE.md item 10 (f) carried, closed by the Phase 8 gate review.
+    """The B4 undercount the Phase 8 gate review found (docs/phase8/exit-check.md), now closed.
 
     The write sits in a `finally`, so a task cancelled *while it was awaiting the store* aborted the
     write and those minutes were never recorded -- and a cap that undercounts fails open. The write
@@ -1831,9 +1831,12 @@ class ACallCancelledDuringItsLedgerWriteStillChargesTheDay(unittest.TestCase):
                 await task
             except asyncio.CancelledError as e:
                 with_cancel = e
+            # What shutdown would wait for, read while the write is still in flight.
+            ledger.writes_shutdown_would_wait_for = len(session_module.pending_ledger_writes())
             release.set()
             # The write is a task of its own, so it outlives the call's.
             await asyncio.gather(*session_module.pending_ledger_writes())
+            ledger.writes_left_after = len(session_module.pending_ledger_writes())
             return ledger, with_cancel
 
         return asyncio.run(scenario())
@@ -1845,6 +1848,15 @@ class ACallCancelledDuringItsLedgerWriteStillChargesTheDay(unittest.TestCase):
         ))
         self.assertIsInstance(cancelled, asyncio.CancelledError)
         self.assertGreaterEqual(ledger.minutes.get(day_key(), -1), 0)
+
+    def test_the_in_flight_write_is_registered_for_shutdown_and_forgotten_when_done(self):
+        # Without the registration, `lifespan` would close the store under a write the shield saved.
+        ledger, _ = self._cancel_during_the_write(lambda ledger: run_call(
+            FakeTransport(hang=False), FakeRealtimeServer(events=[response_done()]),
+            FakeCoreBankingClient(), ledger,
+        ))
+        self.assertEqual(ledger.writes_shutdown_would_wait_for, 1)
+        self.assertEqual(ledger.writes_left_after, 0)
 
     def test_the_closed_path(self):
         ledger, cancelled = self._cancel_during_the_write(lambda ledger: run_closed_call(

@@ -19,6 +19,10 @@ _ENV = {
 }
 
 
+async def _provider():
+    return "token"
+
+
 def _fake_async_openai_factory(models_connected, kwargs_seen):
     class _FakeRealtime:
         def connect(self, model):
@@ -39,7 +43,7 @@ class ConnectRealtimeReadsConfigAtCallTime(unittest.TestCase):
         env = dict(_ENV, AOAI_DEPLOYMENT="gpt-realtime-mini-successor")
         with patch.dict(os.environ, env), \
              patch.object(client, "AsyncOpenAI", _fake_async_openai_factory(models_connected, kwargs_seen)):
-            client.connect_realtime()
+            client.connect_realtime(_provider)
         self.assertEqual(models_connected, ["gpt-realtime-mini-successor"])
 
     def test_the_endpoint_becomes_the_ga_websocket_path(self):
@@ -48,17 +52,31 @@ class ConnectRealtimeReadsConfigAtCallTime(unittest.TestCase):
         models_connected, kwargs_seen = [], []
         with patch.dict(os.environ, _ENV), \
              patch.object(client, "AsyncOpenAI", _fake_async_openai_factory(models_connected, kwargs_seen)):
-            client.connect_realtime()
+            client.connect_realtime(_provider)
         base_url = kwargs_seen[0]["websocket_base_url"]
         self.assertEqual(base_url, "wss://fake.example.com/openai/v1")
         self.assertNotIn("api-version", base_url)
+
+    def test_the_token_provider_is_handed_to_the_client_uncalled(self):
+        # The provider is async and shared: AsyncOpenAI awaits it on every connect, off the event
+        # loop's critical path. Calling it here would run a sync fetch (the Phase 8 gate review's
+        # finding: a sync credential built and called per call).
+        models_connected, kwargs_seen = [], []
+        with patch.dict(os.environ, _ENV), \
+             patch.object(client, "AsyncOpenAI", _fake_async_openai_factory(models_connected, kwargs_seen)):
+            client.connect_realtime(_provider)
+        self.assertIs(kwargs_seen[0]["api_key"], _provider)
+
+    def test_the_module_builds_no_credential_of_its_own(self):
+        self.assertFalse(hasattr(client, "DefaultAzureCredential"))
+        self.assertFalse(hasattr(client, "get_bearer_token_provider"))
 
     def test_a_missing_deployment_pin_fails_closed(self):
         # No default: a missing pin must raise, never silently fall back to another deployment
         # (B3, CLAUDE.md).
         env = {k: v for k, v in _ENV.items() if k != "AOAI_DEPLOYMENT"}
         with patch.dict(os.environ, env, clear=True), self.assertRaises(KeyError):
-            client.connect_realtime()
+            client.connect_realtime(_provider)
 
 
 if __name__ == "__main__":

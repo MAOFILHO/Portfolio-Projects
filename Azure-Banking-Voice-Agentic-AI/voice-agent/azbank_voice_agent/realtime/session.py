@@ -388,7 +388,7 @@ async def _charge_the_day(call_records, started, now=None):
 
     The write sits in a `finally`, so a task cancelled *while awaiting the store* used to abort it and
     those minutes went unrecorded -- and B4's cap fails open on minutes it cannot see (Phase 8 gate
-    review, PROJECT_STATE.md item 10 (f)). The write is its own task and the caller awaits it through
+    review, docs/phase8/exit-check.md). The write is its own task and the caller awaits it through
     `asyncio.shield`: a cancellation still ends the call at once (`CancelledError` propagates from
     the `await`, so the `finally` around this still finishes the capture), and the write completes
     behind it. Uncancelled, this is exactly `await _record_minutes(...)`.

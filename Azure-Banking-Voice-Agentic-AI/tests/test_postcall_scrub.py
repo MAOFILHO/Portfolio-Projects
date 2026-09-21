@@ -51,14 +51,50 @@ class AFormattedPhoneNumberIsMaskedWhole(unittest.TestCase):
                 scrubbed = scrub_numbers(f"my number is {number} thanks")
                 self.assertFalse(any(c.isdigit() for c in scrubbed), scrubbed)
 
+    def test_any_common_separator_between_the_groups_is_masked_whole(self):
+        # Gate review 2: a slash, comma, en dash, underscore, middle dot, non-breaking space or a
+        # line break between the groups left the first two groups behind.
+        for sep in ("/", ",", "\u2013", "\u2014", "_", "\u00b7", "\u00a0", "\n", ". ", " - "):
+            number = f"416{sep}555{sep}0199"
+            with self.subTest(sep=sep):
+                scrubbed = scrub_numbers(f"my number is {number} thanks")
+                self.assertEqual(scrubbed, f"my number is {MASK} thanks")
+
+    def test_a_slash_between_area_code_and_local_number(self):
+        self.assertEqual(scrub_numbers("call 416/555-0199 now"), f"call {MASK} now")
+
+    def test_a_space_inside_the_last_group(self):
+        for number in ("(416) 555-01 99", "416 555 01 99", "416-555-0 199"):
+            with self.subTest(number=number):
+                self.assertEqual(scrub_numbers(f"call {number} now"), f"call {MASK} now")
+
+    def test_a_longer_run_is_masked_whole_not_split(self):
+        # Gate review 2: the phone pattern used to take ten digits out of a longer run and leave
+        # the tail, a regression from the plain digit-run rule.
+        for run in ("41655501991", "416555019912", "4165550199123", "1234567890123", "416-555-0199-123"):
+            with self.subTest(run=run):
+                self.assertEqual(scrub_numbers(f"id {run} end"), f"id {MASK} end")
+
     def test_a_dotted_seven_digit_local_number_is_masked(self):
         self.assertFalse(any(c.isdigit() for c in scrub_numbers("call 555.0199 now")))
 
     def test_the_words_around_it_survive(self):
         self.assertEqual(scrub_numbers("call 416.555.0199 now"), f"call {MASK} now")
 
+    def test_a_local_number_with_a_slash_or_en_dash_is_masked(self):
+        for number in ("555/0199", "555\u20130199", "555\u00a00199"):
+            with self.subTest(number=number):
+                self.assertEqual(scrub_numbers(f"call {number} now"), f"call {MASK} now")
+
     def test_amounts_and_versions_still_survive(self):
-        for text in ("You have $12.50 today", "rate is 4.25 percent", "on 3.5 accounts", "page 2.1"):
+        for text in (
+            "You have $12.50 today",
+            "rate is 4.25 percent",
+            "on 3.5 accounts",
+            "page 2.1",
+            "you owe $12.50, $3.25 and $8.75",
+            "a fee of $1,234.56",
+        ):
             with self.subTest(text=text):
                 self.assertEqual(scrub_numbers(text), text)
 

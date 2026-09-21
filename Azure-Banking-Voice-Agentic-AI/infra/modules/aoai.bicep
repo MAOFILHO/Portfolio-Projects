@@ -1,4 +1,5 @@
-// Azure OpenAI: the Cognitive Services account, its pinned realtime model deployment, and the RBAC
+// Azure OpenAI: the Cognitive Services account, its two pinned model deployments (the realtime one
+// and, since the Phase 8 gate review, the text one the post-call summariser calls), and the RBAC
 // grant that lets the voice agent call it without a stored key.
 //
 // WRITTEN AGAINST AN ALREADY-LIVE RESOURCE, same posture as acs.bicep beside it: the account and its

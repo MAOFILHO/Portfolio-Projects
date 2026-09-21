@@ -110,6 +110,11 @@ _core_banking = None
 _call_records = None
 _call_automation = None
 
+#: The async bearer-token provider every realtime connection is opened with, over the one shared
+#: credential (`lifespan`). Not per call: a credential built per call has no token cache and, being
+#: sync, ran its fetch on the event loop -- the Phase 8 gate review's finding.
+_realtime_token_provider = None
+
 #: Phase 8's post-call collaborators, each None when its configuration is absent. With no redactor
 #: the pipeline writes no transcript and no summary, only the call's outcome row (ADR-007 -- an
 #: unredacted transcript is never a fallback).
@@ -226,6 +231,7 @@ async def lifespan(_app):
     `python -m azbank_voice_agent.boot` under `az login`; it is free and read-only.
     """
     global _core_banking, _call_records, _call_automation, _transcripts, _redactor, _summarizer
+    global _realtime_token_provider
     assert_boot_safety()
     # Read and discarded, for its refusal. Every other address this app needs is validated by being
     # *used* here; this one is only used per-request, so without this line a missing value would
@@ -254,11 +260,13 @@ async def lifespan(_app):
     # App's system-assigned identity, which is the same identity B3's boot guard already uses to
     # read ARM. Nothing here holds an account key.
     #
-    # **The async credential, one for every async Azure client here** (Table, Blob, and the
-    # bearer-token provider behind Language and the text model). azure-core calls a *sync*
-    # credential's `get_token` inline on the event loop, so a token refresh would stall every call in
-    # flight -- B5. It was the sync one until the Phase 8 gate review (2026-09-21).
+    # **The async credential, one for every Azure client here** (Table, Blob, and the bearer-token
+    # providers behind the realtime connection, Language and the text model). azure-core calls a
+    # *sync* credential's `get_token` inline on the event loop, so a token refresh would stall every
+    # call in flight -- B5. It was the sync one until the Phase 8 gate review (2026-09-21); the
+    # realtime connection built its own sync one per call until the second gate review.
     credential = AsyncDefaultAzureCredential()
+    _realtime_token_provider = get_bearer_token_provider(credential, COGNITIVE_SERVICES_SCOPE)
     _call_records = TableStorageCallRecordStore.from_account_url(
         call_records_account_url(), credential
     )
@@ -296,6 +304,7 @@ async def lifespan(_app):
         _transcripts = None
         _redactor = None
         _summarizer = None
+        _realtime_token_provider = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -409,14 +418,14 @@ async def media_stream(websocket: WebSocket):
             try:
                 await budget_or_closed(call_records())
             except caps.DailyBudgetSpent as e:
-                async with connect_realtime() as realtime:
+                async with connect_realtime(_realtime_token_provider) as realtime:
                     await run_closed_call(
                         websocket, realtime, call_records(), correlation_id,
                         closed_path_cause=e.cause, capture=capture,
                     )
                 log.info("WS closed (service closed) correlationId=%s", correlation_id)
                 return
-            async with connect_realtime() as realtime:
+            async with connect_realtime(_realtime_token_provider) as realtime:
                 # `correlation_id` is handed to the relay rather than fetched by it (issue #48): an
                 # escalation record has to carry it, and a relay that reached back through the
                 # transport for a header would be a relay that knew what kind of transport it had.

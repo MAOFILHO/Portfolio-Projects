@@ -151,10 +151,17 @@ def is_storable_id(correlation_id):
     )
 
 
+#: The same digit-free translation `realtime/session.py` applies to its frame and idempotency ids.
+#: A raw `uuid4().hex` is more than half digits and spells a four-digit run by chance, which B2's
+#: run-wide scan reads as a leaked PIN (it failed about 3 runs in 100 until this was applied). Distinct
+#: hex strings stay distinct after the translation.
+_DIGIT_FREE = str.maketrans("0123456789", "qrstuvwxyz")
+
+
 def storable_or_generated_id(correlation_id):
-    """The id itself if it can key a call's rows, else a fresh one. A call that arrives with an id
-    no store can hold loses its ACS id, never its row."""
-    return correlation_id if is_storable_id(correlation_id) else uuid.uuid4().hex
+    """The id itself if it can key a call's rows, else a fresh, digit-free one. A call that arrives
+    with an id no store can hold loses its ACS id, never its row."""
+    return correlation_id if is_storable_id(correlation_id) else uuid.uuid4().hex.translate(_DIGIT_FREE)
 
 
 @dataclass(frozen=True)
@@ -199,7 +206,10 @@ SUMMARY_SKIPPED = "skipped"
 SUMMARY_FAILED = "failed"
 #: Either field, on the row written the moment the call ends and before the slow steps run. A row
 #: still saying this when nobody is working on it is a pipeline that started and never finished (the
-#: container was killed mid-way); the finished pipeline overwrites it.
+#: container was killed mid-way); the finished pipeline overwrites it. **It is also what a row says
+#: if the final write fails** (the table was unreachable), even when the blob was stored: the row
+#: cannot tell a kill from a failed overwrite, and `post-call ... could not record the call summary`
+#: in the log is what separates them.
 TRANSCRIPT_PENDING = "pending"
 SUMMARY_PENDING = "pending"
 #: Either field, when the adapter that would have produced it was never configured.

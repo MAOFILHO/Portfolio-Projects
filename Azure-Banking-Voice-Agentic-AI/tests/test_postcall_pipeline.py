@@ -349,7 +349,7 @@ class ACorrelationIdThatIsNotAStorageKeyStillGetsItsRow(unittest.TestCase):
         parts = _wired()
         store = _run(_finished_capture(TURNS, correlation_id="bad#id?x"), **parts)
         [row] = store.call_summaries
-        self.assertNotIn("bad", row.correlation_id)
+        self.assertNotEqual(row.correlation_id, "bad#id?x")
         self.assertRegex(row.correlation_id, r"^[A-Za-z0-9._-]+$")
         [(blob_id, _)] = parts["transcripts"].writes
         self.assertEqual(blob_id, row.correlation_id)

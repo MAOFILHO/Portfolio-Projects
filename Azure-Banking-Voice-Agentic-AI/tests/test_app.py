@@ -199,7 +199,7 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
         # The process-wide collaborators lifespan() would have built (issues #28, #48). Patched
         # rather than constructed per call, because per-call construction is exactly what the design
         # rules out -- a breaker thrown away with the call can never trip.
-        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(realtime)), \
+        with patch.object(app, "connect_realtime", lambda _provider: FakeRealtimeConnectCM(realtime)), \
              patch.object(app, "_core_banking", core_banking), \
              patch.object(app, "_call_records", call_records), \
              patch.object(app, "run_call", fake_run_call):
@@ -222,7 +222,7 @@ class MediaStreamDelegatesToBridge(unittest.TestCase):
 
         fake_ws = FakeWebSocket()
         fake_ws.headers = {"x-ms-call-correlation-id": header}
-        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+        with patch.object(app, "connect_realtime", lambda _provider: FakeRealtimeConnectCM(FakeRealtimeServer())), \
              patch.object(app, "_core_banking", FakeCoreBankingClient()), \
              patch.object(app, "_call_records", FakeCallRecordStore()), \
              patch.object(app, "run_call", fake_run_call):
@@ -299,7 +299,7 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
                 task.cancel()
             return handler_returned
 
-        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+        with patch.object(app, "connect_realtime", lambda _provider: FakeRealtimeConnectCM(FakeRealtimeServer())), \
              patch.object(app, "_core_banking", FakeCoreBankingClient()), \
              patch.object(app, "_call_records", FakeCallRecordStore()), \
              patch.object(app, "budget_or_closed", budget or default_budget), \
@@ -345,7 +345,7 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
         async def no_budget_problem(_records):
             return None
 
-        with patch.object(app, "connect_realtime", lambda: FakeRealtimeConnectCM(FakeRealtimeServer())), \
+        with patch.object(app, "connect_realtime", lambda _provider: FakeRealtimeConnectCM(FakeRealtimeServer())), \
              patch.object(app, "_core_banking", FakeCoreBankingClient()), \
              patch.object(app, "_call_records", FakeCallRecordStore()), \
              patch.object(app, "budget_or_closed", no_budget_problem), \
@@ -376,7 +376,7 @@ class PostCallIsScheduledAfterTheCallNeverInsideIt(unittest.TestCase):
             if pending:
                 await asyncio.wait(pending, timeout=1)
 
-        with patch.object(app, "connect_realtime", lambda: Refuses()), \
+        with patch.object(app, "connect_realtime", lambda _provider: Refuses()), \
              patch.object(app, "_core_banking", FakeCoreBankingClient()), \
              patch.object(app, "_call_records", records), \
              patch.object(app, "budget_or_closed", budget or no_budget_problem), \
@@ -487,8 +487,10 @@ class PostCallAdaptersAreBuiltFromConfigurationAndNeverBlockBoot(unittest.TestCa
             async with app.lifespan(app.app):
                 seen["redactor"] = app._redactor
                 seen["summarizer"] = app._summarizer
+                seen["realtime_provider"] = app._realtime_token_provider
                 seen["types"] = (LanguagePIIRedactor, OpenAISummarizer)
             seen["after"] = (app._redactor, app._summarizer)
+            seen["provider_after"] = app._realtime_token_provider
 
         clean = {k: v for k, v in os.environ.items()
                  if k not in ("LANGUAGE_ENDPOINT", "AOAI_TEXT_DEPLOYMENT", "AOAI_ENDPOINT",
@@ -529,9 +531,20 @@ class PostCallAdaptersAreBuiltFromConfigurationAndNeverBlockBoot(unittest.TestCa
         self.assertEqual(seen["after"], (None, None))
         self.assertTrue(_AsyncCredentialStub.closed)
 
+    def test_the_realtime_token_provider_exists_with_no_post_call_adapter_and_is_cleared_after(self):
+        seen = self._inside_lifespan({})
+        self.assertIsNotNone(seen["realtime_provider"])
+        self.assertIsNone(seen["provider_after"])
+
     def test_a_malformed_language_endpoint_is_refused_at_boot_not_at_the_first_call(self):
         with self.assertRaises(SystemExit):
             self._inside_lifespan({"LANGUAGE_ENDPOINT": "Endpoint=https://x;Key=abc"})
+
+    def test_a_malformed_transcripts_account_url_is_refused_at_boot_too(self):
+        # The same rule as the Language endpoint (`boot._optional_service_url`): unset switches the
+        # feature off, but a value that is set and wrong is a connection string pasted by mistake.
+        with self.assertRaises(SystemExit):
+            self._inside_lifespan({"TRANSCRIPTS_ACCOUNT_URL": "DefaultEndpointsProtocol=https;AccountKey=abc"})
 
 
 class _RecordingFactory:
@@ -552,10 +565,15 @@ class OneAsyncCredentialServesEveryAzureClient(unittest.TestCase):
     since Phase 5. One async credential, shared, closed once."""
 
     @staticmethod
-    def _run(env):
+    def _run(env, providers=None):
         tables, blobs = _RecordingFactory(), _RecordingFactory()
         _AsyncCredentialStub.closed = False
         built = []
+
+        def make_provider(credential, scope):
+            if providers is not None:
+                providers.append((credential, scope))
+            return lambda: None
 
         def make_credential():
             built.append(_AsyncCredentialStub())
@@ -575,7 +593,7 @@ class OneAsyncCredentialServesEveryAzureClient(unittest.TestCase):
              patch.object(app, "BlobTranscriptStore", blobs), \
              patch.object(app, "call_records_account_url", lambda: "https://storage.test"), \
              patch.object(app, "AsyncDefaultAzureCredential", make_credential), \
-             patch.object(app, "get_bearer_token_provider", lambda credential, scope: (lambda: None)), \
+             patch.object(app, "get_bearer_token_provider", make_provider), \
              patch.dict(os.environ, {**clean, **env}, clear=True):
             asyncio.run(go())
         return tables, blobs, built
@@ -596,6 +614,15 @@ class OneAsyncCredentialServesEveryAzureClient(unittest.TestCase):
 
     def test_no_sync_credential_is_built_by_the_app(self):
         self.assertFalse(hasattr(app, "DefaultAzureCredential"))
+
+    def test_the_realtime_connection_gets_its_token_from_that_same_credential(self):
+        # `realtime/client.py` used to build a sync credential per call and call it on the event loop.
+        # It is now handed a provider made from the shared one -- even with no post-call adapter.
+        from azbank_voice_agent.boot import COGNITIVE_SERVICES_SCOPE
+
+        providers = []
+        _, _, built = self._run({}, providers)
+        self.assertEqual(providers, [(built[0], COGNITIVE_SERVICES_SCOPE)])
 
 
 class ShutdownWaitsForTheLedgerWritesACancelledCallLeftBehind(unittest.TestCase):

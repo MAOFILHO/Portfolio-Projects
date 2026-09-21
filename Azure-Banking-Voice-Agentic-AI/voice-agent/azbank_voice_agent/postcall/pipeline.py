@@ -15,7 +15,9 @@ call gets a row saying so, and no transcript and no summary.
 ends, and the steps below can take up to three minutes, so the row goes in first with the two slow
 fields `pending` and is overwritten when they finish. A container killed mid-pipeline then leaves an
 honest "started, never finished" row instead of no row at all (Phase 8 gate review). A call with
-nothing to redact has no slow step and is written once.
+nothing to redact has no slow step and is written once. If the *final* write fails the row stays
+`pending` even though the blob may have been stored: the row alone cannot tell that from a kill, and
+the "could not record the call summary" log line is what does.
 
 Every step has its own deadline and its own failure, so one degraded dependency costs its own fields
 of the row (a redaction failure takes the transcript and the summary with it) and nothing else.

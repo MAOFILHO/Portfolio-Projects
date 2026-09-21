@@ -153,8 +153,8 @@ def allowed_names():
 
 def allowed_pairs():
     """The exact (name, version) pairs B3 permits, read from the guard itself -- the union of both
-    allowlists (realtime, ADR-006's text pin), since this scanner no longer distinguishes which
-    deployment class a given match belongs to before checking it."""
+    allowlists (realtime, ADR-006's text pin). The pair check is class-blind on purpose: which *file*
+    may carry which name is `class_violation`'s job, on names only (see the module docstring)."""
     sys.path.insert(0, str(REPO_ROOT / "voice-agent"))
     from azbank_voice_agent import boot
 
