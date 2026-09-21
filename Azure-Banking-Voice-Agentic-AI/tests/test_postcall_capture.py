@@ -14,6 +14,7 @@ from azbank_voice_agent.call_records.fake import FakeCallRecordStore
 from azbank_voice_agent.core_banking.fake import FakeCoreBankingClient
 from azbank_voice_agent.cost import caps
 from azbank_voice_agent.dispatch import gate
+from azbank_voice_agent.postcall import outcome
 from azbank_voice_agent.postcall.capture import CallCapture
 from azbank_voice_agent.realtime.fake import (
     FakeRealtimeServer,
@@ -147,6 +148,91 @@ class TheCaptureKnowsHowTheCallEnded(unittest.TestCase):
                 FakeCoreBankingClient(), ledger, capture=BrokenCapture(),
             ))
         self.assertTrue(ledger.minutes)
+
+
+class EveryWayAFakeCallEndsLandsOnItsOwnOutcome(unittest.TestCase):
+    """Exit criterion 3, end to end. The mapping's unit tests feed `call_outcome` strings; these run
+    real calls to each ending the fakes can reproduce and read the outcome off the capture the
+    pipeline would receive -- so a session.py that stopped emitting the reason the mapping expects
+    fails here, not only in a regex over its source (Phase 8 gate review, Spec finding)."""
+
+    @staticmethod
+    def _end(events, transport, realtime_hangs=False):
+        capture = CallCapture()
+        realtime = FakeRealtimeServer(events=events, hang=realtime_hangs)
+        try:
+            asyncio.run(run_call(
+                transport, realtime, FakeCoreBankingClient(), FakeCallRecordStore(), capture=capture,
+            ))
+        except Exception:  # noqa: BLE001 -- only the classification is under test
+            pass
+        return capture
+
+    def _classify(self, capture):
+        return outcome.call_outcome(capture.end_reason, capture.auth_state)
+
+    def test_the_caller_hanging_up(self):
+        # The model side stays open, so the caller's disconnect is the only thing that can end the
+        # call -- with both sides ending at once the relay reports whichever finished task it visits
+        # last, which is a race (the same care `test_a_call_that_hits_the_turn_cap_says_so` takes).
+        capture = self._end([], FakeTransport(frames=[]), realtime_hangs=True)
+        self.assertEqual(capture.end_reason, "caller_hangup")
+        self.assertEqual(self._classify(capture), outcome.CALLER_HANGUP)
+
+    def test_a_person_asked_for(self):
+        capture = self._end(
+            [function_call("escalate_to_human", '{"reason": "caller_asked"}'), response_done()],
+            FakeTransport(hang=True),
+        )
+        self.assertEqual(capture.end_reason, "escalated")
+        self.assertEqual(self._classify(capture), outcome.ESCALATED)
+
+    def test_the_turn_cap(self):
+        with patch.object(caps, "MAX_CALL_TURNS", 1):
+            capture = self._end([response_done(), response_done()], FakeTransport(hang=True))
+        self.assertEqual(capture.end_reason, "cost_cap")
+        self.assertEqual(self._classify(capture), outcome.ERROR)
+
+    def test_the_time_cap(self):
+        with patch.object(caps, "MAX_CALL_SECONDS", 0.05):
+            capture = self._end([], FakeTransport(hang=True), realtime_hangs=True)
+        self.assertEqual(capture.end_reason, "timeout")
+        self.assertEqual(self._classify(capture), outcome.ERROR)
+
+    def test_the_model_ending_a_call_nobody_authenticated_on(self):
+        capture = self._end([response_done()], FakeTransport(hang=True))
+        self.assertEqual(capture.end_reason, "model_ended")
+        self.assertEqual(self._classify(capture), outcome.ERROR)
+
+    def test_a_relay_that_fails(self):
+        realtime = FakeRealtimeServer(events=[])
+        capture = CallCapture()
+        with patch.object(realtime, "send", side_effect=RuntimeError("boom")), \
+             self.assertRaises(RuntimeError):
+            asyncio.run(run_call(
+                FakeTransport(), realtime, FakeCoreBankingClient(), FakeCallRecordStore(),
+                capture=capture,
+            ))
+        self.assertEqual(self._classify(capture), outcome.ERROR)
+
+    def test_the_closed_line(self):
+        capture = CallCapture()
+        realtime = FakeRealtimeServer(
+            events=[audio_delta("were-closed"), response_done()], respond_after_appends=0,
+        )
+        asyncio.run(run_closed_call(
+            FakeTransport(), realtime, FakeCallRecordStore(), correlation_id="c", capture=capture,
+        ))
+        self.assertEqual(self._classify(capture), outcome.CLOSED_PATH)
+
+    def test_no_ending_reaches_the_pipeline_unclassified(self):
+        # The old "never escapes the enum" test fed the function strings it already knew. Every
+        # ending above must produce one of the five.
+        for capture in (
+            self._end([], FakeTransport(frames=[]), realtime_hangs=True),
+            self._end([response_done()], FakeTransport(hang=True)),
+        ):
+            self.assertIn(self._classify(capture), outcome.CALL_OUTCOMES)
 
 
 class AttachingACaptureChangesNothingAboutTheCall(unittest.TestCase):
