@@ -1,1 +1,0 @@
-# SmartClaims Agent — Lab Exercises
