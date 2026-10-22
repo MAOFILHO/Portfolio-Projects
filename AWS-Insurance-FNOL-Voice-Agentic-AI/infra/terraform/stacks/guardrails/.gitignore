@@ -1,7 +1,0 @@
-# State migrated to the remote backend in Phase 8 Stage 0. These two lines still matter: the migration
-# leaves an emptied `terraform.tfstate` and a pre-migration `terraform.tfstate.backup` on disk, and
-# CLAUDE.md forbids committing .tfstate outright.
-*.tfstate
-*.tfstate.*
-.terraform/
-# `.terraform.lock.hcl` is intentionally absent from this list -- see the root .gitignore for why.
