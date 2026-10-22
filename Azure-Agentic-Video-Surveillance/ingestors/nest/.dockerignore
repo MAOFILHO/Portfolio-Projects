@@ -1,7 +1,0 @@
-.env
-.env.example
-stub_backend.py
-received_frames/
-get_refresh_token.py
-__pycache__/
-*.pyc
